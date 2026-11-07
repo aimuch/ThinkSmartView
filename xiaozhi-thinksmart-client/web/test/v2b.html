@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小二</title>
+<link rel="stylesheet" href="/static/v2/app.css">
+<!-- GPU residue bisection copy of the v2 page (not part of the UI): same app.css/app.js, plus
+     query flags that hide one part each. Used while bisecting a GPU fault. -->
+<style>
+.noorb .orb { visibility: hidden; }
+.noglow .glows { display: none; }
+.nocorona .corona { display: none; }
+.nocore .core { display: none; }
+.noside .side { visibility: hidden; }
+.noedge .edge { display: none; }
+.noshadow .mic { box-shadow: none !important; }
+.noring .mic-ring { display: none; }
+.blurOnly .mic { box-shadow: 0 12px 34px #4fb8ff40 !important; }
+.ringOnly .mic { box-shadow: 0 0 0 9px #ffffff0c !important; }
+.blurNoOff .mic { box-shadow: 0 0 34px #4fb8ff40 !important; }
+.blurSmall .mic { box-shadow: 0 12px 10px #4fb8ff40 !important; }
+.nobg body, body.nobg { background: #0b1128 !important; }
+</style>
+<script>addEventListener('DOMContentLoaded', () => { for (const f of new URLSearchParams(location.search).keys()) document.body.classList.add(f); });</script>
+</head>
+<body data-state="idle" class="fresh">
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="mark">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round">
+          <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>
+      </div>
+      <div class="name">小二</div>
+    </div>
+    <button class="model-pill" id="modelPill" aria-label="切换模型">
+      <img class="tile" id="pillLogo" alt="">
+      <span class="pill-text"><b id="pillLabel">选择模型</b><small id="pillModel"></small></span>
+      <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="right">
+      <div class="link" id="link"><i></i><span>待机</span></div>
+      <div class="clock" id="clock"><span id="time">--:--</span></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="stage">
+      <div class="orb" id="orb">
+        <!-- static pre-rendered glows, one per state; only opacity changes (cross-fade) -->
+        <div class="glows" aria-hidden="true">
+          <i class="g-idle"></i><i class="g-connecting"></i><i class="g-listening"></i><i class="g-thinking"></i><i class="g-speaking"></i>
+        </div>
+        <div class="corona" id="corona"></div>
+        <div class="core" id="core">
+          <i class="c-idle"></i><i class="c-connecting"></i><i class="c-listening"></i><i class="c-thinking"></i><i class="c-speaking"></i>
+          <b class="gloss"></b>
+        </div>
+      </div>
+      <h1 class="title" id="title">说<em>「你好小二」</em></h1>
+      <p class="hint" id="hint">或者点麦克风；按住可以直接说</p>
+      <div class="controls">
+        <button class="ctl" id="btnAbort" aria-label="打断">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.4"/><rect x="14" y="5" width="4" height="14" rx="1.4"/></svg>
+          <span>打断</span></button>
+        <button class="mic" id="btnMic" aria-label="说话">
+          <i class="mic-ring" id="micRing"></i>
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+        </button>
+        <button class="ctl" id="btnEnd" aria-label="结束">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.8"/></svg>
+          <span>结束</span></button>
+      </div>
+    </section>
+
+    <section class="side">
+      <div class="welcome" id="welcome">
+        <div class="greet" id="greet">你好</div>
+        <div class="big-time" id="bigTime">--:--</div>
+        <div class="big-date" id="bigDate"></div>
+        <div class="try">试试这样问我</div>
+        <div class="chips" id="chips"></div>
+      </div>
+
+      <div class="convo" id="convo">
+        <div class="convo-head">
+          <img class="tile sm" id="headLogo" alt="">
+          <span class="head-title" id="headTitle">对话</span>
+          <span class="head-meta" id="headMeta"></span>
+        </div>
+        <div class="messages" id="messages"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="edge" aria-hidden="true"><i class="edge-lvl" id="edgeBar"></i><i class="edge-run"></i></div>
+
+<div class="sheet" id="sheet">
+  <div class="sheet-bar">
+    <div><h2>选择模型</h2><p>切换后，新的提问交给它回答；每个模型各自保留对话</p></div>
+    <button class="close" id="sheetClose" aria-label="关闭">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="hud" id="hud">
+  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+  <div class="hud-bar"><i id="hudFill"></i></div>
+  <div class="hud-num" id="hudNum">0</div>
+</div>
+
+<script src="/static/v2/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Autolaunched by Weston for the thinksmart-kiosk session: start the proximity wake
+# daemon, then keep the kiosk browser running for as long as this Weston runs.
+
+# No desktop session reaches graphical-session.target, so start it here
+systemctl --user start vcnl4200-proximity-daemon.service 2>/dev/null
+
+# Exit together with Weston instead of relaunching the browser forever as an orphan
+WESTON_PID=$PPID
+while kill -0 "$WESTON_PID" 2>/dev/null; do
+    /usr/bin/python3 /usr/local/bin/thinksmart-kiosk.py
+    sleep 2
+done

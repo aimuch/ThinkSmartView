@@ -1,0 +1,8 @@
+# build outputs and downloads
+codec-dmic/out/
+*.img
+*.img.xz
+*.tar.gz
+__pycache__/
+*.pyc
+.DS_Store

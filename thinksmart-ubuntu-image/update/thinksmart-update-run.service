@@ -1,0 +1,10 @@
+[Unit]
+Description=Handle an update request from the page (check, or install the checked version)
+# killed (timeout) or crashed mid-install: the check clears the job the page shows as running
+OnFailure=thinksmart-update-check.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/thinksmart-update run
+# a slow direct link to GitHub (tens of KB/s) needs over an hour for a release with its environment
+TimeoutStartSec=3h

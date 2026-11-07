@@ -1,0 +1,29 @@
+[Unit]
+Description=ThinkSmart voice client (wake word, talks to xiaozhi-hub, serves the kiosk page on 127.0.0.1:8090)
+After=network-online.target user@1000.service
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+# Installed versions live in /opt/thinksmart/client/<version>, current -> the running one
+# (thinksmart-ubuntu-image/update/thinksmart-update switches it, and back if a new version fails its self-test)
+WorkingDirectory=/opt/thinksmart/client/current
+Environment=HOME=/home/ubuntu XDG_RUNTIME_DIR=/run/user/1000 PULSE_SERVER=unix:/run/user/1000/pulse/native PYTHONUNBUFFERED=1
+# Audio callbacks compete with the wake word model for the GIL; 43 ms PipeWire periods keep replies from crackling
+Environment=PIPEWIRE_LATENCY=2048/48000
+# No /dev/snd: PortAudio probes every hardware PCM at startup, and touching the speaker PCM behind
+# PipeWire's back breaks the q6asm DSP until reboot. Audio goes through PipeWire only.
+PrivateDevices=yes
+# ...except the volume keys and the mic switch (read only)
+BindReadOnlyPaths=/dev/input
+DeviceAllow=char-input r
+ExecStartPre=/bin/sh -c 'until [ -S /run/user/1000/pulse/native ]; do sleep 2; done'
+# Root (+), failure ignored (-): devices from the 20261101 image get the updater that also installs the
+# system layer (deploy/bootstrap-updater; a no-op once they have it)
+ExecStartPre=-+/opt/thinksmart/client/current/deploy/bootstrap-updater
+ExecStart=/opt/thinksmart/client/current/.venv/bin/python -m thinksmart_client
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

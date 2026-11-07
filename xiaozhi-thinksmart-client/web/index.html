@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小麦</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-state="idle">
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="mark">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round">
+          <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>
+      </div>
+      <div><div class="name">小麦</div><div class="sub">ThinkSmart</div></div>
+    </div>
+    <nav class="models" id="models"></nav>
+    <div class="right">
+      <div class="link" id="link"><i></i><span>待机</span></div>
+      <div class="clock"><div class="t" id="time">--:--</div><div class="d" id="date"></div></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="stage">
+      <div class="orb" id="orb">
+        <div class="halo"></div>
+        <div class="ring"></div>
+        <div class="core"></div>
+        <div class="gloss"></div>
+      </div>
+      <h1 class="title" id="title">说「小麦小麦」</h1>
+      <p class="hint" id="hint">或者点下面的麦克风；按住可以直接说</p>
+      <div class="controls">
+        <button class="ctl ghost" id="btnAbort" aria-label="打断">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>
+          <span>打断</span></button>
+        <button class="mic" id="btnMic" aria-label="说话">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+        </button>
+        <button class="ctl ghost" id="btnEnd" aria-label="结束">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+          <span>结束</span></button>
+      </div>
+    </section>
+
+    <section class="chat">
+      <div class="chat-head">
+        <img class="avatar" id="chatLogo" alt="">
+        <div><div class="chat-title" id="chatTitle">对话</div><div class="chat-sub" id="chatSub">新对话</div></div>
+      </div>
+      <div class="messages" id="messages"></div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="hud" id="hud"><div class="hud-label">音量</div><div class="hud-bar"><i id="hudFill"></i></div><div class="hud-num" id="hudNum"></div></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

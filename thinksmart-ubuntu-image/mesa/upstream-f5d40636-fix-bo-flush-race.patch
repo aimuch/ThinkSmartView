@@ -1,0 +1,31 @@
+From f5d40636cd254ae9b555beb11d073162cf98391a Mon Sep 17 00:00:00 2001
+From: Rob Clark <rob.clark@oss.qualcomm.com>
+Date: Thu, 5 Mar 2026 11:31:09 -0800
+Subject: [PATCH] freedreno/drm: Fix bo_flush race
+
+Once we've dropped the lock, we need to be referring to our own
+temporary reference.
+
+Fixes: 7b02bc6139f1 ("freedreno/drm: Drop fd_bo_fence")
+Signed-off-by: Rob Clark <rob.clark@oss.qualcomm.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/40352>
+---
+ src/freedreno/drm/freedreno_bo.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/freedreno/drm/freedreno_bo.c b/src/freedreno/drm/freedreno_bo.c
+index 1f99f36bd2ba..6eda8101e46c 100644
+--- a/src/freedreno/drm/freedreno_bo.c
++++ b/src/freedreno/drm/freedreno_bo.c
+@@ -501,7 +501,7 @@ bo_flush(struct fd_bo *bo)
+    simple_mtx_unlock(&fence_lock);
+ 
+    for (unsigned i = 0; i < nr; i++) {
+-      fd_fence_flush(bo->fences[i]);
++      fd_fence_flush(fences[i]);
+       fd_fence_del(fences[i]);
+    }
+ }
+-- 
+GitLab
+

@@ -1,0 +1,30 @@
+#!/bin/sh
+# Settings of the ThinkSmart kiosk (Weston + full-screen browser, thinksmart-kiosk.service).
+#   kiosk-mode status
+#   kiosk-mode url <URL>
+#   kiosk-mode rotation <normal|90|180|270>
+#   kiosk-mode restart          (applies url/rotation now; a reboot does too)
+set -e
+CONF=/etc/thinksmart-kiosk.conf
+
+need_root() { [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }; }
+
+set_key() {
+    if grep -q "^$1=" "$CONF"; then
+        # & | and \ are special in the sed replacement (URLs often have &)
+        v=$(printf '%s' "$2" | sed 's/[&|\\]/\\&/g')
+        sed -i "s|^$1=.*|$1=$v|" "$CONF"
+    else
+        echo "$1=$2" >> "$CONF"
+    fi
+}
+
+case "${1:-status}" in
+    url)      need_root; [ -n "${2:-}" ] || { echo "usage: kiosk-mode url <URL>"; exit 1; }
+              set_key URL "\"$2\""; echo "URL set: $2 (kiosk-mode restart to apply)";;
+    rotation) need_root; case "${2:-}" in normal|90|180|270) ;; *) echo "usage: kiosk-mode rotation <normal|90|180|270>"; exit 1;; esac
+              set_key ROTATION "$2"; echo "rotation set: $2 (kiosk-mode restart to apply)";;
+    restart)  need_root; systemctl restart thinksmart-kiosk.service;;
+    status)   systemctl is-active thinksmart-kiosk.service || true; grep -E "^(URL|ROTATION|GPU)=" "$CONF";;
+    *)        echo "usage: kiosk-mode status|url <URL>|rotation <normal|90|180|270>|restart"; exit 1;;
+esac

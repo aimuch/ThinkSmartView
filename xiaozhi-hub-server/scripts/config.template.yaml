@@ -1,0 +1,51 @@
+# xiaozhi-hub-server 本地配置（会覆盖 config.yaml 中的同名配置）
+# 由安装脚本生成。此文件不会提交到 Git，API Key 只写在这里。
+# 大模型、API Key、语音合成音色等，可以在管理后台 http://<本机IP>:16688/admin 中修改。
+
+server:
+  http_port: 16688  # HTTP：OTA 接口和管理后台。设备配网时填 http://<本机IP>:16688/xiaozhi/ota/
+  port: 16689       # WebSocket：设备的语音长连接，地址由 OTA 接口自动下发
+
+# 每句话开始时把设备缓冲补到约 0.6 秒（10 帧 × 60ms），避免 Wi-Fi 抖动导致设备说话断续（原项目默认 5 帧）。
+# 调大更抗抖动，但点屏幕打断后要多播一会儿才停、每轮说完后也要多等一会儿才开始收音
+tts_audio_prebuffer_count: 10
+
+selected_module:
+  VAD: SileroVAD
+  ASR: SherpaXASR         # 语音识别：本地 X-ASR 中英混合（sherpa-onnx），不需要联网
+  LLM: ClaudeCLI          # 安装时根据是否找到 Claude Code 自动选择
+  TTS: EdgeTTS
+  Memory: nomem
+  Intent: nointent        # 使用 Claude CLI 时必须是 nointent
+
+LLM:
+  # 本机 Claude Code（需要先安装并登录）
+  ClaudeCLI:
+    type: claude_cli
+    cli_path: ""                    # 留空自动查找
+    model: haiku                    # 留空使用 Claude Code 默认模型
+    effort: low                     # 思考力度：low 更快、high 更准；留空使用 Claude Code 默认值
+    workdir: ~/xiaozhi-workspace    # 读写文件只能在这个目录里；开启执行命令（Auto）后，命令不受这个限制
+    allowed_tools: [Read, Grep, Glob]   # 默认只读；放开 Bash/Write 等需谨慎
+    permission_mode: default
+    turn_timeout_seconds: 600       # 一个任务最长做多久；干活期间设备陪着等，连接不会断开
+    stall_timeout_seconds: 30       # 连续这么久没有任何响应（卡住）就中断并提示；执行工具时不算
+    idle_timeout_seconds: 300
+    background_max_seconds: 7200    # 打断、断开、单轮超时时 Claude 还在干活就后台接着做，做完进待汇报；最长做多久，0 是打断就停
+    background_after_seconds: 30    # 用过工具、或做了这么久才算长任务转后台；更短的聊天被打断直接停
+    resume_window_minutes: 120
+    resume_keywords: [接着上次聊, 继续上次的话题, 继续刚才的话题, 接着刚才聊]
+    first_reply_filler: 好的，我看一下
+    filler_delay_seconds: 2
+    progress_interval_seconds: 30   # 干活时这么久没开口就提示进度，之后间隔逐渐拉长到 4 倍并报已用时间；填 0 关闭
+    progress_reply: 还在处理，请稍等
+
+  # Claude API（OpenAI 兼容接口），在管理后台填写 API Key 后可切换使用
+  ClaudeAPI:
+    type: openai
+    base_url: https://api.anthropic.com/v1/
+    model_name: claude-haiku-5-5
+    api_key: 你的Claude API Key
+    max_tokens: 500
+    # 直连 api.anthropic.com 时会自动关闭思考；经第三方代理访问时，如果首字很慢或没有回复，
+    # 可在本文件里为这一项添加 extra_body，例如 extra_body: {"reasoning_effort": "none"}

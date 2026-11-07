@@ -1,0 +1,28 @@
+# Compressed swap in RAM. 1.9 GB and no swap: when the hub, the client and the browser together run
+# out of memory the kernel kills the hub, and the audio DSP breaks with it (needs a reboot).
+# lz4 rather than the kernel's default zstd: this CPU is slow, and swapping must not hold up speech
+# recognition. As big as RAM (Fedora's default): with swappiness 100 the idle parts of the hub and
+# the browser (~700 MB) move here and free real memory, so 1 GB left too little room for a spike.
+# RAM is only used for what is stored, compressed (~1.7:1 measured).
+[Unit]
+Description=Compressed swap in RAM (zram)
+DefaultDependencies=no
+Before=swap.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# With swap present the msm GPU driver may also swap out GPU buffers (enable_eviction). Keep them
+# resident (~80 MB): the first boot with zram froze the screen after a GPU fault ("CP opcode error,
+# opcode 0" = the GPU read a command buffer of zeros). Not proven to be eviction (1 in 4 boots,
+# little swap in use), but the GPU never relied on it before zram.
+ExecStartPre=/bin/sh -c 'echo N > /sys/module/msm/parameters/enable_eviction'
+ExecStart=/usr/sbin/zramctl /dev/zram0 --size 1900M --algorithm lz4
+ExecStart=/usr/sbin/mkswap /dev/zram0
+ExecStart=/usr/sbin/swapon --priority 100 /dev/zram0
+ExecStop=/usr/sbin/swapoff /dev/zram0
+# reset through sysfs: zramctl --reset also removes /dev/zram0, and a restart would find no device
+ExecStop=/bin/sh -c 'echo 1 > /sys/block/zram0/reset'
+
+[Install]
+WantedBy=swap.target

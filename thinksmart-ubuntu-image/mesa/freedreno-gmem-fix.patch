@@ -1,0 +1,77 @@
+diff -ru a/src/gallium/drivers/freedreno/freedreno_gmem.c b/src/gallium/drivers/freedreno/freedreno_gmem.c
+--- a/src/gallium/drivers/freedreno/freedreno_gmem.c	2026-10-31 00:06:18
++++ b/src/gallium/drivers/freedreno/freedreno_gmem.c	2026-10-31 00:06:18
+@@ -233,6 +233,15 @@
+     * constraints:
+     */
+    while (!layout_gmem(key, nbins_x, nbins_y, gmem)) {
++      /* Once the bins are down to the tile alignment, more bins can't make
++       * them any smaller.  Give up instead of looping forever, and let the
++       * caller render this batch in sysmem.
++       */
++      if (gmem->bin_w <= screen->info->tile_align_w &&
++          gmem->bin_h <= screen->info->tile_align_h) {
++         gmem->no_fit = true;
++         return;
++      }
+       if (nbins_y > nbins_x) {
+          nbins_x++;
+       } else {
+@@ -462,9 +471,16 @@
+ 
+    if (has_zs || assume_zs) {
+       struct fd_resource *rsc = fd_resource(pfb->zsbuf.texture);
+-      key->zsbuf_cpp[0] = rsc->layout.cpp * pfb->samples;
++      /* layout.cpp already includes the resource's sample count.  What
++       * takes space in GMEM is the framebuffer's sample count (they differ
++       * for multisampled-render-to-texture), so scale the per-sample size.
++       */
++      key->zsbuf_cpp[0] = rsc->layout.cpp / fd_resource_nr_samples(&rsc->b.b) *
++                          pfb->samples;
+       if (rsc->stencil)
+-         key->zsbuf_cpp[1] = rsc->stencil->layout.cpp * pfb->samples;
++         key->zsbuf_cpp[1] = rsc->stencil->layout.cpp /
++                             fd_resource_nr_samples(&rsc->stencil->b.b) *
++                             pfb->samples;
+ 
+       /* If we clear z or s but not both, and we are using z24s8 (ie.
+        * !separate_stencil) then we need to restore the other, even if
+@@ -754,6 +770,19 @@
+       sysmem = true;
+    }
+ 
++   struct fd_gmem_stateobj *gmem = NULL;
++   if (!batch->nondraw && !sysmem) {
++      gmem = lookup_gmem_state(batch, false, false);
++      if (gmem->no_fit && ctx->emit_sysmem_prep) {
++         DBG("%p: %ux%u does not fit in GMEM, rendering in sysmem", batch,
++             pfb->width, pfb->height);
++         fd_screen_lock(ctx->screen);
++         fd_gmem_reference(&gmem, NULL);
++         fd_screen_unlock(ctx->screen);
++         sysmem = true;
++      }
++   }
++
+    fd_reset_wfi(batch);
+ 
+    ctx->stats.batch_total++;
+@@ -775,7 +804,6 @@
+       trace_end_render_pass(&batch->trace, batch->gmem);
+       ctx->stats.batch_sysmem++;
+    } else {
+-      struct fd_gmem_stateobj *gmem = lookup_gmem_state(batch, false, false);
+       batch->gmem_state = gmem;
+       trace_render_gmem(&batch->trace, batch->gmem, gmem->nbins_x, gmem->nbins_y,
+                         gmem->bin_w, gmem->bin_h);
+diff -ru a/src/gallium/drivers/freedreno/freedreno_gmem.h b/src/gallium/drivers/freedreno/freedreno_gmem.h
+--- a/src/gallium/drivers/freedreno/freedreno_gmem.h	2026-10-31 00:06:18
++++ b/src/gallium/drivers/freedreno/freedreno_gmem.h	2026-10-31 00:06:18
+@@ -44,6 +44,7 @@
+    uint16_t width, height;
+    uint16_t maxpw, maxph; /* maximum pipe width/height */
+    uint8_t num_vsc_pipes; /* number of pipes for a20x */
++   bool no_fit;           /* even the smallest bins exceed GMEM */
+ 
+    struct fd_vsc_pipe vsc_pipe[32];
+    struct fd_tile *tile;

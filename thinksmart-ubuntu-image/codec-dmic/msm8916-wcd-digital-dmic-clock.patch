@@ -1,0 +1,162 @@
+diff -ru a/Documentation/devicetree/bindings/sound/qcom,msm8916-wcd-digital-codec.yaml b/Documentation/devicetree/bindings/sound/qcom,msm8916-wcd-digital-codec.yaml
+--- a/Documentation/devicetree/bindings/sound/qcom,msm8916-wcd-digital-codec.yaml	2026-10-31 20:37:58
++++ b/Documentation/devicetree/bindings/sound/qcom,msm8916-wcd-digital-codec.yaml	2026-10-31 20:38:23
+@@ -30,6 +30,14 @@
+   '#sound-dai-cells':
+     const: 1
+ 
++  qcom,dmic-sample-rate:
++    description:
++      Highest DMIC clock rate in Hz. The codec uses the fastest MCLK divider
++      (2, 3, 4, 6 or 16) that does not exceed it. Lower it for microphones
++      that do not deliver clean data at the default.
++    $ref: /schemas/types.yaml#/definitions/uint32
++    default: 3200000
++
+ required:
+   - compatible
+   - reg
+diff -ru a/arch/arm64/boot/dts/qcom/apq8053-lenovo-cd-18781y.dts b/arch/arm64/boot/dts/qcom/apq8053-lenovo-cd-18781y.dts
+--- a/arch/arm64/boot/dts/qcom/apq8053-lenovo-cd-18781y.dts	2026-10-31 20:37:57
++++ b/arch/arm64/boot/dts/qcom/apq8053-lenovo-cd-18781y.dts	2026-10-31 20:38:23
+@@ -407,6 +407,11 @@
+ 	status = "okay";
+ };
+ 
++&lpass_codec {
++	/* DMIC1 only delivers clean data at 2.4 MHz, DMIC2 works at both */
++	qcom,dmic-sample-rate = <2400000>;
++};
++
+ &wcd_codec {
+ 	vdd-cdc-io-supply = <&pm8953_l5>;
+ 	vdd-cdc-tx-rx-cx-supply = <&pm8953_s4>;
+diff -ru a/sound/soc/codecs/msm8916-wcd-digital.c b/sound/soc/codecs/msm8916-wcd-digital.c
+--- a/sound/soc/codecs/msm8916-wcd-digital.c	2026-10-31 20:37:57
++++ b/sound/soc/codecs/msm8916-wcd-digital.c	2026-10-31 20:38:23
+@@ -180,6 +180,9 @@
+ #define TXN_DMIC_CTL_CLK_SEL_DIV6		0x3
+ #define TXN_DMIC_CTL_CLK_SEL_DIV16		0x4
+ 
++/* 3.2 MHz: what the driver always used with the usual 9.6 MHz MCLK */
++#define MSM8916_WCD_DMIC_CLK_RATE_DEFAULT	3200000
++
+ #define MSM8916_WCD_DIGITAL_RATES (SNDRV_PCM_RATE_8000 | \
+ 				   SNDRV_PCM_RATE_16000 | \
+ 				   SNDRV_PCM_RATE_32000 | \
+@@ -226,6 +229,7 @@
+ 
+ struct msm8916_wcd_digital_priv {
+ 	struct clk *ahbclk, *mclk;
++	u32 dmic_clk_rate;
+ };
+ 
+ static const unsigned long rx_gain_reg[] = {
+@@ -594,18 +598,40 @@
+ 	return 0;
+ }
+ 
++/*
++ * DMIC clock divider: the fastest DMIC clock not above the requested rate. The DMIC
++ * clock generator and every decimator fed by a DMIC must use the same setting.
++ */
++static unsigned int msm8916_wcd_digital_dmic_clk_sel(struct snd_soc_component *component)
++{
++	static const unsigned int divs[] = { 2, 3, 4, 6, 16 };	/* CLK_SEL 0..4 */
++	struct msm8916_wcd_digital_priv *priv = snd_soc_component_get_drvdata(component);
++	unsigned long mclk = clk_get_rate(priv->mclk);
++	unsigned int sel;
++
++	if (!mclk)
++		return TXN_DMIC_CTL_CLK_SEL_DIV3;
++
++	for (sel = 0; sel < ARRAY_SIZE(divs) - 1; sel++)
++		if (mclk / divs[sel] <= priv->dmic_clk_rate)
++			break;
++
++	return sel;
++}
++
+ static int msm8916_wcd_digital_enable_dec(struct snd_soc_dapm_widget *w,
+ 					  struct snd_kcontrol *kcontrol,
+ 					  int event)
+ {
+ 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
+ 	unsigned int decimator = w->shift + 1;
+-	u16 dec_reset_reg, tx_vol_ctl_reg, tx_mux_ctl_reg;
++	u16 dec_reset_reg, tx_vol_ctl_reg, tx_mux_ctl_reg, tx_dmic_ctl_reg;
+ 	u8 dec_hpf_cut_of_freq;
+ 
+ 	dec_reset_reg = LPASS_CDC_CLK_TX_RESET_B1_CTL;
+ 	tx_vol_ctl_reg = LPASS_CDC_TX1_VOL_CTL_CFG + 32 * (decimator - 1);
+ 	tx_mux_ctl_reg = LPASS_CDC_TX1_MUX_CTL + 32 * (decimator - 1);
++	tx_dmic_ctl_reg = LPASS_CDC_TX1_DMIC_CTL + 32 * (decimator - 1);
+ 
+ 	switch (event) {
+ 	case SND_SOC_DAPM_PRE_PMU:
+@@ -622,6 +648,14 @@
+ 					    TX_MUX_CTL_CUT_OFF_FREQ_MASK,
+ 					    TX_MUX_CTL_CF_NEG_3DB_150HZ);
+ 		}
++		/*
++		 * The decimator's DMIC clock setting belongs to the decimator, not to a DMIC
++		 * line: DEC1 may be fed by DMIC2 and vice versa. A mismatch with the actual
++		 * DMIC clock turns its output into full-scale noise.
++		 */
++		snd_soc_component_update_bits(component, tx_dmic_ctl_reg,
++				    TXN_DMIC_CTL_CLK_SEL_MASK,
++				    msm8916_wcd_digital_dmic_clk_sel(component));
+ 		break;
+ 	case SND_SOC_DAPM_POST_PMU:
+ 		/* enable HPF */
+@@ -662,38 +696,13 @@
+ 					   int event)
+ {
+ 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
+-	unsigned int dmic;
+-	int ret;
+-	/* get dmic number out of widget name */
+-	char *dmic_num = strpbrk(w->name, "12");
+ 
+-	if (dmic_num == NULL) {
+-		dev_err(component->dev, "Invalid DMIC\n");
+-		return -EINVAL;
+-	}
+-	ret = kstrtouint(dmic_num, 10, &dmic);
+-	if (ret < 0 || dmic > 2) {
+-		dev_err(component->dev, "Invalid DMIC line on the component\n");
+-		return -EINVAL;
+-	}
+-
+ 	switch (event) {
+ 	case SND_SOC_DAPM_PRE_PMU:
++		/* the decimators get the matching setting in enable_dec */
+ 		snd_soc_component_update_bits(component, LPASS_CDC_CLK_DMIC_B1_CTL,
+ 				    DMIC_B1_CTL_DMIC0_CLK_SEL_MASK,
+-				    DMIC_B1_CTL_DMIC0_CLK_SEL_DIV3);
+-		switch (dmic) {
+-		case 1:
+-			snd_soc_component_update_bits(component, LPASS_CDC_TX1_DMIC_CTL,
+-					    TXN_DMIC_CTL_CLK_SEL_MASK,
+-					    TXN_DMIC_CTL_CLK_SEL_DIV3);
+-			break;
+-		case 2:
+-			snd_soc_component_update_bits(component, LPASS_CDC_TX2_DMIC_CTL,
+-					    TXN_DMIC_CTL_CLK_SEL_MASK,
+-					    TXN_DMIC_CTL_CLK_SEL_DIV3);
+-			break;
+-		}
++				    msm8916_wcd_digital_dmic_clk_sel(component) << 1);
+ 		break;
+ 	}
+ 
+@@ -1172,6 +1181,9 @@
+ 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+ 	if (!priv)
+ 		return -ENOMEM;
++
++	priv->dmic_clk_rate = MSM8916_WCD_DMIC_CLK_RATE_DEFAULT;
++	of_property_read_u32(dev->of_node, "qcom,dmic-sample-rate", &priv->dmic_clk_rate);
+ 
+ 	base = devm_platform_ioremap_resource(pdev, 0);
+ 	if (IS_ERR(base))

@@ -1,0 +1,125 @@
+#!/usr/bin/python3
+"""Bridge the two DMICs into PipeWire as virtual sources.
+
+  thinksmart_mic          mono, DMIC2 only (the default source, what clients used so far)
+  thinksmart_mic_stereo   both DMICs: left DMIC1 (decimator TX1), right DMIC2 (TX2)
+
+DMIC1 is only clean with the codec-dmic kernel fix (DMIC clock 2.4 MHz); on a kernel
+without it the left channel of thinksmart_mic_stereo is noise, the mono source is fine.
+
+The q6asm capture path on this device survives exactly one prepare per open: any
+second prepare (PortAudio opening the device, or arecord recovering from an xrun)
+fails with "Buffer already allocated" and leaves the DSP broken, speaker included,
+until reboot. PipeWire's own ALSA source times out in the DSP as well.
+
+So one arecord keeps the PCM open and is drained continuously. Its audio goes into a
+PipeWire pipe source through a non-blocking FIFO; when nobody is listening PipeWire
+stops reading the FIFO and the audio is dropped here instead of stalling arecord.
+"""
+import array
+import errno
+import os
+import subprocess
+import sys
+import time
+
+RUN = os.environ['XDG_RUNTIME_DIR']
+CHUNK = 3840  # 20 ms of 48 kHz stereo S16
+FRAME = 4     # one stereo S16 frame
+GONE_SECONDS = 5  # a FIFO that had a reader and has none this long: its source was unloaded
+
+
+def pactl(*args):
+    return subprocess.run(['pactl', *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+
+
+class PipeSource:
+    """A PipeWire pipe source fed through a non-blocking FIFO; audio nobody reads is dropped."""
+
+    def __init__(self, name, fifo, channels, description):
+        self.fifo, self.fd, self.retry_at = os.path.join(RUN, fifo), None, 0.0
+        self.was_open, self.gone_since = False, None
+        if pactl('load-module', 'module-pipe-source', f'source_name={name}', f'file={self.fifo}',
+                 'format=s16le', 'rate=48000', f'channels={channels}',
+                 f"source_properties='device.description=\"{description}\"'") != 0:
+            sys.exit(f'could not load module-pipe-source {name}')
+
+    def write(self, data):
+        now = time.monotonic()
+        if self.fd is None and now >= self.retry_at:
+            self.retry_at = now + 1
+            try:
+                self.fd = os.open(self.fifo, os.O_WRONLY | os.O_NONBLOCK)
+                self.was_open, self.gone_since = True, None
+            except OSError as e:
+                if e.errno not in (errno.ENXIO, errno.ENOENT):  # ENXIO: no reader yet
+                    raise
+                # PipeWire keeps the FIFO open as long as the source exists (idle it just stops
+                # reading). No reader after there was one: pipewire-pulse restarted and the module
+                # went with it. Exit so systemd starts us again and the source is loaded anew.
+                if self.was_open:
+                    self.gone_since = self.gone_since or now
+                    if now - self.gone_since >= GONE_SECONDS:
+                        sys.exit(f'{self.fifo}: no reader for {GONE_SECONDS} s, source gone')
+        if self.fd is None:
+            return
+        try:
+            os.write(self.fd, data)
+        except BlockingIOError:
+            pass  # reader idle: drop this chunk
+        except BrokenPipeError:
+            os.close(self.fd)
+            self.fd = None
+
+
+def wait_for_speaker(timeout=120):
+    # WirePlumber probes the capture PCM while it sets up the card's HiFi profile; if
+    # arecord already holds it, the card falls back to profile "off" and the speaker
+    # sink never appears. Open the mic only once the speaker sink exists.
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        sinks = subprocess.run(['pactl', 'list', 'sinks', 'short'], capture_output=True, text=True).stdout
+        if 'alsa_output.platform-c051000.sound-card' in sinks:
+            return
+        time.sleep(2)
+    sys.exit('speaker sink did not appear')
+
+
+def set_mic_route():
+    # DEC1 takes DMIC1, DEC2 DMIC2. (Feeding DEC1 from DMIC2 used to give full-scale noise:
+    # the stock driver sets a decimator's DMIC clock divider only for the DMIC of the same
+    # number. Routed like this both decimators get it on any kernel.)
+    # UCM's BootSequence (+31 dB) is not applied when PipeWire does not manage the mic,
+    # and at the 0 dB default (84) speech barely leaves the noise floor.
+    for ctl, value in (('CIC1 MUX', 'DMIC'), ('CIC2 MUX', 'DMIC'),
+                       ('DEC1 MUX', 'DMIC1'), ('DEC2 MUX', 'DMIC2'),
+                       ('TX1 Digital Volume', '115'), ('TX2 Digital Volume', '115')):
+        subprocess.run(['amixer', '-q', '-c', '0', 'cset', f'name={ctl}', value], check=False)
+
+
+def main():
+    wait_for_speaker()
+    set_mic_route()
+    pactl('unload-module', 'module-pipe-source')
+    mono = PipeSource('thinksmart_mic', 'thinksmart-mic.fifo', 1, 'Microphone')
+    stereo = PipeSource('thinksmart_mic_stereo', 'thinksmart-mic-stereo.fifo', 2,
+                        'Microphones (both)')
+    pactl('set-default-source', 'thinksmart_mic')
+
+    rec = subprocess.Popen(['arecord', '-q', '-D', 'hw:cd18781y,1', '-f', 'S16_LE', '-r', '48000',
+                            '-c', '2', '-t', 'raw', '--period-time=20000', '--buffer-time=1000000'],
+                           stdout=subprocess.PIPE, bufsize=0)
+    rest = b''
+    while True:
+        data = rec.stdout.read(CHUNK)
+        if not data:
+            sys.exit(f'arecord exited ({rec.wait()})')
+        data, rest = rest + data, b''
+        cut = len(data) - len(data) % FRAME
+        data, rest = data[:cut], data[cut:]
+        stereo.write(data)
+        mono.write(array.array('h', data)[1::2].tobytes())  # right channel (DMIC2)
+
+
+if __name__ == '__main__':
+    main()

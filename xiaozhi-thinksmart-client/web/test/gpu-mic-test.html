@@ -1,0 +1,51 @@
+<!doctype html>
+<!-- GPU residue bisection page (not part of the UI): the v2 page's mic button and side buttons
+     at the same screen position, with the same background. window.step() runs one press /
+     listening / idle cycle. Query flags drop one ingredient each: noshadow, noring, notrans,
+     noctl, nobg. Driven over the remote inspector while bisecting. -->
+<html><head><meta charset="utf-8"><title>gpu mic test</title>
+<style>
+:root { --bg0: #050813; --bg1: #0b1128; --card: #ffffff0b; --card2: #ffffff14; --line: #ffffff17; --ink2: #b6c0e2;
+        --c1: #aab4e6; --c2: #5a66a8; }
+body[data-state="listening"] { --c1: #7ff3ff; --c2: #19b4f0; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body { background: radial-gradient(760px 560px at 20% 46%, #18245a 0%, transparent 70%),
+       radial-gradient(820px 520px at 100% 108%, #0c3350 0%, transparent 62%),
+       radial-gradient(600px 380px at 78% -10%, #1c1546 0%, transparent 70%),
+       linear-gradient(160deg, var(--bg1), var(--bg0) 70%); }
+body.nobg { background: #0b1128; }
+.ctl, .mic { position: absolute; border: 0; padding: 0; font: inherit; }
+.mic { left: 202px; top: 602px; width: 116px; height: 116px; border-radius: 50%; color: #081024;
+       background: linear-gradient(140deg, #8ff0ff, #6c8cff); box-shadow: 0 12px 34px #4fb8ff40, 0 0 0 9px #ffffff0c;
+       transition: transform .14s; }
+.noshadow .mic { box-shadow: none; }
+.mic.hold { transform: scale(.93); }
+.notrans .mic.hold { transform: none; }
+.mic-ring { position: absolute; inset: -14px; border-radius: 50%; border: 3px solid var(--c1); opacity: 0; transition: opacity .25s; }
+body[data-state="listening"] .mic-ring { opacity: .75; }
+.noring .mic-ring { display: none; }
+.ctl { top: 620px; width: 96px; height: 80px; border-radius: 22px; color: var(--ink2); background: var(--card);
+       border: 1px solid var(--line); transition: opacity .25s, transform .12s; }
+.ctl[disabled] { opacity: .22; }
+#btnAbort { left: 72px; } #btnEnd { left: 352px; }
+.noctl .ctl { display: none; }
+</style></head>
+<body data-state="idle">
+<button class="ctl" id="btnAbort" disabled></button>
+<button class="mic" id="btnMic"><i class="mic-ring"></i></button>
+<button class="ctl" id="btnEnd" disabled></button>
+<script>
+for (const f of new URLSearchParams(location.search).keys()) document.body.classList.add(f);
+const $ = id => document.getElementById(id);
+const wait = ms => new Promise(r => setTimeout(r, ms));
+// one cycle like a push-to-talk: press, listen, release, the end/abort buttons light up and go dim again
+window.step = async () => {
+  $('btnMic').classList.add('hold'); document.body.dataset.state = 'listening';
+  $('btnEnd').disabled = false;
+  await wait(900);
+  $('btnMic').classList.remove('hold'); $('btnAbort').disabled = false;
+  await wait(500);
+  document.body.dataset.state = 'idle'; $('btnAbort').disabled = true; $('btnEnd').disabled = true;
+  return 1;
+};
+</script></body></html>

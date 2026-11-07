@@ -1,0 +1,9 @@
+#%PAM-1.0
+# /etc/pam.d/thinksmart-kiosk: the autologin session of thinksmart-kiosk.service. systemd runs only
+# the account and session stacks here (no password); pam_systemd in common-session registers the
+# logind session on seat0 that Weston needs. (PAMName=login works too but logs a missing pam_lastlog.)
+@include common-account
+session    required   pam_limits.so
+session    required   pam_env.so readenv=1
+session    required   pam_env.so readenv=1 envfile=/etc/default/locale
+@include common-session

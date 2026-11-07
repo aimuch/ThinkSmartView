@@ -1,0 +1,8 @@
+[Unit]
+Description=Check for a new ThinkSmart client version (only checks, never installs)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/thinksmart-update check

@@ -1,0 +1,26 @@
+[Unit]
+Description=ThinkSmart kiosk: Weston kiosk-shell with the full-screen browser on tty1
+# Replaces SDDM autologin (the desktop is gone). PAMName gives ubuntu a logind session on seat0,
+# so Weston can take the DRM device and input through logind.
+After=systemd-user-sessions.service getty@tty1.service thinksmart-gpu-watchdog.service
+Conflicts=getty@tty1.service
+
+[Service]
+User=ubuntu
+PAMName=thinksmart-kiosk
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+Environment=XDG_SESSION_TYPE=wayland XDG_SESSION_CLASS=user XDG_SESSION_DESKTOP=ThinkSmartKiosk XDG_CURRENT_DESKTOP=ThinkSmartKiosk
+ExecStart=/usr/local/bin/thinksmart-kiosk-session
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical.target

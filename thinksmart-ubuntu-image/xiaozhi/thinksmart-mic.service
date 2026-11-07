@@ -1,0 +1,15 @@
+[Unit]
+Description=DMIC to PipeWire bridge (virtual source thinksmart_mic)
+After=pipewire-pulse.service wireplumber.service
+# The sources live inside pipewire-pulse: when it stops, crashes or restarts, so do we (BindsTo;
+# Requires leaves us running against a source that's gone), and WantedBy below starts us again
+# whenever it starts, however it was started (socket activation, its own Restart=).
+BindsTo=pipewire-pulse.service
+
+[Service]
+ExecStart=/usr/local/bin/thinksmart-mic
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target pipewire-pulse.service

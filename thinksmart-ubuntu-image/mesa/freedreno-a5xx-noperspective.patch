@@ -1,0 +1,38 @@
+diff -ru a/src/gallium/drivers/freedreno/a5xx/fd5_program.c b/src/gallium/drivers/freedreno/a5xx/fd5_program.c
+--- a/src/gallium/drivers/freedreno/a5xx/fd5_program.c	2026-10-31 04:30:22.490636494 +0000
++++ b/src/gallium/drivers/freedreno/a5xx/fd5_program.c	2026-10-31 04:32:21.953703010 +0000
+@@ -535,7 +535,7 @@
+          A5XX_HLSQ_CONTROL_3_REG_IJ_LINEAR_PIXEL(ij_regid[IJ_LINEAR_PIXEL]) |
+          A5XX_HLSQ_CONTROL_3_REG_IJ_PERSP_CENTROID(
+             ij_regid[IJ_PERSP_CENTROID]) |
+-         A5XX_HLSQ_CONTROL_3_REG_IJ_PERSP_CENTROID(
++         A5XX_HLSQ_CONTROL_3_REG_IJ_LINEAR_CENTROID(
+             ij_regid[IJ_LINEAR_CENTROID]));
+    OUT_RING(
+       ring,
+diff -ru a/src/util/00-mesa-defaults.conf b/src/util/00-mesa-defaults.conf
+--- a/src/util/00-mesa-defaults.conf	2026-10-31 04:30:22.488636494 +0000
++++ b/src/util/00-mesa-defaults.conf	2026-10-31 04:32:21.953703010 +0000
+@@ -1234,6 +1234,22 @@
+         </application>
+     </device>
+     <!--
++        Adreno 506 (a5xx): Skia (WebKitGTK 2.52, Skia m145) draws blurred box-shadows
++        with GL_NV_shader_noperspective_interpolation varyings, and on this GPU some of
++        those draws come out wrong: blocks of the glow land in the wrong place and stay
++        on screen. Captured and replayed, one such draw renders differently from llvmpipe
++        with identical inputs; with the extension hidden Skia uses ordinary interpolation
++        (identical results at w = 1) and no residue appears (0 of 60 real-UI checks, vs.
++        several per 20 with it). A standalone noperspective test passes, so the exact
++        hardware state at fault is not known yet; hide the extension until it is.
++     -->
++    <device driver="msm" device="FD506">
++        <application name="all">
++            <option name="mesa_extension_override" value="-GL_NV_shader_noperspective_interpolation" />
++        </application>
++    </device>
++
++    <!--
+          The android game hall of shame:
+ 
+          Workarounds for android games that are not aware of open source drivers.

@@ -1,0 +1,9 @@
+[Unit]
+Description=Pick up update requests from the client page and the welcome page
+
+[Path]
+PathExistsGlob=/var/lib/thinksmart-update/requests/*
+Unit=thinksmart-update-run.service
+
+[Install]
+WantedBy=multi-user.target

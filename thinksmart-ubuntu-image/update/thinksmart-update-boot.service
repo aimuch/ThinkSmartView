@@ -1,0 +1,11 @@
+[Unit]
+Description=Finish or undo a client update a reboot or power cut interrupted
+After=network-online.target thinksmart-client.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/thinksmart-update boot
+TimeoutStartSec=10min
+
+[Install]
+WantedBy=multi-user.target
