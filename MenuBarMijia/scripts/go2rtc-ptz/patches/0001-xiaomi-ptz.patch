@@ -1,0 +1,2184 @@
+diff --git a/internal/streams/stream.go b/internal/streams/stream.go
+index 984c73e..f192817 100644
+--- a/internal/streams/stream.go
++++ b/internal/streams/stream.go
+@@ -47,6 +47,21 @@ func NewStream(source any) *Stream {
+ 	}
+ }
+ 
++// Conns returns the live connections of this stream's producers (nil for producers that are
++// not connected), so a module can reach a source's own control channel over the session that
++// is already open.
++func (s *Stream) Conns() []core.Producer {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	conns := make([]core.Producer, 0, len(s.producers))
++	for _, prod := range s.producers {
++		prod.mu.Lock()
++		conns = append(conns, prod.conn)
++		prod.mu.Unlock()
++	}
++	return conns
++}
++
+ func (s *Stream) Sources() []string {
+ 	sources := make([]string, 0, len(s.producers))
+ 	for _, prod := range s.producers {
+diff --git a/internal/xiaomi/audit_repro_test.go b/internal/xiaomi/audit_repro_test.go
+new file mode 100644
+index 0000000..3ffd76c
+--- /dev/null
++++ b/internal/xiaomi/audit_repro_test.go
+@@ -0,0 +1,108 @@
++package xiaomi
++
++import (
++	"errors"
++	"testing"
++	"time"
++)
++
++// Adapted from the independent audit reproduction. The API now allocates a bridge session, so
++// "stop before move" means begin -> stop -> late move. Assertions are the original ones: the
++// motor must never start, and no stop may claim a successful write when the write failed.
++
++func TestAuditRepro1A_StopBeforeFirstMoveFailsToBlockLateMove(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(20000, 0)
++
++	session, _, err := ptz.begin("cam", now)
++	if err != nil {
++		t.Fatal(err)
++	}
++	sent, mode, err := ptz.stop("cam", ptz.epoch, session)
++	t.Logf("stop before move: sent=%v mode=%v err=%v", sent, mode, err)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err := ptz.move("cam", ptz.epoch, session, 1, "left", now.Add(time.Millisecond)); !errors.Is(err, errPTZEnded) {
++		t.Fatalf("BUG (1A): late move after stop started the motor: ops=%v err=%v", motor.snapshot(), err)
++	}
++	if len(motor.snapshot()) != 0 {
++		t.Fatalf("BUG (1A): an unmoved begin touched the motor: %v", motor.snapshot())
++	}
++}
++
++func TestAuditRepro1B_StopBeforeFirstMoveAfterPreviousSessionReturnsConflict(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(21000, 0)
++
++	old, _, err := ptz.begin("cam", now)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err := ptz.move("cam", ptz.epoch, old, 1, "left", now); err != nil {
++		t.Fatal(err)
++	}
++	if _, _, err := ptz.stop("cam", ptz.epoch, old); err != nil {
++		t.Fatal(err)
++	}
++
++	fresh, _, err := ptz.begin("cam", now.Add(time.Second))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, _, err := ptz.stop("cam", ptz.epoch, fresh); err != nil {
++		t.Fatalf("BUG (1B): stop before move failed: %v", err)
++	}
++	if _, err := ptz.move("cam", ptz.epoch, fresh, 1, "left", now.Add(time.Second+time.Millisecond)); !errors.Is(err, errPTZEnded) {
++		t.Fatalf("BUG (1B-followup): late move started: %v", err)
++	}
++}
++
++func TestAuditRepro2_OldGenerationResurrectsAfterNewerGenerationEnds(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(22000, 0)
++
++	first, _, _ := ptz.begin("cam", now)
++	if _, err := ptz.move("cam", ptz.epoch, first, 1, "left", now); err != nil {
++		t.Fatal(err)
++	}
++	if _, _, err := ptz.stop("cam", ptz.epoch, first); err != nil {
++		t.Fatal(err)
++	}
++
++	second, _, _ := ptz.begin("cam", now.Add(time.Second))
++	if _, err := ptz.move("cam", ptz.epoch, second, 1, "right", now.Add(time.Second)); err != nil {
++		t.Fatal(err)
++	}
++	if _, _, err := ptz.stop("cam", ptz.epoch, second); err != nil {
++		t.Fatal(err)
++	}
++
++	if _, err := ptz.move("cam", ptz.epoch, first, 2, "left", now.Add(2*time.Second)); !errors.Is(err, errPTZEnded) && !errors.Is(err, errPTZNoSession) {
++		t.Fatalf("BUG (2): old generation revived: %v", err)
++	}
++}
++
++func TestAuditRepro3_StopSwallowsMotorWriteErrorAndClaimsSent(t *testing.T) {
++	motor := &fakeMotor{
++		model: "xiaomi.camera.c01a01",
++		fail:  map[int]bool{-1001: true},
++	}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(23000, 0)
++
++	session, _, err := ptz.begin("cam", now)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err := ptz.move("cam", ptz.epoch, session, 1, "left", now); err != nil {
++		t.Fatal(err)
++	}
++	sent, _, err := ptz.stop("cam", ptz.epoch, session)
++	if err == nil || sent {
++		t.Fatalf("BUG (3): stop swallowed the write error: sent=%v err=%v", sent, err)
++	}
++}
+diff --git a/internal/xiaomi/ptz.go b/internal/xiaomi/ptz.go
+new file mode 100644
+index 0000000..ad92bf7
+--- /dev/null
++++ b/internal/xiaomi/ptz.go
+@@ -0,0 +1,606 @@
++package xiaomi
++
++import (
++	"context"
++	"crypto/rand"
++	"encoding/hex"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"net"
++	"net/http"
++	"strings"
++	"sync"
++	"time"
++
++	"github.com/AlexxIT/go2rtc/internal/streams"
++)
++
++// Timing for a held drag. The client renews a move every heartbeat; a move that is no longer
++// renewed stops on the bridge even when the app crashed or its network went away.
++type ptzTiming struct {
++	Step  time.Duration
++	Lease time.Duration
++	Cap   time.Duration
++	Tick  time.Duration
++}
++
++var ptzDefaultTiming = ptzTiming{
++	Step:  380 * time.Millisecond,
++	Lease: 700 * time.Millisecond,
++	Cap:   8 * time.Second,
++	Tick:  100 * time.Millisecond,
++}
++
++type ptzMode int
++
++const (
++	ptzStep ptzMode = iota
++	ptzContinuous
++	ptzUnknown
++)
++
++func (m ptzMode) String() string {
++	switch m {
++	case ptzStep:
++		return "step"
++	case ptzContinuous:
++		return "continuous"
++	default:
++		return "unknown"
++	}
++}
++
++// ptzProfiles is an evidence table, not a brand rule. Step/continuous entries come from
++// real-device reports; a model outside the table keeps the plain viewer.
++var ptzProfiles = map[string]ptzMode{
++	// One operation moves a bounded step and self-stops.
++	"chuangmi.camera.029a02": ptzStep,
++	"isa.camera.hlc8":        ptzStep,
++	"isa.camera.hlc8a":       ptzStep,
++	"isa.camera.500dh":       ptzStep,
++	"isa.camera.hlmax":       ptzStep,
++
++	// One operation runs until -1001.
++	"xiaomi.camera.c01a01":   ptzContinuous,
++	"chuangmi.camera.72ac1":  ptzContinuous,
++	"chuangmi.camera.039a04": ptzContinuous,
++	"chuangmi.camera.039c04": ptzContinuous,
++	"isa.camera.df3":         ptzContinuous,
++	"isa.camera.isc5c1":      ptzContinuous,
++
++	// Hardware is documented; the motor's motion mode has not been verified on a real unit.
++	"chuangmi.camera.061a01": ptzUnknown,
++	"chuangmi.camera.061a03": ptzUnknown,
++	"chuangmi.camera.069a01": ptzUnknown,
++	"chuangmi.camera.039c01": ptzUnknown,
++	"chuangmi.camera.021a04": ptzUnknown,
++	"chuangmi.camera.026c02": ptzUnknown,
++	"chuangmi.camera.ipc019": ptzUnknown,
++	"chuangmi.camera.ip029a": ptzUnknown,
++}
++
++type motorControl interface {
++	Motor(operation int) error
++	Model() string
++}
++
++// A session is allocated by this bridge. Sessions are monotonic per stream and stoppedThrough is
++// a permanent high-water mark, so a late packet from an old session can never start a motor.
++type ptzSession struct {
++	session   uint64
++	lastSeq   uint64
++	direction string
++	mode      ptzMode
++	motor     motorControl
++	started   time.Time
++	expires   time.Time
++	lastStep  time.Time
++	created   time.Time
++	ended     bool
++	stopDone  chan struct{}
++	cancel    context.CancelFunc
++}
++
++type ptzStream struct {
++	motorLock       sync.Mutex
++	stopMu          sync.Mutex
++	nextSession     uint64
++	stoppedThrough  uint64
++	lastStopSession uint64
++	lastStopSent    bool
++	lastStopErr     error
++	stopsInFlight   int
++	stopBarrier     chan struct{}
++	current         *ptzSession
++}
++
++type ptzManager struct {
++	mu      sync.Mutex
++	streams map[string]*ptzStream
++	timing  ptzTiming
++	epoch   string
++	autoRun bool
++}
++
++func newPTZManager() *ptzManager {
++	var raw [8]byte
++	_, _ = rand.Read(raw[:])
++	return &ptzManager{
++		streams: map[string]*ptzStream{},
++		timing:  ptzDefaultTiming,
++		epoch:   hex.EncodeToString(raw[:]),
++		autoRun: true,
++	}
++}
++
++var ptz = newPTZManager()
++
++var (
++	errPTZConflict    = errors.New("another move is active")
++	errPTZEnded       = errors.New("move already ended")
++	errPTZStale       = errors.New("stale command")
++	errPTZNoSession   = errors.New("no such session")
++	errPTZUnsupported = errors.New("camera is not a known PTZ model")
++	errPTZNoMotor     = errors.New("stream has no connected motor")
++	errPTZEpoch       = errors.New("bridge epoch changed")
++	errPTZStopWrite   = errors.New("stop write failed")
++)
++
++func directionOperation(direction string) (int, bool) {
++	switch direction {
++	case "left":
++		return 1, true
++	case "right":
++		return 2, true
++	case "up":
++		return 3, true
++	case "down":
++		return 4, true
++	}
++	return 0, false
++}
++
++var lookupMotor = findMotor
++
++func findMotor(name string) (motorControl, error) {
++	stream := streams.Get(name)
++	if stream == nil {
++		return nil, fmt.Errorf("stream %q not found", name)
++	}
++	isXiaomi := false
++	for _, src := range stream.Sources() {
++		if strings.HasPrefix(src, "xiaomi:") {
++			isXiaomi = true
++			break
++		}
++	}
++	if !isXiaomi {
++		return nil, errPTZNoMotor
++	}
++	for _, conn := range stream.Conns() {
++		if motor, ok := conn.(motorControl); ok {
++			return motor, nil
++		}
++	}
++	return nil, errPTZNoMotor
++}
++
++// begin allocates one session per drag. It never touches a motor; the first move does.
++func (m *ptzManager) begin(name string, now time.Time) (uint64, ptzMode, error) {
++	motor, err := lookupMotor(name)
++	if err != nil {
++		return 0, 0, err
++	}
++	mode, ok := ptzProfiles[motor.Model()]
++	if !ok {
++		return 0, 0, errPTZUnsupported
++	}
++
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	stream := m.streams[name]
++	if stream == nil {
++		stream = &ptzStream{}
++		m.streams[name] = stream
++	}
++	if stream.current != nil && !stream.current.ended {
++		if stream.current.started.IsZero() {
++			// A session whose first move never arrived (a click or a cancelled drag) must not
++			// block the next drag forever. It never touched the motor.
++			stream.current.ended = true
++			stream.current.cancel()
++		} else {
++			return 0, 0, errPTZConflict
++		}
++	}
++	stream.nextSession++
++	ctx, cancel := context.WithCancel(context.Background())
++	session := &ptzSession{
++		session: stream.nextSession,
++		mode:    mode,
++		motor:   motor,
++		created: now,
++		cancel:  cancel,
++	}
++	stream.current = session
++	if m.autoRun {
++		go m.run(ctx, name, stream, session)
++	}
++	_ = now
++	return session.session, mode, nil
++}
++
++func (m *ptzManager) move(name, epoch string, session, seq uint64, direction string, now time.Time) (ptzMode, error) {
++	operation, ok := directionOperation(direction)
++	if !ok {
++		return 0, fmt.Errorf("invalid direction")
++	}
++	if epoch != m.epoch {
++		return 0, errPTZEpoch
++	}
++
++	m.mu.Lock()
++	stream := m.streams[name]
++	if stream == nil || stream.current == nil || stream.current.session != session {
++		m.mu.Unlock()
++		return 0, errPTZNoSession
++	}
++	current := stream.current
++	if current.ended || session <= stream.stoppedThrough {
++		m.mu.Unlock()
++		return 0, errPTZEnded
++	}
++	if seq <= current.lastSeq {
++		m.mu.Unlock()
++		return 0, errPTZStale
++	}
++	current.lastSeq = seq
++	directionChanged := current.direction != direction
++	current.direction = direction
++	wasActive := !current.started.IsZero()
++	if !wasActive {
++		current.started = now
++		current.expires = now.Add(m.timing.Lease)
++		current.lastStep = now
++	} else {
++		current.expires = now.Add(m.timing.Lease)
++	}
++	if directionChanged {
++		current.lastStep = now
++	}
++	mode := current.mode
++	m.mu.Unlock()
++
++	if !wasActive || directionChanged {
++		if err := m.sendStep(stream, current, operation); err != nil {
++			_ = m.end(stream, current, mode != ptzStep)
++			return mode, err
++		}
++	}
++	return mode, nil
++}
++
++func (m *ptzManager) heartbeat(name, epoch string, session, seq uint64, now time.Time) error {
++	if epoch != m.epoch {
++		return errPTZEpoch
++	}
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	stream := m.streams[name]
++	if stream == nil || stream.current == nil || stream.current.session != session {
++		return errPTZNoSession
++	}
++	current := stream.current
++	if current.ended || session <= stream.stoppedThrough {
++		return errPTZEnded
++	}
++	if seq <= current.lastSeq {
++		return errPTZStale
++	}
++	current.lastSeq = seq
++	if !current.started.IsZero() {
++		current.expires = now.Add(m.timing.Lease)
++	}
++	return nil
++}
++
++// stop ends the session and sends the stop operation for modes that need one. A stop for a
++// session the bridge has not seen yet still leaves a tombstone: the session is allocated by
++// begin, and stoppedThrough is monotonic.
++func (m *ptzManager) stop(name, epoch string, session uint64) (bool, ptzMode, error) {
++	if epoch != m.epoch {
++		return false, 0, errPTZEpoch
++	}
++	m.mu.Lock()
++	stream := m.streams[name]
++	if stream == nil {
++		m.mu.Unlock()
++		return false, ptzStep, nil
++	}
++	if session == 0 || session > stream.nextSession {
++		m.mu.Unlock()
++		return false, 0, errPTZNoSession
++	}
++	mode := ptzStep
++	current := stream.current
++	if current == nil || current.session != session {
++		if session > stream.stoppedThrough {
++			stream.stoppedThrough = session
++		}
++		m.mu.Unlock()
++		return false, mode, nil
++	}
++	mode = current.mode
++	if current.ended {
++		wait := current.stopDone
++		m.mu.Unlock()
++		if wait != nil {
++			<-wait
++		}
++		m.mu.Lock()
++		sent, err := storedStopLocked(stream, session)
++		m.mu.Unlock()
++		return sent, mode, err
++	}
++	sendStop := mode != ptzStep && !current.started.IsZero()
++	m.mu.Unlock()
++	sent, err := m.finishSession(stream, current, sendStop)
++	if err != nil {
++		return false, mode, err
++	}
++	return sent, mode, nil
++}
++
++func storedStopLocked(stream *ptzStream, session uint64) (bool, error) {
++	if stream.lastStopSession != session {
++		return false, nil
++	}
++	if stream.lastStopErr != nil {
++		return false, fmt.Errorf("%w: %v", errPTZStopWrite, stream.lastStopErr)
++	}
++	return stream.lastStopSent, nil
++}
++
++// finishSession is the one stop path for an explicit stop and for the watchdog. The motor
++// barrier starts before m.mu is released, so a new session's first step always waits for every
++// old stop write instead of overtaking it.
++func (m *ptzManager) finishSession(stream *ptzStream, session *ptzSession, sendStop bool) (bool, error) {
++	m.mu.Lock()
++	if session.ended || stream.current != session {
++		m.mu.Unlock()
++		return false, nil
++	}
++	if sendStop {
++		if stream.stopsInFlight == 0 {
++			stream.stopBarrier = make(chan struct{})
++		}
++		stream.stopsInFlight++
++		session.stopDone = make(chan struct{})
++	}
++	session.ended = true
++	if session.session > stream.stoppedThrough {
++		stream.stoppedThrough = session.session
++	}
++	session.cancel()
++	m.mu.Unlock()
++
++	if !sendStop {
++		return false, nil
++	}
++	stream.stopMu.Lock()
++	stream.motorLock.Lock()
++	err := session.motor.Motor(-1001)
++	stream.motorLock.Unlock()
++	stream.stopMu.Unlock()
++
++	m.mu.Lock()
++	stream.lastStopSession = session.session
++	stream.lastStopSent = err == nil
++	stream.lastStopErr = err
++	stream.stopsInFlight--
++	if stream.stopsInFlight == 0 {
++		close(stream.stopBarrier)
++		stream.stopBarrier = nil
++	}
++	close(session.stopDone)
++	session.stopDone = nil
++	m.mu.Unlock()
++
++	if err != nil {
++		return false, fmt.Errorf("%w: %v", errPTZStopWrite, err)
++	}
++	return true, nil
++}
++
++func (m *ptzManager) sendStep(stream *ptzStream, session *ptzSession, operation int) error {
++	// Wait for a stop write that is already on the wire. Re-check after the wait: the barrier is
++	// the linearization point between an old stop and a new session's first move.
++	for {
++		m.mu.Lock()
++		barrier := stream.stopBarrier
++		m.mu.Unlock()
++		if barrier == nil {
++			break
++		}
++		<-barrier
++	}
++	stream.motorLock.Lock()
++	defer stream.motorLock.Unlock()
++	m.mu.Lock()
++	if session.ended || stream.current != session {
++		m.mu.Unlock()
++		return errPTZEnded
++	}
++	m.mu.Unlock()
++	return session.motor.Motor(operation)
++}
++
++func (m *ptzManager) end(stream *ptzStream, session *ptzSession, sendStop bool) error {
++	_, err := m.finishSession(stream, session, sendStop)
++	return err
++}
++
++func (m *ptzManager) run(ctx context.Context, name string, stream *ptzStream, session *ptzSession) {
++	ticker := time.NewTicker(m.timing.Tick)
++	defer ticker.Stop()
++	for {
++		select {
++		case <-ctx.Done():
++			return
++		case now := <-ticker.C:
++			m.tickStream(stream, session, now)
++		}
++	}
++}
++
++// tick advances every stream once. Tests call it with explicit timestamps instead of sleeping.
++func (m *ptzManager) tick(now time.Time) {
++	m.mu.Lock()
++	type entry struct {
++		stream  *ptzStream
++		session *ptzSession
++	}
++	entries := make([]entry, 0, len(m.streams))
++	for _, stream := range m.streams {
++		if stream.current != nil {
++			entries = append(entries, entry{stream: stream, session: stream.current})
++		}
++	}
++	m.mu.Unlock()
++	for _, e := range entries {
++		m.tickStream(e.stream, e.session, now)
++	}
++}
++
++func (m *ptzManager) tickStream(stream *ptzStream, session *ptzSession, now time.Time) {
++	m.mu.Lock()
++	if stream.current != session || session.ended {
++		m.mu.Unlock()
++		return
++	}
++	if session.started.IsZero() {
++		expired := now.Sub(session.created) >= m.timing.Lease
++		m.mu.Unlock()
++		if expired {
++			_, _ = m.finishSession(stream, session, false)
++		}
++		return
++	}
++	expired := !now.Before(session.expires) || now.Sub(session.started) >= m.timing.Cap
++	if expired {
++		mode := session.mode
++		m.mu.Unlock()
++		_ = m.end(stream, session, mode != ptzStep)
++		return
++	}
++	if session.mode == ptzStep && now.Sub(session.lastStep) >= m.timing.Step {
++		operation, ok := directionOperation(session.direction)
++		session.lastStep = now
++		m.mu.Unlock()
++		if ok {
++			if err := m.sendStep(stream, session, operation); err != nil {
++				_ = m.end(stream, session, false)
++			}
++		}
++		return
++	}
++	m.mu.Unlock()
++}
++
++func apiPTZ(w http.ResponseWriter, r *http.Request) {
++	w.Header().Set("X-MenuBarMijia-PTZ", "v1")
++	if r.Method != "POST" {
++		http.Error(w, "POST only", http.StatusMethodNotAllowed)
++		return
++	}
++	if !isLoopback(r.RemoteAddr) {
++		http.Error(w, "loopback only", http.StatusForbidden)
++		return
++	}
++	if r.Header.Get("Origin") != "" {
++		http.Error(w, "origin not allowed", http.StatusForbidden)
++		return
++	}
++
++	var req struct {
++		Src       string `json:"src"`
++		Action    string `json:"action"`
++		Epoch     string `json:"epoch"`
++		Session   uint64 `json:"session"`
++		Seq       uint64 `json:"seq"`
++		Direction string `json:"direction"`
++	}
++	r.Body = http.MaxBytesReader(w, r.Body, 4096)
++	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Src == "" {
++		http.Error(w, "invalid request", http.StatusBadRequest)
++		return
++	}
++
++	now := time.Now()
++	switch req.Action {
++	case "begin":
++		session, mode, err := ptz.begin(req.Src, now)
++		if err != nil {
++			writePTZError(w, err)
++			return
++		}
++		writePTZJSON(w, map[string]any{
++			"ok": true, "epoch": ptz.epoch, "session": session, "mode": mode.String(),
++		})
++	case "move":
++		mode, err := ptz.move(req.Src, req.Epoch, req.Session, req.Seq, req.Direction, now)
++		if err != nil {
++			writePTZError(w, err)
++			return
++		}
++		writePTZJSON(w, map[string]any{"ok": true, "mode": mode.String()})
++	case "heartbeat":
++		if err := ptz.heartbeat(req.Src, req.Epoch, req.Session, req.Seq, now); err != nil {
++			writePTZError(w, err)
++			return
++		}
++		writePTZJSON(w, map[string]any{"ok": true})
++	case "stop":
++		sent, mode, err := ptz.stop(req.Src, req.Epoch, req.Session)
++		if err != nil && !errors.Is(err, errPTZStopWrite) {
++			writePTZError(w, err)
++			return
++		}
++		reply := map[string]any{
++			"ok": true, "mode": mode.String(), "stopSent": sent, "stopConfirmed": false,
++		}
++		if err != nil {
++			reply["stopError"] = "write_failed"
++		}
++		writePTZJSON(w, reply)
++	default:
++		http.Error(w, "invalid action", http.StatusBadRequest)
++	}
++}
++
++func writePTZJSON(w http.ResponseWriter, value any) {
++	w.Header().Set("Content-Type", "application/json")
++	_ = json.NewEncoder(w).Encode(value)
++}
++
++func writePTZError(w http.ResponseWriter, err error) {
++	code := http.StatusBadRequest
++	switch {
++	case errors.Is(err, errPTZConflict), errors.Is(err, errPTZEnded),
++		errors.Is(err, errPTZStale), errors.Is(err, errPTZNoSession),
++		errors.Is(err, errPTZUnsupported), errors.Is(err, errPTZNoMotor),
++		errors.Is(err, errPTZEpoch):
++		code = http.StatusConflict
++	}
++	http.Error(w, err.Error(), code)
++}
++
++func isLoopback(remoteAddr string) bool {
++	host, _, err := net.SplitHostPort(remoteAddr)
++	if err != nil {
++		host = remoteAddr
++	}
++	ip := net.ParseIP(host)
++	return ip != nil && ip.IsLoopback()
++}
+diff --git a/internal/xiaomi/ptz_test.go b/internal/xiaomi/ptz_test.go
+new file mode 100644
+index 0000000..7432e20
+--- /dev/null
++++ b/internal/xiaomi/ptz_test.go
+@@ -0,0 +1,508 @@
++package xiaomi
++
++import (
++	"encoding/json"
++	"errors"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++)
++
++type fakeMotor struct {
++	model string
++	mu    sync.Mutex
++	ops   []int
++	fail  map[int]bool
++}
++
++func (f *fakeMotor) Motor(operation int) error {
++	if f.fail[operation] {
++		return errors.New("write failed")
++	}
++	f.mu.Lock()
++	f.ops = append(f.ops, operation)
++	f.mu.Unlock()
++	return nil
++}
++
++func (f *fakeMotor) Model() string { return f.model }
++
++func (f *fakeMotor) snapshot() []int {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	return append([]int(nil), f.ops...)
++}
++
++func withPTZFixture(t *testing.T, motor *fakeMotor, timing ptzTiming) {
++	t.Helper()
++	oldLookup, oldPTZ := lookupMotor, ptz
++	lookupMotor = func(string) (motorControl, error) { return motor, nil }
++	ptz = &ptzManager{
++		streams: map[string]*ptzStream{},
++		timing:  timing,
++		epoch:   "test-epoch",
++		autoRun: false,
++	}
++	t.Cleanup(func() { lookupMotor, ptz = oldLookup, oldPTZ })
++}
++
++func countOps(ops []int, operation int) int {
++	n := 0
++	for _, op := range ops {
++		if op == operation {
++			n++
++		}
++	}
++	return n
++}
++
++func startSession(t *testing.T, name, direction string, now time.Time) (uint64, ptzMode) {
++	t.Helper()
++	session, mode, err := ptz.begin(name, now)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err := ptz.move(name, ptz.epoch, session, 1, direction, now); err != nil {
++		t.Fatal(err)
++	}
++	return session, mode
++}
++
++func TestStepModeRepeatsOnExplicitTicks(t *testing.T) {
++	motor := &fakeMotor{model: "chuangmi.camera.029a02"}
++	timing := ptzTiming{Step: 380 * time.Millisecond, Lease: time.Second, Cap: 8 * time.Second, Tick: 100 * time.Millisecond}
++	withPTZFixture(t, motor, timing)
++	now := time.Unix(1000, 0)
++
++	session, mode := startSession(t, "cam", "left", now)
++	if mode != ptzStep {
++		t.Fatalf("mode %v", mode)
++	}
++	if countOps(motor.snapshot(), 1) != 1 {
++		t.Fatalf("first step missing: %v", motor.snapshot())
++	}
++	ptz.tick(now.Add(timing.Step + time.Millisecond))
++	if countOps(motor.snapshot(), 1) != 2 {
++		t.Fatalf("step not repeated: %v", motor.snapshot())
++	}
++	ptz.tick(now.Add(timing.Step + timing.Step + time.Millisecond))
++	if countOps(motor.snapshot(), 1) != 3 {
++		t.Fatalf("second repeat missing: %v", motor.snapshot())
++	}
++	if _, _, err := ptz.stop("cam", ptz.epoch, session); err != nil {
++		t.Fatal(err)
++	}
++	// A step-mode camera needs no stop operation.
++	if countOps(motor.snapshot(), -1001) != 0 {
++		t.Fatalf("step mode sent stop: %v", motor.snapshot())
++	}
++	ptz.tick(now.Add(10 * time.Second))
++	if countOps(motor.snapshot(), 1) != 3 {
++		t.Fatalf("tick after stop moved the motor: %v", motor.snapshot())
++	}
++}
++
++func TestContinuousModeSendsOneMoveThenStop(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, motor, ptzTiming{Step: 380 * time.Millisecond, Lease: time.Second, Cap: 8 * time.Second, Tick: 100 * time.Millisecond})
++	now := time.Unix(2000, 0)
++
++	session, _ := startSession(t, "cam", "right", now)
++	ptz.tick(now.Add(100 * time.Millisecond))
++	if countOps(motor.snapshot(), 2) != 1 {
++		t.Fatalf("continuous move repeated: %v", motor.snapshot())
++	}
++	sent, mode, err := ptz.stop("cam", ptz.epoch, session)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if !sent || mode != ptzContinuous {
++		t.Fatalf("sent=%v mode=%v", sent, mode)
++	}
++	if countOps(motor.snapshot(), -1001) != 1 {
++		t.Fatalf("stop missing: %v", motor.snapshot())
++	}
++}
++
++func TestUnknownModeSendsOneStepAndStop(t *testing.T) {
++	motor := &fakeMotor{model: "chuangmi.camera.061a01"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(3000, 0)
++
++	session, _ := startSession(t, "cam", "up", now)
++	ptz.tick(now.Add(time.Second))
++	if countOps(motor.snapshot(), 3) != 1 {
++		t.Fatalf("unknown mode repeated a step: %v", motor.snapshot())
++	}
++	if _, _, err := ptz.stop("cam", ptz.epoch, session); err != nil {
++		t.Fatal(err)
++	}
++	if countOps(motor.snapshot(), -1001) != 1 {
++		t.Fatalf("unknown mode stop missing: %v", motor.snapshot())
++	}
++}
++
++func TestLeaseExpiryStopsContinuousMove(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	timing := ptzTiming{Step: 20 * time.Millisecond, Lease: 700 * time.Millisecond, Cap: 8 * time.Second, Tick: 100 * time.Millisecond}
++	withPTZFixture(t, motor, timing)
++	now := time.Unix(4000, 0)
++
++	session, _ := startSession(t, "cam", "down", now)
++	ptz.tick(now.Add(timing.Lease + timing.Tick))
++	if countOps(motor.snapshot(), -1001) != 1 {
++		t.Fatalf("lease expiry did not stop: %v", motor.snapshot())
++	}
++	if _, _, err := ptz.stop("cam", ptz.epoch, session); err != nil {
++		t.Fatalf("repeated stop should be idempotent: %v", err)
++	}
++	if err := ptz.heartbeat("cam", ptz.epoch, session, 2, now.Add(time.Second)); err == nil {
++		t.Fatal("a late heartbeat revived an ended move")
++	}
++}
++
++func TestHardCapStopsContinuousMove(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	timing := ptzTiming{Step: 20 * time.Millisecond, Lease: time.Minute, Cap: 8 * time.Second, Tick: 100 * time.Millisecond}
++	withPTZFixture(t, motor, timing)
++	now := time.Unix(5000, 0)
++
++	startSession(t, "cam", "left", now)
++	ptz.tick(now.Add(timing.Cap + time.Millisecond))
++	if countOps(motor.snapshot(), -1001) != 1 {
++		t.Fatalf("hard cap did not stop: %v", motor.snapshot())
++	}
++}
++
++func TestDirectionChangeIsImmediateAndNotRepeatedByHeartbeats(t *testing.T) {
++	motor := &fakeMotor{model: "chuangmi.camera.029a02"}
++	withPTZFixture(t, motor, ptzTiming{Step: 380 * time.Millisecond, Lease: time.Second, Cap: 8 * time.Second, Tick: 100 * time.Millisecond})
++	now := time.Unix(6000, 0)
++
++	session, _, _ := ptz.begin("cam", now)
++	if _, err := ptz.move("cam", ptz.epoch, session, 1, "left", now); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := ptz.move("cam", ptz.epoch, session, 2, "right", now.Add(50*time.Millisecond)); err != nil {
++		t.Fatal(err)
++	}
++	ops := motor.snapshot()
++	if countOps(ops, 1) != 1 || countOps(ops, 2) != 1 {
++		t.Fatalf("direction change not immediate: %v", ops)
++	}
++	if err := ptz.heartbeat("cam", ptz.epoch, session, 3, now.Add(200*time.Millisecond)); err != nil {
++		t.Fatal(err)
++	}
++	if countOps(motor.snapshot(), 2) != 1 {
++		t.Fatalf("heartbeat repeated a direction: %v", motor.snapshot())
++	}
++}
++
++func TestStaleSequenceIsRejected(t *testing.T) {
++	motor := &fakeMotor{model: "chuangmi.camera.029a02"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(7000, 0)
++
++	session, _, _ := ptz.begin("cam", now)
++	if _, err := ptz.move("cam", ptz.epoch, session, 2, "left", now); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := ptz.move("cam", ptz.epoch, session, 1, "right", now.Add(time.Millisecond)); !errors.Is(err, errPTZStale) {
++		t.Fatalf("stale move: %v", err)
++	}
++	if err := ptz.heartbeat("cam", ptz.epoch, session, 1, now.Add(time.Millisecond)); !errors.Is(err, errPTZStale) {
++		t.Fatalf("stale heartbeat: %v", err)
++	}
++}
++
++func TestStopBeforeFirstMoveLeavesTombstone(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(8000, 0)
++
++	session, _, err := ptz.begin("cam", now)
++	if err != nil {
++		t.Fatal(err)
++	}
++	// Release before the in-flight first move arrives.
++	if _, _, err := ptz.stop("cam", ptz.epoch, session); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := ptz.move("cam", ptz.epoch, session, 1, "left", now.Add(time.Millisecond)); !errors.Is(err, errPTZEnded) {
++		t.Fatalf("late move started after stop: %v", err)
++	}
++	if countOps(motor.snapshot(), 1) != 0 {
++		t.Fatalf("motor moved after early stop: %v", motor.snapshot())
++	}
++}
++
++func TestStopBeforeFirstMoveAfterPreviousSession(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(9000, 0)
++
++	old, _, _ := ptz.begin("cam", now)
++	_, _ = ptz.move("cam", ptz.epoch, old, 1, "left", now)
++	_, _, _ = ptz.stop("cam", ptz.epoch, old)
++
++	fresh, _, err := ptz.begin("cam", now.Add(time.Second))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, _, err := ptz.stop("cam", ptz.epoch, fresh); err != nil {
++		t.Fatalf("early stop of new session: %v", err)
++	}
++	if _, err := ptz.move("cam", ptz.epoch, fresh, 1, "right", now.Add(time.Second+time.Millisecond)); !errors.Is(err, errPTZEnded) {
++		t.Fatalf("late move for stopped fresh session: %v", err)
++	}
++}
++
++func TestOldSessionCannotResurrectAfterNewerSessionEnded(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(10000, 0)
++
++	first, _, _ := ptz.begin("cam", now)
++	_, _ = ptz.move("cam", ptz.epoch, first, 1, "left", now)
++	_, _, _ = ptz.stop("cam", ptz.epoch, first)
++
++	second, _, _ := ptz.begin("cam", now.Add(time.Second))
++	_, _ = ptz.move("cam", ptz.epoch, second, 1, "right", now.Add(time.Second))
++	_, _, _ = ptz.stop("cam", ptz.epoch, second)
++
++	if _, err := ptz.move("cam", ptz.epoch, first, 2, "left", now.Add(2*time.Second)); !errors.Is(err, errPTZEnded) && !errors.Is(err, errPTZNoSession) {
++		t.Fatalf("old session resurrected: %v", err)
++	}
++}
++
++func TestEpochRejectsTokensFromAnotherBridgeProcess(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(11000, 0)
++
++	session, _, _ := ptz.begin("cam", now)
++	if _, err := ptz.move("cam", "other-epoch", session, 1, "left", now); !errors.Is(err, errPTZEpoch) {
++		t.Fatalf("epoch: %v", err)
++	}
++	if _, _, err := ptz.stop("cam", "other-epoch", session); !errors.Is(err, errPTZEpoch) {
++		t.Fatalf("epoch stop: %v", err)
++	}
++}
++
++func TestSessionsArePerStream(t *testing.T) {
++	a := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	b := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, a, ptzDefaultTiming)
++	lookupMotor = func(name string) (motorControl, error) {
++		switch name {
++		case "a":
++			return a, nil
++		case "b":
++			return b, nil
++		}
++		return nil, errPTZNoMotor
++	}
++	now := time.Unix(12000, 0)
++
++	aSession, _, _ := ptz.begin("a", now)
++	bSession, _, _ := ptz.begin("b", now)
++	_, _ = ptz.move("a", ptz.epoch, aSession, 1, "left", now)
++	_, _ = ptz.move("b", ptz.epoch, bSession, 1, "left", now)
++	_, _, _ = ptz.stop("a", ptz.epoch, aSession)
++	if countOps(b.snapshot(), -1001) != 0 {
++		t.Fatal("stopping one camera stopped another")
++	}
++}
++
++func TestStopWriteErrorIsReported(t *testing.T) {
++	motor := &fakeMotor{
++		model: "xiaomi.camera.c01a01",
++		fail:  map[int]bool{-1001: true},
++	}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(13000, 0)
++
++	session, _, _ := ptz.begin("cam", now)
++	_, _ = ptz.move("cam", ptz.epoch, session, 1, "left", now)
++	sent, _, err := ptz.stop("cam", ptz.epoch, session)
++	if err == nil || sent {
++		t.Fatalf("stop write error was lost: sent=%v err=%v", sent, err)
++	}
++}
++
++func TestStopIsTheLastMotorCommand(t *testing.T) {
++	motor := &blockingMotor{
++		model:   "xiaomi.camera.c01a01",
++		started: make(chan struct{}),
++		release: make(chan struct{}),
++	}
++	withPTZFixture(t, nil, ptzDefaultTiming)
++	lookupMotor = func(string) (motorControl, error) { return motor, nil }
++	now := time.Unix(14000, 0)
++
++	session, _, _ := ptz.begin("cam", now)
++	moveDone := make(chan error, 1)
++	go func() {
++		_, err := ptz.move("cam", ptz.epoch, session, 1, "left", now)
++		moveDone <- err
++	}()
++	<-motor.started
++
++	stopDone := make(chan struct{})
++	go func() {
++		_, _, _ = ptz.stop("cam", ptz.epoch, session)
++		close(stopDone)
++	}()
++	close(motor.release)
++	<-moveDone
++	<-stopDone
++
++	motor.mu.Lock()
++	ops := append([]int(nil), motor.ops...)
++	motor.mu.Unlock()
++	if len(ops) == 0 || ops[len(ops)-1] != -1001 {
++		t.Fatalf("stop was not the last command: %v", ops)
++	}
++}
++
++type blockingMotor struct {
++	model   string
++	started chan struct{}
++	release chan struct{}
++	once    sync.Once
++	mu      sync.Mutex
++	ops     []int
++}
++
++func (b *blockingMotor) Motor(operation int) error {
++	if operation == 1 {
++		b.once.Do(func() { close(b.started) })
++		<-b.release
++	}
++	b.mu.Lock()
++	b.ops = append(b.ops, operation)
++	b.mu.Unlock()
++	return nil
++}
++
++func (b *blockingMotor) Model() string { return b.model }
++
++func TestUnknownModelKeepsViewer(t *testing.T) {
++	motor := &fakeMotor{model: "chuangmi.camera.ipc016"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	if _, _, err := ptz.begin("cam", time.Unix(15000, 0)); err == nil {
++		t.Fatal("a non-PTZ model was allowed to move")
++	}
++}
++
++func TestPTZEndpointRejectsUnsafeRequests(t *testing.T) {
++	motor := &fakeMotor{model: "chuangmi.camera.029a02"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++
++	call := func(method, remote, origin, body string) *httptest.ResponseRecorder {
++		req := httptest.NewRequest(method, "/api/xiaomi/ptz", strings.NewReader(body))
++		req.RemoteAddr = remote
++		if origin != "" {
++			req.Header.Set("Origin", origin)
++		}
++		rec := httptest.NewRecorder()
++		apiPTZ(rec, req)
++		return rec
++	}
++
++	if rec := call("GET", "127.0.0.1:1234", "", ""); rec.Code != http.StatusMethodNotAllowed ||
++		rec.Header().Get("X-MenuBarMijia-PTZ") != "v1" {
++		t.Fatalf("GET: %d header=%q", rec.Code, rec.Header().Get("X-MenuBarMijia-PTZ"))
++	}
++	if rec := call("POST", "192.0.2.10:1234", "", `{"src":"cam","action":"begin"}`); rec.Code != http.StatusForbidden {
++		t.Fatalf("non-loopback: %d", rec.Code)
++	}
++	if rec := call("POST", "127.0.0.1:1234", "https://evil.example", `{"src":"cam","action":"begin"}`); rec.Code != http.StatusForbidden {
++		t.Fatalf("origin: %d", rec.Code)
++	}
++	if rec := call("POST", "127.0.0.1:1234", "", `{"src":"cam","action":"teleport"}`); rec.Code != http.StatusBadRequest {
++		t.Fatalf("bad action: %d", rec.Code)
++	}
++	rec := call("POST", "127.0.0.1:1234", "", `{"src":"cam","action":"begin"}`)
++	if rec.Code != http.StatusOK {
++		t.Fatalf("begin: %d %s", rec.Code, rec.Body.String())
++	}
++	var beginReply struct {
++		Epoch   string `json:"epoch"`
++		Session uint64 `json:"session"`
++		Mode    string `json:"mode"`
++	}
++	if err := json.Unmarshal(rec.Body.Bytes(), &beginReply); err != nil {
++		t.Fatal(err)
++	}
++	if beginReply.Epoch == "" || beginReply.Session == 0 || beginReply.Mode != "step" {
++		t.Fatalf("begin reply: %s", rec.Body.String())
++	}
++	rec = call("POST", "127.0.0.1:1234", "", `{"src":"cam","action":"stop","epoch":"`+beginReply.Epoch+`","session":`+itoa(beginReply.Session)+`}`)
++	if rec.Code != http.StatusOK {
++		t.Fatalf("stop: %d %s", rec.Code, rec.Body.String())
++	}
++	var stopReply map[string]any
++	if err := json.Unmarshal(rec.Body.Bytes(), &stopReply); err != nil {
++		t.Fatal(err)
++	}
++	if stopReply["stopConfirmed"] != false {
++		t.Fatalf("stop claimed confirmation: %v", stopReply)
++	}
++}
++
++func itoa(value uint64) string {
++	const digits = "0123456789"
++	if value == 0 {
++		return "0"
++	}
++	var buf [20]byte
++	i := len(buf)
++	for value > 0 {
++		i--
++		buf[i] = digits[value%10]
++		value /= 10
++	}
++	return string(buf[i:])
++}
++
++func TestBeginReplacesAnUnstartedSession(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(16000, 0)
++
++	first, _, err := ptz.begin("cam", now)
++	if err != nil {
++		t.Fatal(err)
++	}
++	second, _, err := ptz.begin("cam", now.Add(time.Millisecond))
++	if err != nil {
++		t.Fatalf("unstarted session blocked the next drag: %v", err)
++	}
++	if second <= first {
++		t.Fatalf("session ids must increase: %d -> %d", first, second)
++	}
++	if _, err := ptz.move("cam", ptz.epoch, first, 1, "left", now.Add(time.Millisecond)); err == nil {
++		t.Fatal("replaced session still accepted a move")
++	}
++}
++
++func TestRepeatedStopKeepsTheSameWriteFailure(t *testing.T) {
++	motor := &fakeMotor{model: "xiaomi.camera.c01a01", fail: map[int]bool{-1001: true}}
++	withPTZFixture(t, motor, ptzDefaultTiming)
++	now := time.Unix(17000, 0)
++
++	session, _, _ := ptz.begin("cam", now)
++	if _, err := ptz.move("cam", ptz.epoch, session, 1, "left", now); err != nil {
++		t.Fatal(err)
++	}
++	if _, _, err := ptz.stop("cam", ptz.epoch, session); err == nil {
++		t.Fatal("first stop lost the write error")
++	}
++	if _, _, err := ptz.stop("cam", ptz.epoch, session); err == nil {
++		t.Fatal("repeated stop forgot the write error")
++	}
++}
+diff --git a/internal/xiaomi/round2_repro_test.go b/internal/xiaomi/round2_repro_test.go
+new file mode 100644
+index 0000000..2615395
+--- /dev/null
++++ b/internal/xiaomi/round2_repro_test.go
+@@ -0,0 +1,117 @@
++package xiaomi
++
++import (
++	"runtime"
++	"sync"
++	"testing"
++	"time"
++)
++
++// Adapted from the round-two independent audit. The stop barrier is the new linearization
++// point: a new session's move must never reach the motor before an old session's stop.
++
++type wireMotor struct {
++	model string
++	mu    sync.Mutex
++	ops   []int
++}
++
++func (w *wireMotor) Model() string { return w.model }
++func (w *wireMotor) Motor(op int) error {
++	w.mu.Lock()
++	w.ops = append(w.ops, op)
++	w.mu.Unlock()
++	return nil
++}
++
++func (w *wireMotor) snapshot() []int {
++	w.mu.Lock()
++	defer w.mu.Unlock()
++	return append([]int(nil), w.ops...)
++}
++
++func TestRound2Repro1_OldStopDoesNotKillNewSessionMove(t *testing.T) {
++	motor := &wireMotor{model: "xiaomi.camera.c01a01"}
++	withPTZFixture(t, nil, ptzDefaultTiming)
++	lookupMotor = func(string) (motorControl, error) { return motor, nil }
++	now := time.Unix(30000, 0)
++
++	s1, _, err := ptz.begin("cam", now)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err := ptz.move("cam", ptz.epoch, s1, 1, "left", now); err != nil {
++		t.Fatal(err)
++	}
++
++	stream := ptz.streams["cam"]
++	stream.motorLock.Lock()
++
++	stopDone := make(chan struct{})
++	go func() {
++		_, _, _ = ptz.stop("cam", ptz.epoch, s1)
++		close(stopDone)
++	}()
++
++	// Wait until stop(s1) marked the session ended and set the barrier.
++	for {
++		ptz.mu.Lock()
++		ended := stream.current != nil && stream.current.ended
++		barrier := stream.stopBarrier
++		ptz.mu.Unlock()
++		if ended && barrier != nil {
++			break
++		}
++		runtime.Gosched()
++	}
++
++	s2, _, err := ptz.begin("cam", now.Add(10*time.Millisecond))
++	if err != nil {
++		stream.motorLock.Unlock()
++		t.Fatal(err)
++	}
++
++	stream.motorLock.Unlock()
++	if _, err := ptz.move("cam", ptz.epoch, s2, 1, "right", now.Add(10*time.Millisecond)); err != nil {
++		t.Fatalf("move(s2) failed: %v", err)
++	}
++	<-stopDone
++
++	ops := motor.snapshot()
++	if len(ops) < 3 || ops[len(ops)-1] != 2 {
++		t.Fatalf("old stop overtook the new move: %v", ops)
++	}
++	for i, op := range ops {
++		if op == -1001 && i == len(ops)-1 {
++			t.Fatalf("stop was the last command: %v", ops)
++		}
++	}
++}
++
++func TestRound2Repro2_UnmovedBeginExpiresWithoutMotor(t *testing.T) {
++	motor := &wireMotor{model: "xiaomi.camera.c01a01"}
++	timing := ptzTiming{Step: 10 * time.Millisecond, Lease: 20 * time.Millisecond, Cap: 40 * time.Millisecond, Tick: 5 * time.Millisecond}
++	withPTZFixture(t, nil, timing)
++	lookupMotor = func(string) (motorControl, error) { return motor, nil }
++	now := time.Unix(31000, 0)
++
++	session, mode, err := ptz.begin("cam", now)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if mode != ptzContinuous {
++		t.Fatalf("mode %v", mode)
++	}
++	ptz.tick(now.Add(timing.Lease + time.Millisecond))
++
++	ptz.mu.Lock()
++	current := ptz.streams["cam"].current
++	ended := current != nil && current.session == session && current.ended
++	ptz.mu.Unlock()
++	if !ended {
++		t.Fatal("an unmoved begin session did not expire")
++	}
++	if len(motor.snapshot()) != 0 {
++		t.Fatalf("an unmoved begin touched the motor: %v", motor.snapshot())
++	}
++}
+diff --git a/internal/xiaomi/xiaomi.go b/internal/xiaomi/xiaomi.go
+index 1e57842..225c3a6 100644
+--- a/internal/xiaomi/xiaomi.go
++++ b/internal/xiaomi/xiaomi.go
+@@ -48,6 +48,7 @@ func Init() {
+ 	})
+ 
+ 	api.HandleFunc("api/xiaomi", apiXiaomi)
++	api.HandleFunc("api/xiaomi/ptz", apiPTZ)
+ }
+ 
+ var log zerolog.Logger
+diff --git a/pkg/tutk/conn.go b/pkg/tutk/conn.go
+index e061069..d2a5886 100644
+--- a/pkg/tutk/conn.go
++++ b/pkg/tutk/conn.go
+@@ -63,6 +63,9 @@ type Conn struct {
+ 	err    error
+ 	cmdMu  sync.Mutex
+ 	cmdAck func()
++
++	abortMu sync.Mutex
++	abort   chan struct{}
+ }
+ 
+ // Read overwrite net.Conn
+@@ -130,11 +133,16 @@ func (c *Conn) WriteCommand(ctrlType uint32, ctrlData []byte) error {
+ 
+ 	buf := c.session.SendIOCtrl(ctrlType, ctrlData)
+ 
++	abort := c.abortChan()
+ 	for {
+ 		if err := c.session.SessionWrite(0, buf); err != nil {
+ 			return err
+ 		}
+-		<-timeout.C
++		select {
++		case <-timeout.C:
++		case <-abort:
++			return fmt.Errorf("%s: command %d aborted", "tutk", ctrlType)
++		}
+ 		r := repeat.Add(-1)
+ 		if r < 0 {
+ 			return nil
+@@ -145,6 +153,35 @@ func (c *Conn) WriteCommand(ctrlType uint32, ctrlData []byte) error {
+ 	}
+ }
+ 
++// WriteCommandNoWait sends one command without waiting for the IOCtrl ack. Motor commands must
++// not hold the command lock for the retry window, or a stop would queue behind a lost move.
++func (c *Conn) WriteCommandNoWait(ctrlType uint32, ctrlData []byte) error {
++	c.cmdMu.Lock()
++	defer c.cmdMu.Unlock()
++
++	buf := c.session.SendIOCtrl(ctrlType, ctrlData)
++	return c.session.SessionWrite(0, buf)
++}
++
++// AbortWaits wakes every WriteCommand blocked on its acknowledgement retry.
++func (c *Conn) AbortWaits() {
++	c.abortMu.Lock()
++	if c.abort != nil {
++		close(c.abort)
++	}
++	c.abort = make(chan struct{})
++	c.abortMu.Unlock()
++}
++
++func (c *Conn) abortChan() chan struct{} {
++	c.abortMu.Lock()
++	defer c.abortMu.Unlock()
++	if c.abort == nil {
++		c.abort = make(chan struct{})
++	}
++	return c.abort
++}
++
+ func (c *Conn) ReadPacket() (hdr, payload []byte, err error) {
+ 	return c.session.RecvFrameData()
+ }
+diff --git a/pkg/tutk/conn_ptz_test.go b/pkg/tutk/conn_ptz_test.go
+new file mode 100644
+index 0000000..bec5e44
+--- /dev/null
++++ b/pkg/tutk/conn_ptz_test.go
+@@ -0,0 +1,67 @@
++package tutk
++
++import (
++	"net"
++	"sync"
++	"testing"
++	"time"
++)
++
++type fakeSession struct {
++	sent   chan struct{}
++	once   sync.Once
++	mu     sync.Mutex
++	writes int
++}
++
++func (f *fakeSession) Close() error                            { return nil }
++func (f *fakeSession) ClientStart(byte, string, string) []byte { return nil }
++func (f *fakeSession) SendIOCtrl(uint32, []byte) []byte        { return []byte{1, 2, 3} }
++func (f *fakeSession) SendFrameData([]byte, []byte) []byte     { return nil }
++func (f *fakeSession) RecvIOCtrl() (uint32, []byte, error)     { return 0, nil, net.ErrClosed }
++func (f *fakeSession) RecvFrameData() ([]byte, []byte, error)  { return nil, nil, net.ErrClosed }
++func (f *fakeSession) SessionRead(byte, []byte) int            { return 0 }
++func (f *fakeSession) SessionWrite(byte, []byte) error {
++	f.once.Do(func() { close(f.sent) })
++	f.mu.Lock()
++	f.writes++
++	f.mu.Unlock()
++	return nil
++}
++
++func TestTutkAbortWaitsInterruptsLostAckRetry(t *testing.T) {
++	session := &fakeSession{sent: make(chan struct{})}
++	c := &Conn{session: session}
++	done := make(chan error, 1)
++	go func() { done <- c.WriteCommand(0x112, []byte{1}) }()
++
++	<-session.sent
++	begin := time.Now()
++	c.AbortWaits()
++	select {
++	case err := <-done:
++		if err == nil {
++			t.Fatal("expected an aborted command error")
++		}
++		if elapsed := time.Since(begin); elapsed > 500*time.Millisecond {
++			t.Fatalf("abort waited for the retry tick: %s", elapsed)
++		}
++	case <-time.After(2 * time.Second):
++		t.Fatal("WriteCommand did not return after AbortWaits")
++	}
++}
++
++func TestTutkWriteCommandNoWaitDoesNotBlock(t *testing.T) {
++	session := &fakeSession{sent: make(chan struct{})}
++	c := &Conn{session: session}
++	done := make(chan error, 1)
++	go func() { done <- c.WriteCommandNoWait(0x1001, []byte{1}) }()
++	select {
++	case err := <-done:
++		if err != nil {
++			t.Fatal(err)
++		}
++	case <-time.After(500 * time.Millisecond):
++		t.Fatal("WriteCommandNoWait blocked")
++	}
++}
+diff --git a/pkg/xiaomi/miss/client.go b/pkg/xiaomi/miss/client.go
+index 3113632..81c17b9 100644
+--- a/pkg/xiaomi/miss/client.go
++++ b/pkg/xiaomi/miss/client.go
+@@ -4,10 +4,12 @@ import (
+ 	"bytes"
+ 	"encoding/binary"
+ 	"encoding/hex"
++	"encoding/json"
+ 	"errors"
+ 	"fmt"
+ 	"net"
+ 	"net/url"
++	"sync"
+ 	"time"
+ 
+ 	"github.com/AlexxIT/go2rtc/pkg/tutk"
+@@ -29,6 +31,8 @@ type Conn interface {
+ 	Version() string
+ 	ReadCommand() (cmd uint32, data []byte, err error)
+ 	WriteCommand(cmd uint32, data []byte) error
++	WriteCommandNoWait(cmd uint32, data []byte) error
++	AbortWaits()
+ 	ReadPacket() (hdr, payload []byte, err error)
+ 	WritePacket(hdr, payload []byte) error
+ 	RemoteAddr() net.Addr
+@@ -72,13 +76,32 @@ func NewClient(rawURL string) (*Client, error) {
+ 		return nil, err
+ 	}
+ 
+-	return &Client{Conn: conn, key: key, model: model}, nil
++	client := &Client{Conn: conn, key: key, model: model}
++	go client.commandLoop()
++	return client, nil
+ }
+ 
+ type Client struct {
+ 	Conn
+ 	key   []byte
+ 	model string
++
++	motorMu sync.Mutex
++	stateMu sync.Mutex
++	last    motorPosition
++}
++
++// MotorState is the last motor response the camera sent on the command channel.
++type MotorState struct {
++	Angle     int
++	Elevation int
++	Ret       int
++	UpdatedAt time.Time
++}
++
++type motorPosition struct {
++	state MotorState
++	ok    bool
+ }
+ 
+ const (
+@@ -104,6 +127,14 @@ const (
+ 	cmdEncoded           = 0x1001
+ )
+ 
++const (
++	motorLeft  = 1
++	motorRight = 2
++	motorUp    = 3
++	motorDown  = 4
++	motorStop  = -1001
++)
++
+ func login(conn Conn, clientPublic, sign string) error {
+ 	s := fmt.Sprintf(`{"public_key":"%s","sign":"%s","uuid":"","support_encrypt":0}`, clientPublic, sign)
+ 	if err := conn.WriteCommand(cmdAuthReq, []byte(s)); err != nil {
+@@ -126,6 +157,136 @@ func (c *Client) Version() string {
+ 	return fmt.Sprintf("%s (%s)", c.Conn.Version(), c.model)
+ }
+ 
++func (c *Client) Model() string {
++	return c.model
++}
++
++// Motor moves a pan/tilt camera one step. operation: 1 left, 2 right, 3 up, 4 down. -1001
++// stops a camera whose motor keeps running until told to stop. Steps are written without
++// waiting for the CS2 acknowledgement: a lost acknowledgement must not delay a stop.
++func (c *Client) Motor(operation int) error {
++	if operation != motorStop && (operation < motorLeft || operation > motorDown) {
++		return fmt.Errorf("miss: invalid motor operation %d", operation)
++	}
++	if operation != motorStop {
++		return c.writeMotor(operation)
++	}
++
++	// A stop is the one motor command whose loss leaves a continuous camera turning. Send it a
++	// few times without waiting for an acknowledgement: bounded, and never behind the UDP retry
++	// lock. A single successful write is not a physical confirmation; callers still report
++	// stopConfirmed=false.
++	var lastErr error
++	for attempt := 0; attempt < 3; attempt++ {
++		if err := c.writeMotor(operation); err != nil {
++			lastErr = err
++		} else {
++			lastErr = nil
++		}
++		if attempt < 2 {
++			time.Sleep(60 * time.Millisecond)
++		}
++	}
++	return lastErr
++}
++
++func (c *Client) writeMotor(operation int) error {
++	if c.model == ModelDafang || c.model == ModelXiaofang {
++		var horizontal, vertical byte
++		switch operation {
++		case motorLeft:
++			horizontal = 1
++		case motorRight:
++			horizontal = 2
++		case motorUp:
++			vertical = 2
++		case motorDown:
++			vertical = 1
++		}
++		raw := dafangRaw(0xff2404, horizontal, vertical, 5)
++		enc, err := crypto.Encode(raw, c.key)
++		if err != nil {
++			return err
++		}
++		c.motorMu.Lock()
++		defer c.motorMu.Unlock()
++		if operation == motorStop {
++			c.Conn.AbortWaits()
++		}
++		return c.Conn.WriteCommandNoWait(cmdEncoded, enc)
++	}
++
++	data := binary.BigEndian.AppendUint32(nil, cmdMotorReq)
++	data = fmt.Appendf(data, `{"operation":%d}`, operation)
++	enc, err := crypto.Encode(data, c.key)
++	if err != nil {
++		return err
++	}
++	c.motorMu.Lock()
++	defer c.motorMu.Unlock()
++	if operation == motorStop {
++		c.Conn.AbortWaits()
++	}
++	return c.Conn.WriteCommandNoWait(cmdEncoded, enc)
++}
++
++// LastMotor returns the newest position report, if the camera has sent one.
++func (c *Client) LastMotor() (MotorState, bool) {
++	c.stateMu.Lock()
++	defer c.stateMu.Unlock()
++	return c.last.state, c.last.ok
++}
++
++// commandLoop drains the camera's command channel. Without it the channel buffer fills and
++// go2rtc drops the whole P2P session after roughly 23 seconds.
++func (c *Client) commandLoop() {
++	for {
++		cmd, data, err := c.ReadCommand()
++		if err != nil {
++			return
++		}
++		if cmd == cmdEncoded {
++			if len(data) < 8 {
++				continue
++			}
++			decoded, err := crypto.Decode(data, c.key)
++			if err != nil || len(decoded) < 4 {
++				continue
++			}
++			cmd = binary.BigEndian.Uint32(decoded)
++			data = decoded[4:]
++		}
++		if cmd != cmdMotorRes {
++			continue
++		}
++		c.recordMotorResponse(bytes.TrimRight(data, "\x00"))
++	}
++}
++
++func (c *Client) recordMotorResponse(data []byte) {
++	var resp struct {
++		Angle     *int `json:"angle"`
++		Elevation *int `json:"elevation"`
++		Ret       *int `json:"ret"`
++	}
++	if err := json.Unmarshal(data, &resp); err != nil {
++		return
++	}
++	state := MotorState{UpdatedAt: time.Now()}
++	if resp.Angle != nil {
++		state.Angle = *resp.Angle
++	}
++	if resp.Elevation != nil {
++		state.Elevation = *resp.Elevation
++	}
++	if resp.Ret != nil {
++		state.Ret = *resp.Ret
++	}
++	c.stateMu.Lock()
++	c.last = motorPosition{state: state, ok: true}
++	c.stateMu.Unlock()
++}
++
+ func (c *Client) WriteCommand(data []byte) error {
+ 	data, err := crypto.Encode(data, c.key)
+ 	if err != nil {
+diff --git a/pkg/xiaomi/miss/cs2/conn.go b/pkg/xiaomi/miss/cs2/conn.go
+index 2c1b395..3fa990d 100644
+--- a/pkg/xiaomi/miss/cs2/conn.go
++++ b/pkg/xiaomi/miss/cs2/conn.go
+@@ -43,6 +43,9 @@ type Conn struct {
+ 
+ 	cmdMu  sync.Mutex
+ 	cmdAck func()
++
++	abortMu sync.Mutex
++	abort   chan struct{}
+ }
+ 
+ const (
+@@ -131,6 +134,10 @@ func (c *Conn) worker() {
+ 		switch buf[1] {
+ 		case msgDrw:
+ 			ch := buf[5]
++			if int(ch) >= len(c.channels) || c.channels[ch] == nil {
++				// Channels 1 and 3 are not implemented; cameras still send frames on them.
++				continue
++			}
+ 			channel := c.channels[ch]
+ 
+ 			if c.isTCP {
+@@ -197,7 +204,7 @@ func (c *Conn) ReadCommand() (cmd uint32, data []byte, err error) {
+ 	if !ok {
+ 		return 0, nil, c.Error()
+ 	}
+-	cmd = binary.LittleEndian.Uint32(buf)
++	cmd = binary.BigEndian.Uint32(buf)
+ 	data = buf[4:]
+ 	return
+ }
+@@ -225,11 +232,16 @@ func (c *Conn) WriteCommand(cmd uint32, data []byte) error {
+ 		timeout.Reset(1)
+ 	}
+ 
++	abort := c.abortChan()
+ 	for {
+ 		if _, err := c.Conn.Write(req); err != nil {
+ 			return err
+ 		}
+-		<-timeout.C
++		select {
++		case <-timeout.C:
++		case <-abort:
++			return fmt.Errorf("%s: command %d aborted", "cs2", cmd)
++		}
+ 		r := repeat.Add(-1)
+ 		if r < 0 {
+ 			return nil
+@@ -240,6 +252,38 @@ func (c *Conn) WriteCommand(cmd uint32, data []byte) error {
+ 	}
+ }
+ 
++// WriteCommandNoWait sends one frame without waiting for msgDrwAck. Motor commands must not
++// hold the command lock for the UDP retry window (up to 5 s), or a stop would queue behind a
++// lost move.
++func (c *Conn) WriteCommandNoWait(cmd uint32, data []byte) error {
++	c.cmdMu.Lock()
++	defer c.cmdMu.Unlock()
++
++	req := marshalCmd(0, c.seqCh0, cmd, data)
++	c.seqCh0++
++	_, err := c.Conn.Write(req)
++	return err
++}
++
++// AbortWaits wakes every WriteCommand blocked on its UDP acknowledgement retry.
++func (c *Conn) AbortWaits() {
++	c.abortMu.Lock()
++	if c.abort != nil {
++		close(c.abort)
++	}
++	c.abort = make(chan struct{})
++	c.abortMu.Unlock()
++}
++
++func (c *Conn) abortChan() chan struct{} {
++	c.abortMu.Lock()
++	defer c.abortMu.Unlock()
++	if c.abort == nil {
++		c.abort = make(chan struct{})
++	}
++	return c.abort
++}
++
+ const hdrSize = 32
+ 
+ func (c *Conn) ReadPacket() (hdr, payload []byte, err error) {
+diff --git a/pkg/xiaomi/miss/cs2/conn_test.go b/pkg/xiaomi/miss/cs2/conn_test.go
+new file mode 100644
+index 0000000..d795acc
+--- /dev/null
++++ b/pkg/xiaomi/miss/cs2/conn_test.go
+@@ -0,0 +1,101 @@
++package cs2
++
++import (
++	"bytes"
++	"encoding/binary"
++	"net"
++	"testing"
++	"time"
++)
++
++func TestReadCommandUsesBigEndianAndSkipsUnknownChannels(t *testing.T) {
++	c := &Conn{channels: [4]*dataChannel{
++		newDataChannel(0, 1), nil, newDataChannel(0, 1), nil,
++	}}
++	payload := binary.BigEndian.AppendUint32(nil, 0x1001)
++	payload = append(payload, 0xAA)
++	frame := binary.BigEndian.AppendUint32(nil, uint32(len(payload)))
++	frame = append(frame, payload...)
++	if err := c.channels[0].Push(frame); err != nil {
++		t.Fatal(err)
++	}
++	cmd, data, err := c.ReadCommand()
++	if err != nil {
++		t.Fatal(err)
++	}
++	if cmd != 0x1001 {
++		t.Fatalf("command %#x", cmd)
++	}
++	if len(data) != 1 || data[0] != 0xAA {
++		t.Fatalf("payload %x", data)
++	}
++}
++
++func TestWriteCommandNoWaitSendsOneDatagram(t *testing.T) {
++	local, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer local.Close()
++	peer, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer peer.Close()
++
++	c := &Conn{Conn: &udpConn{UDPConn: local, addr: peer.LocalAddr().(*net.UDPAddr)}, channels: [4]*dataChannel{
++		newDataChannel(0, 1), nil, newDataChannel(0, 1), nil,
++	}}
++	if err := c.WriteCommandNoWait(0x1001, []byte{0xAA}); err != nil {
++		t.Fatal(err)
++	}
++	buf := make([]byte, 64)
++	_ = peer.SetReadDeadline(time.Now().Add(time.Second))
++	n, _, err := peer.ReadFromUDP(buf)
++	if err != nil {
++		t.Fatal(err)
++	}
++	want := marshalCmd(0, 0, 0x1001, []byte{0xAA})
++	if !bytes.Equal(buf[:n], want) {
++		t.Fatalf("frame %x, want %x", buf[:n], want)
++	}
++}
++
++func TestAbortWaitsInterruptsLostAckRetry(t *testing.T) {
++	local, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer local.Close()
++	peer, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer peer.Close()
++
++	c := &Conn{Conn: &udpConn{UDPConn: local, addr: peer.LocalAddr().(*net.UDPAddr)}, channels: [4]*dataChannel{
++		newDataChannel(0, 1), nil, newDataChannel(0, 1), nil,
++	}}
++	done := make(chan error, 1)
++	go func() { done <- c.WriteCommand(0x1001, []byte{1}) }()
++
++	// Wait for the first datagram instead of sleeping; the peer never sends msgDrwAck.
++	buf := make([]byte, 64)
++	_ = peer.SetReadDeadline(time.Now().Add(time.Second))
++	if _, _, err := peer.ReadFromUDP(buf); err != nil {
++		t.Fatal(err)
++	}
++	begin := time.Now()
++	c.AbortWaits()
++	select {
++	case err := <-done:
++		if err == nil {
++			t.Fatal("expected an aborted command error")
++		}
++		if elapsed := time.Since(begin); elapsed > 500*time.Millisecond {
++			t.Fatalf("abort waited for the 1s retry tick: %s", elapsed)
++		}
++	case <-time.After(2 * time.Second):
++		t.Fatal("WriteCommand did not return after AbortWaits")
++	}
++}
+diff --git a/pkg/xiaomi/miss/motor_test.go b/pkg/xiaomi/miss/motor_test.go
+new file mode 100644
+index 0000000..7b5b953
+--- /dev/null
++++ b/pkg/xiaomi/miss/motor_test.go
+@@ -0,0 +1,205 @@
++package miss
++
++import (
++	"bytes"
++	"encoding/binary"
++	"encoding/json"
++	"net"
++	"runtime"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/AlexxIT/go2rtc/pkg/xiaomi/crypto"
++)
++
++// fakeConn is the smallest Conn that lets the client start and lets a test block a command
++// write the way a lost CS2 acknowledgement does.
++type fakeConn struct {
++	commands chan []byte
++
++	mu       sync.Mutex
++	noWait   [][]byte
++	block    chan struct{}
++	aborted  bool
++	closed   chan struct{}
++	closeOne sync.Once
++}
++
++func newFakeConn() *fakeConn {
++	return &fakeConn{commands: make(chan []byte, 4), closed: make(chan struct{})}
++}
++
++func (f *fakeConn) Protocol() string { return "cs2+udp" }
++func (f *fakeConn) Version() string  { return "CS2" }
++func (f *fakeConn) ReadCommand() (uint32, []byte, error) {
++	select {
++	case data := <-f.commands:
++		return cmdEncoded, data, nil
++	case <-f.closed:
++		return 0, nil, net.ErrClosed
++	}
++}
++func (f *fakeConn) WriteCommand(uint32, []byte) error {
++	if f.block != nil {
++		<-f.block
++	}
++	return nil
++}
++func (f *fakeConn) WriteCommandNoWait(_ uint32, data []byte) error {
++	f.mu.Lock()
++	f.noWait = append(f.noWait, append([]byte(nil), data...))
++	f.mu.Unlock()
++	return nil
++}
++func (f *fakeConn) AbortWaits() {
++	f.mu.Lock()
++	f.aborted = true
++	f.mu.Unlock()
++	if f.block != nil {
++		select {
++		case <-f.block:
++		default:
++			close(f.block)
++		}
++	}
++}
++func (f *fakeConn) ReadPacket() ([]byte, []byte, error) { return nil, nil, net.ErrClosed }
++func (f *fakeConn) WritePacket([]byte, []byte) error    { return nil }
++func (f *fakeConn) RemoteAddr() net.Addr                { return &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)} }
++func (f *fakeConn) SetDeadline(time.Time) error         { return nil }
++func (f *fakeConn) Close() error {
++	f.closeOne.Do(func() { close(f.closed) })
++	return nil
++}
++
++func TestMotorStopTakesPriorityOverBlockedWrite(t *testing.T) {
++	conn := newFakeConn()
++	conn.block = make(chan struct{})
++	client := &Client{Conn: conn, key: make([]byte, 32), model: "test"}
++
++	started := make(chan struct{})
++	go func() {
++		close(started)
++		_ = conn.WriteCommand(cmdEncoded, nil)
++	}()
++	<-started
++
++	begin := time.Now()
++	if err := client.Motor(-1001); err != nil {
++		t.Fatalf("Motor(stop): %v", err)
++	}
++	if elapsed := time.Since(begin); elapsed > 200*time.Millisecond {
++		t.Fatalf("stop waited for the blocked write: %s", elapsed)
++	}
++	conn.mu.Lock()
++	aborted := conn.aborted
++	conn.mu.Unlock()
++	if !aborted {
++		t.Fatal("stop did not abort a blocked command write")
++	}
++}
++
++func TestCommandLoopParsesEncodedMotorResponse(t *testing.T) {
++	conn := newFakeConn()
++	key := make([]byte, 32)
++	client := &Client{Conn: conn, key: key, model: "test"}
++	go client.commandLoop()
++
++	payload := binary.BigEndian.AppendUint32(nil, cmdMotorRes)
++	payload = append(payload, []byte(`{"angle":45,"elevation":37,"ret":0}`+"\x00")...)
++	encoded, err := crypto.Encode(payload, key)
++	if err != nil {
++		t.Fatal(err)
++	}
++	conn.commands <- encoded
++
++	deadline := time.Now().Add(2 * time.Second)
++	for {
++		state, ok := client.LastMotor()
++		if ok {
++			if state.Angle != 45 || state.Elevation != 37 || state.Ret != 0 {
++				t.Fatalf("parsed %+v", state)
++			}
++			break
++		}
++		if time.Now().After(deadline) {
++			t.Fatal("motor response was not parsed")
++		}
++		runtime.Gosched()
++	}
++	_ = conn.Close()
++}
++
++func TestMotorRejectsUnknownOperation(t *testing.T) {
++	client := &Client{Conn: newFakeConn(), key: make([]byte, 32)}
++	if err := client.Motor(9); err == nil {
++		t.Fatal("expected an error")
++	}
++}
++
++func TestMotorPayloadIsJSONOperation(t *testing.T) {
++	conn := newFakeConn()
++	client := &Client{Conn: conn, key: make([]byte, 32)}
++	if err := client.Motor(2); err != nil {
++		t.Fatal(err)
++	}
++	conn.mu.Lock()
++	defer conn.mu.Unlock()
++	if len(conn.noWait) != 1 {
++		t.Fatalf("writes: %d", len(conn.noWait))
++	}
++	decoded, err := crypto.Decode(conn.noWait[0], client.key)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if binary.BigEndian.Uint32(decoded) != cmdMotorReq {
++		t.Fatalf("inner command: %x", decoded[:4])
++	}
++	var body struct {
++		Operation int `json:"operation"`
++	}
++	if err := json.Unmarshal(decoded[4:], &body); err != nil {
++		t.Fatal(err)
++	}
++	if body.Operation != 2 {
++		t.Fatalf("operation: %d", body.Operation)
++	}
++}
++
++func TestDafangMotorUsesRawICamCommand(t *testing.T) {
++	cases := []struct {
++		operation int
++		want      []byte
++	}{
++		{1, dafangRaw(0xff2404, 1, 0, 5)},
++		{2, dafangRaw(0xff2404, 2, 0, 5)},
++		{3, dafangRaw(0xff2404, 0, 2, 5)},
++		{4, dafangRaw(0xff2404, 0, 1, 5)},
++		{-1001, dafangRaw(0xff2404, 0, 0, 5)},
++	}
++	for _, tc := range cases {
++		conn := newFakeConn()
++		client := &Client{Conn: conn, key: make([]byte, 32), model: ModelDafang}
++		if err := client.Motor(tc.operation); err != nil {
++			t.Fatalf("operation %d: %v", tc.operation, err)
++		}
++		conn.mu.Lock()
++		writes := append([][]byte(nil), conn.noWait...)
++		conn.mu.Unlock()
++		wantWrites := 1
++		if tc.operation == -1001 {
++			wantWrites = 3 // bounded UDP retries; still no acknowledgement wait
++		}
++		if len(writes) != wantWrites {
++			t.Fatalf("operation %d wrote %d frames, want %d", tc.operation, len(writes), wantWrites)
++		}
++		decoded, err := crypto.Decode(writes[0], client.key)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if !bytes.Equal(decoded, tc.want) {
++			t.Fatalf("operation %d payload %x, want %x", tc.operation, decoded, tc.want)
++		}
++	}
++}
+diff --git a/pkg/xiaomi/miss/producer.go b/pkg/xiaomi/miss/producer.go
+index dcea284..45c9851 100644
+--- a/pkg/xiaomi/miss/producer.go
++++ b/pkg/xiaomi/miss/producer.go
+@@ -17,6 +17,16 @@ type Producer struct {
+ 	client *Client
+ }
+ 
++// Motor sends a pan/tilt step over this producer's session. The camera allows one session,
++// so motor commands must share it rather than dial a second one.
++func (p *Producer) Motor(operation int) error {
++	return p.client.Motor(operation)
++}
++
++func (p *Producer) Model() string {
++	return p.client.Model()
++}
++
+ func Dial(rawURL string) (core.Producer, error) {
+ 	client, err := NewClient(rawURL)
+ 	if err != nil {

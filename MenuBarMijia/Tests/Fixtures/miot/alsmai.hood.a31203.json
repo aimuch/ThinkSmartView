@@ -1,0 +1,307 @@
+{
+  "description": "Hood",
+  "services": [
+    {
+      "comment": "设备信息",
+      "description": "Device Information",
+      "iid": 1,
+      "properties": [
+        {
+          "access": [
+            "read"
+          ],
+          "description": "Device Manufacturer",
+          "format": "string",
+          "iid": 1,
+          "type": "urn:miot-spec-v2:property:manufacturer:00000001:alsmai-a31203:1"
+        },
+        {
+          "access": [
+            "read"
+          ],
+          "description": "Device Model",
+          "format": "string",
+          "iid": 2,
+          "type": "urn:miot-spec-v2:property:model:00000002:alsmai-a31203:1"
+        },
+        {
+          "access": [
+            "read"
+          ],
+          "comment": "设备ID",
+          "description": "Device ID",
+          "format": "string",
+          "iid": 3,
+          "type": "urn:miot-spec-v2:property:serial-number:00000003:alsmai-a31203:1"
+        },
+        {
+          "access": [
+            "read"
+          ],
+          "description": "Current Firmware Version",
+          "format": "string",
+          "iid": 4,
+          "type": "urn:miot-spec-v2:property:firmware-revision:00000005:alsmai-a31203:1"
+        },
+        {
+          "access": [
+            "read",
+            "notify"
+          ],
+          "comment": "SN码",
+          "description": "Serial Number",
+          "format": "string",
+          "iid": 5,
+          "type": "urn:miot-spec-v2:property:serial-no:000000FF:alsmai-a31203:1"
+        }
+      ],
+      "type": "urn:miot-spec-v2:service:device-information:00007801:alsmai-a31203:1"
+    },
+    {
+      "comment": "油烟机",
+      "description": "Hood",
+      "iid": 2,
+      "properties": [
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "开关",
+          "description": "Switch Status",
+          "format": "bool",
+          "iid": 1,
+          "type": "urn:miot-spec-v2:property:on:00000006:alsmai-a31203:1"
+        },
+        {
+          "access": [
+            "read",
+            "notify"
+          ],
+          "comment": "故障",
+          "description": "Device Fault",
+          "format": "uint8",
+          "iid": 2,
+          "type": "urn:miot-spec-v2:property:fault:00000009:alsmai-a31203:1",
+          "value-list": [
+            {
+              "description": "No Faults",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "关机延时时间",
+          "description": "Power Off Delay Time",
+          "format": "uint32",
+          "gatt-access": [],
+          "iid": 6,
+          "type": "urn:miot-spec-v2:property:off-delay-time:00000054:alsmai-a31203:1",
+          "unit": "minutes",
+          "value-range": [
+            0,
+            10,
+            1
+          ]
+        }
+      ],
+      "type": "urn:miot-spec-v2:service:hood:0000782B:alsmai-a31203:1"
+    },
+    {
+      "comment": "灯",
+      "description": "Light",
+      "iid": 6,
+      "properties": [
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "开关",
+          "description": "Switch Status",
+          "format": "bool",
+          "iid": 1,
+          "type": "urn:miot-spec-v2:property:on:00000006:alsmai-a31203:1"
+        },
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "亮度",
+          "description": "Brightness",
+          "format": "uint8",
+          "gatt-access": [],
+          "iid": 2,
+          "type": "urn:miot-spec-v2:property:brightness:0000000D:alsmai-a31203:1",
+          "unit": "percentage",
+          "value-list": [
+            {
+              "comment": "1档",
+              "description": "Level1",
+              "value": 10
+            },
+            {
+              "comment": "2档",
+              "description": "Level2",
+              "value": 20
+            },
+            {
+              "comment": "3档",
+              "description": "Level3",
+              "value": 30
+            },
+            {
+              "comment": "4档",
+              "description": "Level4",
+              "value": 40
+            },
+            {
+              "comment": "5档",
+              "description": "Level5",
+              "value": 50
+            },
+            {
+              "comment": "6档",
+              "description": "Level6",
+              "value": 60
+            },
+            {
+              "comment": "7档",
+              "description": "Level7",
+              "value": 70
+            },
+            {
+              "comment": "8档",
+              "description": "Level8",
+              "value": 80
+            },
+            {
+              "comment": "9档",
+              "description": "Level9",
+              "value": 90
+            },
+            {
+              "comment": "10档",
+              "description": "Level10",
+              "value": 100
+            }
+          ]
+        },
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "色温",
+          "description": "Color Temperature",
+          "format": "uint32",
+          "iid": 4,
+          "type": "urn:miot-spec-v2:property:color-temperature:0000000F:alsmai-a31203:1",
+          "unit": "kelvin",
+          "value-range": [
+            1000,
+            10000,
+            1
+          ]
+        }
+      ],
+      "type": "urn:miot-spec-v2:service:light:00007802:alsmai-a31203:1"
+    },
+    {
+      "comment": "风机控制",
+      "description": "Fan Control",
+      "iid": 7,
+      "properties": [
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "风机档位",
+          "description": "Fan Level",
+          "format": "uint8",
+          "gatt-access": [],
+          "iid": 2,
+          "type": "urn:miot-spec-v2:property:fan-level:00000016:alsmai-a31203:1",
+          "value-list": [
+            {
+              "comment": "一档",
+              "description": "Level1",
+              "value": 1
+            },
+            {
+              "comment": "二档",
+              "description": "Level2",
+              "value": 2
+            },
+            {
+              "comment": "三档",
+              "description": "Level3",
+              "value": 3
+            },
+            {
+              "comment": "四档",
+              "description": "Level4",
+              "value": 4
+            },
+            {
+              "comment": "五档",
+              "description": "Level5",
+              "value": 5
+            },
+            {
+              "comment": "六档",
+              "description": "Level6",
+              "value": 6
+            },
+            {
+              "comment": "七档",
+              "description": "Level7",
+              "value": 7
+            },
+            {
+              "comment": "八档",
+              "description": "Level8",
+              "value": 8
+            },
+            {
+              "comment": "九档",
+              "description": "Level9",
+              "value": 9
+            },
+            {
+              "comment": "高风",
+              "description": "High",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "开关",
+          "description": "Switch Status",
+          "format": "bool",
+          "iid": 3,
+          "type": "urn:miot-spec-v2:property:on:00000006:alsmai-a31203:1"
+        }
+      ],
+      "type": "urn:miot-spec-v2:service:fan-control:00007809:alsmai-a31203:1"
+    }
+  ],
+  "type": "urn:miot-spec-v2:device:hood:0000A01B:alsmai-a31203:1"
+}

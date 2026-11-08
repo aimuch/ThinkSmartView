@@ -1,0 +1,28 @@
+name: 功能建议
+description: 想要新功能或体验改进
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决什么问题
+      description: 先说场景和痛点，再说功能。例如"我在客厅看电影时想…"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望的做法
+      description: 如果你有具体交互或界面的想法，写在这里
+    validations:
+      required: false
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - macOS
+        - Windows
+        - 两者都要
+    validations:
+      required: true

@@ -1,0 +1,285 @@
+import SwiftUI
+import AppKit
+import MijiaCore
+
+// MARK: - Panel Height
+
+/// User-chosen panel height; `.max` fills the screen below the menu bar.
+public enum PanelHeight: String, CaseIterable, Identifiable, Sendable {
+    case compact, standard, tall, max
+
+    public static let storageKey = "panel_height"
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .compact: return L10n.tr("紧凑", "Compact")
+        case .standard: return L10n.tr("标准", "Standard")
+        case .tall: return L10n.tr("加高", "Tall")
+        case .max: return L10n.tr("最大", "Max")
+        }
+    }
+
+    @MainActor
+    public var points: CGFloat {
+        let screen = (NSScreen.main?.visibleFrame.height ?? 900) - 40
+        switch self {
+        case .compact: return 460
+        case .standard: return Swift.min(560, screen)
+        case .tall: return Swift.min(680, screen)
+        case .max: return Swift.max(460, screen)
+        }
+    }
+}
+
+// MARK: - Appearance
+
+/// Panel appearance: follow the system, or force light/dark.
+public enum AppAppearance: String, CaseIterable, Identifiable, Sendable {
+    case system, light, dark
+
+    public static let storageKey = "app_appearance"
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .system: return L10n.tr("跟随系统", "Follow System")
+        case .light: return L10n.tr("浅色", "Light")
+        case .dark: return L10n.tr("深色", "Dark")
+        }
+    }
+
+    /// `nil` means "use the system colour scheme".
+    public var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+
+    /// `nil` inherits the system appearance on `NSWindow` / `NSView`.
+    public var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
+// MARK: - System Panel Look
+
+/// One system design, no skins. Tiles mirror Control Center: anything that is on gets the loudest
+/// surface the appearance allows — an opaque bright platter in light mode, a lifted well one step
+/// above the quiet off-state glass in dark mode, where a white slab would glare and force the ink
+/// inside it back to the light scheme. `TileSurface` derives ink, fill and hairline together so no
+/// caller has to reason about the pairing.
+public enum PanelLook {
+    public static let tileRadius: CGFloat = 14
+
+    /// Ink for the light-mode platter. `Color.primary` is white in dark mode, so the bright platter
+    /// carries its own fixed dark ink instead of following the window scheme.
+    public static let platterInk = DesignTokens.Ink.onPlatter
+
+    /// Soft drop shadow that keeps the platter above the glass; wells stay flat.
+    public static func platterShadow(isActive: Bool) -> Color {
+        isActive ? Color.black.opacity(0.18) : .clear
+    }
+}
+
+/// One tile's presentation state: lit or quiet, and when lit, on the light-mode platter or the
+/// family-coloured glass. Ink, fill and hairline all derive from it, so callers pass one value
+/// instead of repeating the active/tint/scheme triple.
+public struct TileSurface: Equatable, Sendable {
+    public var isActive: Bool
+    public var tint: Color?
+    public var scheme: ColorScheme
+
+    public init(isActive: Bool, tint: Color? = nil, scheme: ColorScheme) {
+        self.isActive = isActive
+        self.tint = tint
+        self.scheme = scheme
+    }
+
+    /// The one surface that needs the fixed dark ink: the light-mode platter. Dark mode never
+    /// paints a bright tile, so white ink stays valid everywhere else — this flag is the single
+    /// place that decides, which is what keeps the ink rules from drifting apart again.
+    public var isBrightPlatter: Bool { isActive && scheme == .light }
+
+    /// Ink on the lit surface. Every lit surface in dark mode is dark glass, so it keeps white ink;
+    /// only the bright platter needs the fixed dark ink.
+    public var ink: Color {
+        if isActive, !isBrightPlatter { return .white }
+        return isActive ? PanelLook.platterInk : .primary
+    }
+
+    public var secondaryInk: Color {
+        if isActive, !isBrightPlatter { return Color.white.opacity(0.62) }
+        return isActive ? PanelLook.platterInk.opacity(0.55) : .secondary
+    }
+
+    /// The tile fill: bright platter when lit in light mode, one step above the well when lit in dark
+    /// mode; a tint swaps either for a wash of the family colour so the hue carries the state.
+    public var fill: AnyShapeStyle {
+        if isActive, let tint {
+            return scheme == .dark
+                ? AnyShapeStyle(LinearGradient(colors: [tint.opacity(0.24), Color.white.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                : AnyShapeStyle(LinearGradient(colors: [tint.opacity(0.14), Color.white.opacity(0.92)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        }
+        if scheme == .dark {
+            // Never a white slab in dark mode: it glares, and every bit of ink inside it would have
+            // to flip back to the light scheme. A lit tile is simply a brighter well.
+            return AnyShapeStyle(Color.white.opacity(isActive ? 0.17 : 0.07))
+        }
+        return isActive ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.black.opacity(0.045))
+    }
+
+    public var hairline: Color {
+        if isActive, let tint {
+            return tint.opacity(scheme == .dark ? 0.38 : 0.30)
+        }
+        if isActive { return scheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.07) }
+        return scheme == .dark ? Color.white.opacity(0.09) : Color.black.opacity(0.05)
+    }
+}
+
+// MARK: - Motion Helpers
+
+/// Status dot that breathes slowly while connected.
+struct BreathingDot: View {
+    @Environment(\.effectiveReduceMotion) private var reduceMotion
+    let color: Color
+    let animate: Bool
+    @State private var dim = false
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 7, height: 7)
+            .opacity(dim ? 0.35 : 1)
+            .onAppear {
+                guard animate, !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { dim = true }
+            }
+    }
+}
+
+extension View {
+    /// Adds a shadow only when `active`; a clear shadow still costs an offscreen pass per frame.
+    @ViewBuilder
+    func shadowIf(_ active: Bool, color: Color, radius: CGFloat, x: CGFloat = 0, y: CGFloat = 0) -> some View {
+        if active { self.shadow(color: color, radius: radius, x: x, y: y) } else { self }
+    }
+
+    /// System tooltip. Kept as one wrapper so the panel can drop tooltips in one place.
+    func panelHelp(_ text: String) -> some View { help(text) }
+}
+
+// MARK: - Hold-to-Confirm All Off
+
+/// "All Off" control: press and hold 0.6s to fire, with a filling progress sweep. It wears the
+/// same quiet chip surface as its header neighbours; the sweep is the only accent.
+struct HoldToConfirmButton: View {
+    let title: String
+    let count: Int
+    let onConfirm: () -> Void
+    let onTap: () -> Void
+
+    @State private var holding = false
+
+    var body: some View {
+        let capsule = Capsule(style: .continuous)
+        HStack(spacing: 4) {
+            Image(systemName: "power").font(.system(size: DesignTokens.TypeSize.micro, weight: .bold))
+            Text(title).font(.system(size: DesignTokens.TypeSize.control, weight: .semibold))
+            Text("(\(count))")
+                .font(.system(size: DesignTokens.TypeSize.control, weight: .semibold))
+                .monospacedDigit()
+                .contentTransition(.numericText(value: Double(count)))
+        }
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+        .foregroundStyle(Color.primary.opacity(0.88))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 5)
+        .background {
+            GeometryReader { geo in
+                Rectangle()
+                    .fill(Color.accentColor.opacity(0.28))
+                    .frame(width: holding ? geo.size.width : 0)
+            }
+            .clipShape(capsule)
+        }
+        .modifier(ChipSurface(shape: capsule, tint: nil, interactive: true, clear: false))
+        .scaleEffect(holding ? 0.95 : 1)
+        .contentShape(capsule)
+        .onTapGesture(perform: onTap)
+        .onLongPressGesture(minimumDuration: 0.6, maximumDistance: 20) {
+            holding = false
+            // #54: a confirm that turns off the whole room deserves a level-change tap.
+            NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+            onConfirm()
+        } onPressingChanged: { pressing in
+            withAnimation(pressing ? .linear(duration: 0.6) : .easeOut(duration: 0.2)) { holding = pressing }
+        }
+        .panelHelp(L10n.tr("按住 0.6 秒关闭这 \(count) 台设备", "Hold 0.6s to turn off these \(count) devices"))
+        // VoiceOver cannot long-press easily; give it an explicit, clearly named action instead.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(title) (\(count))"))
+        .accessibilityHint(Text(L10n.tr("按住 0.6 秒关闭", "Hold 0.6 seconds to turn off")))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: Text(L10n.tr("关闭这 \(count) 台设备", "Turn off these \(count) devices"))) {
+            NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+            onConfirm()
+        }
+    }
+}
+
+// MARK: - Panel Root
+
+/// Panel root: one system material behind every state, with the forced appearance and the
+/// "Reduce transparency" fallback (#41).
+public struct PanelRoot: ViewModifier {
+    @Environment(\.colorScheme) private var systemScheme
+    @Environment(\.effectiveReduceTransparency) private var reduceTransparency
+    @AppStorage(AppAppearance.storageKey) private var appearanceRaw: String = AppAppearance.system.rawValue
+
+    public func body(content: Content) -> some View {
+        let scheme = (AppAppearance(rawValue: appearanceRaw) ?? .system).colorScheme ?? systemScheme
+        content
+            .background {
+                if reduceTransparency {
+                    Rectangle().fill(Color(nsColor: .windowBackgroundColor))
+                } else if #available(macOS 26.0, *) {
+                    // Native Liquid Glass replaces the hand-stacked material+scrim; the wrapper
+                    // keeps the macOS 26 API inside ThemeAndMotion. A lighter scrim still pins the
+                    // chosen appearance: over a bright wallpaper the dark scheme must stay dark or
+                    // white text loses contrast.
+                    Color.clear
+                        .panelRootGlass()
+                    Rectangle().fill(scheme == .dark ? Color.black.opacity(0.30) : Color.white.opacity(0.18))
+                } else {
+                    // A thin material alone picks up whatever is behind the window: over a bright
+                    // wallpaper the dark scheme stays light and white text loses contrast. The scrim
+                    // pins the surface to the chosen appearance without losing the glass.
+                    Rectangle().fill(.ultraThinMaterial)
+                    Rectangle().fill(scheme == .dark ? Color.black.opacity(0.42) : Color.white.opacity(0.32))
+                }
+            }
+            .environment(\.colorScheme, scheme)
+    }
+}
+
+extension View {
+    public func panelRoot() -> some View { modifier(PanelRoot()) }
+}
+
+// MARK: - Panel Preferences
+
+/// Storage keys that are not a user-visible choice but still persist between launches.
+public enum PanelPrefs {
+    public static let climatePanelKey = "climate_panel_module"
+}

@@ -1,0 +1,51 @@
+# MenuBarMijia Homebrew cask（issue #61）。
+#
+# 自有 tap 安装：brew install --cask jryang1997/tap/menubarmijia
+# 本文件由 packaging/homebrew/update_cask.sh 从 packaging/homebrew/menubarmijia.rb.tmpl 生成：
+# 版本号、URL、SHA-256 全部从「已发布的 vX.Y.Z」推导（脚本只接受 fixed 仓库 + X.Y.Z tag），
+# 发版后由 .github/workflows/homebrew-tap.yml 同步到 jryang1997/homebrew-tap。
+# 手改生成结果会被 update_cask.sh --check 判成漂移；要改内容请改模板再重新生成。
+#
+# 签名状态：Developer ID 签名 + 公证（issue #17）完成前，首次启动会被 Gatekeeper 拦住，需要用户在
+# 「系统设置 → 隐私与安全性」里手动放行。本 cask 刻意不在安装后执行 xattr -cr / spctl 之类命令，
+# 也不使用 --no-quarantine：不替用户关掉隔离属性。公证完成后再考虑提交官方 homebrew/cask。
+cask "menubarmijia" do
+  version "1.0.6"
+  sha256 "f6266785fcaf295bf0e076c687a4df9c5cd67f2775723a9b23e401f476183ec8"
+
+  url "https://github.com/jryang1997/MenuBarMijia/releases/download/v#{version}/MenuBarMijia-#{version}.dmg",
+      verified: "github.com/jryang1997/MenuBarMijia/"
+  name "MenuBarMijia"
+  desc "Menu bar control center for Mijia and Home Assistant devices"
+  homepage "https://github.com/jryang1997/MenuBarMijia"
+
+  livecheck do
+    url "https://github.com/jryang1997/MenuBarMijia"
+    strategy :github_latest
+  end
+
+  # 应用内自带「下载并安装」更新（AppUpdater），会在原位替换 /Applications 里的 bundle，
+  # 所以 brew 不该把它当成被 Homebrew 独占管理的版本。
+  auto_updates true
+
+  # Info.plist 的 LSMinimumSystemVersion 是 14.0（Package.swift 的 .macOS(.v14)）。
+  depends_on macos: :sonoma
+
+  app "MenuBarMijia.app"
+
+  uninstall quit: "com.jryang1997.MenuBarMijia"
+
+  zap trash: [
+    "~/Library/Caches/MenuBarMijia",
+    "~/Library/Caches/com.jryang1997.MenuBarMijia",
+    "~/Library/Preferences/com.jryang1997.MenuBarMijia.plist",
+    "~/Library/Saved Application State/com.jryang1997.MenuBarMijia.savedState",
+  ]
+
+  # 公证完成前（issue #17），首次启动会被 Gatekeeper 拦下。这里只说明怎么由用户自己放行，
+  # 不在安装流程里替用户改动任何安全属性。
+  caveats <<~EOS
+    MenuBarMijia is not notarized yet. If macOS refuses to open it on first launch,
+    approve it yourself in System Settings → Privacy & Security → "Open Anyway".
+  EOS
+end

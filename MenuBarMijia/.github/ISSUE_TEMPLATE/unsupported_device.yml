@@ -1,0 +1,54 @@
+name: 设备不支持
+description: 某台设备不显示、显示不全或控制无效
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这类报告帮助扩大设备识别覆盖。**did 与令牌属于敏感信息**：did 只需给出格式样例（把数字换成 0），不要贴真实完整 did。
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: 数据源
+      options:
+        - "小米云（扫码登录）"
+        - "Home Assistant"
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: 设备型号（model）
+      description: 小米云：设备详情页/应用日志里的 model 字符串（如 lumi.acpartner.mcn04）；HA：实体所属的 integration 与 device model
+    validations:
+      required: true
+  - type: input
+    id: did-format
+    attributes:
+      label: did 格式（仅小米云）
+      description: 用 0 替换真实数字，例如 700000000（说明位数即可）
+    validations:
+      required: false
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象
+      description: 不显示 / 显示但控制无效 / 控制一部分属性有效？期望它支持什么功能（开关、亮度、温度…）
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: HA 用户可贴出实体 id（如 climate.xxx）与支持的属性列表；小米云用户可贴设备属性规范截图（脱敏）
+    validations:
+      required: false

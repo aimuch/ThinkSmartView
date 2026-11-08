@@ -1,0 +1,10 @@
+# 自动升级 CI 中钉住 SHA 的 GitHub Actions（每周一次）。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

@@ -1,0 +1,60 @@
+name: Bug 报告
+description: 应用行为不符合预期、崩溃、设备失控等
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先搜索是否已有同类 issue。**不要粘贴任何令牌、Key、密码**；诊断信息可以用应用内「复制诊断信息」生成（已自动脱敏）。
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: 系统版本
+      description: 例如 macOS 26.1 / Windows 11 26300
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: 应用版本
+      description: 设置 → 关于 里可以看到
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: 数据源
+      options:
+        - "小米云（扫码登录）"
+        - "Home Assistant"
+        - "演示模式"
+        - "不适用"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 从打开应用开始，一步步写清做了什么、期望什么、实际发生什么
+      placeholder: |
+        1. 打开面板
+        2. 点击 …
+        3. 出现 …（期望是 …）
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 诊断信息 / 截图
+      description: 有诊断信息请整段贴上；截图请脱敏（遮住设备名、IP、令牌）
+    validations:
+      required: false

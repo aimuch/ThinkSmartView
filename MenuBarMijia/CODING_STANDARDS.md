@@ -1,0 +1,108 @@
+# Coding Standards
+
+Reviewed by `/code-review` (Standards axis). Mechanical rules (secret scanning, `kVK_*` key constants, `UNUserNotificationCenter` `.app` bundle guard, and `swift test`) are enforced deterministically by `scripts/check.sh`. The rules below cover architectural and domain judgement calls.
+
+## 1. Entity Registry Exclusions Block State Fallbacks
+
+When synthesizing Home Assistant entities in `Sources/MijiaCore/DeviceSynthesizer.swift` with a primary pass over `snapshot.entityRegistry` followed by a fallback pass over `snapshot.states`:
+
+- Record every matched registry `entity_id` into the seen set (`seen...Ids`) **before** skipping `disabled_by != nil || hidden_by != nil` entries.
+- Skipping before recording leaks disabled or hidden entities back into the UI through the `states` fallback loop.
+
+## 2. Bidirectional Optimistic Lock on Snapshot Undo
+
+When restoring a `previousDevices` snapshot in `HomeStore` (`UndoBanner` / `undoTurnAllOff`):
+
+- Call `lockOptimistic(dev.id, duration: .seconds(3.0))` for **every device whose state differs** between current `devices` and `banner.previousDevices`.
+- Locking only `where dev.isActiveOn` fails when undoing an action (such as `QuickAction.softNightLight`) that turned a previously-off device on, exposing the restored off-state to stale WebSocket frames.
+
+## 3. System Global Resource Lifecycle
+
+System-wide registrations (such as Carbon `RegisterEventHotKey` in `HotkeyAndNotificationManager`) must bind their active registration lifecycle to their preference toggle:
+
+- Call `UnregisterEventHotKey` immediately when `enableGlobalHotkey` is set to `false`, and re-register when set to `true`.
+- Leaving a global hotkey registered while ignoring the callback hijacks the key chord from other macOS applications.
+
+## 4. CompactTile Two-Column Alignment
+
+In `ControlCenterPanel` when `isCompactGridMode` is active:
+
+- Devices with an open detail drawer (`expandedDeviceId == dev.id`) render as full-width `.single(dev)` rows (`isCompactTile: false`).
+- Unexpanded devices render in two-column `.pair(left, right)` rows (`isCompactTile: true`). When an unexpanded tile has no partner, pair it with `nil` and render a half-width `Color.clear.frame(maxWidth: .infinity)` placeholder so single tiles never stretch full-width.
+
+## 5. Domain Vocabulary & Single Source of Truth
+
+- Keep `MijiaCore` free of `AppKit` / `SwiftUI` imports so all synthesis, optimistic locking, and store state remain fast-testable via `MockHomeProvider`.
+- Align type and property names with [`GLOSSARY.md`](GLOSSARY.md) and [`docs/adr/0001-ha-as-single-source-of-truth.md`](docs/adr/0001-ha-as-single-source-of-truth.md).
+
+## 6. Cross-Platform Golden Corpora & AI Provider Parity
+
+When adding or changing spoken command, delay, undo, habit-memory, proactive-suggestion, MIoT synthesis, MIoT command mapping, or AI provider preset rules, or model confirmation rules, in `Sources/MijiaCore/LocalIntentParser.swift`, `Sources/MijiaCore/UserHabitMemory.swift`, `Sources/MijiaCore/AssistantSchedule.swift`, `Sources/MijiaCore/AssistantConfig.swift`, `Sources/MijiaCore/ModelActionPolicy.swift`, `Sources/MijiaCore/MiCloud/MiotSynthesizer.swift`, `Sources/MijiaCore/MiCloud/MiotCommandMapper.swift`, `windows/src/core/assistant.ts`, or `windows/src/core/miCloudClient.ts`:
+
+- Add a representative test case to [`Tests/Fixtures/intent_golden.json`](Tests/Fixtures/intent_golden.json) or [`Tests/Fixtures/miot_golden.json`](Tests/Fixtures/miot_golden.json) so both `Tests/MijiaCoreTests/GoldenCorpusTests.swift` and `windows/tests/core.test.ts` assert the exact same behavior. AI provider preset rules (domain matching, which hosts may receive API keys) live in [`Tests/Fixtures/provider_golden.json`](Tests/Fixtures/provider_golden.json); Mi cloud region codes/order in [`Tests/Fixtures/region_golden.json`](Tests/Fixtures/region_golden.json); the Jev `/v1/systemone` request skeleton in [`Tests/Fixtures/ai_request_golden.json`](Tests/Fixtures/ai_request_golden.json); habit-memory record/unrecord and the Top-4 proactive engine in [`Tests/Fixtures/habit_golden.json`](Tests/Fixtures/habit_golden.json) — all asserted by `Tests/MijiaCoreTests/GoldenCorpusTests.swift` and …
+- Keep `AssistantProviderPreset.allCases.map(\.rawValue)` (macOS) and `ASSISTANT_PROVIDER_PRESETS.map(p => p.id)` (Windows) identical in order and membership, and isolate user-saved API keys per provider (`KeychainHelper.assistantProviderAPIKeyAccount(for:)`).
+- Never let one platform silently diverge on Chinese or English command parsing, delay limits (`<= 86400s`), unknown-word fallback (`nil` / `null`), MIoT `0`/`1` boolean coercion, multi-service property resolution, or command range/step clamping.
+- GrokBall emotion priority and radial slot order live in [`Tests/Fixtures/grok_ball_golden.json`](Tests/Fixtures/grok_ball_golden.json), asserted by both `GoldenCorpusTests` and `windows/tests/core.test.ts`. Preserve the upstream MIT notice when updating the bundled engine or native geometry.
+- [`Tests/Fixtures/air_quality_golden.json`](Tests/Fixtures/air_quality_golden.json) pins the purifier air-quality grade (raw grade word or PM2.5) that drives both the label and the card colour, asserted by `AirQualityLevelTests` and `windows/tests/core.test.ts`. Views map `AirQualityLevel.tone` to a colour; they never re-derive the grade.
+- [`Tests/Fixtures/confirmation_golden.json`](Tests/Fixtures/confirmation_golden.json) is the shared confirmation table asserted by `GoldenCorpusTests` and `windows/tests/core.test.ts`.
+- [`Tests/Fixtures/miot_coverage_golden.json`](Tests/Fixtures/miot_coverage_golden.json) pins how MIoT synthesis classifies one real public spec per device type (`miot_coverage_specs.json`), asserted by `MiotCoverageBaselineTests` and `windows/tests/miotCoverage.test.ts`. A synthesis change that moves a spec between categories must re-record it (`RECORD_MIOT_COVERAGE=1 swift test --filter MiotCoverageBaselineTests`); `windowsDivergences` lists the specs Windows still classifies differently, and must be pruned by hand when a Windows synthesis fix catches up (the recorder keeps the previous list). `miot_golden.json` also pins the generic-card summary (`genericCases`) and the 更多设置 control list (`facetCases`) for both platforms. Rows of [`docs/capabilities.json`](docs/capabilities.json) that carry `miotTypes` take both platforms' README status from this baseline (`scripts/check_capability_matrix.py`), so a re-record that matches or drops a listed type also updates that row in both READMEs.
+- [`Tests/Fixtures/miot_facets.json`](Tests/Fixtures/miot_facets.json) is the hand-written rule fixture for generic facets (#303), asserted by `MiotFacetsTests` and `windows/tests/miotFacets.test.ts`; [`miot_facets_coverage_golden.json`](Tests/Fixtures/miot_facets_coverage_golden.json) pins facet membership over the `miot_coverage_specs.json` models. A rule change must update the hand-written case and re-record the golden (`RECORD_MIOT_FACETS=1 swift test --filter MiotFacetsTests`).
+
+## 7. Scheduled Command Persistence & Missed-Timer Confirmation
+
+When modifying `ScheduledCommand` or `HomeStore+Assistant.swift`:
+
+- Persist both `scheduledCommands` and unconfirmed `missedScheduledCommands` to `UserDefaults` (`ScheduledCommand.storageKey`) on every schedule, fire, restore, confirm, dismiss, or cancel transition.
+- Never auto-execute an expired timer silently on launch; keep it in `missedScheduledCommands` (and on disk across restarts) until the user explicitly confirms (`runMissedScheduledCommand`) or dismisses (`dismissMissedScheduledCommand`).
+- The same applies after the Mac sleeps: `Task.sleep` keeps counting during sleep, so a timer task can wake up long after its `fireDate`. A timer that wakes more than `HomeStore.lateTimerGrace` (60 s) late goes to `missedScheduledCommands` instead of running. Tests simulate this with `assistantNow`.
+
+## 8. macOS 14+ Adaptive Glass Boundary
+
+- Isolate macOS 26 `.glassEffect(` and `GlassEffectContainer` calls inside `Sources/MenuBarMijiaApp/ThemeAndMotion.swift` (`View.adaptiveGlass` and `AdaptiveGlassContainer`), guarded by `#available(macOS 26.0, *)` with Material fallback for macOS 14 and 15. Enforced mechanically by `scripts/check.sh`.
+
+## 9. Tests Must Not Race Product Timers
+
+When a test asserts on state that a production timer can change (undo banner expiry, scheduled commands, cooldowns, polling):
+
+- Freeze the timer through an existing seam (`HomeStore.pauseUndoBannerCountdown()`, `assistantNow`, `controlDebounceInterval`), or
+- Poll a deterministic signal that the path under test actually produces. When the failure path records nothing, the reliable signal is "the timer is frozen and the assertion runs immediately", not a spin on a success-only collection.
+
+A wall-clock sleep before the assertion is the failure mode: on a loaded CI runner the sleep stretches past the timer's expiry, so the assertion fails nondeterministically while passing locally. This shipped once: `failedQuickActionRecordsNothing` spun on `executedCommands` (empty on failures) for 18 s in CI, past the 10 s banner expiry.
+
+The same rule covers a test that needs to observe an intermediate state. Hold the seam open and release it from the test (`setGetPropsHook` fed by an `AsyncStream`, `GatedUndoProvider.release()`, `readBackEchoHold`) instead of sleeping for the state to appear; a sleep long enough to see the state on this machine is a coin flip on a loaded runner. See `initialSnapshotWaitsForEveryAccount` and `wakeFromSleepWaitsForAllAccountsBeforeClosingAwayGap` in `MiAccountsProviderTests` for the gated form.
+
+## 10. Overlay Geometry Has One Owner
+
+Placement math that reserves space and the view that draws inside it must read the same dimensions:
+
+- Pill sizes and spacing live once beside the content (`GrokBallSuggestionMetrics`); placement math derives its column, row, and footprint from them instead of repeating literals like 132, 44, 206, and 558.
+- A view never hardcodes a size the placement reserves. When the two drift apart the content clips silently: #123's English empty state needed 65 pt inside a 44 pt row.
+- Empty and fallback states fill the reserved width (`.frame(maxWidth: .infinity)`) so they reflow instead of assuming a fixed column.
+
+## 11. External Payload Replay & Deterministic Fuzzing
+
+External payloads (Mi cloud responses, MIoT instance JSON, Home Assistant WebSocket frames, go2rtc MP4 bytes) are untrusted and change without notice:
+
+- Sanitised recordings live in `Tests/Fixtures/contracts/`. Each fixture carries a `_fixture` object with its endpoint, capture date and sanitisation note; identifiers, names, MAC addresses and IP addresses are synthetic. Addresses use TEST-NET ranges (`192.0.2.0/24`), never a real LAN.
+- `ContractReplayTests` decodes each fixture and asserts the exact stable fields the app consumes. When the upstream shape changes, update the fixture and the assertions together; never weaken an assertion to make a changed payload pass.
+- Fuzz tests use `SeededFuzzGenerator` with a fixed base seed and bounded iterations, and print `seed=<n> iteration=<n> input=<hex>` in every failure message. They must finish in milliseconds so the normal `swift test` suite keeps them.
+- A fuzzer that finds a trap ships with the fix and a minimal regression case (see the `tfhd` / `trun` short-payload and huge-number cases). Production code must not convert external numbers with trapping initialisers: use `Int(exactly:)` / `DeviceSynthesizer.roundedInt` and degrade to "no reading" when out of range.
+- A separate libFuzzer target is intentionally not wired into SwiftPM. The parsers are pure functions with deterministic seeds already reproducible on macOS and Linux; libFuzzer would add an LLVM-only build path without covering more code. Revisit only if a parser starts consuming non-deterministic process state.
+
+## 12. A Conditional View Ships With Its Snapshot
+
+A view that appears only in some state (a banner, a prompt, an empty or error state) ships with a snapshot case that puts the store into that state. Existing baselines never render it, so the `no-snapshot-change` label is wrong for it even though no current PNG changes.
+
+The snapshot is the check that the layout holds: the plaintext-consent banner (#276) truncated its reason on one line until its own snapshot showed it. Reserve `no-snapshot-change` for changes that alter no visible state at all.
+
+## 13. Pending UI State Ends on Every Transition
+
+State that waits on the user or a timer (a consent prompt, an auto-dismiss timer, a window a ring opened) has an owner and an end. For each such field, check every path that can supersede it:
+
+- **Backend switch.** Entering demo mode or rebuilding the provider clears it, and a late callback from the replaced provider is ignored. #276 shipped a consent banner whose 仍然连接 rebuilt the live backends while the app said demo.
+- **User takeover.** A window or session the user opened, kept or moved into picture-in-picture belongs to the user; automation never moves, switches or closes it. #308 needed this three times: a ring hijacked an open camera view, a later ring re-armed auto-close after picture-in-picture, and a restore was closed by an old timer.
+- **Repeat and stale events.** A repeated event renews what it owns or does nothing; an event about an older head, address or timestamp is ignored.
+
+Name the clearing site for each new field in the diff; a field set in one place and cleared nowhere is the defect.
+
+

@@ -1,0 +1,394 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      snapshot_failure_probe:
+        description: "Intentionally mismatch one snapshot to verify failure artifacts"
+        type: boolean
+        default: false
+      record_only:
+        description: "Only record snapshot baselines (skips the test jobs; used by scripts/record_snapshots.sh)"
+        type: boolean
+        default: false
+
+# 最小权限。actions: write 只用于 Actions cache（Swift .build / npm / Rust），
+# 不授予 contents: write。需要写仓库的发布流程在单独的 release 工作流里。
+permissions:
+  contents: read
+  actions: write
+
+# PR 上连续推送只保留最新一次。main 的每一次提交都要跑完（发版依赖这条），不取消。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  changes:
+    # 按改动范围分流：文档-only 跳过全部重型任务；只改单一平台时跳过另一平台。
+    # 工作流本身仍会运行：被 if 跳过的 job 在 GitHub 上记为成功，
+    # 这样 path filter 不会把 required check 卡在 Pending。
+    # 见 https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks#handling-skipped-but-required-checks
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      macos: ${{ steps.filter.outputs.macos }}
+      windows: ${{ steps.filter.outputs.windows }}
+      core: ${{ steps.filter.outputs.core }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Decide which CI surfaces changed
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          full_ci() {
+            printf 'code=true\nmacos=true\nwindows=true\ncore=true\n' >> "$GITHUB_OUTPUT"
+          }
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            full_ci
+            echo "workflow_dispatch always runs full CI"
+            exit 0
+          fi
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$BASE_SHA"
+            head="$HEAD_SHA"
+          else
+            base="$BEFORE_SHA"
+            head="$HEAD_SHA"
+            if [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              full_ci
+              echo "new branch; running full CI"
+              exit 0
+            fi
+          fi
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null || ! git cat-file -e "${head}^{commit}" 2>/dev/null; then
+            full_ci
+            echo "could not resolve ${base}..${head}; running full CI"
+            exit 0
+          fi
+          # --no-renames：一次跨目录移动会同时列出旧路径和新路径，避免漏掉旧平台。
+          git diff --name-only --no-renames "$base" "$head" > "$RUNNER_TEMP/changed.txt"
+          scope="$(bash scripts/ci_relevant_paths.sh < "$RUNNER_TEMP/changed.txt")"
+          # 脚本输出异常时按全量 CI 处理，避免格式错误被误判成 docs-only 而跳过检查。
+          for key in code macos windows core; do
+            if ! printf '%s\n' "$scope" | grep -Eq "^${key}=(true|false)$"; then
+              full_ci
+              echo "unexpected scope output; running full CI"
+              printf '%s\n' "$scope"
+              cat "$RUNNER_TEMP/changed.txt"
+              exit 0
+            fi
+          done
+          printf '%s\n' "$scope" >> "$GITHUB_OUTPUT"
+          if printf '%s\n' "$scope" | grep -q '^code=true$'; then
+            echo "code changed; running the affected CI surfaces"
+          else
+            echo "docs-only change; heavy jobs skipped"
+            cat "$RUNNER_TEMP/changed.txt"
+          fi
+
+  nas-safety:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && inputs.record_only != true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install ripgrep
+        run: bash scripts/install_ripgrep.sh
+      - name: Secret, coding-standard, and design-token checks
+        # 这些检查与操作系统无关，放在 Ubuntu 上，避免占用 macOS 配额。
+        # swift:6.1 容器里没有 python3，设计令牌和公钥一致性以前只在 macOS 上跑。
+        run: bash scripts/check.sh --lint-only
+      - name: MIoT coverage report
+        run: |
+          { echo '```'; python3 scripts/miot_coverage_report.py; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Test NAS deployment safety
+        run: bash scripts/test_nas_setup.sh
+
+  linux-core:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.core == 'true' && inputs.record_only != true
+    # 验证 MijiaCore 全量单测（Ubuntu + Swift 6.1）。密钥与编码规范在 nas-safety 里跑。
+    # 只在核心库或其共享语料变更时运行；macos-test 仍覆盖同一批 MijiaCoreTests。
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test MijiaCore on Linux
+        run: bash scripts/linux-check/run.sh
+
+  windows-core:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.windows == 'true' && inputs.record_only != true
+    # 验证 Windows 版 TypeScript 核心测试与前端打包
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+      - name: Install & Test & Build Frontend
+        run: npm ci && npm test && npm run build
+
+  windows-camera-bin:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.windows == 'true' && inputs.record_only != true
+    # 构建安装包内置的 go2rtc 与最小 LGPL ffmpeg；结果由 windows-installer 消费。
+    uses: ./.github/workflows/camera-bin.yml
+
+  windows-installer:
+    needs: [changes, windows-camera-bin]
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.windows == 'true' && inputs.record_only != true
+    # 安装包依赖 windows-camera-bin 的内置组件；前端测试仍由 windows-core 覆盖，
+    # 这里保留 cargo test 与 Tauri 安装包构建。
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: "windows/src-tauri -> target"
+      - name: Install frontend & Tauri CLI dependencies
+        run: npm ci
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: camera-bin
+          path: windows/src-tauri/camera-bin
+      - name: Test native URL and credential policies
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Build Windows Tauri installer (.exe & .msi)
+        run: npx tauri build -- --locked
+      - name: Collect Windows installers
+        shell: bash
+        run: |
+          version="$(tr -d '[:space:]' < ../VERSION)"
+          mkdir -p ../dist-windows
+          cp src-tauri/target/release/bundle/nsis/*.exe "../dist-windows/MenuBarMijia-${version}-windows-x64-setup.exe"
+          cp src-tauri/target/release/bundle/msi/*.msi "../dist-windows/MenuBarMijia-${version}-windows-x64.msi"
+          cd ../dist-windows
+          sha256sum "MenuBarMijia-${version}-windows-x64-setup.exe" > "MenuBarMijia-${version}-windows-x64-setup.exe.sha256"
+          sha256sum "MenuBarMijia-${version}-windows-x64.msi" > "MenuBarMijia-${version}-windows-x64.msi.sha256"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: MenuBarMijia-Windows-x64
+          path: dist-windows/*
+
+  macos-test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.macos == 'true' && inputs.record_only != true
+    # 全部 Swift 单测（含快照）。App Intents 与 Release 通用二进制各用一台机器，三路并行。
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Toolchain info
+        run: xcodebuild -version && swift --version
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build
+          # v3 discards caches built while merge commits were not stamped.
+          key: spm-debug-v3-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            spm-debug-v3-${{ runner.os }}-
+      - name: Restore source mtimes for the Swift cache
+        run: bash scripts/ci_restore_mtimes.sh
+      - name: Perturb baseline for the manual snapshot failure probe
+        if: github.event_name == 'workflow_dispatch' && inputs.snapshot_failure_probe
+        run: sips -z 1 1 Tests/MenuBarMijiaAppTests/__Snapshots__/SnapshotTests/deviceCardSnapshots.card-light-classic-zh-light.png
+      - name: Swift tests
+        env:
+          # 快照不一致时把差异图写到固定目录，便于作为 artifact 下载（#46）。
+          SNAPSHOT_ARTIFACTS: "${{ github.workspace }}/snapshot-failed"
+          # A deadlocked test samples its stacks and fails here instead of burning the 45-minute
+          # job timeout in silence.
+          SWIFT_TEST_STALL_SECONDS: "300"
+        run: bash scripts/ci_swift_test.sh
+      - name: Trim Swift build cache
+        if: success()
+        run: |
+          find .build -type d \( -name ModuleCache -o -name Index.noindex \) -prune -exec rm -rf {} + 2>/dev/null || true
+          du -sh .build 2>/dev/null || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: snapshot-diff
+          path: snapshot-failed
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+  macos-appintents:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.macos == 'true' && inputs.record_only != true
+    # xcodebuild 提取 App Intents。和 swift test 串在一台 3 核机器上时，冷启动会把两者相加。
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derived
+          key: appintents-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            appintents-v1-${{ runner.os }}-
+      - name: Restore source mtimes for the Xcode cache
+        run: bash scripts/ci_restore_mtimes.sh
+      - name: App Intents metadata
+        run: APP_INTENTS_ONLY=1 bash scripts/build_app.sh
+      - name: Trim Xcode derived data
+        if: success()
+        run: |
+          find .derived -type d \( -name ModuleCache -o -name Index.noindex \) -prune -exec rm -rf {} + 2>/dev/null || true
+          rm -f .derived/appintents-build.log
+          du -sh .derived 2>/dev/null || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: appintents-log
+          path: .derived/appintents-build.log
+          if-no-files-found: ignore
+
+  macos-release:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.macos == 'true' && inputs.record_only != true
+    # Release -O 通用二进制（#2 这类崩溃只在 -O 下出现）以及符号表路径泄露检查。
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Toolchain info
+        run: xcodebuild -version && swift --version
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build
+          key: spm-release-v2-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            spm-release-v2-${{ runner.os }}-
+            spm-release-v1-${{ runner.os }}-
+      - name: Restore source mtimes for the Swift cache
+        run: bash scripts/ci_restore_mtimes.sh
+      - name: Build app (release universal)
+        env:
+          SKIP_APP_INTENTS: "1"
+        run: bash scripts/build_app.sh
+      - name: Trim Swift build cache
+        if: success()
+        run: |
+          find .build -type d \( -name ModuleCache -o -name Index.noindex \) -prune -exec rm -rf {} + 2>/dev/null || true
+          rm -f .build/appintents-build.log
+          du -sh .build 2>/dev/null || true
+
+  macos:
+    # 历史 required check 的名字。文档-only 或只改 Windows 时三个 macOS job 被跳过，这里仍成功，
+    # 避免 path filter 把 `CI / macos` 卡在 Pending。任一应有的 macOS job 失败则这里失败。
+    needs: [changes, macos-test, macos-release, macos-appintents]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require macOS tests and the release build
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+          RECORD_ONLY: ${{ inputs.record_only }}
+          MACOS: ${{ needs.changes.outputs.macos }}
+          TESTS: ${{ needs.macos-test.result }}
+          RELEASE: ${{ needs.macos-release.result }}
+          INTENTS: ${{ needs.macos-appintents.result }}
+        run: >-
+          bash scripts/ci_require_jobs.sh
+          "macos-test:$TESTS:$MACOS"
+          "macos-release:$RELEASE:$MACOS"
+          "macos-appintents:$INTENTS:$MACOS"
+
+  snapshot-record:
+    # 仅手动触发且 record_only=true 时录制 UI 快照基线（#46）；普通手动全量 CI 不再顺带录制。
+    # Record 模式下 SnapshotTesting 以非零码退出，属预期；把 PNG 从 artifact 下载后
+    # 拷到 Tests/MenuBarMijiaAppTests/__Snapshots__/SnapshotTests/ 提交即可。
+    if: github.event_name == 'workflow_dispatch' && inputs.record_only && !inputs.snapshot_failure_probe
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      SNAPSHOT_RECORD: "1"
+      SNAPSHOT_ARTIFACTS: "${{ github.workspace }}/snapshot-failed"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Record snapshot baselines
+        continue-on-error: true
+        run: swift test --filter SnapshotTests
+      - name: Collect baselines
+        if: always()
+        run: |
+          mkdir -p snapshot-baselines
+          find Tests/MenuBarMijiaAppTests/__Snapshots__ -name '*.png' -exec cp {} snapshot-baselines/ \; 2>/dev/null || true
+          ls snapshot-baselines | head -20
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: snapshot-baselines
+          path: snapshot-baselines
+
+  ci:
+    # 始终运行的汇总检查。文档-only、record-only 或未受影响的平台任务被跳过时，这里成功；
+    # 任何一个实际失败（不是预期跳过）则失败。适合作为唯一的 required check。
+    needs: [changes, nas-safety, linux-core, windows-core, windows-camera-bin, windows-installer, macos-test, macos-release, macos-appintents]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Fail the workflow unless every required job succeeded
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+          RECORD_ONLY: ${{ inputs.record_only }}
+          MACOS: ${{ needs.changes.outputs.macos }}
+          WINDOWS: ${{ needs.changes.outputs.windows }}
+          CORE: ${{ needs.changes.outputs.core }}
+          NAS: ${{ needs.nas-safety.result }}
+          LINUX: ${{ needs.linux-core.result }}
+          WINDOWS_CORE: ${{ needs.windows-core.result }}
+          WINDOWS_CAMERA: ${{ needs.windows-camera-bin.result }}
+          WINDOWS_INSTALLER: ${{ needs.windows-installer.result }}
+          MACOS_TEST: ${{ needs.macos-test.result }}
+          MACOS_RELEASE: ${{ needs.macos-release.result }}
+          MACOS_INTENTS: ${{ needs.macos-appintents.result }}
+        run: >-
+          bash scripts/ci_require_jobs.sh
+          "nas-safety:$NAS:always"
+          "linux-core:$LINUX:$CORE"
+          "windows-core:$WINDOWS_CORE:$WINDOWS"
+          "windows-camera-bin:$WINDOWS_CAMERA:$WINDOWS"
+          "windows-installer:$WINDOWS_INSTALLER:$WINDOWS"
+          "macos-test:$MACOS_TEST:$MACOS"
+          "macos-release:$MACOS_RELEASE:$MACOS"
+          "macos-appintents:$MACOS_INTENTS:$MACOS"

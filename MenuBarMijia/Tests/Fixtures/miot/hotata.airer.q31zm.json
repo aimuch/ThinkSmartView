@@ -1,0 +1,259 @@
+{
+    "type": "urn:miot-spec-v2:device:airer:0000A00D:hotata-q31zm:1:0000D05F",
+    "description": "hotata airer q31zm",
+    "services": [
+        {
+            "iid": 1,
+            "type": "urn:miot-spec-v2:service:device-information:00007801:hotata-q31zm:1:0000D05F",
+            "description": "Device Information",
+            "properties": [
+                {
+                    "iid": 1,
+                    "type": "urn:miot-spec-v2:property:manufacturer:00000001:hotata-q31zm:1:0000D05F",
+                    "description": "Device Manufacturer",
+                    "format": "string",
+                    "access": [
+                        "read"
+                    ],
+                    "comment": "企业标志"
+                },
+                {
+                    "iid": 2,
+                    "type": "urn:miot-spec-v2:property:model:00000002:hotata-q31zm:1:0000D05F",
+                    "description": "Device Model",
+                    "format": "string",
+                    "access": [
+                        "read"
+                    ],
+                    "comment": "产品模型"
+                },
+                {
+                    "iid": 3,
+                    "type": "urn:miot-spec-v2:property:serial-number:00000003:hotata-q31zm:1:0000D05F",
+                    "description": "Device ID",
+                    "format": "string",
+                    "access": [
+                        "read"
+                    ],
+                    "comment": "设备ID"
+                },
+                {
+                    "iid": 4,
+                    "type": "urn:miot-spec-v2:property:firmware-revision:00000005:hotata-q31zm:1:0000D05F",
+                    "description": "Current Firmware Version",
+                    "format": "string",
+                    "access": [
+                        "read"
+                    ],
+                    "comment": "固件版本号"
+                },
+                {
+                    "iid": 5,
+                    "type": "urn:miot-spec-v2:property:serial-no:000000FF:hotata-q31zm:1:0000D05F",
+                    "description": "Serial Number",
+                    "format": "string",
+                    "access": [
+                        "read",
+                        "notify"
+                    ],
+                    "comment": "SN码"
+                }
+            ],
+            "comment": "设备信息"
+        },
+        {
+            "iid": 2,
+            "type": "urn:miot-spec-v2:service:airer:00007817:hotata-q31zm:1:0000D05F",
+            "description": "Airer",
+            "properties": [
+                {
+                    "iid": 1,
+                    "type": "urn:miot-spec-v2:property:fault:00000009:hotata-q31zm:1:0000D05F",
+                    "description": "Device Fault",
+                    "format": "uint32",
+                    "access": [
+                        "read",
+                        "notify"
+                    ],
+                    "value-list": [
+                        {
+                            "value": 0,
+                            "description": " No Faults",
+                            "comment": "无故障"
+                        },
+                        {
+                            "value": 1,
+                            "description": "Power Error",
+                            "comment": "电源故障"
+                        },
+                        {
+                            "value": 2,
+                            "description": "Encounter Obstacles",
+                            "comment": "遇阻"
+                        },
+                        {
+                            "value": 4,
+                            "description": "Encounter Obstacles",
+                            "comment": "遇阻"
+                        },
+                        {
+                            "value": 8,
+                            "description": "Encounter Obstacles",
+                            "comment": "遇阻"
+                        },
+                        {
+                            "value": 10,
+                            "description": "Encounter Obstacles",
+                            "comment": "遇阻"
+                        },
+                        {
+                            "value": 12,
+                            "description": "Encounter Obstacles",
+                            "comment": "遇阻"
+                        },
+                        {
+                            "value": 16,
+                            "description": "Overweight",
+                            "comment": "超重 "
+                        }
+                    ],
+                    "source": 1,
+                    "gatt-access": [],
+                    "comment": "故障"
+                },
+                {
+                    "iid": 2,
+                    "type": "urn:miot-spec-v2:property:status:00000007:hotata-q31zm:1:0000D05F",
+                    "description": "Status",
+                    "format": "uint8",
+                    "access": [
+                        "read",
+                        "notify"
+                    ],
+                    "value-list": [
+                        {
+                            "value": 0,
+                            "description": "Stop",
+                            "comment": "停止"
+                        },
+                        {
+                            "value": 1,
+                            "description": "Rising",
+                            "comment": "上升中"
+                        },
+                        {
+                            "value": 2,
+                            "description": "Down",
+                            "comment": "下降中"
+                        }
+                    ],
+                    "comment": "工作状态"
+                },
+                {
+                    "iid": 5,
+                    "type": "urn:miot-spec-v2:property:motor-control:00000038:hotata-q31zm:1:0000D05F",
+                    "description": "Motor Control",
+                    "format": "uint8",
+                    "access": [
+                        "write"
+                    ],
+                    "value-list": [
+                        {
+                            "value": 0,
+                            "description": "Pause",
+                            "comment": "暂停"
+                        },
+                        {
+                            "value": 1,
+                            "description": "Up",
+                            "comment": "上升"
+                        },
+                        {
+                            "value": 2,
+                            "description": "Down",
+                            "comment": "下降"
+                        }
+                    ],
+                    "gatt-access": [],
+                    "comment": "晾杆控制"
+                },
+                {
+                    "iid": 11,
+                    "type": "urn:miot-spec-v2:property:current-position:00000039:hotata-q31zm:1:0000D05F",
+                    "description": "Current Position",
+                    "format": "uint8",
+                    "access": [
+                        "read",
+                        "notify"
+                    ],
+                    "unit": "percentage",
+                    "value-range": [
+                        0,
+                        100,
+                        1
+                    ],
+                    "comment": "当前位置"
+                }
+            ],
+            "comment": "晾衣架"
+        },
+        {
+            "iid": 3,
+            "type": "urn:miot-spec-v2:service:light:00007802:hotata-q31zm:1:0000D05F",
+            "description": "Light",
+            "properties": [
+                {
+                    "iid": 1,
+                    "type": "urn:miot-spec-v2:property:on:00000006:hotata-q31zm:1:0000D05F",
+                    "description": "Switch Status",
+                    "format": "bool",
+                    "access": [
+                        "read",
+                        "write",
+                        "notify"
+                    ],
+                    "source": 1,
+                    "gatt-access": [],
+                    "comment": "照明开关"
+                },
+                {
+                    "iid": 2,
+                    "type": "urn:miot-spec-v2:property:brightness:0000000D:hotata-q31zm:1:0000D05F",
+                    "description": "Brightness",
+                    "format": "uint8",
+                    "access": [
+                        "read",
+                        "write",
+                        "notify"
+                    ],
+                    "unit": "percentage",
+                    "value-range": [
+                        1,
+                        100,
+                        1
+                    ],
+                    "comment": "亮度"
+                },
+                {
+                    "iid": 4,
+                    "type": "urn:miot-spec-v2:property:working-time:00000079:hotata-q31zm:1",
+                    "description": "Working Time",
+                    "format": "uint32",
+                    "access": [
+                        "read",
+                        "notify"
+                    ],
+                    "unit": "minutes",
+                    "value-range": [
+                        0,
+                        255,
+                        1
+                    ],
+                    "gatt-access": [],
+                    "comment": "照明剩余时间"
+                }
+            ],
+            "comment": "灯"
+        }
+    ]
+}

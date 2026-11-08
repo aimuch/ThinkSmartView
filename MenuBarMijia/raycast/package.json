@@ -1,0 +1,67 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "menubarmijia",
+  "title": "MenuBarMijia",
+  "description": "Search and control MenuBarMijia devices, scenes and quick actions from Raycast. Runs through the app's menumijia:// links, so your Mi Home and Home Assistant credentials never leave the app.",
+  "icon": "icon.png",
+  "author": "jryang1997",
+  "license": "MIT",
+  "categories": ["Applications", "Productivity"],
+  "keywords": ["smart home", "mijia", "xiaomi", "home assistant", "menubar"],
+  "commands": [
+    {
+      "name": "search-devices",
+      "title": "Search Devices",
+      "subtitle": "MenuBarMijia",
+      "description": "Search the devices MenuBarMijia shows and control power, brightness, colour temperature, thermostat target and fan speed.",
+      "mode": "view"
+    },
+    {
+      "name": "search-scenes",
+      "title": "Scenes & Quick Actions",
+      "subtitle": "MenuBarMijia",
+      "description": "Run Home Assistant scenes and the built-in quick actions: all lights off, soft night light, sleep climate off, all off and undo.",
+      "mode": "view"
+    },
+    {
+      "name": "ask",
+      "title": "Ask MenuBarMijia",
+      "subtitle": "MenuBarMijia",
+      "description": "Send one natural-language command to the MenuBarMijia assistant, using the same parsing and confirmation rules as the app.",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "snapshotPath",
+      "title": "Snapshot Path",
+      "description": "Leave empty to read ~/Library/Application Support/MenuBarMijia/raycast-snapshot.json. Set MENUBARMIJIA_SNAPSHOT_PATH to override it for every command.",
+      "type": "textfield",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "waitTimeoutSeconds",
+      "title": "Result Timeout",
+      "description": "Seconds to wait for MenuBarMijia to report the result of a command.",
+      "type": "textfield",
+      "required": false,
+      "default": "12"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^2.11.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.2",
+    "typescript": "^5.7.2"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "lint": "ray lint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/*.test.ts"
+  }
+}

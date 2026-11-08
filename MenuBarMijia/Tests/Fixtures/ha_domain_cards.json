@@ -1,0 +1,136 @@
+{
+  "areas": [
+    {"area_id": "living", "name": "客厅"},
+    {"area_id": "bathroom", "name": "卫生间"},
+    {"area_id": "kitchen", "name": "厨房"},
+    {"area_id": "garage", "name": "车库"}
+  ],
+  "devices": [
+    {"id": "humidifier-full", "area_id": "living", "name": "客厅加湿器", "model": "deerma.humidifier.jsq5"},
+    {"id": "humidifier-minimal", "area_id": "bathroom", "name": "加湿器", "model": "generic.humidifier"},
+    {"id": "water-heater-full", "area_id": "bathroom", "name": "热水器", "model": "viomi.waterheater.u19"},
+    {"id": "water-heater-minimal", "area_id": "kitchen", "name": "小厨宝", "model": "generic.water_heater"},
+    {"id": "valve-water", "area_id": "kitchen", "name": "入户水阀", "model": "tuya.valve"},
+    {"id": "valve-gas", "area_id": "kitchen", "name": "燃气阀", "model": "tuya.valve"},
+    {"id": "valve-minimal", "area_id": "garage", "name": "阀门", "model": "generic.valve"}
+  ],
+  "entities": [
+    {"entity_id": "humidifier.living", "device_id": "humidifier-full"},
+    {"entity_id": "sensor.living_humidity", "device_id": "humidifier-full"},
+    {"entity_id": "switch.living_led", "device_id": "humidifier-full"},
+    {"entity_id": "select.living_fan_mode", "device_id": "humidifier-full"},
+    {"entity_id": "number.target_level", "device_id": "humidifier-full"},
+    {"entity_id": "button.living_self_clean", "device_id": "humidifier-full"},
+    {"entity_id": "sensor.living_battery", "device_id": "humidifier-full"},
+    {"entity_id": "binary_sensor.living_water_shortage", "device_id": "humidifier-full"},
+    {"entity_id": "text.living_note", "device_id": "humidifier-full"},
+    {"entity_id": "switch.living_reboot", "device_id": "humidifier-full", "entity_category": "config"},
+    {"entity_id": "humidifier.minimal", "device_id": "humidifier-minimal"},
+    {"entity_id": "water_heater.boiler", "device_id": "water-heater-full"},
+    {"entity_id": "water_heater.minimal", "device_id": "water-heater-minimal"},
+    {"entity_id": "valve.water_main", "device_id": "valve-water"},
+    {"entity_id": "valve.gas_main", "device_id": "valve-gas"},
+    {"entity_id": "valve.minimal", "device_id": "valve-minimal"}
+  ],
+  "states": [
+    {
+      "entity_id": "humidifier.living",
+      "state": "on",
+      "attributes": {
+        "friendly_name": "客厅加湿器",
+        "available_modes": ["auto", "sleep", "strong"],
+        "mode": "auto",
+        "target_humidity": 55,
+        "min_humidity": 30,
+        "max_humidity": 80,
+        "target_humidity_step": 5,
+        "current_humidity": 48,
+        "supported_features": 3
+      }
+    },
+    {
+      "entity_id": "sensor.living_humidity",
+      "state": "47",
+      "attributes": {"device_class": "humidity", "unit_of_measurement": "%", "friendly_name": "湿度"}
+    },
+    {
+      "entity_id": "switch.living_led",
+      "state": "on",
+      "attributes": {"friendly_name": "指示灯"}
+    },
+    {
+      "entity_id": "select.living_fan_mode",
+      "state": "medium",
+      "attributes": {"friendly_name": "风速", "options": ["low", "medium", "high"]}
+    },
+    {
+      "entity_id": "number.target_level",
+      "state": "40",
+      "attributes": {"friendly_name": "目标档位", "min": 0, "max": 100, "step": 10}
+    },
+    {
+      "entity_id": "button.living_self_clean",
+      "state": "2026-11-01T08:00:00+00:00",
+      "attributes": {"friendly_name": "自清洁"}
+    },
+    {
+      "entity_id": "sensor.living_battery",
+      "state": "88",
+      "attributes": {"device_class": "battery", "unit_of_measurement": "%", "friendly_name": "电量"}
+    },
+    {
+      "entity_id": "binary_sensor.living_water_shortage",
+      "state": "off",
+      "attributes": {"device_class": "problem", "friendly_name": "缺水"}
+    },
+    {
+      "entity_id": "text.living_note",
+      "state": "hello",
+      "attributes": {"friendly_name": "备注"}
+    },
+    {
+      "entity_id": "switch.living_reboot",
+      "state": "off",
+      "attributes": {"friendly_name": "重启"}
+    },
+    {
+      "entity_id": "humidifier.minimal",
+      "state": "off",
+      "attributes": {}
+    },
+    {
+      "entity_id": "water_heater.boiler",
+      "state": "eco",
+      "attributes": {
+        "friendly_name": "热水器",
+        "operation_list": ["eco", "performance", "electric"],
+        "operation_mode": "eco",
+        "temperature": 55,
+        "current_temperature": 48,
+        "min_temp": 35,
+        "max_temp": 75,
+        "target_temp_step": 1
+      }
+    },
+    {
+      "entity_id": "water_heater.minimal",
+      "state": "off",
+      "attributes": {}
+    },
+    {
+      "entity_id": "valve.water_main",
+      "state": "open",
+      "attributes": {"friendly_name": "入户水阀", "device_class": "water", "supported_features": 3}
+    },
+    {
+      "entity_id": "valve.gas_main",
+      "state": "closed",
+      "attributes": {"friendly_name": "燃气阀", "device_class": "gas", "supported_features": 3}
+    },
+    {
+      "entity_id": "valve.minimal",
+      "state": "closed",
+      "attributes": {}
+    }
+  ]
+}

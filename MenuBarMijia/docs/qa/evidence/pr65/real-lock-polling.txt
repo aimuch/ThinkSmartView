@@ -1,0 +1,9 @@
+Source commit: 97a0432676b38eb2445dc9b1ce3d4f5354715819
+Actual Apple menu Lock Screen; existing Xiaomi account; no automation rules.
+CGSession screenLocked was true after lock and false after unlock.
+Only the provider context lines are included below.
+The 0 count covers provider polling, not every possible network request.
+
+2026-10-27 14:49:34.018 I  MenuBarMijiaApp[90336:7ca7e1] [com.jryang1997.MenuBarMijia:MiCloudProvider] Mi cloud polling: panel closed (39 polls since last change)
+2026-10-27 14:50:59.398 I  MenuBarMijiaApp[90336:7caf36] [com.jryang1997.MenuBarMijia:MiCloudProvider] Mi cloud polling: paused (asleep or locked) (1 polls since last change)
+2026-10-27 14:52:52.273 I  MenuBarMijiaApp[90336:7ca26a] [com.jryang1997.MenuBarMijia:MiCloudProvider] Mi cloud polling: panel closed (0 polls since last change)

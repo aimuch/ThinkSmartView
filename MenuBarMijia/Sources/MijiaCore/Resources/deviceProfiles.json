@@ -1,0 +1,281 @@
+{
+  "version": 2,
+  "noise": {
+    "services": [
+      "device-information",
+      "exception-card",
+      "device-custom",
+      "*-custom"
+    ],
+    "properties": [
+      "bind-timestamp",
+      "trigger-status",
+      "no-reminder-status",
+      "*-timestamp",
+      "*-list",
+      "*-code",
+      "*-result*",
+      "scenario-*"
+    ],
+    "keepInNoisyServices": [
+      "temp-warn-*",
+      "temperature-warn-*",
+      "today-feeded-num"
+    ]
+  },
+  "alerts": {
+    "words": [
+      "low",
+      "low1",
+      "blocked",
+      "blockage",
+      "bockage",
+      "fault",
+      "error",
+      "exception",
+      "abnormal",
+      "not inserted",
+      "stuck",
+      "empty",
+      "timeout",
+      "change",
+      "offline",
+      "alarm",
+      "堵塞",
+      "故障",
+      "异常",
+      "未插入",
+      "缺水",
+      "缺粮",
+      "超时",
+      "更换",
+      "不足",
+      "低水位"
+    ]
+  },
+  "facets": {
+    "maxVisible": 8,
+    "highRiskTypes": [
+      "heater",
+      "*-heater",
+      "electric-blanket",
+      "lock",
+      "*-lock",
+      "lock-*",
+      "router",
+      "gateway",
+      "repeater",
+      "germicidal-lamp",
+      "alertor",
+      "garbage-disposal"
+    ],
+    "highRiskServices": [
+      "heater",
+      "*-heater",
+      "boiler",
+      "ptc",
+      "floor-heat",
+      "heating",
+      "lock",
+      "lock-*",
+      "*-lock",
+      "*-valve",
+      "*faucet*",
+      "pump",
+      "*cook*",
+      "*warmer*",
+      "*steam*",
+      "*stove*",
+      "*charg*",
+      "*disposer*",
+      "*towel*",
+      "foot-bath",
+      "*coffee*",
+      "*treadmill*",
+      "*walking-pad*",
+      "*disposal*",
+      "alertor",
+      "*alarm*",
+      "*steriliz*",
+      "*router*",
+      "*wifi*",
+      "*wlan*",
+      "*gateway*",
+      "*repeater*"
+    ],
+    "highValue": [
+      "mode",
+      "target-*",
+      "*-level",
+      "brightness"
+    ],
+    "lowRiskWrites": [
+      "on",
+      "brightness",
+      "mode",
+      "fan-level",
+      "fan-speed",
+      "soft-wind",
+      "vertical-swing",
+      "horizontal-swing",
+      "sleep-mode",
+      "eco",
+      "dryer",
+      "anion",
+      "uv",
+      "target-humidity"
+    ]
+  },
+  "manualControlPolicy": {
+    "strictlyHighRisk": [
+      "lock",
+      "*-lock",
+      "germicidal-lamp",
+      "alertor",
+      "garbage-disposal",
+      "router",
+      "gateway",
+      "repeater",
+      "lock-*",
+      "*-valve",
+      "*disposal*",
+      "*alarm*",
+      "*steriliz*",
+      "*router*",
+      "*wifi*",
+      "*wlan*",
+      "*gateway*",
+      "*repeater*"
+    ],
+    "heatingService": [
+      "heater",
+      "ptc",
+      "floor-heat",
+      "heating",
+      "water-heater",
+      "electric-water-heater",
+      "gas-water-heater"
+    ],
+    "lowRiskServices": [
+      "indicator-light",
+      "night-light",
+      "buzzer",
+      "speaker",
+      "physical-controls-locked"
+    ],
+    "lowRiskTokens": [
+      "led",
+      "indicator",
+      "buzzer",
+      "mute",
+      "display",
+      "screen"
+    ]
+  },
+  "overrides": [
+    {
+      "models": [
+        "*.fishbowl.*",
+        "*.fish-tank.*"
+      ],
+      "deviceTypes": [
+        "fish-tank"
+      ],
+      "highlight": [
+        "fish-tank.water-pump",
+        "pump-flux",
+        "pet-food-out",
+        "light.on",
+        "light.mode",
+        "light.brightness",
+        "*filter*",
+        "*warn*",
+        "upper-temperature"
+      ],
+      "readouts": [
+        "temperature"
+      ],
+      "feeding": {
+        "action": "pet-food-out",
+        "fedToday": [
+          "today-feeded-num",
+          "sum-fed-measure",
+          "feeding-quantity"
+        ]
+      }
+    },
+    {
+      "models": [
+        "*.feeder.*"
+      ],
+      "deviceTypes": [
+        "pet-feeder"
+      ],
+      "highlight": [
+        "pet-food-out",
+        "target-feeding-measure",
+        "pet-food-left-level",
+        "fault"
+      ],
+      "readouts": [
+        "pet-food-left-level"
+      ],
+      "feeding": {
+        "action": "pet-food-out",
+        "fedToday": [
+          "today-feeded-num",
+          "sum-fed-measure",
+          "feeding-quantity"
+        ]
+      }
+    }
+  ],
+  "fallbackClaims": {
+    "air-condition-outlet": [
+      "air-conditioner"
+    ],
+    "ble-speaker": [
+      "speaker"
+    ],
+    "ceiling-fan": [
+      "fan"
+    ],
+    "door": [
+      "lock",
+      "video-doorbell"
+    ],
+    "night-light": [
+      "light"
+    ],
+    "relay": [
+      "switch"
+    ]
+  },
+  "appliances": {
+    "bath-heater": {
+      "primary": [
+        "ptc-bath-heater",
+        "bath-heater"
+      ],
+      "companions": [
+        "fan-control",
+        "environment",
+        "light"
+      ],
+      "symbol": "heater.vertical",
+      "roomReading": true,
+      "heats": true
+    },
+    "hood": {
+      "primary": [
+        "hood",
+        "fan-control"
+      ],
+      "companions": [
+        "fan-control",
+        "light"
+      ],
+      "symbol": "wind"
+    }
+  }
+}

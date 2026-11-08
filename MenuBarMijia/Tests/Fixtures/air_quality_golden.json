@@ -1,0 +1,23 @@
+{
+  "_comment": "Air-quality grade from a purifier's raw grade word or PM2.5. Asserted by AirQualityLevelTests (macOS) and windows/tests/core.test.ts. A known raw word wins over PM2.5; an unknown raw word has no grade (null) and is shown as reported.",
+  "cases": [
+    { "raw": "优", "pm25": null, "level": "excellent" },
+    { "raw": "空气优", "pm25": null, "level": "excellent" },
+    { "raw": " Excellent ", "pm25": null, "level": "excellent" },
+    { "raw": "良", "pm25": null, "level": "good" },
+    { "raw": "good", "pm25": 140, "level": "good" },
+    { "raw": "轻度污染", "pm25": null, "level": "moderate" },
+    { "raw": "中度污染", "pm25": null, "level": "poor" },
+    { "raw": "heavy pollution", "pm25": null, "level": "heavy" },
+    { "raw": "严重污染", "pm25": null, "level": "hazardous" },
+    { "raw": "Smoky", "pm25": 12, "level": null },
+    { "raw": "", "pm25": 35, "level": "excellent" },
+    { "raw": null, "pm25": 36, "level": "good" },
+    { "raw": null, "pm25": 75, "level": "good" },
+    { "raw": null, "pm25": 115, "level": "moderate" },
+    { "raw": null, "pm25": 150, "level": "poor" },
+    { "raw": null, "pm25": 250, "level": "heavy" },
+    { "raw": null, "pm25": 251, "level": "hazardous" },
+    { "raw": null, "pm25": null, "level": null }
+  ]
+}

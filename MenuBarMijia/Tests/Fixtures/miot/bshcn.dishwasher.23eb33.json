@@ -1,0 +1,493 @@
+{
+  "description": "Dishwasher",
+  "services": [
+    {
+      "comment": "设备信息",
+      "description": "Device Information",
+      "iid": 1,
+      "properties": [
+        {
+          "access": [
+            "read"
+          ],
+          "description": "Device Manufacturer",
+          "format": "string",
+          "iid": 1,
+          "type": "urn:miot-spec-v2:property:manufacturer:00000001:bshcn-23eb33:1"
+        },
+        {
+          "access": [
+            "read"
+          ],
+          "description": "Device Model",
+          "format": "string",
+          "iid": 2,
+          "type": "urn:miot-spec-v2:property:model:00000002:bshcn-23eb33:1"
+        },
+        {
+          "access": [
+            "read"
+          ],
+          "comment": "设备ID",
+          "description": "Device ID",
+          "format": "string",
+          "iid": 3,
+          "type": "urn:miot-spec-v2:property:serial-number:00000003:bshcn-23eb33:1"
+        },
+        {
+          "access": [
+            "read"
+          ],
+          "description": "Current Firmware Version",
+          "format": "string",
+          "iid": 4,
+          "type": "urn:miot-spec-v2:property:firmware-revision:00000005:bshcn-23eb33:1"
+        },
+        {
+          "access": [
+            "read",
+            "notify"
+          ],
+          "comment": "SN码",
+          "description": "Serial Number",
+          "format": "string",
+          "iid": 5,
+          "type": "urn:miot-spec-v2:property:serial-no:000000FF:bshcn-23eb33:1"
+        }
+      ],
+      "type": "urn:miot-spec-v2:service:device-information:00007801:bshcn-23eb33:1"
+    },
+    {
+      "actions": [
+        {
+          "comment": "开始洗涤",
+          "description": "Start Wash",
+          "iid": 1,
+          "in": [],
+          "out": [],
+          "type": "urn:miot-spec-v2:action:start-wash:00002824:bshcn-23eb33:1"
+        },
+        {
+          "comment": "暂停",
+          "description": "Pause",
+          "iid": 2,
+          "in": [],
+          "out": [],
+          "type": "urn:miot-spec-v2:action:pause:0000280C:bshcn-23eb33:1"
+        },
+        {
+          "comment": "停止洗涤",
+          "description": "Stop Washing",
+          "iid": 3,
+          "in": [],
+          "out": [],
+          "type": "urn:miot-spec-v2:action:stop-washing:0000283B:bshcn-23eb33:1"
+        },
+        {
+          "comment": "预约",
+          "description": "Reserve",
+          "iid": 5,
+          "in": [],
+          "out": [],
+          "type": "urn:miot-spec-v2:action:reserve:000028ED:bshcn-23eb33:1"
+        },
+        {
+          "comment": "终止预约",
+          "description": "Stop Reserve",
+          "iid": 6,
+          "in": [],
+          "out": [],
+          "type": "urn:miot-spec-v2:action:stop-reserve:000028EE:bshcn-23eb33:1"
+        },
+        {
+          "comment": "结束保鲜存储",
+          "description": "Stop Preservation",
+          "iid": 7,
+          "in": [],
+          "out": [],
+          "type": "urn:miot-spec-v2:action:stop-preservation:000028D1:bshcn-23eb33:1"
+        }
+      ],
+      "comment": "洗碗机",
+      "description": "Dishwasher",
+      "events": [
+        {
+          "arguments": [],
+          "comment": "洗涤结束",
+          "description": "Washing End",
+          "iid": 1,
+          "type": "urn:miot-spec-v2:event:wash-end:0000500B:bshcn-23eb33:1"
+        },
+        {
+          "arguments": [],
+          "comment": "洗涤开始",
+          "description": "Wash Start",
+          "iid": 2,
+          "type": "urn:miot-spec-v2:event:wash-start:0000508C:bshcn-23eb33:1"
+        },
+        {
+          "arguments": [],
+          "comment": "洗涤继续",
+          "description": "Wash Continue",
+          "iid": 3,
+          "type": "urn:miot-spec-v2:event:wash-continue:0000508D:bshcn-23eb33:1"
+        },
+        {
+          "arguments": [],
+          "comment": "预约任务开始",
+          "description": "Reservation Start",
+          "iid": 4,
+          "type": "urn:miot-spec-v2:event:reservation-start:0000508E:bshcn-23eb33:1"
+        }
+      ],
+      "iid": 2,
+      "properties": [
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "开关",
+          "description": "Switch Status",
+          "format": "bool",
+          "iid": 1,
+          "type": "urn:miot-spec-v2:property:on:00000006:bshcn-23eb33:1"
+        },
+        {
+          "access": [
+            "read",
+            "notify"
+          ],
+          "comment": "工作状态",
+          "description": "Status",
+          "format": "uint8",
+          "gatt-access": [],
+          "iid": 2,
+          "type": "urn:miot-spec-v2:property:status:00000007:bshcn-23eb33:1",
+          "value-list": [
+            {
+              "comment": "待机中",
+              "description": "Idle",
+              "value": 0
+            },
+            {
+              "comment": "运行中",
+              "description": "Busy",
+              "value": 1
+            },
+            {
+              "comment": "预约中",
+              "description": "Delay",
+              "value": 2
+            },
+            {
+              "comment": "程序完成",
+              "description": "Completed",
+              "value": 3
+            },
+            {
+              "comment": "抑菌储存中",
+              "description": "Preservation",
+              "value": 4
+            },
+            {
+              "comment": "正在中止",
+              "description": "Aborting",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "access": [
+            "read",
+            "notify"
+          ],
+          "comment": "故障",
+          "description": "Device Fault",
+          "format": "uint8",
+          "gatt-access": [],
+          "iid": 3,
+          "type": "urn:miot-spec-v2:property:fault:00000009:bshcn-23eb33:1",
+          "value-list": [
+            {
+              "comment": "null",
+              "description": "No Faults",
+              "value": 0
+            },
+            {
+              "comment": "出现异常",
+              "description": "Faults",
+              "value": 1
+            },
+            {
+              "comment": "防漏水系统已激活",
+              "description": "AquaStopOccured",
+              "value": 2
+            },
+            {
+              "comment": "排水故障",
+              "description": "Water Draining Malfunction",
+              "value": 3
+            },
+            {
+              "comment": "水泵短路或断路",
+              "description": "The Pump Is Short Circuited Or Disconnected",
+              "value": 4
+            },
+            {
+              "comment": "电源电压异常",
+              "description": "Abnormal Voltage",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "模式",
+          "description": "Mode",
+          "format": "uint8",
+          "gatt-access": [],
+          "iid": 4,
+          "type": "urn:miot-spec-v2:property:mode:00000008:bshcn-23eb33:1",
+          "value-list": [
+            {
+              "comment": "智能洗",
+              "description": "Smart",
+              "value": 35
+            },
+            {
+              "comment": "节能洗",
+              "description": "Energy Saving",
+              "value": 31
+            },
+            {
+              "comment": "超快洗",
+              "description": "Quick Wash",
+              "value": 33
+            },
+            {
+              "comment": "日常洗",
+              "description": "Daily Wash",
+              "value": 30
+            },
+            {
+              "comment": "超净洗",
+              "description": "Ultra Clean Washing",
+              "value": 34
+            }
+          ]
+        },
+        {
+          "access": [
+            "read",
+            "notify"
+          ],
+          "comment": "剩余时间",
+          "description": "Left Time",
+          "format": "uint16",
+          "gatt-access": [],
+          "iid": 5,
+          "type": "urn:miot-spec-v2:property:left-time:0000003C:bshcn-23eb33:1",
+          "unit": "minutes",
+          "value-range": [
+            0,
+            1439,
+            1
+          ]
+        },
+        {
+          "access": [
+            "read",
+            "notify"
+          ],
+          "comment": "运行状态",
+          "description": "Run Status",
+          "format": "uint8",
+          "gatt-access": [],
+          "iid": 15,
+          "type": "urn:miot-spec-v2:property:run-status:0000014C:bshcn-23eb33:1",
+          "value-list": [
+            {
+              "comment": "预洗",
+              "description": "Prewashing",
+              "value": 1
+            },
+            {
+              "comment": "主洗",
+              "description": "Washing",
+              "value": 2
+            },
+            {
+              "comment": "漂洗",
+              "description": "Rinsh",
+              "value": 3
+            },
+            {
+              "comment": "烘干",
+              "description": "Dry",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "下发和显示预约开始时间",
+          "description": "Reservation Complete Time",
+          "format": "uint16",
+          "gatt-access": [],
+          "iid": 17,
+          "type": "urn:miot-spec-v2:property:reservation-complete-time:00000314:bshcn-23eb33:1",
+          "unit": "minutes",
+          "value-range": [
+            0,
+            1439,
+            1
+          ]
+        },
+        {
+          "access": [
+            "read",
+            "notify",
+            "write"
+          ],
+          "comment": "预约剩余时间",
+          "description": "Reservation Left Time",
+          "format": "uint16",
+          "gatt-access": [],
+          "iid": 21,
+          "type": "urn:miot-spec-v2:property:reservation-left-time:0000016E:bshcn-23eb33:1",
+          "unit": "minutes",
+          "value-range": [
+            0,
+            1439,
+            1
+          ]
+        },
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "洗碗完成提醒开关",
+          "description": "Wash End Reminder",
+          "format": "bool",
+          "iid": 26,
+          "type": "urn:miot-spec-v2:property:wash-end-reminder:00000405:bshcn-23eb33:1"
+        },
+        {
+          "access": [
+            "read",
+            "notify"
+          ],
+          "comment": "安全远程控制状态",
+          "description": "Child Protected Status",
+          "format": "bool",
+          "iid": 28,
+          "type": "urn:miot-spec-v2:property:child-protected-status:00000349:bshcn-23eb33:1"
+        },
+        {
+          "access": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "comment": "预约时间戳",
+          "description": "Regular Preservation Data",
+          "format": "string",
+          "gatt-access": [],
+          "iid": 29,
+          "type": "urn:miot-spec-v2:property:regular-preservation-data:00000317:bshcn-23eb33:1"
+        }
+      ],
+      "type": "urn:miot-spec-v2:service:dishwasher:0000784D:bshcn-23eb33:1"
+    },
+    {
+      "comment": "软化盐管理",
+      "description": "Water Softener Management",
+      "events": [
+        {
+          "arguments": [],
+          "comment": "软化盐低",
+          "description": "Low Water Softener Level",
+          "iid": 1,
+          "type": "urn:miot-spec-v2:event:low-water-softener-level:0000501A:bshcn-23eb33:1"
+        }
+      ],
+      "iid": 6,
+      "properties": [
+        {
+          "access": [
+            "read",
+            "notify"
+          ],
+          "comment": "软化盐剩余量",
+          "description": "Water Softener Left Level",
+          "format": "uint8",
+          "iid": 1,
+          "type": "urn:miot-spec-v2:property:water-softener-left-level:000000D2:bshcn-23eb33:1",
+          "value-list": [
+            {
+              "description": "Normal",
+              "value": 1
+            },
+            {
+              "description": "Low",
+              "value": 2
+            }
+          ]
+        }
+      ],
+      "type": "urn:miot-spec-v2:service:water-softener-management:0000788C:bshcn-23eb33:1"
+    },
+    {
+      "comment": "漂洗剂管理",
+      "description": "Rinse Management",
+      "events": [
+        {
+          "arguments": [],
+          "comment": "漂洗剂耗尽提醒",
+          "description": "Low Rinse Level",
+          "iid": 1,
+          "type": "urn:miot-spec-v2:event:low-rinse-level:000050C1:bshcn-23eb33:1"
+        }
+      ],
+      "iid": 7,
+      "properties": [
+        {
+          "access": [
+            "read",
+            "notify"
+          ],
+          "comment": "漂洗剂剩余量",
+          "description": "Rinse Left Level",
+          "format": "uint8",
+          "gatt-access": [],
+          "iid": 2,
+          "type": "urn:miot-spec-v2:property:rinse-left-level:00000410:bshcn-23eb33:1",
+          "value-list": [
+            {
+              "description": "Normal",
+              "value": 1
+            },
+            {
+              "description": "Lack",
+              "value": 2
+            }
+          ]
+        }
+      ],
+      "type": "urn:miot-spec-v2:service:rinse-management:00007913:bshcn-23eb33:1"
+    }
+  ],
+  "type": "urn:miot-spec-v2:device:dishwasher:0000A034:bshcn-23eb33:1"
+}

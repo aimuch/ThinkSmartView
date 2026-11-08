@@ -1,0 +1,1615 @@
+#!/usr/bin/env python3
+"""mijia — 在终端或 MCP 客户端里控制 MenuBarMijia。
+
+所有控制都通过 `menumijia://` 链接交给 MenuBarMijia 执行，本脚本只读应用写出的
+`raycast-snapshot.json`，不保存也不转发米家 / Home Assistant 凭据。因此需要：
+
+1. 打开 MenuBarMijia：设置 → 自动化与外部控制 → 打开「Raycast 集成」；
+2. 让应用保持运行（关闭后它无法执行链接）。
+
+用法示例：
+
+    mijia list --room 书房
+    mijia toggle 书房台灯
+    mijia on 客厅射灯
+    mijia brightness 书房台灯 40
+    mijia color-temp 书房台灯 4000
+    mijia temperature 书房空调 25.5
+    mijia fan 客厅风扇 --percent 60
+    mijia scene 观影模式
+    mijia ask "把客厅灯调到 40%"
+    mijia mcp
+
+退出码：0 成功；1 应用报告执行失败；2 本地错误（快照缺失、设备找不到、
+集成未开启等）；3 等待结果超时。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import subprocess
+import sys
+import time
+import unicodedata
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+SCHEMA_VERSION = 1
+SNAPSHOT_ENV = "MENUBARMIJIA_SNAPSHOT_PATH"
+DEFAULT_SNAPSHOT_PATH = (
+    Path.home() / "Library" / "Application Support" / "MenuBarMijia" / "raycast-snapshot.json"
+)
+DEFAULT_TIMEOUT = 12.0
+POLL_INTERVAL = 0.15
+MAX_ASK_LENGTH = 500
+
+EXIT_OK = 0
+EXIT_COMMAND_FAILED = 1
+EXIT_LOCAL_ERROR = 2
+EXIT_TIMEOUT = 3
+
+MCP_DEFAULT_PROTOCOL_VERSION = "2024-11-05"
+MCP_SUPPORTED_PROTOCOL_VERSIONS = ("2025-03-26", "2024-11-05")
+MCP_SERVER_INFO = {"name": "menubarmijia", "version": "1.1.7"}
+MCP_INSTRUCTIONS = (
+    "MenuBarMijia 本地智能家居伴生服务。只读 raycast-snapshot.json 并通过 menumijia:// "
+    "交由正在运行的 MenuBarMijia 执行，不接触米家或 Home Assistant 凭据；"
+    "锁屏拦截与高风险设备（电暖器、插座、摄像机、扫地机、热水器、开窗器、晾衣架、车库门）"
+    "二次确认均在应用内生效。"
+)
+
+
+class CliError(Exception):
+    """在把链接交给应用之前就失败：快照缺失、设备找不到、集成未开启。"""
+
+
+class FeedbackTimeout(CliError):
+    """链接已交给应用，但在超时内没有等到这条命令的结果。"""
+
+
+def snapshot_path(explicit: str | None = None, env: dict | None = None) -> Path:
+    if explicit:
+        return Path(explicit).expanduser()
+    override = ((env if env is not None else os.environ).get(SNAPSHOT_ENV) or "").strip()
+    if override:
+        return Path(override).expanduser()
+    return DEFAULT_SNAPSHOT_PATH
+
+
+def load_snapshot(path: Path) -> dict:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise CliError(
+            f"没找到 {path}。请在 MenuBarMijia 的设置 → 自动化与外部控制里打开「Raycast 集成」。"
+        ) from None
+    except OSError as error:
+        raise CliError(f"读取快照失败：{error}") from error
+    try:
+        snapshot = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise CliError(f"{path} 不是合法 JSON：{error}") from error
+    if not isinstance(snapshot, dict):
+        raise CliError(f"{path} 的顶层不是对象，格式不认识")
+    version = snapshot.get("schemaVersion")
+    if version != SCHEMA_VERSION:
+        raise CliError(f"快照版本是 {version!r}，本脚本只认识 {SCHEMA_VERSION}；请更新到配套版本。")
+    return snapshot
+
+
+def public_snapshot(snapshot: dict) -> dict:
+    """对外输出或返回给 MCP 客户端前剥掉本机 bridgeToken。"""
+    return {key: value for key, value in snapshot.items() if key != "bridgeToken"}
+
+
+def _fold(value: object) -> str:
+    return str(value or "").strip().casefold()
+
+
+def _device_label(device: dict) -> str:
+    name = str(device.get("name") or "?")
+    room = str(device.get("roomName") or "")
+    room_part = f"（{room}）" if room else ""
+    return f"{name}{room_part} · {device.get('id', '?')}"
+
+
+def _unique(candidates: list, what: str, query: str, label) -> dict:
+    if not candidates:
+        raise CliError(f"没有名字或 ID 是「{query}」的{what}")
+    if len(candidates) > 1:
+        listing = "\n".join(f"  - {label(item)}" for item in candidates)
+        raise CliError(f"「{query}」匹配到多个{what}，请写得更具体或直接用 ID：\n{listing}")
+    return candidates[0]
+
+
+def _device_keys(device: dict) -> tuple[set[str], tuple[str, ...]]:
+    name = _fold(device.get("name"))
+    room = _fold(device.get("roomName"))
+    short = name[len(room) :].strip() if room and name.startswith(room) else name
+    initials = _fold(device.get("pinyinInitials"))
+    room_initials = _fold(device.get("roomPinyinInitials"))
+    full_pinyin = _fold(device.get("pinyinFull"))
+    exact = {
+        key
+        for key in (
+            name,
+            f"{room}{name}",
+            f"{room} {name}",
+            f"{room}{short}",
+            f"{room} {short}",
+            initials,
+            f"{room_initials}{initials}",
+            full_pinyin,
+        )
+        if key.strip()
+    }
+    haystacks = tuple(
+        key for key in (name, f"{room}{name}", f"{room} {name}", f"{room} {short}", full_pinyin) if key.strip()
+    )
+    return exact, haystacks
+
+
+def match_device(snapshot: dict, query: str) -> dict:
+    devices = [device for device in snapshot.get("devices") or [] if isinstance(device, dict)]
+    needle = " ".join(_fold(query).split())
+    if not needle:
+        raise CliError("设备名不能为空")
+    for device in devices:
+        if str(device.get("id") or "") == str(query).strip():
+            return device
+    exact = [device for device in devices if needle in _device_keys(device)[0]]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return _unique(exact, "设备", query, _device_label)
+    substring = [
+        device
+        for device in devices
+        if any(needle in haystack for haystack in _device_keys(device)[1])
+    ]
+    return _unique(substring, "设备", query, _device_label)
+
+
+def _scene_label(item: dict) -> str:
+    return f"{item.get('name', '?')} · {item.get('id', '?')}"
+
+
+BUILTIN_QUICK_ALIASES: dict[str, str] = {
+    "lightsoff": "lightsOff",
+    "lights_off": "lightsOff",
+    "全屋关灯": "lightsOff",
+    "softnightlight": "softNightLight",
+    "soft_night_light": "softNightLight",
+    "柔和夜灯": "softNightLight",
+    "climatesleepoff": "climateSleepOff",
+    "climate_sleep_off": "climateSleepOff",
+    "关温控风扇": "climateSleepOff",
+    "睡眠关空调": "climateSleepOff",
+    "alloff": "allOff",
+    "all_off": "allOff",
+    "一键全关": "allOff",
+    "全关": "allOff",
+    "undo": "undo",
+    "撤销上一步": "undo",
+    "撤销": "undo",
+}
+
+
+def _match_in_pool(pool: list, needle: str, *, allow_contains: bool) -> tuple[dict | None, list]:
+    """返回唯一命中，或命中列表（需要用户写得更具体）。"""
+    for item in pool:
+        if _fold(item.get("id")) == needle or _fold(item.get("entityId")) == needle:
+            return item, []
+    hits = [
+        item
+        for item in pool
+        if _fold(item.get("name")) == needle
+        or _fold(item.get("pinyinInitials")) == needle
+        or _fold(item.get("pinyinFull")) == needle
+    ]
+    if len(hits) == 1:
+        return hits[0], []
+    if len(hits) > 1:
+        return None, hits
+    if not allow_contains:
+        return None, []
+    hits = [
+        item
+        for item in pool
+        if needle in _fold(item.get("name"))
+        or needle in _fold(item.get("pinyinInitials"))
+        or needle in _fold(item.get("pinyinFull"))
+    ]
+    if len(hits) == 1:
+        return hits[0], []
+    return None, hits
+
+
+def match_scene(snapshot: dict, query: str) -> tuple[str, dict]:
+    """返回 ("quick", 快捷动作) 或 ("scene", 场景)。"""
+    quick_actions = [item for item in snapshot.get("quickActions") or [] if isinstance(item, dict)]
+    scenes = [item for item in snapshot.get("scenes") or [] if isinstance(item, dict)]
+    needle = _fold(query)
+    if not needle:
+        raise CliError("场景名不能为空")
+
+    if needle.startswith("quick:"):
+        builtin = needle[len("quick:") :].strip()
+        canonical_id = BUILTIN_QUICK_ALIASES.get(builtin)
+        target_id = _fold(canonical_id or builtin)
+        for item in quick_actions:
+            if _fold(item.get("id")) == target_id or _fold(item.get("name")) == builtin:
+                return "quick", item
+        if canonical_id:
+            return "quick", {"id": canonical_id, "name": builtin}
+        raise CliError(f"没有 ID 是「{builtin}」的快捷动作")
+
+    canonical_alias = BUILTIN_QUICK_ALIASES.get(needle)
+    if canonical_alias:
+        alias_id = _fold(canonical_alias)
+        for item in quick_actions:
+            if _fold(item.get("id")) == alias_id:
+                return "quick", item
+        if not any(_fold(scene.get("name")) == needle for scene in scenes):
+            return "quick", {"id": canonical_alias, "name": query.strip()}
+
+    # 名字完全一致优先于「包含」，且两个池子平级比较：快捷动作叫「全屋关灯」时，
+    # 不会因为某个场景名里恰好也含这四个字而被场景抢走。
+    for allow_contains in (False, True):
+        ambiguous: list = []
+        for pool, kind in ((scenes, "scene"), (quick_actions, "quick")):
+            item, hits = _match_in_pool(pool, needle, allow_contains=allow_contains)
+            if item is not None:
+                return kind, item
+            ambiguous.extend(hits)
+        if ambiguous:
+            listing = "\n".join(f"  - {_scene_label(item)}" for item in ambiguous)
+            raise CliError(f"「{query}」匹配到多个场景或快捷动作，请写得更具体或直接用 ID：\n{listing}")
+    raise CliError(f"没有名字是「{query}」的场景或快捷动作")
+
+
+def build_url(route: str, params: list[tuple[str, str]], token: str, request_id: str) -> str:
+    from urllib.parse import quote, urlencode
+
+    query = list(params)
+    query.append(("id", request_id))
+    query.append(("token", token))
+    # quote, not quote_plus: the app reads a literal "+" as part of the text.
+    return f"menumijia://{route}?" + urlencode(query, quote_via=quote)
+
+
+def open_url(url: str) -> None:
+    try:
+        completed = subprocess.run(
+            ["open", url],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError as error:
+        raise CliError(f"无法调用 open 打开链接：{error}") from error
+    if completed.returncode != 0:
+        reason = (completed.stderr or "").strip() or f"退出码 {completed.returncode}"
+        raise CliError(f"系统没能打开 menumijia:// 链接（{reason}），请确认 MenuBarMijia 已安装。")
+
+
+def validate_timeout(timeout: object) -> float:
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise CliError("等待超时秒数必须是大于 0 的数字")
+    value = float(timeout)
+    if not math.isfinite(value) or value <= 0.0 or value > 300.0:
+        raise CliError("等待超时秒数必须在 0–300 之间")
+    return value
+
+
+def wait_for_feedback(path: Path, request_id: str, timeout: float, now, sleep) -> dict:
+    valid_timeout = validate_timeout(timeout)
+    deadline = now() + valid_timeout
+    while True:
+        # Writes are atomic, so a read either has the whole file or the previous one. A missing or
+        # unreadable file here is a real problem (integration turned off) and surfaces immediately.
+        snapshot = load_snapshot(path)
+        feedback = snapshot.get("lastCommandFeedback")
+        if isinstance(feedback, dict) and feedback.get("requestId") == request_id:
+            return feedback
+        if now() >= deadline:
+            raise FeedbackTimeout(
+                f"等了 {valid_timeout:g} 秒没收到执行结果。请确认 MenuBarMijia 正在运行、"
+                "「Raycast 集成」仍处于打开状态。"
+            )
+        sleep(POLL_INTERVAL)
+
+
+def _token(snapshot: dict) -> str:
+    token = str(snapshot.get("bridgeToken") or "").strip()
+    if not token:
+        raise CliError("快照里没有本机令牌。请在设置里关闭再打开「Raycast 集成」以重新签发。")
+    return token
+
+
+def dispatch_link(
+    snapshot: dict,
+    path: Path,
+    route: str,
+    params: list[tuple[str, str]],
+    *,
+    opener,
+    now,
+    sleep,
+    timeout: float,
+) -> dict:
+    """发送带本机令牌与 requestId 的链接，并返回应用写回的结果字典。"""
+    request_id = uuid.uuid4().hex
+    url = build_url(route, params, _token(snapshot), request_id)
+    opener(url)
+    feedback = wait_for_feedback(path, request_id, timeout, now, sleep)
+    return {
+        "requestId": request_id,
+        "command": feedback.get("command") or route,
+        "message": str(feedback.get("message") or ""),
+        "isError": bool(feedback.get("isError")),
+        "completedAt": feedback.get("completedAt"),
+    }
+
+
+def send(
+    snapshot: dict,
+    path: Path,
+    route: str,
+    params: list[tuple[str, str]],
+    *,
+    opener,
+    now,
+    sleep,
+    timeout: float,
+    dry_run: bool = False,
+    wait: bool = True,
+    as_json: bool = False,
+) -> int:
+    request_id = uuid.uuid4().hex
+    url = build_url(route, params, _token(snapshot), request_id)
+    if dry_run:
+        print(_redacted(url))
+        return EXIT_OK
+    opener(url)
+    if not wait:
+        print(f"已发送：{url.split('?', 1)[0]}")
+        return EXIT_OK
+    try:
+        feedback = wait_for_feedback(path, request_id, timeout, now, sleep)
+    except FeedbackTimeout as error:
+        print(f"mijia: {error}", file=sys.stderr)
+        return EXIT_TIMEOUT
+    message = str(feedback.get("message") or "")
+    is_error = bool(feedback.get("isError"))
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "requestId": request_id,
+                    "command": feedback.get("command"),
+                    "message": message,
+                    "isError": is_error,
+                },
+                ensure_ascii=False,
+            )
+        )
+    else:
+        print(message or ("完成" if not is_error else "执行失败"))
+    return EXIT_COMMAND_FAILED if is_error else EXIT_OK
+
+
+def _redacted(url: str) -> str:
+    from urllib.parse import quote
+
+    parts = url.split("token=", 1)
+    if len(parts) != 2:
+        return url
+    tail = parts[1]
+    separator = tail.find("&")
+    suffix = "" if separator < 0 else tail[separator:]
+    return f"{parts[0]}token={quote('<本机令牌>')}{suffix}"
+
+
+def _number(value: object) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "?"
+    if round(number) == number:
+        return str(int(number))
+    return f"{number:.1f}"
+
+
+def _width(text: str) -> int:
+    return sum(2 if unicodedata.east_asian_width(char) in "WF" else 1 for char in text)
+
+
+def _pad(text: str, width: int) -> str:
+    return text + " " * max(0, width - _width(text))
+
+
+def _reading_text(reading: dict) -> str:
+    parts = []
+    if reading.get("temperature") is not None:
+        parts.append(f"{_number(reading['temperature'])}°C")
+    if reading.get("humidity") is not None:
+        parts.append(f"{_number(reading['humidity'])}%")
+    if reading.get("battery") is not None:
+        parts.append(f"电量 {reading['battery']}%")
+    return " · ".join(parts) or "无读数"
+
+
+def _room_key(device: dict) -> tuple[int, str]:
+    try:
+        rank = int(device.get("roomSortOrder"))
+    except (TypeError, ValueError):
+        rank = 999
+    # 快照本身已按房间和面板顺序排好；排序要稳定，房间内保持应用给的顺序。
+    return rank, str(device.get("roomName") or "")
+
+
+def _dedup_rooms(candidates: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    seen: set[str] = set()
+    unique: list[tuple[str, str]] = []
+    for room_id, room_name in candidates:
+        key = _fold(room_name or room_id)
+        if key not in seen:
+            seen.add(key)
+            unique.append((room_id, room_name))
+    return unique
+
+
+def resolve_room(snapshot: dict, query: str) -> tuple[str, str]:
+    devices = [device for device in snapshot.get("devices") or [] if isinstance(device, dict)]
+    needle = _fold(query)
+    rooms: list[tuple[str, str]] = []
+    for device in devices:
+        room_id = str(device.get("roomId") or "")
+        room_name = str(device.get("roomName") or "")
+        if (room_id or room_name) and (room_id, room_name) not in rooms:
+            rooms.append((room_id, room_name))
+    exact = _dedup_rooms(
+        [
+            (room_id, room_name)
+            for room_id, room_name in rooms
+            if _fold(room_id) == needle or _fold(room_name) == needle
+        ]
+    )
+    if not exact:
+        exact = _dedup_rooms(
+            [
+                (room_id, room_name)
+                for room_id, room_name in rooms
+                if needle in _fold(room_id) or needle in _fold(room_name)
+            ]
+        )
+    if not exact:
+        known = "、".join(sorted({name for _, name in rooms if name})) or "（空）"
+        raise CliError(f"没有名叫「{query}」的房间；现有房间：{known}")
+    if len(exact) > 1:
+        listing = "\n".join(f"  - {name or room_id}" for room_id, name in exact)
+        raise CliError(f"「{query}」匹配到多个房间：\n{listing}")
+    return exact[0]
+
+
+def filter_devices(
+    snapshot: dict,
+    *,
+    room: str | None = None,
+    category: str | None = None,
+    online_only: bool = False,
+) -> list[dict]:
+    devices = [device for device in snapshot.get("devices") or [] if isinstance(device, dict)]
+    if room:
+        room_id, room_name = resolve_room(snapshot, room)
+        devices = [
+            device
+            for device in devices
+            if (room_id and str(device.get("roomId") or "") == room_id)
+            or (room_name and str(device.get("roomName") or "") == room_name)
+        ]
+    if category:
+        wanted = _fold(category)
+        devices = [
+            device
+            for device in devices
+            if _fold(device.get("category")) == wanted or _fold(device.get("categoryTitle")) == wanted
+        ]
+    if online_only:
+        devices = [device for device in devices if bool(device.get("isOnline"))]
+    devices.sort(key=_room_key)
+    return devices
+
+
+def format_device_list(snapshot: dict, devices: list[dict]) -> str:
+    if not devices:
+        return "没有符合条件、且面板里可见的设备。"
+    header = f"更新于 {snapshot.get('updatedAt') or '?'}"
+    if snapshot.get("isStale"):
+        header += "（数据可能已过期）"
+    lines = [header]
+    current_room = None
+    for device in devices:
+        room_name = str(device.get("roomName") or "未分配房间")
+        if room_name != current_room:
+            if current_room is not None:
+                lines.append("")
+            lines.append(room_name)
+            current_room = room_name
+        online = bool(device.get("isOnline"))
+        name = str(device.get("name") or "?")
+        state = str(device.get("stateText") or "")
+        if not online:
+            state = "离线"
+        marker = "●" if online and device.get("isActiveOn") else "○"
+        favorite = " ★" if device.get("isFavorite") else ""
+        lines.append(f"  {marker} {_pad(name, 18)}{state}{favorite}")
+    return "\n".join(lines)
+
+
+def command_list(snapshot: dict, room: str | None, as_json: bool) -> int:
+    devices = filter_devices(snapshot, room=room)
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "updatedAt": snapshot.get("updatedAt"),
+                    "isStale": snapshot.get("isStale"),
+                    "connectionSummary": snapshot.get("connectionSummary"),
+                    "devices": devices,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return EXIT_OK
+    print(format_device_list(snapshot, devices))
+    return EXIT_OK
+
+
+def build_status_payload(snapshot: dict) -> dict:
+    devices = [device for device in snapshot.get("devices") or [] if isinstance(device, dict)]
+    online = [device for device in devices if device.get("isOnline")]
+    active = [device for device in devices if device.get("isActiveOn") and device.get("isOnline")]
+    feedback = snapshot.get("lastCommandFeedback") or {}
+    readings = [
+        reading for reading in snapshot.get("environmentReadings") or [] if isinstance(reading, dict)
+    ]
+    return {
+        "updatedAt": snapshot.get("updatedAt"),
+        "connectionSummary": snapshot.get("connectionSummary"),
+        "isStale": snapshot.get("isStale"),
+        "deviceCount": len(devices),
+        "onlineCount": len(online),
+        "activeCount": len(active),
+        "sceneCount": len(snapshot.get("scenes") or []),
+        "quickActionCount": len(snapshot.get("quickActions") or []),
+        "lastCommandFeedback": feedback or None,
+        "environmentReadings": readings,
+    }
+
+
+def format_status_text(snapshot: dict) -> str:
+    payload = build_status_payload(snapshot)
+    readings = payload["environmentReadings"]
+    feedback = payload["lastCommandFeedback"] or {}
+    lines = [
+        f"连接：{payload['connectionSummary'] or '未知'}",
+        f"更新：{payload['updatedAt'] or '?'}{'（可能已过期）' if payload['isStale'] else ''}",
+        f"设备：{payload['deviceCount']} 台，在线 {payload['onlineCount']} 台，开启 {payload['activeCount']} 台",
+        f"场景：{payload['sceneCount']} 个，快捷动作 {payload['quickActionCount']} 个",
+    ]
+    if readings:
+        lines.append("环境读数：")
+        for reading in readings:
+            room = str(reading.get("roomName") or "")
+            label = str(reading.get("label") or "?")
+            lines.append(f"  {_pad(f'{room} {label}'.strip(), 24)}{_reading_text(reading)}")
+    if isinstance(feedback, dict) and feedback.get("message"):
+        result = "失败" if feedback.get("isError") else "成功"
+        lines.append(f"上次命令：{feedback.get('command') or '?'} → {result}：{feedback.get('message')}")
+    return "\n".join(lines)
+
+
+def command_status(snapshot: dict, as_json: bool) -> int:
+    if as_json:
+        print(json.dumps(build_status_payload(snapshot), ensure_ascii=False, indent=2))
+        return EXIT_OK
+    print(format_status_text(snapshot))
+    return EXIT_OK
+
+
+def _require_toggleable(device: dict) -> None:
+    if not device.get("isPrimaryToggleable"):
+        raise CliError(f"{_device_label(device)} 没有可直接开关的功能")
+
+
+def _require_int(raw: object, label: str, minimum: int, maximum: int) -> int:
+    if isinstance(raw, bool) or raw is None:
+        raise CliError(f"{label}必须是 {minimum}–{maximum} 的整数")
+    if isinstance(raw, float):
+        if not raw.is_integer():
+            raise CliError(f"{label}必须是 {minimum}–{maximum} 的整数")
+        value = int(raw)
+    else:
+        try:
+            text = str(raw).strip()
+            value = int(text)
+        except (TypeError, ValueError):
+            raise CliError(f"{label}必须是 {minimum}–{maximum} 的整数") from None
+    if not (minimum <= value <= maximum):
+        raise CliError(f"{label}必须在 {minimum}–{maximum} 之间（收到 {value}）")
+    return value
+
+
+def _require_float(raw: object, label: str, minimum: float, maximum: float) -> float:
+    if isinstance(raw, bool) or raw is None:
+        raise CliError(f"{label}必须是 {_number(minimum)}–{_number(maximum)} 之间的数字")
+    try:
+        value = float(str(raw).strip() if not isinstance(raw, (int, float)) else raw)
+    except (TypeError, ValueError):
+        raise CliError(f"{label}必须是 {_number(minimum)}–{_number(maximum)} 之间的数字") from None
+    if not math.isfinite(value) or not (minimum <= value <= maximum):
+        raise CliError(f"{label}必须在 {_number(minimum)}–{_number(maximum)} 之间（收到 {raw!r}）")
+    return value
+
+
+def validate_brightness(device: dict, raw_percent: object) -> int:
+    percent = _require_int(raw_percent, "亮度百分比", 0, 100)
+    caps = device.get("capabilities") or {}
+    if percent == 0:
+        if not (caps.get("canTogglePower") or device.get("isPrimaryToggleable")):
+            raise CliError(f"{_device_label(device)} 不支持关闭")
+    elif not caps.get("brightnessWritable"):
+        raise CliError(f"{_device_label(device)} 不支持调节亮度")
+    return percent
+
+
+def validate_color_temp(device: dict, raw_kelvin: object) -> int:
+    kelvin = _require_int(raw_kelvin, "色温（K）", 1000, 20000)
+    caps = device.get("capabilities") or {}
+    if not caps.get("colorWritable"):
+        raise CliError(f"{_device_label(device)} 不支持调节色温")
+    min_k = caps.get("minKelvin")
+    max_k = caps.get("maxKelvin")
+    if isinstance(min_k, int) and isinstance(max_k, int) and min_k <= max_k:
+        if not (min_k <= kelvin <= max_k):
+            raise CliError(f"{_device_label(device)} 的色温范围是 {min_k}K–{max_k}K（收到 {kelvin}K）")
+    return kelvin
+
+
+def validate_temperature(device: dict, raw_celsius: object) -> float:
+    celsius = _require_float(raw_celsius, "目标温度（°C）", -30.0, 50.0)
+    caps = device.get("capabilities") or {}
+    if not caps.get("temperatureWritable"):
+        raise CliError(f"{_device_label(device)} 不支持设定目标温度")
+    min_t = caps.get("minTemp")
+    max_t = caps.get("maxTemp")
+    if isinstance(min_t, (int, float)) and isinstance(max_t, (int, float)) and min_t <= max_t:
+        if not (float(min_t) <= celsius <= float(max_t)):
+            raise CliError(
+                f"{_device_label(device)} 的可调温度范围是 {_number(min_t)}°C–{_number(max_t)}°C"
+                f"（收到 {_number(celsius)}°C）"
+            )
+    return celsius
+
+
+_FAN_SPOKEN_LEVELS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
+    ("auto", ("auto", "自动"), ("auto", "自动")),
+    ("sleep", ("sleep", "睡眠", "silent", "静音"), ("sleep", "睡眠", "silent", "静音")),
+    ("favorite", ("favorite", "favourite", "最爱", "manual", "手动"), ("favorite", "favourite", "最爱", "manual", "手动")),
+    ("natural", ("natural", "nature", "自然", "自然风"), ("natural", "nature", "自然")),
+    ("direct", ("direct", "straight", "直吹", "直吹风"), ("direct", "straight", "直吹")),
+    ("high", ("high", "高", "大", "强", "max", "最大", "strong"), ("high", "strong", "高", "强")),
+    ("medium", ("medium", "middle", "mid", "中"), ("medium", "middle", "mid", "中")),
+    ("low", ("low", "低", "小", "弱", "min", "最小", "微"), ("low", "低", "弱")),
+)
+_FAN_NON_LEVEL_HINTS = (
+    "auto", "自动", "sleep", "睡眠", "silent", "静音", "natural", "nature", "自然", "smart", "智能", "favorite", "favourite", "最爱"
+)
+
+
+def _match_fan_preset(wanted: str, modes: list[str]) -> str | None:
+    folded = _fold(wanted)
+    if not folded or not modes:
+        return None
+    for mode in modes:
+        if _fold(mode) == folded:
+            return mode
+    for level, triggers, hints in _FAN_SPOKEN_LEVELS:
+        if any(folded == word or folded.startswith(word) for word in triggers):
+            for mode in modes:
+                if any(hint in _fold(mode) for hint in hints):
+                    return mode
+            if level in ("low", "medium", "high"):
+                plain = [m for m in modes if not any(h in _fold(m) for h in _FAN_NON_LEVEL_HINTS)]
+                if plain:
+                    if level == "low":
+                        return plain[0]
+                    if level == "high":
+                        return plain[-1]
+                    return plain[len(plain) // 2]
+            break
+    return next((mode for mode in modes if folded in _fold(mode)), None)
+
+
+def validate_fan(
+    device: dict,
+    raw_percent: object | None,
+    raw_preset: object | None,
+) -> list[tuple[str, str]]:
+    caps = device.get("capabilities") or {}
+    if not caps.get("fanSpeedWritable"):
+        raise CliError(f"{_device_label(device)} 不支持调节风速或档位")
+    if raw_preset is not None and not isinstance(raw_preset, str):
+        raise CliError("预设档位（preset）必须是字符串")
+    has_percent = raw_percent is not None
+    preset_text = raw_preset.strip() if isinstance(raw_preset, str) else ""
+    has_preset = bool(preset_text)
+    if has_percent == has_preset:
+        raise CliError("风速百分比（percent）与档位（preset）必须且只能指定其中一项")
+    if has_percent:
+        percent = _require_int(raw_percent, "风速百分比", 1, 100)
+        return [("device", str(device["id"])), ("percent", str(percent))]
+    if len(preset_text) > 200:
+        raise CliError("预设档位名称长度不能超过 200 个字符")
+    modes = [str(mode) for mode in (caps.get("availablePresetModes") or []) if str(mode).strip()]
+    if not modes:
+        raise CliError(f"{_device_label(device)} 不支持预设档位，请改用风速百分比（percent）")
+    matched = _match_fan_preset(preset_text, modes)
+    if matched is None:
+        options = "、".join(modes[:8])
+        raise CliError(f"{_device_label(device)} 没有「{preset_text}」档位，可选：{options}")
+    return [("device", str(device["id"])), ("preset", matched)]
+
+
+# MARK: - Model Context Protocol (MCP) Server (#19, GH#177, ADR-0013)
+
+
+@dataclass(frozen=True)
+class McpContext:
+    path: Path
+    opener: Callable[[str], None]
+    now: Callable[[], float]
+    sleep: Callable[[float], None]
+    timeout: float
+
+
+@dataclass(frozen=True)
+class McpResourceSpec:
+    uri: str
+    name: str
+    description: str
+    mime_type: str
+    reader: Callable[[dict], dict]
+
+
+@dataclass(frozen=True)
+class McpToolSpec:
+    name: str
+    description: str
+    input_schema: dict
+    annotations: dict
+    handler: Callable[[McpContext, dict], dict]
+
+
+def _read_status_resource(snapshot: dict) -> dict:
+    return build_status_payload(public_snapshot(snapshot))
+
+
+def _read_devices_resource(snapshot: dict) -> dict:
+    clean = public_snapshot(snapshot)
+    return {
+        "updatedAt": clean.get("updatedAt"),
+        "isStale": clean.get("isStale"),
+        "connectionSummary": clean.get("connectionSummary"),
+        "devices": filter_devices(clean),
+    }
+
+
+def _read_scenes_resource(snapshot: dict) -> dict:
+    clean = public_snapshot(snapshot)
+    return {
+        "updatedAt": clean.get("updatedAt"),
+        "quickActions": clean.get("quickActions") or [],
+        "scenes": clean.get("scenes") or [],
+    }
+
+
+MCP_RESOURCES: tuple[McpResourceSpec, ...] = (
+    McpResourceSpec(
+        uri="mijia://status",
+        name="家庭连接与环境状态",
+        description="连接源摘要、设备在线与开启统计、温湿度与电量读数、上一条外部指令执行结果（不含任何凭据或令牌）。",
+        mime_type="application/json",
+        reader=_read_status_resource,
+    ),
+    McpResourceSpec(
+        uri="mijia://devices",
+        name="可见智能设备列表",
+        description="面板中可见的设备列表，含房间、在线与开关状态、当前读数、可控能力范围与高风险标记。",
+        mime_type="application/json",
+        reader=_read_devices_resource,
+    ),
+    McpResourceSpec(
+        uri="mijia://scenes",
+        name="场景与内置快捷动作",
+        description="可执行的全屋快捷动作（全屋关灯、柔和夜灯、睡眠关温控、一键全关、撤销上一步）与 Home Assistant 场景。",
+        mime_type="application/json",
+        reader=_read_scenes_resource,
+    ),
+)
+
+MCP_RESOURCES_BY_URI: dict[str, McpResourceSpec] = {spec.uri: spec for spec in MCP_RESOURCES}
+
+
+def _require_string_arg(arguments: dict, key: str, label: str, *, max_length: int = 200) -> str:
+    raw = arguments.get(key)
+    if not isinstance(raw, str) or not raw.strip():
+        raise CliError(f"{label}（{key}）不能为空")
+    value = raw.strip()
+    if len(value) > max_length:
+        raise CliError(f"{label}长度不能超过 {max_length} 个字符")
+    return value
+
+
+def _tool_result(text: str, structured: dict | None = None, *, is_error: bool = False) -> dict:
+    result: dict = {
+        "content": [{"type": "text", "text": text}],
+        "isError": bool(is_error),
+    }
+    if structured is not None:
+        result["structuredContent"] = structured
+    return result
+
+
+def _dispatch_tool_link(
+    ctx: McpContext,
+    snapshot: dict,
+    route: str,
+    params: list[tuple[str, str]],
+) -> dict:
+    feedback = dispatch_link(
+        snapshot,
+        ctx.path,
+        route,
+        params,
+        opener=ctx.opener,
+        now=ctx.now,
+        sleep=ctx.sleep,
+        timeout=ctx.timeout,
+    )
+    message = feedback["message"] or ("执行失败" if feedback["isError"] else "完成")
+    return _tool_result(message, feedback, is_error=feedback["isError"])
+
+
+def _mcp_list_devices(ctx: McpContext, arguments: dict) -> dict:
+    snapshot = public_snapshot(load_snapshot(ctx.path))
+    room = arguments.get("room")
+    if room is not None and not isinstance(room, str):
+        raise CliError("room 必须是字符串")
+    category = arguments.get("category")
+    if category is not None and not isinstance(category, str):
+        raise CliError("category 必须是字符串")
+    online_only = arguments.get("online_only")
+    if online_only is None:
+        online_only = False
+    if not isinstance(online_only, bool):
+        raise CliError("online_only 必须是布尔值")
+    devices = filter_devices(
+        snapshot,
+        room=room.strip() if isinstance(room, str) and room.strip() else None,
+        category=category.strip() if isinstance(category, str) and category.strip() else None,
+        online_only=online_only,
+    )
+    structured = {
+        "updatedAt": snapshot.get("updatedAt"),
+        "isStale": snapshot.get("isStale"),
+        "connectionSummary": snapshot.get("connectionSummary"),
+        "devices": devices,
+    }
+    return _tool_result(format_device_list(snapshot, devices), structured)
+
+
+def _mcp_get_home_status(ctx: McpContext, _arguments: dict) -> dict:
+    snapshot = public_snapshot(load_snapshot(ctx.path))
+    structured = build_status_payload(snapshot)
+    structured["quickActions"] = snapshot.get("quickActions") or []
+    structured["scenes"] = snapshot.get("scenes") or []
+    return _tool_result(format_status_text(snapshot), structured)
+
+
+def _mcp_toggle_device(ctx: McpContext, arguments: dict) -> dict:
+    snapshot = load_snapshot(ctx.path)
+    query = _require_string_arg(arguments, "device", "设备名或 ID")
+    device = match_device(snapshot, query)
+    _require_toggleable(device)
+    return _dispatch_tool_link(ctx, snapshot, "toggle", [("device", str(device["id"]))])
+
+
+def _mcp_set_device_power(ctx: McpContext, arguments: dict) -> dict:
+    snapshot = load_snapshot(ctx.path)
+    query = _require_string_arg(arguments, "device", "设备名或 ID")
+    is_on = arguments.get("on")
+    if not isinstance(is_on, bool):
+        raise CliError("开关状态（on）必须是布尔值 true 或 false")
+    device = match_device(snapshot, query)
+    _require_toggleable(device)
+    return _dispatch_tool_link(
+        ctx,
+        snapshot,
+        "power",
+        [("device", str(device["id"])), ("on", "true" if is_on else "false")],
+    )
+
+
+def _mcp_set_light_brightness(ctx: McpContext, arguments: dict) -> dict:
+    snapshot = load_snapshot(ctx.path)
+    query = _require_string_arg(arguments, "device", "设备名或 ID")
+    device = match_device(snapshot, query)
+    percent = validate_brightness(device, arguments.get("percent"))
+    return _dispatch_tool_link(
+        ctx,
+        snapshot,
+        "brightness",
+        [("device", str(device["id"])), ("percent", str(percent))],
+    )
+
+
+def _mcp_set_light_color_temp(ctx: McpContext, arguments: dict) -> dict:
+    snapshot = load_snapshot(ctx.path)
+    query = _require_string_arg(arguments, "device", "设备名或 ID")
+    device = match_device(snapshot, query)
+    kelvin = validate_color_temp(device, arguments.get("kelvin"))
+    return _dispatch_tool_link(
+        ctx,
+        snapshot,
+        "color-temp",
+        [("device", str(device["id"])), ("kelvin", str(kelvin))],
+    )
+
+
+def _mcp_set_temperature(ctx: McpContext, arguments: dict) -> dict:
+    snapshot = load_snapshot(ctx.path)
+    query = _require_string_arg(arguments, "device", "设备名或 ID")
+    device = match_device(snapshot, query)
+    celsius = validate_temperature(device, arguments.get("celsius"))
+    return _dispatch_tool_link(
+        ctx,
+        snapshot,
+        "temperature",
+        [("device", str(device["id"])), ("celsius", _number(celsius))],
+    )
+
+
+def _mcp_set_fan(ctx: McpContext, arguments: dict) -> dict:
+    snapshot = load_snapshot(ctx.path)
+    query = _require_string_arg(arguments, "device", "设备名或 ID")
+    device = match_device(snapshot, query)
+    params = validate_fan(device, arguments.get("percent"), arguments.get("preset"))
+    return _dispatch_tool_link(ctx, snapshot, "fan", params)
+
+
+def _mcp_run_scene(ctx: McpContext, arguments: dict) -> dict:
+    snapshot = load_snapshot(ctx.path)
+    query = _require_string_arg(arguments, "name", "场景或快捷动作名称")
+    kind, item = match_scene(snapshot, query)
+    target = f"quick:{item['id']}" if kind == "quick" else str(item["id"])
+    return _dispatch_tool_link(ctx, snapshot, "scene", [("name", target)])
+
+
+def _mcp_ask_home(ctx: McpContext, arguments: dict) -> dict:
+    snapshot = load_snapshot(ctx.path)
+    text = _require_string_arg(arguments, "text", "自然语言指令", max_length=MAX_ASK_LENGTH)
+    return _dispatch_tool_link(ctx, snapshot, "ask", [("text", text)])
+
+
+def _mcp_focus_device(ctx: McpContext, arguments: dict) -> dict:
+    snapshot = load_snapshot(ctx.path)
+    query = _require_string_arg(arguments, "device", "设备名或 ID")
+    device = match_device(snapshot, query)
+    return _dispatch_tool_link(ctx, snapshot, "focus", [("device", str(device["id"]))])
+
+
+READ_ONLY_ANNOTATIONS = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+CONTROL_IDEMPOTENT_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+CONTROL_NON_IDEMPOTENT_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": False,
+    "openWorldHint": False,
+}
+
+MCP_TOOLS: tuple[McpToolSpec, ...] = (
+    McpToolSpec(
+        name="list_devices",
+        description="列出 MenuBarMijia 面板里可见的智能设备、在线状态、当前读数与可控能力；可按房间、类别或在线状态筛选。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "room": {"type": "string", "description": "可选：按房间名或房间 ID 筛选（如「书房」）"},
+                "category": {"type": "string", "description": "可选：按类别英文键或中文标题筛选（如 light / 灯 / 空调）"},
+                "online_only": {"type": "boolean", "description": "可选：为 true 时只返回在线设备"},
+            },
+            "additionalProperties": False,
+        },
+        annotations=READ_ONLY_ANNOTATIONS,
+        handler=_mcp_list_devices,
+    ),
+    McpToolSpec(
+        name="get_home_status",
+        description="读取家庭连接摘要、设备统计、各房间温湿度与电量读数、可执行场景与内置快捷动作。",
+        input_schema={
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+        annotations=READ_ONLY_ANNOTATIONS,
+        handler=_mcp_get_home_status,
+    ),
+    McpToolSpec(
+        name="toggle_device",
+        description="翻转一台可开关设备的主开关（支持设备名、房间+设备名、ID 或拼音首字母，如 sftd）。知道明确目标状态时优先用 set_device_power。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "device": {"type": "string", "description": "设备名、ID 或拼音首字母"},
+            },
+            "required": ["device"],
+            "additionalProperties": False,
+        },
+        annotations=CONTROL_NON_IDEMPOTENT_ANNOTATIONS,
+        handler=_mcp_toggle_device,
+    ),
+    McpToolSpec(
+        name="set_device_power",
+        description="将设备设置为明确的开启（on=true）或关闭（on=false）状态；高风险设备开启时会在应用内请求用户确认。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "device": {"type": "string", "description": "设备名、ID 或拼音首字母"},
+                "on": {"type": "boolean", "description": "true 为打开，false 为关闭"},
+            },
+            "required": ["device", "on"],
+            "additionalProperties": False,
+        },
+        annotations=CONTROL_IDEMPOTENT_ANNOTATIONS,
+        handler=_mcp_set_device_power,
+    ),
+    McpToolSpec(
+        name="set_light_brightness",
+        description="设置灯具亮度百分比（0–100）；设为 0 时直接关闭灯具。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "device": {"type": "string", "description": "灯具名称、ID 或拼音首字母"},
+                "percent": {"type": "integer", "minimum": 0, "maximum": 100, "description": "亮度百分比（0–100）"},
+            },
+            "required": ["device", "percent"],
+            "additionalProperties": False,
+        },
+        annotations=CONTROL_IDEMPOTENT_ANNOTATIONS,
+        handler=_mcp_set_light_brightness,
+    ),
+    McpToolSpec(
+        name="set_light_color_temp",
+        description="设置灯具色温（开尔文 K，如 2700 暖光、4000 自然光、6500 冷白光），需在灯具支持的 minKelvin–maxKelvin 范围内。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "device": {"type": "string", "description": "灯具名称、ID 或拼音首字母"},
+                "kelvin": {
+                    "type": "integer",
+                    "minimum": 1000,
+                    "maximum": 20000,
+                    "description": "目标色温（K）",
+                },
+            },
+            "required": ["device", "kelvin"],
+            "additionalProperties": False,
+        },
+        annotations=CONTROL_IDEMPOTENT_ANNOTATIONS,
+        handler=_mcp_set_light_color_temp,
+    ),
+    McpToolSpec(
+        name="set_temperature",
+        description="设置空调、电暖器或温控设备的目标温度（°C），需在设备支持的 minTemp–maxTemp 范围内。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "device": {"type": "string", "description": "温控设备名称、ID 或拼音首字母"},
+                "celsius": {
+                    "type": "number",
+                    "minimum": -30,
+                    "maximum": 50,
+                    "description": "目标摄氏温度（°C）",
+                },
+            },
+            "required": ["device", "celsius"],
+            "additionalProperties": False,
+        },
+        annotations=CONTROL_IDEMPOTENT_ANNOTATIONS,
+        handler=_mcp_set_temperature,
+    ),
+    McpToolSpec(
+        name="set_fan",
+        description="设置风扇或空气净化器的风速百分比（percent: 1–100）或预设档位（preset: 需在设备 availablePresetModes 列表中），二选一。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "device": {"type": "string", "description": "风扇或净化器名称、ID 或拼音首字母"},
+                "percent": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "description": "可选：风速百分比（1–100），与 preset 二选一",
+                },
+                "preset": {
+                    "type": "string",
+                    "description": "可选：设备支持的预设档位名（与 percent 二选一）",
+                },
+            },
+            "required": ["device"],
+            "additionalProperties": False,
+        },
+        annotations=CONTROL_IDEMPOTENT_ANNOTATIONS,
+        handler=_mcp_set_fan,
+    ),
+    McpToolSpec(
+        name="run_scene",
+        description="执行 Home Assistant 场景或内置快捷动作（全屋关灯、柔和夜灯、关温控风扇、一键全关、撤销上一步）。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "场景名、快捷动作名或对应 ID（如「观影模式」「全屋关灯」「undo」）"},
+            },
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+        annotations=CONTROL_NON_IDEMPOTENT_ANNOTATIONS,
+        handler=_mcp_run_scene,
+    ),
+    McpToolSpec(
+        name="ask_home",
+        description="向 MenuBarMijia 发送一句自然语言指令（如「把书房灯设为柔和月光模式」「10分钟后关书房灯」），复用应用内本地规则与确认策略。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "自然语言指令（不超过 500 字）"},
+            },
+            "required": ["text"],
+            "additionalProperties": False,
+        },
+        annotations=CONTROL_NON_IDEMPOTENT_ANNOTATIONS,
+        handler=_mcp_ask_home,
+    ),
+    McpToolSpec(
+        name="focus_device",
+        description="在 MenuBarMijia 面板中定位并展开指定设备的详情抽屉（只做界面跳转，不改变设备状态）。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "device": {"type": "string", "description": "设备名、ID 或拼音首字母"},
+            },
+            "required": ["device"],
+            "additionalProperties": False,
+        },
+        annotations=READ_ONLY_ANNOTATIONS,
+        handler=_mcp_focus_device,
+    ),
+)
+
+MCP_TOOLS_BY_NAME: dict[str, McpToolSpec] = {spec.name: spec for spec in MCP_TOOLS}
+
+
+def _jsonrpc_result(req_id: object, result: dict) -> dict:
+    return {"jsonrpc": "2.0", "id": req_id, "result": result}
+
+
+def _jsonrpc_error(req_id: object, code: int, message: str) -> dict:
+    return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+
+
+MAX_MCP_FRAME_BYTES = 4 * 1024 * 1024
+
+
+def _validate_tool_arguments(spec: McpToolSpec, arguments: dict) -> None:
+    allowed = set((spec.input_schema.get("properties") or {}).keys())
+    unknown = sorted(set(arguments.keys()) - allowed)
+    if unknown:
+        allowed_list = "、".join(sorted(allowed)) or "（无参数）"
+        raise CliError(f"工具 {spec.name} 不认识参数 {', '.join(unknown)}；可用参数：{allowed_list}")
+
+
+def handle_mcp_message(ctx: McpContext, message: object) -> dict | None:
+    """处理单条 JSON-RPC 2.0 消息；通知（无 id）返回 None。"""
+    if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
+        req_id = message.get("id") if isinstance(message, dict) else None
+        return _jsonrpc_error(req_id, -32600, "Invalid Request: expected JSON-RPC 2.0 object")
+
+    method = message.get("method")
+    has_id = "id" in message and message.get("id") is not None
+    req_id = message.get("id")
+    params = message.get("params")
+
+    if not isinstance(method, str) or not method:
+        return _jsonrpc_error(req_id, -32600, "Invalid Request: missing method") if has_id else None
+
+    if not has_id:
+        return None
+
+    if params is not None and not isinstance(params, dict):
+        return _jsonrpc_error(req_id, -32602, "Invalid params: expected object")
+    params = params or {}
+
+    if method == "initialize":
+        requested = str(params.get("protocolVersion") or "").strip()
+        negotiated = (
+            requested
+            if requested in MCP_SUPPORTED_PROTOCOL_VERSIONS
+            else MCP_DEFAULT_PROTOCOL_VERSION
+        )
+        return _jsonrpc_result(
+            req_id,
+            {
+                "protocolVersion": negotiated,
+                "capabilities": {
+                    "tools": {"listChanged": False},
+                    "resources": {"subscribe": False, "listChanged": False},
+                },
+                "serverInfo": dict(MCP_SERVER_INFO),
+                "instructions": MCP_INSTRUCTIONS,
+            },
+        )
+
+    if method in ("ping", "logging/setLevel"):
+        return _jsonrpc_result(req_id, {})
+
+    if method == "completion/complete":
+        return _jsonrpc_result(req_id, {"completion": {"values": [], "total": 0, "hasMore": False}})
+
+    if method == "prompts/list":
+        return _jsonrpc_result(req_id, {"prompts": []})
+
+    if method == "resources/templates/list":
+        return _jsonrpc_result(req_id, {"resourceTemplates": []})
+
+    if method == "resources/list":
+        return _jsonrpc_result(
+            req_id,
+            {
+                "resources": [
+                    {
+                        "uri": spec.uri,
+                        "name": spec.name,
+                        "description": spec.description,
+                        "mimeType": spec.mime_type,
+                    }
+                    for spec in MCP_RESOURCES
+                ]
+            },
+        )
+
+    if method == "resources/read":
+        uri = params.get("uri")
+        if not isinstance(uri, str) or uri not in MCP_RESOURCES_BY_URI:
+            return _jsonrpc_error(req_id, -32602, f"Unknown resource URI: {uri!r}")
+        spec = MCP_RESOURCES_BY_URI[uri]
+        try:
+            snapshot = load_snapshot(ctx.path)
+            payload = spec.reader(snapshot)
+        except CliError as error:
+            return _jsonrpc_error(req_id, -32000, str(error))
+        return _jsonrpc_result(
+            req_id,
+            {
+                "contents": [
+                    {
+                        "uri": spec.uri,
+                        "mimeType": spec.mime_type,
+                        "text": json.dumps(payload, ensure_ascii=False, indent=2),
+                    }
+                ]
+            },
+        )
+
+    if method == "tools/list":
+        return _jsonrpc_result(
+            req_id,
+            {
+                "tools": [
+                    {
+                        "name": spec.name,
+                        "description": spec.description,
+                        "inputSchema": spec.input_schema,
+                        "annotations": spec.annotations,
+                    }
+                    for spec in MCP_TOOLS
+                ]
+            },
+        )
+
+    if method == "tools/call":
+        name = params.get("name")
+        if not isinstance(name, str) or name not in MCP_TOOLS_BY_NAME:
+            return _jsonrpc_error(req_id, -32602, f"Unknown tool: {name!r}")
+        arguments = params.get("arguments")
+        if arguments is None:
+            arguments = {}
+        if not isinstance(arguments, dict):
+            return _jsonrpc_error(req_id, -32602, "Invalid params: tool arguments must be an object")
+        spec = MCP_TOOLS_BY_NAME[name]
+        try:
+            _validate_tool_arguments(spec, arguments)
+            result = spec.handler(ctx, arguments)
+        except CliError as error:
+            result = _tool_result(str(error), is_error=True)
+        return _jsonrpc_result(req_id, result)
+
+    return _jsonrpc_error(req_id, -32601, f"Method not found: {method}")
+
+
+def _is_header_start(stripped: bytes) -> bool:
+    if stripped.startswith((b"{", b"[")) or b":" not in stripped:
+        return False
+    name = stripped.split(b":", 1)[0].strip().lower()
+    return name in (b"content-length", b"content-type")
+
+
+def _read_mcp_frame(stream) -> tuple[str | None, bool]:
+    """从字节流读取一条 MCP 消息，返回 (json_text, is_content_length_framed)。EOF 返回 (None, False)。"""
+    while True:
+        first_line = stream.readline()
+        if not first_line:
+            return None, False
+        stripped = first_line.strip()
+        if not stripped:
+            continue
+        if _is_header_start(stripped):
+            headers: dict[bytes, bytes] = {}
+            line = stripped
+            while True:
+                if b":" in line:
+                    k, v = line.split(b":", 1)
+                    headers[k.strip().lower()] = v.strip()
+                next_line = stream.readline()
+                if not next_line or next_line in (b"\r\n", b"\n"):
+                    break
+                line = next_line.strip()
+            raw_len = headers.get(b"content-length")
+            if raw_len is None:
+                raise ValueError("Missing Content-Length header")
+            try:
+                content_length = int(raw_len)
+            except ValueError as error:
+                raise ValueError(f"Invalid Content-Length header: {raw_len!r}") from error
+            if content_length <= 0 or content_length > MAX_MCP_FRAME_BYTES:
+                raise ValueError(f"Out-of-bounds Content-Length: {content_length}")
+            body = stream.read(content_length)
+            if len(body) < content_length:
+                raise ValueError(
+                    f"Incomplete Content-Length frame: expected {content_length} bytes, got {len(body)}"
+                )
+            return body.decode("utf-8", errors="replace"), True
+        return stripped.decode("utf-8", errors="replace"), False
+
+
+def _write_mcp_frame(stream, payload: dict | list, *, framed: bool) -> None:
+    encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    if framed:
+        header = f"Content-Length: {len(encoded)}\r\n\r\n".encode("ascii")
+        stream.write(header + encoded)
+    else:
+        stream.write(encoded + b"\n")
+    stream.flush()
+
+
+def serve_mcp_stdio(
+    ctx: McpContext,
+    stdin=None,
+    stdout=None,
+) -> int:
+    in_stream = stdin if stdin is not None else sys.stdin.buffer
+    out_stream = stdout if stdout is not None else sys.stdout.buffer
+    while True:
+        try:
+            raw_text, framed = _read_mcp_frame(in_stream)
+        except ValueError as error:
+            _write_mcp_frame(out_stream, _jsonrpc_error(None, -32700, f"Parse error: {error}"), framed=True)
+            continue
+        if raw_text is None:
+            return EXIT_OK
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError as error:
+            _write_mcp_frame(out_stream, _jsonrpc_error(None, -32700, f"Parse error: {error}"), framed=framed)
+            continue
+
+        if isinstance(parsed, list):
+            if not parsed:
+                _write_mcp_frame(
+                    out_stream,
+                    _jsonrpc_error(None, -32600, "Invalid Request: empty batch"),
+                    framed=framed,
+                )
+                continue
+            responses = [
+                resp for item in parsed if (resp := handle_mcp_message(ctx, item)) is not None
+            ]
+            if responses:
+                _write_mcp_frame(out_stream, responses, framed=framed)
+            continue
+
+        response = handle_mcp_message(ctx, parsed)
+        if response is not None:
+            _write_mcp_frame(out_stream, response, framed=framed)
+
+
+# MARK: - CLI Argument Parser
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mijia",
+        description="通过 menumijia:// 链接控制 MenuBarMijia（需在设置里打开「Raycast 集成」）。",
+        epilog=f"快照路径可用环境变量 {SNAPSHOT_ENV} 覆盖。",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    def common(subparser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        subparser.add_argument("--snapshot", help="快照文件路径（默认读应用写出的那份）")
+        subparser.add_argument("--json", action="store_true", help="输出 JSON")
+        subparser.add_argument(
+            "--timeout", type=float, default=DEFAULT_TIMEOUT, help=f"等待结果的秒数（默认 {DEFAULT_TIMEOUT:g}）"
+        )
+        subparser.add_argument("--dry-run", action="store_true", help="只打印将要打开的链接")
+        subparser.add_argument("--no-wait", action="store_true", help="打开链接后不等待执行结果")
+        return subparser
+
+    listing = common(subparsers.add_parser("list", help="列出面板里可见的设备"))
+    listing.add_argument("--room", help="只看某个房间")
+
+    common(subparsers.add_parser("status", help="概览连接、场景与环境读数"))
+
+    for cmd_name, help_text in (
+        ("toggle", "翻转设备主开关"),
+        ("on", "打开设备"),
+        ("off", "关闭设备"),
+        ("focus", "在面板中定位并展开该设备的详情抽屉"),
+    ):
+        sub = common(subparsers.add_parser(cmd_name, help=help_text))
+        sub.add_argument("device", help="设备名、ID 或拼音首字母")
+
+    brightness = common(subparsers.add_parser("brightness", help="设置灯具亮度百分比（0–100）"))
+    brightness.add_argument("device", help="灯具名称、ID 或拼音首字母")
+    brightness.add_argument("percent", help="亮度百分比（0–100，0 为关灯）")
+
+    color_temp = common(subparsers.add_parser("color-temp", help="设置灯具色温（1000–20000K）"))
+    color_temp.add_argument("device", help="灯具名称、ID 或拼音首字母")
+    color_temp.add_argument("kelvin", help="色温（开尔文 K，如 2700、4000、6500）")
+
+    temperature = common(subparsers.add_parser("temperature", help="设置温控设备目标温度（°C）"))
+    temperature.add_argument("device", help="温控设备名称、ID 或拼音首字母")
+    temperature.add_argument("celsius", help="目标摄氏温度（°C）")
+
+    fan = common(subparsers.add_parser("fan", help="设置风扇或净化器风速百分比或预设档位"))
+    fan.add_argument("device", help="风扇或净化器名称、ID 或拼音首字母")
+    fan.add_argument("--percent", help="风速百分比（1–100）")
+    fan.add_argument("--preset", help="预设档位名称")
+
+    scene = common(subparsers.add_parser("scene", help="执行场景或内置快捷动作"))
+    scene.add_argument("name", help="场景名、快捷动作名或它们对应的 ID")
+
+    for cmd_name, help_text in (("ask", "执行一句话指令"), ("command", "同 ask")):
+        sub = common(subparsers.add_parser(cmd_name, help=help_text))
+        sub.add_argument("text", help="自然语言指令")
+
+    mcp = subparsers.add_parser("mcp", help="启动基于 stdio 的本地 MCP 服务（供 Claude / Cursor 调用）")
+    mcp.add_argument("--snapshot", help="快照文件路径（默认读应用写出的那份）")
+    mcp.add_argument(
+        "--timeout", type=float, default=DEFAULT_TIMEOUT, help=f"等待结果的秒数（默认 {DEFAULT_TIMEOUT:g}）"
+    )
+    return parser
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    opener=open_url,
+    now=time.monotonic,
+    sleep=time.sleep,
+    env: dict | None = None,
+    stdin=None,
+    stdout=None,
+) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        path = snapshot_path(args.snapshot, env)
+        timeout = validate_timeout(args.timeout)
+        if args.command == "mcp":
+            ctx = McpContext(path=path, opener=opener, now=now, sleep=sleep, timeout=timeout)
+            return serve_mcp_stdio(ctx, stdin=stdin, stdout=stdout)
+
+        snapshot = load_snapshot(path)
+        if args.command == "list":
+            return command_list(snapshot, args.room, args.json)
+        if args.command == "status":
+            return command_status(snapshot, args.json)
+
+        def dispatch(route: str, params: list[tuple[str, str]]) -> int:
+            return send(
+                snapshot,
+                path,
+                route,
+                params,
+                opener=opener,
+                now=now,
+                sleep=sleep,
+                timeout=timeout,
+                dry_run=args.dry_run,
+                wait=not args.no_wait,
+                as_json=args.json,
+            )
+
+        if args.command == "toggle":
+            device = match_device(snapshot, args.device)
+            _require_toggleable(device)
+            return dispatch("toggle", [("device", device["id"])])
+        if args.command in ("on", "off"):
+            device = match_device(snapshot, args.device)
+            _require_toggleable(device)
+            return dispatch("power", [("device", device["id"]), ("on", "true" if args.command == "on" else "false")])
+        if args.command == "brightness":
+            device = match_device(snapshot, args.device)
+            percent = validate_brightness(device, args.percent)
+            return dispatch("brightness", [("device", device["id"]), ("percent", str(percent))])
+        if args.command == "color-temp":
+            device = match_device(snapshot, args.device)
+            kelvin = validate_color_temp(device, args.kelvin)
+            return dispatch("color-temp", [("device", device["id"]), ("kelvin", str(kelvin))])
+        if args.command == "temperature":
+            device = match_device(snapshot, args.device)
+            celsius = validate_temperature(device, args.celsius)
+            return dispatch("temperature", [("device", device["id"]), ("celsius", _number(celsius))])
+        if args.command == "fan":
+            device = match_device(snapshot, args.device)
+            return dispatch("fan", validate_fan(device, args.percent, args.preset))
+        if args.command == "focus":
+            device = match_device(snapshot, args.device)
+            return dispatch("focus", [("device", device["id"])])
+        if args.command == "scene":
+            kind, item = match_scene(snapshot, args.name)
+            name = f"quick:{item['id']}" if kind == "quick" else str(item["id"])
+            return dispatch("scene", [("name", name)])
+        if args.command in ("ask", "command"):
+            text = args.text.strip()
+            if not text:
+                raise CliError("指令不能为空")
+            if len(text) > MAX_ASK_LENGTH:
+                raise CliError(f"指令长度不能超过 {MAX_ASK_LENGTH} 个字符")
+            return dispatch("ask", [("text", text)])
+        raise CliError(f"不认识的命令：{args.command}")
+    except CliError as error:
+        print(f"mijia: {error}", file=sys.stderr)
+        return EXIT_LOCAL_ERROR
+
+
+if __name__ == "__main__":
+    sys.exit(main())

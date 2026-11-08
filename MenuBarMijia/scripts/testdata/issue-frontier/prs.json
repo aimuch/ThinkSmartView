@@ -1,0 +1,5 @@
+[
+  {"number": 501, "title": "fix: 某个修复", "body": "说明里没写编号。", "headRefName": "feat/some-fix", "closingIssuesReferences": [{"number": 24}]},
+  {"number": 502, "title": "docs: 另一件事", "body": "Refs #25。另见 #280 和 other/repo#28。", "headRefName": "docs/other", "closingIssuesReferences": []},
+  {"number": 503, "title": "修复#16 的显示问题", "body": "", "headRefName": "fix/display", "closingIssuesReferences": []}
+]

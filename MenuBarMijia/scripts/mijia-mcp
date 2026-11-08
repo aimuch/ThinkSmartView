@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""mijia-mcp — MenuBarMijia 本地 stdio MCP 服务端入口（#19, GH#177）。
+
+等价于运行 `scripts/mijia mcp`，供 Claude Desktop、Claude Code、Cursor 等 MCP 客户端直接配置为
+`command`。本进程只读 `raycast-snapshot.json` 并通过 `menumijia://` 链接交由正在运行的
+MenuBarMijia 执行，不接触任何米家或 Home Assistant 凭据。
+"""
+
+from __future__ import annotations
+
+import importlib.machinery
+import importlib.util
+import sys
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+
+_CLI = Path(__file__).resolve().with_name("mijia")
+_LOADER = importlib.machinery.SourceFileLoader("mijia_cli", str(_CLI))
+_SPEC = importlib.util.spec_from_loader(_LOADER.name, _LOADER)
+assert _SPEC is not None and _SPEC.loader is not None
+_MODULE = importlib.util.module_from_spec(_SPEC)
+sys.modules[_LOADER.name] = _MODULE
+_SPEC.loader.exec_module(_MODULE)
+
+
+if __name__ == "__main__":
+    sys.exit(_MODULE.main(["mcp", *sys.argv[1:]]))

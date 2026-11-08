@@ -1,0 +1,991 @@
+{
+  "models" : {
+    "090615.airc.a07s" : {
+      "category" : "matched",
+      "deviceType" : "air-conditioner",
+      "service" : "air-conditioner",
+      "unexposedWritable" : 14
+    },
+    "090615.bhf_light.ptxyb" : {
+      "category" : "matched",
+      "deviceType" : "bath-heater",
+      "service" : "ptc-bath-heater",
+      "unexposedWritable" : 1
+    },
+    "090615.curtain.1mcu01" : {
+      "category" : "matched",
+      "deviceType" : "curtain",
+      "service" : "curtain",
+      "unexposedWritable" : 3
+    },
+    "090615.gateway.ac10" : {
+      "category" : "genericControllable",
+      "deviceType" : "gateway"
+    },
+    "090615.light.ailig1" : {
+      "category" : "matched",
+      "deviceType" : "light",
+      "service" : "light",
+      "unexposedWritable" : 16
+    },
+    "090615.plug.cmp86" : {
+      "category" : "matched",
+      "deviceType" : "outlet",
+      "service" : "switch",
+      "unexposedWritable" : 2
+    },
+    "090615.remote.akswr1" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "remote-control"
+    },
+    "090615.sensor_occupy.mw" : {
+      "category" : "matched",
+      "deviceType" : "occupancy-sensor",
+      "service" : "occupancy-sensor",
+      "unexposedWritable" : 23
+    },
+    "090615.switch.09dh1" : {
+      "category" : "matched",
+      "deviceType" : "switch",
+      "service" : "switch",
+      "unexposedWritable" : 2
+    },
+    "090615.wafa.f11026" : {
+      "category" : "genericControllable",
+      "deviceType" : "water-faucet"
+    },
+    "090615.wifispeaker.x6bj" : {
+      "category" : "matched",
+      "deviceType" : "speaker",
+      "service" : "speaker",
+      "unexposedWritable" : 38
+    },
+    "123888.fan.1121" : {
+      "category" : "matched",
+      "deviceType" : "fan",
+      "service" : "fan",
+      "unexposedWritable" : 4
+    },
+    "123888.stb.1101" : {
+      "category" : "genericControllable",
+      "deviceType" : "stb"
+    },
+    "123888.tv.xhzn11" : {
+      "category" : "genericControllable",
+      "deviceType" : "television"
+    },
+    "1245.airfresh.cj300" : {
+      "category" : "matched",
+      "deviceType" : "air-fresh",
+      "service" : "air-fresh",
+      "unexposedWritable" : 4
+    },
+    "1245.airpurifier.dl01" : {
+      "category" : "matched",
+      "deviceType" : "air-purifier",
+      "service" : "air-purifier",
+      "unexposedWritable" : 2
+    },
+    "17216.massage.6261d" : {
+      "category" : "genericControllable",
+      "deviceType" : "massage"
+    },
+    "17216.pillow.pl007" : {
+      "category" : "genericControllable",
+      "deviceType" : "pillow"
+    },
+    "209754.fishbowl.tank01" : {
+      "category" : "genericControllable",
+      "deviceType" : "fish-tank"
+    },
+    "25mj.bed.bed001" : {
+      "category" : "genericControllable",
+      "deviceType" : "bed"
+    },
+    "25mj.sofa.safarm" : {
+      "category" : "genericControllable",
+      "deviceType" : "sofa"
+    },
+    "360sdj.vacuum.s" : {
+      "category" : "matched",
+      "deviceType" : "vacuum",
+      "service" : "vacuum",
+      "unexposedWritable" : 0
+    },
+    "445.mirror.jg1" : {
+      "category" : "genericControllable",
+      "deviceType" : "mirror"
+    },
+    "445.shower.lyq01" : {
+      "category" : "genericControllable",
+      "deviceType" : "shower"
+    },
+    "445.toilet.cnlzmt" : {
+      "category" : "genericControllable",
+      "deviceType" : "toilet"
+    },
+    "445.tow_w.mjj1" : {
+      "category" : "genericControllable",
+      "deviceType" : "towel-rack"
+    },
+    "913101.carseat.d1max" : {
+      "category" : "genericControllable",
+      "deviceType" : "safety-seat"
+    },
+    "913101.tracker.d1" : {
+      "category" : "genericControllable",
+      "deviceType" : "tracker"
+    },
+    "aden.derh.derh16" : {
+      "category" : "matched",
+      "deviceType" : "dehumidifier",
+      "service" : "dehumidifier",
+      "unexposedWritable" : 9
+    },
+    "aden.waterheater.ash200" : {
+      "category" : "matched",
+      "deviceType" : "water-heater",
+      "service" : "water-heater",
+      "unexposedWritable" : 18
+    },
+    "adp.fitting.adgw" : {
+      "category" : "genericControllable",
+      "deviceType" : "fitting"
+    },
+    "adp.motor.adfbt6" : {
+      "category" : "genericControllable",
+      "deviceType" : "motor-controller"
+    },
+    "adp.robot.ad" : {
+      "category" : "genericControllable",
+      "deviceType" : "robot"
+    },
+    "adream.diffuser.v1" : {
+      "category" : "matched",
+      "deviceType" : "diffuser",
+      "service" : "diffuser",
+      "unexposedWritable" : 15
+    },
+    "afd.airrtc.a001" : {
+      "category" : "matched",
+      "deviceType" : "thermostat",
+      "service" : "thermostat",
+      "unexposedWritable" : 3
+    },
+    "afour.s_lamp.001" : {
+      "category" : "genericControllable",
+      "deviceType" : "germicidal-lamp"
+    },
+    "agkey.desk.k2" : {
+      "category" : "genericControllable",
+      "deviceType" : "table"
+    },
+    "aimei.avamp.box1" : {
+      "category" : "genericControllable",
+      "deviceType" : "audio-video-amplifier"
+    },
+    "ainice.motion.bt" : {
+      "category" : "matched",
+      "deviceType" : "motion-sensor",
+      "service" : "motion-sensor",
+      "unexposedWritable" : 16
+    },
+    "air.blanket.tq24" : {
+      "category" : "matched",
+      "deviceType" : "electric-blanket",
+      "service" : "electric-blanket",
+      "unexposedWritable" : 1
+    },
+    "air.heater.wda14" : {
+      "category" : "matched",
+      "deviceType" : "heater",
+      "service" : "heater",
+      "unexposedWritable" : 3
+    },
+    "aizbot.etool.xqspkb" : {
+      "category" : "genericControllable",
+      "deviceType" : "rangefinder"
+    },
+    "aizbot.watermon.wd2" : {
+      "category" : "genericControllable",
+      "deviceType" : "watermon"
+    },
+    "als1.humidifier.js03" : {
+      "category" : "matched",
+      "deviceType" : "humidifier",
+      "service" : "humidifier",
+      "unexposedWritable" : 0
+    },
+    "alsmai.hood.a31203" : {
+      "category" : "matched",
+      "deviceType" : "hood",
+      "service" : "hood",
+      "unexposedWritable" : 4
+    },
+    "alsmai.oven.a0120g" : {
+      "category" : "matched",
+      "deviceType" : "oven",
+      "service" : "oven",
+      "unexposedWritable" : 1
+    },
+    "amtdq.magic_touch.a01" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "massager"
+    },
+    "anseny.sensor_ht.0121b" : {
+      "category" : "matched",
+      "deviceType" : "temperature-humidity-sensor",
+      "service" : "temperature-humidity-sensor",
+      "unexposedWritable" : 0
+    },
+    "asp.treadmill.a9" : {
+      "category" : "genericControllable",
+      "deviceType" : "treadmill"
+    },
+    "asu.projector.apro" : {
+      "category" : "genericControllable",
+      "deviceType" : "projector"
+    },
+    "at123.foot_bath.6sb" : {
+      "category" : "genericControllable",
+      "deviceType" : "foot-bath"
+    },
+    "ateai.mosq.dakuo" : {
+      "category" : "genericControllable",
+      "deviceType" : "mosquito-dispeller"
+    },
+    "aupu.airer.d350m" : {
+      "category" : "matched",
+      "deviceType" : "airer",
+      "service" : "airer",
+      "unexposedWritable" : 2
+    },
+    "babai.ven_fan.tycold" : {
+      "category" : "genericControllable",
+      "deviceType" : "ceiling-fan"
+    },
+    "babai.wopener.82" : {
+      "category" : "matched",
+      "deviceType" : "window-opener",
+      "service" : "window-opener",
+      "unexposedWritable" : 11
+    },
+    "bairen.scales.hd01" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "scale"
+    },
+    "bdf668.lock.mf24n" : {
+      "category" : "matched",
+      "deviceType" : "lock",
+      "service" : "lock",
+      "unexposedWritable" : 0
+    },
+    "bdx.i_stove.a1xs" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "integrated-stove"
+    },
+    "beb.mattress.byb01" : {
+      "category" : "genericControllable",
+      "deviceType" : "mattress"
+    },
+    "becbas.disposer.e60" : {
+      "category" : "genericControllable",
+      "deviceType" : "garbage-disposal"
+    },
+    "beem.airm.gsb" : {
+      "category" : "matched",
+      "deviceType" : "air-monitor",
+      "service" : "air-monitor",
+      "unexposedWritable" : 0
+    },
+    "beem.tvbox.iradc" : {
+      "category" : "genericControllable",
+      "deviceType" : "tv-box"
+    },
+    "binuo.feeder.y1" : {
+      "category" : "genericControllable",
+      "deviceType" : "pet-feeder"
+    },
+    "bj352.waterpuri.k10" : {
+      "category" : "genericControllable",
+      "deviceType" : "water-purifier"
+    },
+    "bkrobo.chair.bc03" : {
+      "category" : "genericControllable",
+      "deviceType" : "chair"
+    },
+    "bkxh.flood.yf02" : {
+      "category" : "matched",
+      "deviceType" : "submersion-sensor",
+      "service" : "submersion-sensor",
+      "unexposedWritable" : 0
+    },
+    "bkxh.magnet.yf01" : {
+      "category" : "matched",
+      "deviceType" : "magnet-sensor",
+      "service" : "magnet-sensor",
+      "unexposedWritable" : 0
+    },
+    "bkxh.sensor_gas.s2" : {
+      "category" : "genericControllable",
+      "deviceType" : "gas-sensor"
+    },
+    "bkxh.sensor_smoke.s1" : {
+      "category" : "genericControllable",
+      "deviceType" : "smoke-sensor"
+    },
+    "bshcn.coffee.181b0w" : {
+      "category" : "genericControllable",
+      "deviceType" : "coffee-machine"
+    },
+    "bshcn.dishwasher.23eb33" : {
+      "category" : "matched",
+      "deviceType" : "dishwasher",
+      "service" : "dishwasher",
+      "unexposedWritable" : 3
+    },
+    "bshcn.dishwasher.zb69mc" : {
+      "category" : "matched",
+      "deviceType" : "dishwasher",
+      "service" : "dishwasher",
+      "unexposedWritable" : 3
+    },
+    "bshcn.dry.2j7x10" : {
+      "category" : "matched",
+      "deviceType" : "dryer",
+      "service" : "dryer",
+      "unexposedWritable" : 4
+    },
+    "bshcn.fridge.1ade0c" : {
+      "category" : "matched",
+      "deviceType" : "fridge",
+      "service" : "fridge",
+      "unexposedWritable" : 1
+    },
+    "bshcn.mfcp.555cbc" : {
+      "category" : "genericControllable",
+      "deviceType" : "multifunction-cooking-pot"
+    },
+    "bshcn.stove.7nyv6e" : {
+      "category" : "genericControllable",
+      "deviceType" : "smart-stove"
+    },
+    "bshcn.washer.0au00w" : {
+      "category" : "matched",
+      "deviceType" : "washer",
+      "service" : "washer",
+      "unexposedWritable" : 4
+    },
+    "btzn.controller.v1" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "control-panel"
+    },
+    "bwlife.cup.01" : {
+      "category" : "genericControllable",
+      "deviceType" : "cup"
+    },
+    "bymiot.cs.sensor" : {
+      "category" : "genericControllable",
+      "deviceType" : "card-switch"
+    },
+    "bymiot.ir.wlv1" : {
+      "category" : "genericControllable",
+      "deviceType" : "ir-remote-control"
+    },
+    "bymiot.relay.wlv1" : {
+      "category" : "matched",
+      "deviceType" : "relay",
+      "service" : "switch",
+      "unexposedWritable" : 12
+    },
+    "candy.enstor.cp02s" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "electric-power"
+    },
+    "canon.printer.ij2" : {
+      "category" : "genericControllable",
+      "deviceType" : "printer"
+    },
+    "careco.camera.650" : {
+      "category" : "matched",
+      "deviceType" : "camera",
+      "service" : "camera-control",
+      "unexposedWritable" : 19
+    },
+    "careco.carlight.p601" : {
+      "category" : "genericControllable",
+      "deviceType" : "carlight"
+    },
+    "careco.evc.a07a01" : {
+      "category" : "genericControllable",
+      "deviceType" : "charging-pile"
+    },
+    "careco.gesture.o651" : {
+      "category" : "genericControllable",
+      "deviceType" : "gesture"
+    },
+    "careco.nlight.o654" : {
+      "category" : "matched",
+      "deviceType" : "night-light",
+      "service" : "light",
+      "unexposedWritable" : 0
+    },
+    "careli.fryer.maf01" : {
+      "category" : "matched",
+      "deviceType" : "air-fryer",
+      "service" : "air-fryer",
+      "unexposedWritable" : 8
+    },
+    "cariot.holder.wpc100" : {
+      "category" : "genericControllable",
+      "deviceType" : "phone-holder"
+    },
+    "cgllc.clock.cgc1" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "clock"
+    },
+    "chint1.valve.1p" : {
+      "category" : "matched",
+      "deviceType" : "electronic-valve",
+      "service" : "electronic-valve",
+      "unexposedWritable" : 13
+    },
+    "chuangmi.cateye.i023a01" : {
+      "category" : "matched",
+      "deviceType" : "video-doorbell",
+      "service" : "video-doorbell",
+      "unexposedWritable" : 0
+    },
+    "chuangmi.door.515a01" : {
+      "category" : "matched",
+      "deviceType" : "door",
+      "service" : "video-doorbell",
+      "unexposedWritable" : 23
+    },
+    "chuangmi.radio.v1" : {
+      "category" : "genericControllable",
+      "deviceType" : "radio"
+    },
+    "chunmi.cooker.017meu" : {
+      "category" : "matched",
+      "deviceType" : "cooker",
+      "service" : "cooker",
+      "unexposedWritable" : 6
+    },
+    "chunmi.health_pot.a1" : {
+      "category" : "matched",
+      "deviceType" : "health-pot",
+      "service" : "health-pot",
+      "unexposedWritable" : 0
+    },
+    "chunmi.ihcooker.cb" : {
+      "category" : "genericControllable",
+      "deviceType" : "induction-cooker"
+    },
+    "chunmi.juicer.a1" : {
+      "category" : "genericControllable",
+      "deviceType" : "juicer"
+    },
+    "chunmi.microwave.cmwb3" : {
+      "category" : "matched",
+      "deviceType" : "microwave-oven",
+      "service" : "microwave-oven",
+      "unexposedWritable" : 2
+    },
+    "chunmi.pre_cooker.dylg5" : {
+      "category" : "genericControllable",
+      "deviceType" : "pressure-cooker"
+    },
+    "chunmi.ysj.tsa1" : {
+      "category" : "matched",
+      "deviceType" : "water-dispenser",
+      "service" : "water-dispenser",
+      "unexposedWritable" : 9
+    },
+    "coc.dryer.fdpsm" : {
+      "category" : "matched",
+      "deviceType" : "clothes-dryer",
+      "service" : "clothes-dryer",
+      "unexposedWritable" : 0
+    },
+    "ctest.inskil.duyr" : {
+      "category" : "genericControllable",
+      "deviceType" : "insect-killer"
+    },
+    "cuco.acpartner.ap2a" : {
+      "category" : "matched",
+      "deviceType" : "air-condition-outlet",
+      "service" : "air-conditioner",
+      "unexposedWritable" : 14
+    },
+    "czmydz.curtain.myf5" : {
+      "category" : "matched",
+      "deviceType" : "curtain",
+      "service" : "curtain",
+      "unexposedWritable" : 13
+    },
+    "dayi.safe.dy" : {
+      "category" : "genericControllable",
+      "deviceType" : "safe-box"
+    },
+    "degree.lunar.smh013" : {
+      "category" : "genericControllable",
+      "deviceType" : "sleep-monitor"
+    },
+    "dnake.alarm.def" : {
+      "category" : "genericControllable",
+      "deviceType" : "alertor"
+    },
+    "doco.fcb.docov001" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "other"
+    },
+    "dreame.scooter.p2223" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "scooter"
+    },
+    "duhua.jmprope.55" : {
+      "category" : "genericControllable",
+      "deviceType" : "jump-rope"
+    },
+    "eizi.toothbrush.sy01" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "toothbrush"
+    },
+    "enchen.razor.bs8" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "shaver"
+    },
+    "era.steriliser.gc01" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "sterilizer"
+    },
+    "feiyu.hair.am02" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "hair-drier"
+    },
+    "fengmi.engrave.demo01" : {
+      "category" : "genericControllable",
+      "deviceType" : "engraving-machine"
+    },
+    "fengyu.intercom.beebird" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "intercom"
+    },
+    "ghome.kettle.sf009" : {
+      "category" : "matched",
+      "deviceType" : "kettle",
+      "service" : "kettle",
+      "unexposedWritable" : 4
+    },
+    "gimi.projector.fm01" : {
+      "category" : "genericControllable",
+      "deviceType" : "projector"
+    },
+    "haibao.pet_waterer.mm2" : {
+      "category" : "genericControllable",
+      "deviceType" : "pet-drinking-fountain"
+    },
+    "haikuo.cleaner.m7" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "vacuum-cleaner"
+    },
+    "hfjh.fishbowl.m100" : {
+      "category" : "genericControllable",
+      "deviceType" : "fish-tank"
+    },
+    "hhcc.bleflowerpot.v2" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "plant-monitor"
+    },
+    "hlznkj.dental.cs60a" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "oral-irrigator"
+    },
+    "hmpace.bracelet.v4" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "bracelet"
+    },
+    "hoto.timer.kt" : {
+      "category" : "genericControllable",
+      "deviceType" : "timer"
+    },
+    "hsm.walkingpad.c2" : {
+      "category" : "genericControllable",
+      "deviceType" : "walking-pad"
+    },
+    "huoman.litter_box.co1" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "cat-litter-box"
+    },
+    "hzyx01.beauty.m180" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "beauty-instrument"
+    },
+    "ihealth.bp.bpm1" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "sphygmomanometer"
+    },
+    "ileja.hud.ccm" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "head-up-display"
+    },
+    "isa.router.mr01hl" : {
+      "category" : "genericControllable",
+      "deviceType" : "router"
+    },
+    "jb2004.exbike.jb909" : {
+      "category" : "genericControllable",
+      "deviceType" : "stationary-bicycle"
+    },
+    "jdxc.pump.wysbm" : {
+      "category" : "genericControllable",
+      "deviceType" : "pump"
+    },
+    "jiqid.mistory.ipen1" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "story-machine"
+    },
+    "jstar.curtain.jcv24" : {
+      "category" : "matched",
+      "deviceType" : "curtain",
+      "service" : "curtain",
+      "unexposedWritable" : 6
+    },
+    "jyaiot.cm.ccj01" : {
+      "category" : "genericControllable",
+      "deviceType" : "cooking-machine"
+    },
+    "kxf321.mop.mo001" : {
+      "category" : "genericControllable",
+      "deviceType" : "mopping-machine"
+    },
+    "lanbo1.fan.lbfs1" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "fan"
+    },
+    "leishi.bhf_light.ls109" : {
+      "category" : "matched",
+      "deviceType" : "bath-heater",
+      "service" : "ptc-bath-heater",
+      "unexposedWritable" : 5
+    },
+    "line.remote.wkgf1" : {
+      "category" : "genericControllable",
+      "deviceType" : "remote-control"
+    },
+    "linp.doorbell.g03" : {
+      "category" : "genericControllable",
+      "deviceType" : "doorbell"
+    },
+    "linp.senpres.ps1bb" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "pressure-sensor"
+    },
+    "lumi.plug.aq1" : {
+      "category" : "matched",
+      "deviceType" : "outlet",
+      "service" : "switch",
+      "unexposedWritable" : 0
+    },
+    "lumi.sen_ill.agl01" : {
+      "category" : "matched",
+      "deviceType" : "illumination-sensor",
+      "service" : "illumination-sensor",
+      "unexposedWritable" : 1
+    },
+    "lumi.sensor_ht.v1" : {
+      "category" : "matched",
+      "deviceType" : "temperature-humidity-sensor",
+      "service" : "temperature-humidity-sensor",
+      "unexposedWritable" : 0
+    },
+    "lumi.switch.b1nacn02" : {
+      "category" : "matched",
+      "deviceType" : "switch",
+      "service" : "switch",
+      "unexposedWritable" : 2
+    },
+    "lumi.vibration.agl01" : {
+      "category" : "genericControllable",
+      "deviceType" : "vibration-sensor"
+    },
+    "macro.boiler.combgl" : {
+      "category" : "genericControllable",
+      "deviceType" : "boiler"
+    },
+    "maijia.ajh.mj9001" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "moxibustion"
+    },
+    "mibx5.washer.f27vn" : {
+      "category" : "matched",
+      "deviceType" : "washer",
+      "service" : "washer",
+      "unexposedWritable" : 15
+    },
+    "midjd.fridge.bs473" : {
+      "category" : "matched",
+      "deviceType" : "fridge",
+      "service" : "fridge",
+      "unexposedWritable" : 15
+    },
+    "midr.camera.bw400" : {
+      "category" : "matched",
+      "deviceType" : "camera",
+      "service" : "camera-control",
+      "unexposedWritable" : 29
+    },
+    "midr.cardvr.x200s" : {
+      "category" : "genericControllable",
+      "deviceType" : "driving-recorder"
+    },
+    "midr.rv_mirror.m2" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "rearview-mirror"
+    },
+    "mijia.watch.n62" : {
+      "category" : "genericControllable",
+      "deviceType" : "watch"
+    },
+    "miot.bin.c2" : {
+      "category" : "genericControllable",
+      "deviceType" : "garbage-can"
+    },
+    "miot.dimmer.hhh" : {
+      "category" : "genericControllable",
+      "deviceType" : "dimmer"
+    },
+    "miot.flowerpot.aztest" : {
+      "category" : "genericControllable",
+      "deviceType" : "flowerpot"
+    },
+    "miot.handdry.hd3" : {
+      "category" : "genericControllable",
+      "deviceType" : "hand-dryer"
+    },
+    "miot.light.hyz05" : {
+      "category" : "matched",
+      "deviceType" : "light",
+      "service" : "light",
+      "unexposedWritable" : 0
+    },
+    "miot.lock.ble22" : {
+      "category" : "matched",
+      "deviceType" : "lock",
+      "service" : "lock",
+      "unexposedWritable" : 25
+    },
+    "miot.pettoy.1" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "pet-toy"
+    },
+    "miot.phone.wgqy" : {
+      "category" : "genericControllable",
+      "deviceType" : "phone"
+    },
+    "miot.phovideo.savr1" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "photography-video"
+    },
+    "miot.uwb.1" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "uwb"
+    },
+    "mrbond.airer.m1super" : {
+      "category" : "matched",
+      "deviceType" : "airer",
+      "service" : "airer",
+      "unexposedWritable" : 4
+    },
+    "msj.f_washer.m1" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "fruit-vegetable-purifier"
+    },
+    "musi.bed.bzz1" : {
+      "category" : "genericControllable",
+      "deviceType" : "bed"
+    },
+    "nhkj15.airrtc.hoer36" : {
+      "category" : "matched",
+      "deviceType" : "thermostat",
+      "service" : "thermostat",
+      "unexposedWritable" : 11
+    },
+    "ows.heater.pro2" : {
+      "category" : "matched",
+      "deviceType" : "heater",
+      "service" : "heater",
+      "unexposedWritable" : 6
+    },
+    "pma.magic_touch.qnhf60" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "massager"
+    },
+    "puppy.vacuum.r3x" : {
+      "category" : "matched",
+      "deviceType" : "vacuum",
+      "service" : "vacuum",
+      "unexposedWritable" : 1
+    },
+    "qdjm.icemake.fkzbj" : {
+      "category" : "genericControllable",
+      "deviceType" : "ice-maker"
+    },
+    "qicyc.bike.tdp02z" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "bike"
+    },
+    "qushui.bedstand.box" : {
+      "category" : "genericControllable",
+      "deviceType" : "bedstand"
+    },
+    "rrui.k_scale.517" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "kitchen-scale"
+    },
+    "runmi.suitcase.v1" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "suitcase"
+    },
+    "shcs.analyzer.20md" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "analyzer"
+    },
+    "shuse.roller.sr01" : {
+      "category" : "genericControllable",
+      "deviceType" : "roller-shutter"
+    },
+    "smith.w_soften.cxs05ta1" : {
+      "category" : "genericControllable",
+      "deviceType" : "water-softener"
+    },
+    "suzi.scales.s400" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "scale"
+    },
+    "szkfd.cooler.k50" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "cooler"
+    },
+    "tata.milkheat.bl1108" : {
+      "category" : "genericControllable",
+      "deviceType" : "baby-bottle-warmer"
+    },
+    "trios1.bleshoes.rftcdl" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "shoes"
+    },
+    "viomi.aircondition.v25" : {
+      "category" : "matched",
+      "deviceType" : "air-conditioner",
+      "service" : "air-conditioner",
+      "unexposedWritable" : 4
+    },
+    "viomi.hood.c26" : {
+      "category" : "matched",
+      "deviceType" : "hood",
+      "service" : "hood",
+      "unexposedWritable" : 6
+    },
+    "viomi.waterheater.u3" : {
+      "category" : "matched",
+      "deviceType" : "water-heater",
+      "service" : "water-heater",
+      "unexposedWritable" : 0
+    },
+    "xiaomi.abwheel.jfl001" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "ab-wheel"
+    },
+    "xiaomi.airp.mc6" : {
+      "category" : "matched",
+      "deviceType" : "air-purifier",
+      "service" : "air-purifier",
+      "unexposedWritable" : 10
+    },
+    "xiaomi.btspker.oh3s" : {
+      "category" : "matched",
+      "deviceType" : "ble-speaker",
+      "service" : "speaker",
+      "unexposedWritable" : 0
+    },
+    "xiaomi.db.yl001" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "dumbbell"
+    },
+    "xiaomi.dev.bl1a01" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "module"
+    },
+    "xiaomi.esteamer.mes01" : {
+      "category" : "genericControllable",
+      "deviceType" : "electric-steamer"
+    },
+    "xiaomi.feeder.iv2002" : {
+      "category" : "genericControllable",
+      "deviceType" : "pet-feeder"
+    },
+    "xiaomi.fishbowl.m200" : {
+      "category" : "genericControllable",
+      "deviceType" : "fish-tank"
+    },
+    "xiaomi.fishbowl.m300" : {
+      "category" : "genericControllable",
+      "deviceType" : "fish-tank"
+    },
+    "xiaomi.laptop.n56sr" : {
+      "category" : "genericControllable",
+      "deviceType" : "laptop"
+    },
+    "xiaomi.mic.s33" : {
+      "category" : "genericControllable",
+      "deviceType" : "microphone"
+    },
+    "xiaomi.plc.v1" : {
+      "category" : "genericReadOnly",
+      "deviceType" : "repeater"
+    },
+    "xiaomi.split_tv.b1" : {
+      "category" : "genericControllable",
+      "deviceType" : "split-tv"
+    },
+    "xiaomi.station.rp05" : {
+      "category" : "genericControllable",
+      "deviceType" : "nas"
+    },
+    "xiaomi.teabar.mtb01" : {
+      "category" : "genericControllable",
+      "deviceType" : "teabar"
+    },
+    "youha.breast.s1" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "breast-pump"
+    },
+    "yunmi.waterpuri.lx14" : {
+      "category" : "genericControllable",
+      "deviceType" : "water-purifier"
+    },
+    "z9527.car.mdd8" : {
+      "category" : "noUsableProperties",
+      "deviceType" : "car"
+    }
+  },
+  "summary" : {
+    "categories" : {
+      "droppedControllable" : 0,
+      "droppedReadOnly" : 0,
+      "genericControllable" : 94,
+      "genericReadOnly" : 14,
+      "matched" : 69,
+      "misclaimed" : 0,
+      "noUsableProperties" : 31
+    },
+    "deviceTypes" : 177,
+    "specs" : 208,
+    "unexposedWritableTotal" : 470
+  },
+  "windowsDivergences" : {
+
+  }
+}

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用问题 / 交流
+    url: https://gitlab.com/jryang1997/MenuBarMijia/-/issues
+    about: 不确定是 bug、想问用法、或想聊聊新功能，请直接开 issue（GitLab 没有 Discussions）
+  - name: 常见问题
+    url: https://gitlab.com/jryang1997/MenuBarMijia#readme
+    about: 安装、登录、Home Assistant 接入说明都在 README
