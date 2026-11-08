@@ -332,7 +332,8 @@ function markdown(md) {
 
 // app.js renders role 'card' messages (self.screen.show_card) with this
 window.cardHtml = card => (card.images || []).map(u => `<img class="md-img" src="${esc(u)}" alt="" onerror="this.remove()">`).join('')
-  + markdown(card.markdown);
+  // the model often starts the markdown with the title again ("# 番茄炒蛋"): don't show it twice
+  + markdown(String(card.markdown || '').replace(/^\s*#{1,6}\s*(.+?)\s*(\n|$)/, (all, t) => t === card.title ? '' : all));
 
 /* ---------------- 屏幕方向 ---------------- */
 let rot = null;
