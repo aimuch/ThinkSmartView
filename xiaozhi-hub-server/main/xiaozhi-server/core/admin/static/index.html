@@ -1494,8 +1494,8 @@ async function renderCost(root) {
     ${d.unpriced.length ? `<div class="banner warn">这些模型还没有单价，费用按 0 算：${d.unpriced.map(esc).join("、")}。在下面「单价」里加上。</div>` : ""}
     ${d.prices_default ? '<div class="banner info">单价现在用的是内置的参考价（DeepSeek，2026-11-08 按官网核对）。厂商会调价，请核对后保存；其他厂商的价格要自己填。</div>' : ""}
     <div class="cost-stats">
-      ${stat("今天 " + esc(d.day), d.today, d.tokens.today, q.used_today, q.daily)}
-      ${stat("本月 " + esc(d.month), d.month, d.tokens.month, q.used_month, q.monthly)}
+      ${stat("今天 " + esc(d.this_day), d.today, d.tokens.today, q.used_today, q.daily)}
+      ${stat("本月 " + esc(d.this_month), d.month, d.tokens.month, q.used_month, q.monthly)}
       ${stat("累计", d.total, d.tokens.total, 0, 0)}
     </div>
     <div class="card panel"><b>近 30 天（${esc(sym(q.currency || "CNY"))}）</b>

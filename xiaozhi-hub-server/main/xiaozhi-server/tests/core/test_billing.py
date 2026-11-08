@@ -87,6 +87,7 @@ def test_record_and_summary(usage_db):
     billing.record("unknown-model", {"prompt": 10, "completion": 1}, device="dev2")
     s = billing.summary({})
     assert s["today"]["CNY"] in (1.0, 2.0)            # 空闲 1 元 / 高峰 2 元（看测试跑的时刻）
+    assert s["month"] == s["today"] == s["total"] and len(s["this_month"]) == 7   # 金额和月份标签不是同一个键
     assert s["tokens"]["today"]["requests"] == 2
     assert s["unpriced"] == ["unknown-model"]
     assert {r["key"] for r in s["devices"]} == {"dev1", "dev2"}

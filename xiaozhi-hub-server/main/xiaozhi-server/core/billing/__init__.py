@@ -235,7 +235,7 @@ def summary(config=None) -> dict:
         'purposes': d.by('purpose', 'month = ?', (month,)),
         'unpriced': d.unpriced_models(),
         'quota': {**q, 'used_today': d.spent(day=day).get(cur, 0), 'used_month': d.spent(month=month).get(cur, 0)},
-        'day': day, 'month': month, 'currencies': pricing.CURRENCIES,
+        'this_day': day, 'this_month': month, 'currencies': pricing.CURRENCIES,
         'settings': {k: cfg[k] for k in ('timezone', 'holidays', 'workdays', 'count_claude_code')},
         'prices': pricing.rules(cfg), 'prices_default': not cfg['prices'],
     }
