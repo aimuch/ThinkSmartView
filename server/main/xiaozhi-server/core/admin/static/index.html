@@ -3,13 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>小智 Hub 管理后台</title>
+<title>小麦网关 · 管理后台</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='15' fill='url(%23g)'/%3E%3Crect x='11' y='19' width='42' height='31' rx='10' fill='%23fff'/%3E%3Ccircle cx='24' cy='32' r='5' fill='%234f46e5'/%3E%3Ccircle cx='40' cy='32' r='5' fill='%234f46e5'/%3E%3Cpath d='M27 42h10' stroke='%230891b2' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M32 19v-7' stroke='%23fff' stroke-width='3.5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='10' r='4' fill='%23fff'/%3E%3C/svg%3E">
 <style>
   :root {
     --side: #0f172a; --side-text: #94a3b8; --side-hover: #1e293b; --side-line: #1e293b;
     --bg: #f1f5f9; --card: #ffffff; --text: #0f172a; --muted: #64748b; --line: #e2e8f0; --field: #ffffff; --soft: #f8fafc;
-    --accent: #4f46e5; --btn: #4f46e5; --btn-hover: #4338ca; --accent-soft: #eef2ff; --accent-line: #c7d2fe;
+    /* [xiaozhi-hub] 小麦的品牌蓝（设备 client/web/v2/tokens.css 的 --accent #6c8cff），浅色底上加深一档，白字按钮够对比度 */
+    --accent: #3f5fe0; --btn: #3f5fe0; --btn-hover: #3350c8; --accent-soft: #eef1ff; --accent-line: #c5d0ff;
     --ok: #059669; --ok-soft: #ecfdf5; --warn: #b45309; --warn-soft: #fffbeb; --err: #dc2626; --err-soft: #fef2f2;
     --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 1px 3px rgba(15, 23, 42, .06);
   }
@@ -17,7 +18,7 @@
     :root {
       --side: #0b1120; --side-hover: #172033; --side-line: #172033;
       --bg: #0f172a; --card: #111a2e; --text: #e2e8f0; --muted: #94a3b8; --line: #23304a; --field: #0b1324; --soft: #0d1629;
-      --accent: #818cf8; --btn: #6366f1; --btn-hover: #4f46e5; --accent-soft: #1e2547; --accent-line: #3b437a;
+      --accent: #8fa6ff; --btn: #5a78f0; --btn-hover: #4a66e0; --accent-soft: #1a2350; --accent-line: #34407a;
       --ok: #34d399; --ok-soft: #0f2a24; --warn: #fbbf24; --warn-soft: #2a2110; --err: #f87171; --err-soft: #2c1517;
       --shadow: none;
     }
@@ -35,8 +36,8 @@
   aside { background: var(--side); color: var(--side-text); padding: 20px 14px; position: sticky; top: 0; height: 100vh;
           display: flex; flex-direction: column; }
   .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 600; font-size: 15px; padding: 0 8px 22px; }
-  .logo { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, #6366f1, #22d3ee);
-          display: grid; place-items: center; font-size: 16px; flex: none; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, #6c8cff, #5ee0ff);
+          display: grid; place-items: center; font-size: 16px; font-weight: 700; color: #fff; flex: none; }
   .nav button { display: flex; width: 100%; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; border: 0;
                 background: none; color: inherit; cursor: pointer; text-align: left; margin-bottom: 2px; }
   .nav button:hover { background: var(--side-hover); color: #e2e8f0; }
@@ -309,7 +310,7 @@
 
 <div id="auth" class="auth hidden">
   <form class="card" id="auth-form">
-    <div class="brand"><div class="logo">🤖</div>小智 Hub 管理后台</div>
+    <div class="brand"><div class="logo">麦</div>小麦网关 · 管理后台</div>
     <input type="text" name="username" value="admin" autocomplete="username" class="hidden" tabindex="-1">
     <div id="auth-setup" class="hidden">
       <h2>设置管理后台密码</h2>
@@ -329,7 +330,7 @@
 
 <div id="app" class="app hidden">
   <aside>
-    <div class="brand"><div class="logo">🤖</div><span>小智 Hub</span></div>
+    <div class="brand"><div class="logo">麦</div><span>小麦网关</span></div>
     <nav class="nav" id="nav">
       <button data-page="status"><span class="ico">◎</span>状态</button>
       <button data-page="how"><span class="ico">⇄</span>工作原理</button>

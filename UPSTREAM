@@ -1,6 +1,7 @@
 # Upstream of each directory: <dir> <git url> <commit this tree is in sync with>
+# (directories renamed 2026-11-08: client, server, system, reference/menubar-mijia; the commits are unchanged)
 # scripts/sync-upstream.sh merges what upstream did since that commit and moves it forward.
-thinksmart-ubuntu-image https://github.com/justhalfbit/thinksmart-ubuntu-image.git d2e32393b30dfcc8397192747fced0fb7115fc33
-xiaozhi-thinksmart-client https://github.com/justhalfbit/xiaozhi-thinksmart-client.git e7ec0de8db6f7105d96a6964025651e1d3094e08
-xiaozhi-hub-server https://github.com/justhalfbit/xiaozhi-hub-server.git 731d35e0a3b32fcf766c0fd015fbc4aa545b6a9b
-MenuBarMijia https://gitlab.com/jryang1997/MenuBarMijia.git 6353cd43ecaa4b5971c68ef910c49600bec3dbc4
+system https://github.com/justhalfbit/thinksmart-ubuntu-image.git d2e32393b30dfcc8397192747fced0fb7115fc33
+client https://github.com/justhalfbit/xiaozhi-thinksmart-client.git e7ec0de8db6f7105d96a6964025651e1d3094e08
+server https://github.com/justhalfbit/xiaozhi-hub-server.git 731d35e0a3b32fcf766c0fd015fbc4aa545b6a9b
+reference/menubar-mijia https://gitlab.com/jryang1997/MenuBarMijia.git 6353cd43ecaa4b5971c68ef910c49600bec3dbc4

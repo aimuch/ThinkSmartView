@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Point a flashed ThinkSmart View at the hub on 10.10.10.224 instead of its bundled one.
-# Run on this computer:  DEVICE=<device IP> remote-hub/setup-device.sh
+# Run on this computer:  DEVICE=<device IP> deploy/setup-device.sh
 #   DEVICE_KEY   ssh key for ubuntu@DEVICE (default ~/.ssh/thinksmart_ed25519)
 #   HUB_KEY      ssh key for andy@HUB      (default ~/.ssh/id_ed25519_btrouter)
 set -euo pipefail

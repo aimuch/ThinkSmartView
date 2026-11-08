@@ -3,7 +3,7 @@
 # server on 10.10.10.224 (~/thinksmart-releases, served on its 127.0.0.1:16690); the device sees it
 # under 设置 → 软件更新 and installs it with one tap.
 #   scripts/publish-release.sh --note "客户端改了什么" [--note ...] [--system-note "系统层改了什么"]
-# Before: raise __version__ in xiaozhi-thinksmart-client/thinksmart_client/__init__.py (upstream
+# Before: raise __version__ in client/thinksmart_client/__init__.py (upstream
 # patch × 100 + our build: upstream 0.1.6 → 0.1.601, 0.1.602 …), commit everything.
 # The Python environment is built in an arm64 container (Docker) unless the cache already has the
 # one for this requirements.lock (~/.cache/thinksmart-release/envs).
@@ -15,11 +15,11 @@ HUB_KEY="${HUB_KEY:-$HOME/.ssh/id_ed25519_btrouter}"
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
-[[ -z "$(git -C "$ROOT" status --porcelain -- xiaozhi-thinksmart-client thinksmart-ubuntu-image)" ]] \
+[[ -z "$(git -C "$ROOT" status --porcelain -- client system)" ]] \
   || { echo "commit the client and image changes first" >&2; exit 1; }
 
-python3 "$ROOT/thinksmart-ubuntu-image/update/make-release.py" "$ROOT/xiaozhi-thinksmart-client" "$OUT" \
-  --system "$ROOT/thinksmart-ubuntu-image" "$@"
+python3 "$ROOT/system/update/make-release.py" "$ROOT/client" "$OUT" \
+  --system "$ROOT/system" "$@"
 
 ssh -i "$HUB_KEY" "$HUB" 'mkdir -p ~/thinksmart-releases/download ~/thinksmart-releases/latest/download'
 # the packages first, latest.json last: a device checking meanwhile never sees a manifest whose files are missing

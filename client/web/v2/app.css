@@ -1,12 +1,7 @@
 /* ThinkSmart voice client v2. 1280×800 landscape, viewed from 0.5–2 m.
    GPU notes (Adreno 506): only transform/opacity animate; glows are static gradients that cross-fade;
    anything driven by the sound level is small (orb core, corona bars, mic ring). */
-:root {
-  --bg0: #050813; --bg1: #0b1128; --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #7883ab;
-  --line: #ffffff17; --card: #ffffff0b; --card2: #ffffff14;
-  --accent: #6c8cff; --accent2: #5ee0ff; --ok: #43d39e; --warn: #ffb547; --bad: #ff6b81;
-  --c1: #aab4e6; --c2: #5a66a8;
-}
+/* colours: tokens.css (shared with 小麦网关's admin page) */
 body[data-state="connecting"] { --c1: #ffd08a; --c2: #f0962e; }
 body[data-state="listening"]  { --c1: #7ff3ff; --c2: #19b4f0; }
 body[data-state="thinking"]   { --c1: #e2a8ff; --c2: #9b5cff; }
