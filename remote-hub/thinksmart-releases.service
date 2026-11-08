@@ -1,0 +1,13 @@
+[Unit]
+Description=ThinkSmart releases for the device's updater (127.0.0.1:16690, reached through the device's SSH tunnel)
+
+[Service]
+# Laid out like GitHub Releases: latest/download/latest.json and download/<tag>/<file>.
+# Loopback only: the device gets here through xiaozhi-hub-tunnel (thinksmart-update accepts plain
+# http for 127.0.0.1), nobody on the LAN can push packages.
+ExecStart=/usr/bin/python3 -m http.server 16690 --bind 127.0.0.1 --directory %h/thinksmart-releases
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

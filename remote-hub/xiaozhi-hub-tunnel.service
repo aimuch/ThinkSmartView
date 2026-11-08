@@ -1,5 +1,5 @@
 [Unit]
-Description=SSH tunnel to the xiaozhi hub on 10.10.10.224 (device 127.0.0.1:16688/16689 -> hub 127.0.0.1:16688/16689)
+Description=SSH tunnel to the xiaozhi hub on 10.10.10.224 (device 127.0.0.1:16688/16689/16690 -> hub 127.0.0.1:16688/16689/16690)
 After=network-online.target
 Wants=network-online.target
 Before=thinksmart-client.service
@@ -8,7 +8,8 @@ Before=thinksmart-client.service
 User=ubuntu
 # The hub's /kiosk/* endpoints only accept requests from its own loopback, so forward to the hub's
 # 127.0.0.1 instead of connecting to 10.10.10.224 directly. The client keeps its defaults
-# (ws://127.0.0.1:16689/xiaozhi/v1/, http://127.0.0.1:16688).
+# (ws://127.0.0.1:16689/xiaozhi/v1/, http://127.0.0.1:16688). 16690: our client releases for
+# thinksmart-update (SOURCES="http://127.0.0.1:16690/", thinksmart-releases.service on the hub).
 ExecStart=/usr/bin/ssh -N -T \
   -i /home/ubuntu/.ssh/hub_tunnel_ed25519 \
   -o BatchMode=yes -o IdentitiesOnly=yes \
@@ -17,6 +18,7 @@ ExecStart=/usr/bin/ssh -N -T \
   -o ConnectTimeout=10 \
   -L 127.0.0.1:16688:127.0.0.1:16688 \
   -L 127.0.0.1:16689:127.0.0.1:16689 \
+  -L 127.0.0.1:16690:127.0.0.1:16690 \
   andy@10.10.10.224
 Restart=always
 RestartSec=5
