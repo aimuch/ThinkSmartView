@@ -558,3 +558,14 @@ body[data-state="listening"] .mic-ring { opacity: .75; }
   .ring-btns { flex-direction: column; gap: 18px; }
   .ring-time { font-size: 132px; }
 }
+
+/* ---- 大模型费用 (the hub's /kiosk/billing) ---- */
+.cost-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.cost-row div { padding: 16px 20px; border-radius: 20px; background: var(--card2); }
+.cost-row small { display: block; font-size: 17px; color: var(--ink3); }
+.cost-row b { display: block; margin-top: 4px; font-size: 30px; font-variant-numeric: tabular-nums; }
+.cost-quota { font-size: 18px; color: var(--ink2); }
+.cost-quota:empty { display: none; }
+.cost-quota .bar { height: 10px; margin-top: 8px; border-radius: 5px; background: #ffffff1c; overflow: hidden; }
+.cost-quota .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transform-origin: left; }
+.cost-quota .bar i.warn { background: var(--warn); } .cost-quota .bar i.over { background: var(--bad); }

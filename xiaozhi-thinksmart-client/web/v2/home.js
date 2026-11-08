@@ -384,6 +384,32 @@ $('rotChoices').addEventListener('click', e => {
 });
 $('rotAuto').addEventListener('click', () => rot && postJson('/api/rotation', { auto: !rot.auto }));
 
+/* ---------------- 大模型费用（网关 core/billing） ---------------- */
+async function renderCost() {
+  if (DEMO) return;
+  let d;
+  try { d = await (await fetch('/api/billing')).json(); } catch (e) { d = { ok: false }; }
+  if (!d || d.ok === false) { $('costNote').textContent = '网关没有返回（可能是旧版网关）'; return; }
+  const sym = c => (d.currencies || {})[c] || c + ' ';
+  const fmt = m => { const p = Object.entries(m || {}).filter(([, v]) => v > 0).map(([c, v]) => sym(c) + (v < 1 ? v.toFixed(3) : v.toFixed(2)));
+    return p.length ? p.join(' + ') : '0'; };
+  $('costToday').textContent = fmt(d.today);
+  $('costMonth').textContent = fmt(d.month);
+  $('costTotal').textContent = fmt(d.total);
+  $('costNote').textContent = d.unpriced && d.unpriced.length ? `${d.unpriced.length} 个模型没设单价` : '';
+  const q = d.quota || {}, parts = [];
+  const line = (name, used, limit) => {
+    if (!(limit > 0)) return;
+    const r = Math.min(1, used / limit);
+    parts.push(`<div>${name}额度 ${sym(q.currency)}${(+used).toFixed(2)} / ${sym(q.currency)}${(+limit).toFixed(2)}${r >= 1 ? '，已用完' : ''}
+      <div class="bar"><i class="${r >= 1 ? 'over' : r >= 0.8 ? 'warn' : ''}" style="transform:scaleX(${r})"></i></div></div>`);
+  };
+  line('今天', q.used_today, q.daily);
+  line('本月', q.used_month, q.monthly);
+  $('costQuota').innerHTML = parts.join('');
+}
+$('btnSettings').addEventListener('click', renderCost);
+
 /* ---------------- events ---------------- */
 const baseSnapshot = handlers.snapshot;
 handlers.snapshot = s => {
