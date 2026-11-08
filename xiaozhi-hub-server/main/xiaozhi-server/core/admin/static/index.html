@@ -1479,7 +1479,13 @@ async function renderCost(root) {
   const stat = (title, m, t, used, limit) => `<div class="card"><span class="muted small">${title}</span><b>${money(m)}</b>
     <span class="muted small">${t.requests} 次请求 · 输入 ${num(t.prompt)}（缓存命中 ${num(t.cache_hit)}）· 输出 ${num(t.completion)}</span>
     ${limit > 0 ? `<div class="muted small" style="margin-top:6px">额度 ${sym(q.currency)}${(+used).toFixed(2)} / ${sym(q.currency)}${(+limit).toFixed(2)}</div>${bar(used, limit)}` : ""}</div>`;
-  const days = [...(d.days || [])].filter((r) => r.currency === (q.currency || "CNY")).reverse();
+  // 固定 30 格（没用的日子留空），一天的数据不会占满整行
+  const byDay = Object.fromEntries((d.days || []).filter((r) => r.currency === (q.currency || "CNY")).map((r) => [r.key, r]));
+  const end = new Date(d.this_day + "T12:00:00");
+  const days = Array.from({ length: 30 }, (_, i) => {
+    const t = new Date(end - (29 - i) * 864e5), key = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    return byDay[key] || { key, cost: 0, requests: 0, currency: q.currency || "CNY" };
+  });
   const maxDay = Math.max(0.000001, ...days.map((r) => r.cost));
   const table = (rows, label) => rows.length ? `<table class="cost-table"><tr><th>${label}</th><th class="n">请求</th><th class="n">输入</th><th class="n">缓存命中</th><th class="n">输出</th><th class="n">费用</th></tr>${
     rows.map((r) => `<tr><td>${esc(r.key || "—")}${r.unpriced ? ' <span class="pill warn">没有单价</span>' : ""}${r.estimated ? ' <span class="pill">含估算</span>' : ""}</td>
@@ -1499,7 +1505,8 @@ async function renderCost(root) {
       ${stat("累计", d.total, d.tokens.total, 0, 0)}
     </div>
     <div class="card panel"><b>近 30 天（${esc(sym(q.currency || "CNY"))}）</b>
-      <div class="bars">${days.map((r) => `<div title="${esc(r.key)}：${sym(r.currency)}${r.cost.toFixed(4)}，${r.requests} 次" style="height:${(r.cost / maxDay * 100).toFixed(1)}%"></div>`).join("") || '<span class="muted small">还没有记录</span>'}</div>
+      <div class="bars">${days.map((r) => `<div title="${esc(r.key)}：${sym(r.currency)}${r.cost.toFixed(4)}，${r.requests} 次" style="height:${(r.cost / maxDay * 100).toFixed(1)}%"></div>`).join("")}</div>
+      <div class="muted small" style="display:flex;justify-content:space-between;margin-top:4px"><span>${esc(days[0].key.slice(5))}</span><span>${esc(days[29].key.slice(5))}</span></div>
     </div>
     <div class="card panel"><b>本月按模型</b>${table(d.models, "模型")}</div>
     <div class="card panel"><b>本月按设备</b>${table(d.devices, "设备")}</div>
