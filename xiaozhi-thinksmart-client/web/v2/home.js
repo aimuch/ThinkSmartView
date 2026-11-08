@@ -62,7 +62,10 @@ function renderHome() {
   if (!v) return;
   renderMiSettings();
   const loggedIn = !!v.account && v.state !== 'expired';
+  // only one of the two takes the sheet's height: both flex:1, the QR pane overflowed its half and
+  // the empty rooms box above it in the stack swallowed taps on 获取二维码
   $('hLogin').style.display = loggedIn ? 'none' : '';
+  $('hRooms').style.display = loggedIn ? '' : 'none';
   $('hRefresh').style.display = loggedIn ? '' : 'none';
   $('hSub').textContent = loggedIn ? `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
     : '用米家 App 扫码登录后显示家里的设备';
