@@ -34,9 +34,11 @@ DEFAULTS = {
     # levels; with 10 dB eval/wake missed 15% -> 7% at -30 dBFS, 39% -> 32% across the room
     'kws_gain_db': 10,
     # second look at each wake word hit (wake_verify.py): 'hub' asks the hub's speech recogniser
-    # whether the wake word is really there, '' trusts the wake word model. Off for now: the hub
-    # takes 2-2.5 s here, which delays the answer to "小麦小麦今天天气怎么样" said in one go by ~4 s
-    'wake_verify': '',
+    # whether the wake word is really there, '' trusts the wake word model. Upstream keeps it off (a hub
+    # on the device took 2-2.5 s). This repository's hub runs on a server through the tunnel: the check
+    # takes 0.2-0.5 s there (2026-11-08), and false wakes were the bigger complaint, so it is on. It fails
+    # open: when the hub can't be asked, the wake counts
+    'wake_verify': 'hub',
     'follow_up_seconds': 10,   # after a reply: keep listening this long for a follow-up
     'port': 8090,
     'sleep': {'enabled': False, 'start': '22:00', 'end': '07:00'},   # sleep.py
