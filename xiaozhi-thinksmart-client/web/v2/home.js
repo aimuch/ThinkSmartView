@@ -181,14 +181,14 @@ function renderDetail(first) {
   box.innerHTML = parts.join('');
 }
 const LABEL = { brightness: '亮度', color_temp: '色温', mode: '模式', status: '状态', motor: '电机', fan_level: '风速',
-  target_temp: '目标温度', temp: '温度', humidity: '湿度', target_humidity: '目标湿度', pm25: 'PM2.5', battery: '电量',
+  target_temp: '目标温度', temp: '温度', device_temp: '设备温度', humidity: '湿度', target_humidity: '目标湿度', pm25: 'PM2.5', battery: '电量',
   power_w: '功率', energy: '用电量', volume: '音量', filter: '滤芯剩余', illum: '光照', aqi: '空气质量',
   position: '开合', target_position: '目标开合', motion: '人体', contact: '门窗', leak: '水浸', mute: '静音',
   swing: '摇头', door_state: '门状态' };
 function fmt(key, v) {
   if (v === true) return { motion: '有人', contact: '关闭', leak: '漏水', mute: '是', swing: '开' }[key] || '是';
   if (v === false) return { motion: '无人', contact: '打开', leak: '无', mute: '否', swing: '关' }[key] || '否';
-  const unit = { brightness: '%', color_temp: 'K', target_temp: '°C', temp: '°C', humidity: '%', target_humidity: '%',
+  const unit = { brightness: '%', color_temp: 'K', target_temp: '°C', temp: '°C', device_temp: '°C', humidity: '%', target_humidity: '%',
     battery: '%', power_w: 'W', energy: 'kWh', filter: '%', position: '%', target_position: '%', illum: 'lux' }[key] || '';
   return `${v}${unit}`;
 }

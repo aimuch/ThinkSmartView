@@ -198,7 +198,10 @@ MODE_WORDS = {'cool': '制冷', 'cooling': '制冷', 'cold': '制冷', 'heat': '
               'dry': '除湿', 'dehumidify': '除湿', 'fan': '送风', 'fan only': '送风', 'wind': '送风',
               'auto': '自动', 'automatic': '自动', 'smart': '智能', 'sleep': '睡眠', 'favorite': '喜爱',
               'manual': '手动', 'silent': '静音', 'strong': '强力', 'none': '无', 'idle': '空闲',
-              'reading': '阅读', 'night': '夜灯', 'tv': '电视', 'computer': '电脑'}
+              'reading': '阅读', 'night': '夜灯', 'tv': '电视', 'computer': '电脑',
+              'no one': '无人', 'has one': '有人', 'someone': '有人', 'nobody': '无人', 'no motion': '无人',
+              'motion': '有人', 'occupied': '有人', 'unoccupied': '无人', 'open': '打开', 'close': '关闭',
+              'closed': '关闭', 'locked': '已上锁', 'unlocked': '未上锁'}
 
 
 def zh(text):
@@ -238,9 +241,11 @@ def state(card):
             out[key] = 100 - pos if card['type'] == 'airer' else pos
     for key in ('motion', 'contact', 'leak', 'mute', 'swing'):
         if key in f and val(key) is not None:
-            out[key] = _bool(val(key)) if f[key]['format'] == 'bool' else (_desc(f[key], val(key)) or val(key))
+            out[key] = _bool(val(key)) if f[key]['format'] == 'bool' else (zh(_desc(f[key], val(key))) or val(key))
     if 'door_state' in f and val('door_state') is not None:
-        out['door_state'] = _desc(f['door_state'], val('door_state')) or val('door_state')
+        out['door_state'] = zh(_desc(f['door_state'], val('door_state'))) or val('door_state')
+    if card['kind'] == 'plug' and 'temp' in out:
+        out['device_temp'] = out.pop('temp')    # a switch's or plug's own chip, not the room
     return out
 
 

@@ -337,3 +337,19 @@ def test_session_file_is_private(tmp_path):
     from thinksmart_client.mijia.store import write_json
     write_json(tmp_path / 'session.json', {'a': 1}, private=True)
     assert os.stat(tmp_path / 'session.json').st_mode & 0o777 == 0o600
+
+
+def test_switch_chip_temperature_is_not_the_room():
+    c = {'kind': 'plug', 'type': 'switch', 'name': '吸顶灯', 'online': True, 'readonly': False,
+         'feats': {'on': {'format': 'bool', 'access': ['read', 'write']}, 'temp': {'format': 'float', 'access': ['read']}},
+         'values': {'on': True, 'temp': 25.0}}
+    assert dv.summary(c) == '开' and dv.state(c)['device_temp'] == 25.0 and 'temp' not in dv.state(c)
+
+
+def test_presence_words_in_chinese():
+    f = {'format': 'uint8', 'access': ['read'], 'list': [{'value': 0, 'desc': 'No One'}, {'value': 1, 'desc': 'Has One'}]}
+    c = {'kind': 'sensor', 'type': 'occupancy-sensor', 'name': '人在', 'online': True, 'readonly': True,
+         'feats': {'motion': f}, 'values': {'motion': 0}}
+    assert dv.summary(c) == '无人'
+    c['values']['motion'] = 1
+    assert dv.state(c)['motion'] == '有人'
