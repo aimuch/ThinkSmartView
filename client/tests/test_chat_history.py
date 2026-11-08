@@ -105,4 +105,4 @@ async def test_clear_history_from_settings():
     c.add_message('user', '又问')
     await c.clear_history(memory_only=True)    # only the hub's summary: the messages stay
     assert c.calls[1][1]['memory_only'] is True and c.threads['DeepSeekLLM'][0]['text'] == '又问'
-    assert await c.clear_history() == {'ok': False, 'error': '连不上小智网关'}
+    assert await c.clear_history() == {'ok': False, 'error': '连不上小麦网关'}

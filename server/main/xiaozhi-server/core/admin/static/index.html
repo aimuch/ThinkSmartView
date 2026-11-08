@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>小麦网关 · 管理后台</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='15' fill='url(%23g)'/%3E%3Crect x='11' y='19' width='42' height='31' rx='10' fill='%23fff'/%3E%3Ccircle cx='24' cy='32' r='5' fill='%234f46e5'/%3E%3Ccircle cx='40' cy='32' r='5' fill='%234f46e5'/%3E%3Cpath d='M27 42h10' stroke='%230891b2' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M32 19v-7' stroke='%23fff' stroke-width='3.5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='10' r='4' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='#6c8cff'/%3E%3Cstop offset='1' stop-color='#5ee0ff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='18' fill='url(#g)'/%3E%3Cg transform='translate(8 7) scale(2)' fill='#fff'%3E%3Cpath d='M12 22V8.6' stroke='#fff' stroke-width='1.5' stroke-linecap='round' fill='none'/%3E%3Cpath d='M12 1.9 Q14.05 5 12 8.1 Q9.95 5 12 1.9Z'/%3E%3Cpath transform='translate(9.85 9.4) rotate(-30)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(14.15 9.4) rotate(30)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(9.75 13.3) rotate(-32)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(14.25 13.3) rotate(32)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(9.7 17.2) rotate(-34)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(14.3 17.2) rotate(34)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3C/g%3E%3C/svg%3E">
 <style>
   :root {
     --side: #0f172a; --side-text: #94a3b8; --side-hover: #1e293b; --side-line: #1e293b;
@@ -310,7 +310,7 @@
 
 <div id="auth" class="auth hidden">
   <form class="card" id="auth-form">
-    <div class="brand"><div class="logo">麦</div>小麦网关 · 管理后台</div>
+    <div class="brand"><div class="logo"><svg width="19" height="19" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 22V8.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M12 1.9 Q14.05 5 12 8.1 Q9.95 5 12 1.9Z"/><path transform="translate(9.85 9.4) rotate(-30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.15 9.4) rotate(30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(9.75 13.3) rotate(-32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.25 13.3) rotate(32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(9.7 17.2) rotate(-34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.3 17.2) rotate(34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/></svg></div>小麦网关 · 管理后台</div>
     <input type="text" name="username" value="admin" autocomplete="username" class="hidden" tabindex="-1">
     <div id="auth-setup" class="hidden">
       <h2>设置管理后台密码</h2>
@@ -330,7 +330,7 @@
 
 <div id="app" class="app hidden">
   <aside>
-    <div class="brand"><div class="logo">麦</div><span>小麦网关</span></div>
+    <div class="brand"><div class="logo"><svg width="19" height="19" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 22V8.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M12 1.9 Q14.05 5 12 8.1 Q9.95 5 12 1.9Z"/><path transform="translate(9.85 9.4) rotate(-30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.15 9.4) rotate(30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(9.75 13.3) rotate(-32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.25 13.3) rotate(32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(9.7 17.2) rotate(-34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.3 17.2) rotate(34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/></svg></div><span>小麦网关</span></div>
     <nav class="nav" id="nav">
       <button data-page="status"><span class="ico">◎</span>状态</button>
       <button data-page="how"><span class="ico">⇄</span>工作原理</button>

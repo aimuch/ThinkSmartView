@@ -29,7 +29,7 @@ function renderStatus() {
   document.body.dataset.state = shown;
   const text = {
     idle: ['说<em>「小麦小麦」</em>', connected ? '对话还保留着，唤醒后可以接着聊' : '或者点下面的麦克风；按住可以直接说'],
-    connecting: ['正在连接…', '连上小智网关后就开始听'],
+    connecting: ['正在连接…', '连上小麦网关后就开始听'],
     listening: ui.ptt ? ['松开发送', '说完松开手指'] : ['我在听', '说完停一下我就开始回答'],
     thinking: [`${esc(modelName())} 正在思考…`, '复杂的问题可能要想一会儿'],
     speaking: ['正在回答', '随时开口就能打断我'],

@@ -497,7 +497,7 @@ class Client:
         except Exception as e:
             log.warning('cannot reach the hub: %s', e)
             self.play('error')
-            self.events.publish('toast', {'kind': 'error', 'text': '连不上小智网关，请检查网关是否在运行'})
+            self.events.publish('toast', {'kind': 'error', 'text': '连不上小麦网关，请检查网关是否在运行'})
             self.set_state('idle')
             return False
         self.decoder = None
@@ -1038,7 +1038,7 @@ class Client:
                                                                 'memory_only': bool(memory_only)})
         except Exception as e:
             log.warning('cannot clear the chat history: %s', e)
-            return {'ok': False, 'error': '连不上小智网关'}
+            return {'ok': False, 'error': '连不上小麦网关'}
         if result.get('ok') and not memory_only:
             self.threads = {}
             self.cards = []

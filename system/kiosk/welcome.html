@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ThinkSmart View</title>
+<title>小麦 · ThinkSmart View</title>
 <!--
   Built-in welcome page of the ThinkSmart image. thinksmart-kiosk.py shows it whenever the
   configured URL can't be loaded (nothing installed yet, service starting or stopped, no
@@ -33,6 +33,7 @@
 
   header { display: flex; align-items: center; justify-content: space-between; }
   .brand { display: flex; align-items: center; gap: 14px; font-size: 22px; font-weight: 600; letter-spacing: .3px; }
+  .brand-sub { color: var(--ink3); font-weight: 400; }
   .logo { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
           background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 6px 24px #6c8cff55; }
   .clock { text-align: right; }
@@ -156,10 +157,9 @@
   <header>
     <div class="brand">
       <div class="logo">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round">
-          <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 22V8.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M12 1.9 Q14.05 5 12 8.1 Q9.95 5 12 1.9Z"/><path transform="translate(9.85 9.4) rotate(-30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.15 9.4) rotate(30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(9.75 13.3) rotate(-32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.25 13.3) rotate(32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(9.7 17.2) rotate(-34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.3 17.2) rotate(34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/></svg>
       </div>
-      ThinkSmart View
+      小麦 <span class="brand-sub">· ThinkSmart View</span>
     </div>
     <div class="clock"><div class="t" id="time">--:--</div><div class="d" id="date"></div></div>
   </header>
@@ -169,7 +169,7 @@
       <div class="orb"></div>
       <span class="tag">AI 语音终端</span>
       <h1><span>你好，欢迎使用</span></h1>
-      <p class="lead">这台设备已经准备好接入 AI。装上小智客户端，说一声唤醒词，就能和 DeepSeek、Claude 等大模型，以及 Claude Code、云端 Agent 直接对话。</p>
+      <p class="lead">这台设备已经准备好接入 AI。装上小麦语音助手，说一声唤醒词，就能和 DeepSeek、Claude 等大模型，以及 Claude Code、云端 Agent 直接对话。</p>
       <div class="status" id="status">
         <div class="dot"></div>
         <div><span id="statusText">正在连接展示页面…</span><small id="statusSub"></small></div>
@@ -186,12 +186,12 @@
 
     <section class="cards">
       <div class="card">
-        <h2>接入小智 AI 网关 <span class="badge">推荐</span></h2>
+        <h2>接入小麦网关 <span class="badge">推荐</span></h2>
         <div class="row">
           <div>
             <ol class="steps">
               <li>部署 xiaozhi-hub-server（装在本机或家里任意一台电脑上）</li>
-              <li>在本机安装 ThinkSmart 小智客户端</li>
+              <li>在本机安装小麦语音助手</li>
               <li>开机直接进入语音对话界面</li>
             </ol>
           </div>
@@ -298,7 +298,7 @@ window.thinksmartStatus = function (st) {
     $('statusSub').textContent = st.target + (st.tries ? `  ·  已重试 ${st.tries} 次` : '');
   } else {
     $('statusText').textContent = '还没有设置展示页面';
-    $('statusSub').textContent = '按右侧的方法装上小智客户端，或设置你自己的地址';
+    $('statusSub').textContent = '按右侧的方法装上小麦语音助手，或设置你自己的地址';
   }
   drawQr(st.help || 'https://github.com/justhalfbit/xiaozhi-hub-server');
 };
@@ -556,7 +556,7 @@ function renderUpdate() {
   } else if (parts.length) {
     title = '有新版本 ' + parts.map(p => `${p.name} ${p.version}`).join(' · ');
     bad = !!result && job.state !== 'done';
-    text = bad ? job.message : (u.current ? `当前：客户端 ${u.current}` + (sys.current ? ` · 系统层 ${sys.current}` : '') : '小智客户端');
+    text = bad ? job.message : (u.current ? `当前：客户端 ${u.current}` + (sys.current ? ` · 系统层 ${sys.current}` : '') : '小麦语音助手');
     if (Date.now() - updArmed < 5000) {
       // waiting for the confirming tap: keep the hint (the status poll re-renders every 3 s)
       bad = false;

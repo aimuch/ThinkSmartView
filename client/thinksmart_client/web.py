@@ -189,7 +189,7 @@ def make_app(client: Client):
         try:
             data = await client._hub_http('/kiosk/billing')
         except Exception:
-            return web.json_response({'ok': False, 'error': '连不上小智网关'})
+            return web.json_response({'ok': False, 'error': '连不上小麦网关'})
         return web.json_response(data if isinstance(data, dict) else {'ok': False})
 
     async def rotation_set(request):

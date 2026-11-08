@@ -195,7 +195,7 @@ function renderStatus() {
   document.body.dataset.state = shown;
   const text = {
     idle: [`说<em>「${wakeName()}」</em>`, connected ? '对话还在，唤醒后可以接着聊' : '或者点麦克风；按住可以直接说'],
-    connecting: ['正在连接…', '连上小智网关后就开始听'],
+    connecting: ['正在连接…', '连上小麦网关后就开始听'],
     listening: ui.ptt ? ['松开<em>发送</em>', '说完松开手指'] : ['我在听', '说完停一下，我就开始回答'],
     thinking: [`<em>${esc(modelName())}</em> 正在思考`, '复杂的问题可能要想一会儿'],
     speaking: ['正在回答', `喊「${(ui.wake && ui.wake.primary) || '小麦小麦'}」或点打断就能停下`],

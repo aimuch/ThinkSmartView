@@ -400,7 +400,7 @@ def self_test(version, need_hub, seconds):
         return False, '新版本没有启动起来'
     if not h.get('audio'):
         return False, '新版本打不开麦克风或扬声器'
-    return False, '新版本连不上小智网关'
+    return False, '新版本连不上小麦网关'
 
 
 def cleanup():
