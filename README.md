@@ -38,6 +38,7 @@ ThinkSmart View (10.10.10.192)                       服务器 Dev (10.10.10.224
 | 米家直连 | `xiaozhi-thinksmart-client/thinksmart_client/mijia/` | 屏幕顶栏 🏠「家居」→ 选地区 → 用米家 App 扫码。按房间显示设备状态，点一下开关，点卡片调亮度、色温、温度、模式、风速、窗帘。直接说「打开书房的灯」「客厅温度多少」「哪些灯开着」也行；插座断电、加热设备开机这类会先问一句。不存密码和 passToken，令牌文件权限 0600，过期了重新扫码。 |
 | 内容卡片 | `self.screen.show_card`（`mcp.py`、`web/v2/home.js`） | 问菜谱、步骤、清单、对比时，模型把内容作为一条图文消息放进屏幕上的对话（标题、列表、表格、图片），嘴上只说一句；客户端自己保存最近 30 条，重新载入聊天记录、重启后还在 |
 | 屏幕旋转 | `thinksmart_client/rotation.py` | 设置 →「屏幕方向」：横屏、竖屏和它们的倒置，或「跟随摆放方向」（加速度计，放稳 3 秒后切换，页面会重新载入一次） |
+| 更多供应商 | `xiaozhi-hub-server/main/xiaozhi-server/core/admin/catalog.py` | 后台「大模型」21 家：原有 9 家，加上硅基流动、百度千帆、腾讯混元、MiniMax、阶跃星辰、讯飞星火、xAI、Mistral、OpenRouter、Magpie 本地网关、Ollama、LM Studio。「语音识别」分本地（X-ASR 快速版/精度版、Qwen3-ASR、SenseVoice，后台可下载模型）和云端（豆包、阿里百炼 Qwen3-ASR-Flash / Paraformer、腾讯、讯飞、百度、OpenAI、Groq） |
 | 大模型费用 | `xiaozhi-hub-server/main/xiaozhi-server/core/billing/` | 后台「费用」页：今日、本月、累计、近 30 天、按模型/设备/用途；单价按模型和时段（DeepSeek 高峰价和空闲价已内置，2026-11-08 核对），法定节假日和调休在「日历」里填；额度可以设每天、每月、每台设备，超了拒绝或改用便宜模型。设备设置页也能看今日/本月/累计。 |
 
 ## 语音识别
