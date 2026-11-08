@@ -825,18 +825,77 @@ def save_vad_silence(raw, merged: dict, path: Path = None):
 
 # ---------- 语音合成 ----------
 
+def tts_engine_of(entry_type: str):
+    return next((e for e in catalog.TTS_ENGINES if e["type"] == entry_type), None)
+
+
 def describe_tts(merged: dict) -> dict:
+    """当前语音合成 + 后台能选的引擎（EdgeTTS、千问 TTS）。voice / voices 是当前引擎的，状态页用。"""
     name = _selected(merged, "TTS")
     entry = _entry(merged, "TTS", name)
+    current = tts_engine_of(entry.get("type", name))
+    engines = []
+    for e in catalog.TTS_ENGINES:
+        item = _entry(merged, "TTS", e["entry"])
+        exists = item.get("type") == e["type"]
+        info = {"id": e["id"], "entry": e["entry"], "label": e["label"], "mark": e["mark"], "desc": e["desc"],
+                "link": e.get("link", ""), "voices": e["voices"], "exists": exists,
+                "conflict": bool(item) and not exists, "using": name == e["entry"] and exists,
+                "voice": str(item.get("voice") or "") if exists else ""}
+        if e["id"] == "qwen3":
+            key = item.get("api_key") if exists else None
+            info["key_set"] = not config_store.is_placeholder(key)
+            info["key_hint"] = config_store.mask_key(key)
+        info["configured"] = exists and info.get("key_set", True)
+        engines.append(info)
     return {
         "selected": name,
         "type": entry.get("type", name),
+        "engine": current["id"] if current and name == current["entry"] else "other",
         "voice": str(entry.get("voice") or ""),
-        "voices": catalog.EDGE_VOICES,
+        "voices": current["voices"] if current else catalog.EDGE_VOICES,
+        "engines": engines,
     }
 
 
+def save_tts(engine_id: str, values: dict, merged: dict, path: Path = None) -> list:
+    """保存某个引擎的音色（千问 TTS 还有 API Key，留空表示不改）；千问 TTS 的条目不存在时新建。"""
+    e = catalog.TTS_ENGINE_BY_ID.get(engine_id)
+    if e is None:
+        raise KeyError(engine_id)
+    values = values or {}
+    entry = _entry(merged, "TTS", e["entry"])
+    if entry and entry.get("type") != e["type"]:
+        raise ValueError(f"配置里的 {e['entry']} 不是 {e['label']}，请在配置文件里改名或删掉它")
+    voice = str(values.get("voice") or "").strip()
+    if voice not in {v["value"] for v in e["voices"]}:
+        raise ValueError("不支持这个音色")
+    changes = {}
+    if voice != str(entry.get("voice") or ""):
+        changes["voice"] = voice
+    if e["id"] == "qwen3":
+        key = str(values.get("api_key") or "").strip()
+        if any(c.isspace() for c in key):
+            raise ValueError("API Key 里不能有空格或换行")
+        if key and key != _text(entry.get("api_key")):
+            changes["api_key"] = key
+        if config_store.is_placeholder(changes.get("api_key", entry.get("api_key"))):
+            raise ValueError("请填写百炼的 API Key")
+    if not entry:
+        if e["id"] != "qwen3":
+            raise ValueError(f"配置里没有 {e['entry']}")
+        changes = {**catalog.QWEN3_TTS_DEFAULTS, **changes}
+    if not changes:
+        return []
+    with config_store.edit_custom(path) as data:
+        target = data.setdefault("TTS", CommentedMap()).setdefault(e["entry"], CommentedMap())
+        for k, v in changes.items():
+            target[k] = v
+    return [k for k in changes if k != "type"]
+
+
 def save_tts_voice(voice: str, merged: dict, path: Path = None) -> list:
+    """旧接口：只改 EdgeTTS 的音色。"""
     name = _selected(merged, "TTS")
     if _entry(merged, "TTS", name).get("type") != "edge":
         raise ValueError("当前语音合成不是 EdgeTTS，后台只支持设置 EdgeTTS 的音色")

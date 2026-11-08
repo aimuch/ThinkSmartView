@@ -176,6 +176,29 @@ def test_save_tts_voice(cfg_path):
     assert merged(cfg_path)["TTS"]["EdgeTTS"]["voice"] == "zh-CN-YunxiNeural"
 
 
+def test_qwen3_tts_engine(cfg_path):
+    """千问 TTS：没有条目时第一次保存按默认值新建；必须有 Key；Key 留空表示不改；音色要在列表里。"""
+    d = pages.describe_tts(merged(cfg_path))
+    assert d["engine"] == "edge" and [e["id"] for e in d["engines"]] == ["edge", "qwen3"]
+    q = d["engines"][1]
+    assert q["exists"] is False and q["key_set"] is False and q["configured"] is False
+    assert any(v["value"] == "Jada" and "上海" in v["group"] for v in q["voices"])
+    with pytest.raises(ValueError, match="API Key"):
+        pages.save_tts("qwen3", {"voice": "Jada"}, merged(cfg_path), cfg_path)
+    with pytest.raises(ValueError, match="音色"):
+        pages.save_tts("qwen3", {"voice": "zh-CN-YunxiNeural", "api_key": "sk-abcdef123456789"}, merged(cfg_path), cfg_path)
+    changed = pages.save_tts("qwen3", {"voice": "Jada", "api_key": "sk-abcdef123456789"}, merged(cfg_path), cfg_path)
+    assert set(changed) == {"voice", "api_key", "model", "language_type", "output_dir"}
+    entry = merged(cfg_path)["TTS"]["Qwen3TTS"]
+    assert entry["type"] == "qwen3_tts" and entry["voice"] == "Jada" and entry["model"] == "qwen3-tts-flash"
+    assert pages.save_tts("qwen3", {"voice": "Dylan", "api_key": ""}, merged(cfg_path), cfg_path) == ["voice"]
+    assert merged(cfg_path)["TTS"]["Qwen3TTS"]["api_key"] == "sk-abcdef123456789"
+    q = pages.describe_tts(merged(cfg_path))["engines"][1]
+    assert q["configured"] and q["key_hint"] == "sk-a…6789" and q["voice"] == "Dylan" and not q["using"]
+    with pytest.raises(KeyError):
+        pages.save_tts("nope", {"voice": "Jada"}, merged(cfg_path), cfg_path)
+
+
 def test_save_vad_silence(cfg_path):
     v = pages.describe_asr(merged(cfg_path))["vad"]
     assert v["selected"] == "SileroVAD" and v["supported"] and v["silence_ms"] == 800
@@ -290,6 +313,16 @@ async def test_llm_and_page_endpoints(client):
     assert (await client.get("/admin/api/tts/preview?voice=en-US-AvaNeural")).status == 400
     r = await client.post("/admin/api/tts", json={"voice": "zh-CN-YunxiNeural"})
     assert r.status == 200 and (await r.json())["changed"] == ["voice"]
+    # 千问 TTS：没保存 Key 不能试听；保存音色和 Key 后改用它
+    assert (await client.get("/admin/api/tts/preview?engine=qwen3&voice=Jada")).status == 400
+    assert (await client.get("/admin/api/tts/preview?engine=qwen3&voice=bogus")).status == 400
+    r = await client.post("/admin/api/tts", json={"engine": "qwen3", "voice": "Jada", "api_key": "sk-abcdef123456789"})
+    assert r.status == 200, await r.text()
+    tts = await (await client.get("/admin/api/tts")).json()
+    assert tts["selected"] == "Qwen3TTS" and tts["engine"] == "qwen3" and tts["voice"] == "Jada"
+    assert "sk-abcdef123456789" not in await (await client.get("/admin/api/tts")).text()
+    r = await client.post("/admin/api/tts", json={"engine": "edge", "voice": "zh-CN-YunxiNeural"})
+    assert r.status == 200 and (await (await client.get("/admin/api/tts")).json())["engine"] == "edge"
     intent = await (await client.get("/admin/api/intent")).json()
     assert intent["locked"] is True
     for path in ("llm", "asr", "tts", "intent"):

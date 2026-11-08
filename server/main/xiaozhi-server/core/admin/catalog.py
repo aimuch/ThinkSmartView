@@ -151,9 +151,41 @@ EDGE_VOICES = [
     {"value": "zh-TW-YunJheNeural", "name": "雲哲", "gender": "男", "style": "友好", "group": "台湾"},
 ]
 EDGE_VOICE_VALUES = {v["value"] for v in EDGE_VOICES}
+# [xiaozhi-hub] 千问 TTS（阿里云百炼 qwen3-tts-flash）：方言音色直接用方言念普通话文字
+QWEN3_TTS_ENTRY = "Qwen3TTS"
+QWEN3_TTS_DEFAULTS = {"type": "qwen3_tts", "model": "qwen3-tts-flash", "language_type": "Chinese", "output_dir": "tmp/"}
+QWEN3_TTS_VOICES = [
+    {"value": "Jada", "name": "阿珍", "gender": "女", "style": "上海阿姐", "group": "方言：上海话"},
+    {"value": "Dylan", "name": "晓东", "gender": "男", "style": "北京胡同少年", "group": "方言：北京话"},
+    {"value": "Peter", "name": "李彼得", "gender": "男", "style": "天津相声味", "group": "方言：天津话"},
+    {"value": "li", "name": "老李", "gender": "男", "style": "南京耐心教练", "group": "方言：南京话"},
+    {"value": "Marcus", "name": "秦川", "gender": "男", "style": "陕西实在", "group": "方言：陕西话"},
+    {"value": "Sunny", "name": "晴儿", "gender": "女", "style": "四川甜妹", "group": "方言：四川话"},
+    {"value": "Eric", "name": "程川", "gender": "男", "style": "四川成都男声", "group": "方言：四川话"},
+    {"value": "Roy", "name": "阿杰", "gender": "男", "style": "闽南诙谐", "group": "方言：闽南话"},
+    {"value": "Rocky", "name": "阿强", "gender": "男", "style": "幽默风趣", "group": "粤语"},
+    {"value": "Kiki", "name": "阿清", "gender": "女", "style": "港妹闺蜜", "group": "粤语"},
+    {"value": "Cherry", "name": "芊悦", "gender": "女", "style": "阳光亲切", "group": "普通话"},
+    {"value": "Serena", "name": "苏瑶", "gender": "女", "style": "温柔", "group": "普通话"},
+    {"value": "Ethan", "name": "晨煦", "gender": "男", "style": "阳光温暖", "group": "普通话"},
+    {"value": "Chelsie", "name": "千雪", "gender": "女", "style": "二次元", "group": "普通话"},
+]
+QWEN3_TTS_VOICE_VALUES = {v["value"] for v in QWEN3_TTS_VOICES}
+
+# 后台「语音合成」能选的引擎：id → 配置条目、类型、音色表
+TTS_ENGINES = [
+    {"id": "edge", "entry": "EdgeTTS", "type": "edge", "label": "EdgeTTS", "mark": "免费",
+     "desc": "微软的在线语音，免费、不需要 Key。有东北话、陕西话、粤语，没有上海话。", "voices": EDGE_VOICES},
+    {"id": "qwen3", "entry": QWEN3_TTS_ENTRY, "type": "qwen3_tts", "label": "千问 TTS", "mark": "阿里云百炼",
+     "desc": "通义千问 qwen3-tts-flash，有上海话、北京话、四川话、粤语等方言音色。按字数计费，需要百炼的 API Key。",
+     "link": "https://bailian.console.aliyun.com/?tab=model#/api-key", "voices": QWEN3_TTS_VOICES},
+]
+TTS_ENGINE_BY_ID = {e["id"]: e for e in TTS_ENGINES}
+
 VOICE_SAMPLE = {
     "普通话": "你好，今天想聊点什么？",
     "粤语": "你好，今日想傾啲乜嘢？",
+    "方言：上海话": "侬好，今朝想讲点啥？",
 }
 
 

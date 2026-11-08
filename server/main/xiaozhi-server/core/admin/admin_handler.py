@@ -1058,21 +1058,40 @@ class AdminHandler:
         return self._json({"ok": True, **pages.describe_tts(merged), "running": self._running("TTS")})
 
     async def handle_tts_save(self, request: web.Request):
+        """{"engine": "edge" | "qwen3", "voice", "api_key"?}：保存这个引擎的音色（和 Key），并改用它。
+
+        不带 engine 是旧接口：只改 EdgeTTS 的音色。"""
         self._require_login(request)
         body = await self._read_json(request)
+        engine = str(body.get("engine") or "")
         try:
             merged = await self._blocking(self._merged)
-            changed = await self._blocking(pages.save_tts_voice, str(body.get("voice") or ""), merged, self.config_path)
+            if engine:
+                changed = await self._blocking(pages.save_tts, engine, {"voice": body.get("voice"),
+                                               "api_key": body.get("api_key")}, merged, self.config_path)
+                name = catalog.TTS_ENGINE_BY_ID[engine]["entry"]
+            else:
+                changed = await self._blocking(pages.save_tts_voice, str(body.get("voice") or ""), merged, self.config_path)
+                name = (merged.get("selected_module") or {}).get("TTS")
+        except KeyError:
+            return self._error("没有这个语音合成引擎", 404)
         except ValueError as e:
             return self._error(str(e), 400)
-        name = (merged.get("selected_module") or {}).get("TTS")
-        self.logger.bind(tag=TAG).info(f"管理后台更新了音色: {body.get('voice')}")
+        if "api_key" in changed:  # 换了 Key，之前没合成成功的试听重新来
+            for k in [k for k in self._voice_samples if k.startswith("qwen3:")]:
+                self._voice_samples.pop(k, None)
+        self.logger.bind(tag=TAG).info(f"管理后台更新了语音合成 {name}: {', '.join(changed) or '无变化'}，音色 {body.get('voice')}")
+        if engine and (merged.get("selected_module") or {}).get("TTS") != name:
+            result = await self._switch("TTS", name)
+            return self._json({"changed": changed, **result}) if result["ok"] else self._error(result["note"], 400)
         return self._json({"ok": True, "changed": changed, **await self._apply_if_selected("TTS", name, changed)})
 
     async def handle_tts_preview(self, request: web.Request):
-        """用 EdgeTTS 合成一句示例，返回 mp3 给浏览器播放。"""
+        """用 EdgeTTS 合成一句示例，返回 mp3 给浏览器播放；engine=qwen3 时用已保存的百炼 Key 合成 WAV。"""
         self._require_login(request)
         voice = request.query.get("voice", "")
+        if request.query.get("engine") == "qwen3":
+            return await self._qwen3_preview(voice)
         info = next((v for v in catalog.EDGE_VOICES if v["value"] == voice), None)
         if info is None:
             return self._error("不支持这个音色", 400)
@@ -1093,6 +1112,32 @@ class AdminHandler:
             audio = b"".join(chunks)
             self._voice_samples[voice] = audio
         return web.Response(body=audio, content_type="audio/mpeg",
+                            headers={**SECURITY_HEADERS, "Cache-Control": "private, max-age=86400"})
+
+    async def _qwen3_preview(self, voice: str):
+        from core.providers.tts import qwen3_tts
+
+        info = next((v for v in catalog.QWEN3_TTS_VOICES if v["value"] == voice), None)
+        if info is None:
+            return self._error("不支持这个音色", 400)
+        cache_key = f"qwen3:{voice}"
+        audio = self._voice_samples.get(cache_key)
+        if audio is None:
+            merged = await self._blocking(self._merged)
+            entry = pages._entry(merged, "TTS", catalog.QWEN3_TTS_ENTRY)
+            if entry.get("type") != "qwen3_tts" or config_store.is_placeholder(entry.get("api_key")):
+                return self._error("先填写百炼的 API Key 并保存，才能试听千问 TTS", 400)
+            try:
+                tts = qwen3_tts.TTSProvider({**entry, "voice": voice, "tts_timeout": 20}, True)
+                pcm = await asyncio.wait_for(tts.synthesize(catalog.voice_sample(info["group"])), timeout=25)
+            except Exception as e:
+                self.logger.bind(tag=TAG).warning(f"千问 TTS 试听失败 {voice}: {e}")
+                return self._error(f"试听合成失败：{e}", 502)
+            if not pcm:
+                return self._error("试听合成失败：没有返回音频", 502)
+            audio = qwen3_tts.pcm_to_wav(pcm)
+            self._voice_samples[cache_key] = audio
+        return web.Response(body=audio, content_type="audio/wav",
                             headers={**SECURITY_HEADERS, "Cache-Control": "private, max-age=86400"})
 
     # ---------- 意图识别 ----------
