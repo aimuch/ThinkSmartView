@@ -27,6 +27,7 @@ from config.logger import setup_logging
 from core.admin import auth, catalog, config_store, connections, pages, pipeline, plugin_settings, updater
 from core.admin.grokbot import GrokBotAdmin
 from core.admin.status import _claude_version, collect_status
+from core import billing
 from core.agent import chat_history, llm_router, reports
 from core.agent.agent_session import ErrorKind
 from core.agent.grokbot_client import GrokBotError
@@ -76,6 +77,7 @@ class AdminHandler:
         self.config = config
         self.ws_server = ws_server
         self.config_path = config_path
+        billing.configure(config)   # [xiaozhi-hub] 费用统计读单价、额度用的配置
         self.sessions = auth.SessionStore()
         # 后台点了更新网关、网关重启后，接着用重启前的登录（文件在 data/ 下，和配置放在一起）
         data_dir = Path(config_path).parent if config_path else updater.SERVER_DIR / "data"
@@ -103,6 +105,10 @@ class AdminHandler:
                 web.post("/admin/api/update/start", self.handle_update_start),
                 web.get("/admin/api/devices", self.handle_devices),
                 web.get("/admin/api/memory", self.handle_memory),
+                web.get("/admin/api/billing", self.handle_billing),
+                web.post("/admin/api/billing", self.handle_billing_save),
+                web.post("/admin/api/billing/clear", self.handle_billing_clear),
+                web.get("/kiosk/billing", self.handle_kiosk_billing),
                 web.post("/admin/api/memory/save", self.handle_memory_save),
                 web.post("/admin/api/devices/{session_id}/emotion", self.handle_emotion_one),
                 web.post("/admin/api/devices/{session_id}/emotion-test", self.handle_emotion_test),
@@ -554,6 +560,11 @@ class AdminHandler:
 
     @staticmethod
     def _test_llm(config: dict) -> dict:
+        with billing.unbilled():   # [xiaozhi-hub] 测试连接只问一个字，不记费用
+            return AdminHandler._test_llm_once(config)
+
+    @staticmethod
+    def _test_llm_once(config: dict) -> dict:
         import httpx
         import openai
         from core.providers.llm.openai.openai import LLMProvider
@@ -1124,6 +1135,51 @@ class AdminHandler:
         return {"running": not task.done(), "stopped": task.cancelled(), "index": run["index"], "total": run["total"],
                 "emotion": run["emotion"], "emoji": EMOTION_EMOJI.get(run["emotion"], "")}
 
+    # ---------- 费用（core/billing） ----------
+
+    async def handle_billing(self, request: web.Request):
+        """今日、本月、累计的费用和 token，近 30 天，按模型、设备、用途，单价表和额度。"""
+        self._require_login(request)
+        merged = await self._blocking(self._merged)
+        data = await self._blocking(billing.summary, merged)
+        data["entries"] = [{"entry": n, "label": llm_router.model_label(n)}
+                           for n, c in (merged.get("LLM") or {}).items()
+                           if isinstance(c, dict) and llm_router.model_ready(merged, n)]
+        return self._json({"ok": True, **data})
+
+    async def handle_billing_save(self, request: web.Request):
+        """{"prices"?: [...], "quota"?: {...}, "settings"?: {...}}：保存后马上生效。"""
+        self._require_login(request)
+        body = await self._read_json(request)
+        try:
+            update = _billing_update(body)
+        except ValueError as e:
+            return self._error(str(e), 400)
+
+        def save():
+            with config_store.edit_custom(self.config_path) as data:
+                cur = dict(data.get("billing") or {})
+                cur.update(update)
+                data["billing"] = cur
+            return dict((self._merged().get("billing") or {}))
+        value = await self._blocking(save)
+        self._push_config("billing", value)
+        billing.configure(self.config)
+        return self._json({"ok": True})
+
+    async def handle_billing_clear(self, request: web.Request):
+        self._require_login(request)
+        await self._blocking(billing.db().clear)
+        logger.bind(tag=TAG).info("费用记录已在管理后台清空")
+        return self._json({"ok": True})
+
+    async def handle_kiosk_billing(self, request: web.Request):
+        """本机设备接口：设备设置页显示的今日、本月、累计费用和额度。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        merged = await self._blocking(self._merged)
+        return self._json({"ok": True, **await self._blocking(billing.brief, merged)})
+
     # ---------- 记忆（聊天记录总结） ----------
 
     async def handle_memory(self, request: web.Request):
@@ -1243,3 +1299,75 @@ class AdminHandler:
         self._require_login(request)
         self._stop_emotion_test(request.match_info["session_id"])
         return self._json({"ok": True})
+
+
+def _billing_update(body: dict) -> dict:
+    """费用设置的取值校验（单价、额度、时区、节假日），返回要写进 billing 的键。"""
+    import datetime
+    import re
+    from zoneinfo import ZoneInfo
+    out = {}
+
+    def money(v, name):
+        try:
+            x = float(v or 0)
+        except (TypeError, ValueError):
+            raise ValueError(f"{name}要填数字")
+        if x < 0 or x > 1e6:
+            raise ValueError(f"{name}超出范围")
+        return x
+
+    def days(v, name):
+        items = [str(d).strip() for d in (v or []) if str(d).strip()]
+        for d in items:
+            try:
+                datetime.date.fromisoformat(d)
+            except ValueError:
+                raise ValueError(f"{name}里的 {d} 不是 YYYY-MM-DD 日期")
+        return sorted(set(items))
+
+    hours_re = re.compile(r"^\s*(\d\d:\d\d-\d\d:\d\d)(\s*[,，]\s*\d\d:\d\d-\d\d:\d\d)*\s*$")
+    days_re = re.compile(r"^(all|workday|weekend|[1-7](-[1-7])?([,，][1-7](-[1-7])?)*)$")
+    if "prices" in body:
+        rules = []
+        for r in body.get("prices") or []:
+            if not isinstance(r, dict) or not str(r.get("match") or "").strip():
+                raise ValueError("每条单价都要填模型名")
+            rule = {"match": str(r["match"]).strip()[:300], "label": str(r.get("label") or "")[:60],
+                    "currency": r.get("currency") if r.get("currency") in billing.pricing.CURRENCIES else "CNY",
+                    **{k: money(r.get(k), "单价") for k in billing.pricing.PRICE_KEYS}, "tiers": []}
+            if r.get("checked"):
+                rule["checked"] = str(r["checked"])[:120]
+            for t in r.get("tiers") or []:
+                d, h = str(t.get("days") or "all").strip(), str(t.get("hours") or "").strip()
+                if not days_re.match(d):
+                    raise ValueError(f"时段的日期 {d} 要写 all / workday / weekend 或 1-5 这样的星期")
+                if h and not hours_re.match(h):
+                    raise ValueError(f"时段 {h} 要写成 09:00-12:00,14:00-18:00")
+                rule["tiers"].append({"name": str(t.get("name") or "时段")[:20], "days": d, "hours": h,
+                                      **{k: money(t.get(k), "时段单价") for k in billing.pricing.PRICE_KEYS}})
+            rules.append(rule)
+        out["prices"] = rules
+    if "quota" in body:
+        q = body.get("quota") or {}
+        if q.get("action", "block") not in ("block", "downgrade"):
+            raise ValueError("超额后的做法只能是 block 或 downgrade")
+        out["quota"] = {"currency": q.get("currency") if q.get("currency") in billing.pricing.CURRENCIES else "CNY",
+                        "daily": money(q.get("daily"), "每天额度"), "monthly": money(q.get("monthly"), "每月额度"),
+                        "device_daily": money(q.get("device_daily"), "每台设备每天额度"),
+                        "action": q.get("action", "block"), "downgrade_to": str(q.get("downgrade_to") or "")[:80]}
+    if "settings" in body:
+        st = body.get("settings") or {}
+        if "timezone" in st:
+            try:
+                ZoneInfo(str(st["timezone"]))
+            except Exception:
+                raise ValueError(f"没有这个时区：{st['timezone']}")
+            out["timezone"] = str(st["timezone"])
+        if "holidays" in st:
+            out["holidays"] = days(st["holidays"], "节假日")
+        if "workdays" in st:
+            out["workdays"] = days(st["workdays"], "调休上班日")
+        if "count_claude_code" in st:
+            out["count_claude_code"] = bool(st["count_claude_code"])
+    return out

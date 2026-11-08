@@ -281,6 +281,25 @@
     .kv { grid-template-columns: max-content minmax(0, 1fr); }
     .kv .copy { display: none; }
   }
+  /* [xiaozhi-hub] 费用 */
+  .cost-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
+  .cost-stats .card { padding: 16px 20px; margin: 0; }
+  .cost-stats b { display: block; font-size: 26px; margin: 4px 0; font-variant-numeric: tabular-nums; }
+  .quota-bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 8px; }
+  .quota-bar i { display: block; height: 100%; background: var(--accent); }
+  .quota-bar i.warn { background: var(--warn); } .quota-bar i.err { background: var(--err); }
+  .bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 10px; }
+  .bars div { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 1px; opacity: .85; }
+  .bars div.peak { background: var(--warn); }
+  .btn.danger { color: var(--err); }
+  .cost-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .cost-table th, .cost-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .cost-table td.n, .cost-table th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .price-rule { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-top: 10px; }
+  .price-row { display: grid; grid-template-columns: 2fr 1fr 90px repeat(3, 1fr) auto; gap: 8px; align-items: end; }
+  .tier-row { display: grid; grid-template-columns: 1fr 1fr 2fr repeat(3, 1fr) auto; gap: 8px; align-items: end; margin-top: 8px; padding-left: 18px; }
+  .price-row label, .tier-row label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+  @media (max-width: 900px) { .cost-stats { grid-template-columns: 1fr; } .price-row, .tier-row { grid-template-columns: 1fr 1fr; } }
 </style>
 </head>
 <body>
@@ -315,6 +334,7 @@
       <button data-page="calls"><span class="ico">☎</span>呼名</button>
       <button data-page="grokbot"><span class="ico">☁</span>Grok Bot</button>
       <button data-page="memory"><span class="ico">✎</span>记忆</button>
+      <button data-page="cost"><span class="ico">¥</span>费用</button>
       <button data-page="asr"><span class="ico">◐</span>语音识别</button>
       <button data-page="tts"><span class="ico">♪</span>语音合成</button>
       <button data-page="intent"><span class="ico">⚙</span>意图识别</button>
@@ -426,7 +446,7 @@ $("auth-form").addEventListener("submit", async (ev) => {
 });
 $("logout").onclick = async () => { if (!confirmLeave()) return; page.dirty = null; await api("logout", {}); await route(); };
 
-const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, memory: renderMemory, asr: renderASR, tts: renderTTS, intent: renderIntent, update: renderUpdate };
+const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, update: renderUpdate };
 const page = { name: "", dirty: null, timer: null };
 function currentPage() { const p = location.hash.slice(1); return PAGES[p] ? p : "status"; }
 function confirmLeave() { return !(page.dirty && page.dirty()) || confirm("当前页面有修改还没保存，确定离开吗？"); }
@@ -1433,6 +1453,131 @@ async function renderMemory(root) {
     });
   };
   draw();
+}
+
+// [xiaozhi-hub] 费用：core/billing（data/usage.db）
+async function renderCost(root) {
+  const d = await api("billing");
+  const sym = (c) => (d.currencies || {})[c] || (c ? c + " " : "");
+  const money = (m) => {
+    const parts = Object.entries(m || {}).filter(([, v]) => v > 0).map(([c, v]) => `${sym(c)}${v < 0.01 ? v.toFixed(4) : v.toFixed(2)}`);
+    return parts.length ? parts.join(" + ") : "0";
+  };
+  const num = (n) => (n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n || 0));
+  const q = d.quota;
+  let prices = JSON.parse(JSON.stringify(d.prices || []));
+  let quota = { ...q };
+  let st = { ...d.settings, holidays: (d.settings.holidays || []).join("\n"), workdays: (d.settings.workdays || []).join("\n") };
+  const saved = JSON.stringify([prices, quota, st]);
+  page.dirty = () => JSON.stringify([prices, quota, st]) !== saved;
+
+  const bar = (used, limit) => {
+    if (!(limit > 0)) return "";
+    const r = Math.min(1, used / limit);
+    return `<div class="quota-bar"><i class="${r >= 1 ? "err" : r >= 0.8 ? "warn" : ""}" style="width:${(r * 100).toFixed(1)}%"></i></div>`;
+  };
+  const stat = (title, m, t, used, limit) => `<div class="card"><span class="muted small">${title}</span><b>${money(m)}</b>
+    <span class="muted small">${t.requests} 次请求 · 输入 ${num(t.prompt)}（缓存命中 ${num(t.cache_hit)}）· 输出 ${num(t.completion)}</span>
+    ${limit > 0 ? `<div class="muted small" style="margin-top:6px">额度 ${sym(q.currency)}${(+used).toFixed(2)} / ${sym(q.currency)}${(+limit).toFixed(2)}</div>${bar(used, limit)}` : ""}</div>`;
+  const days = [...(d.days || [])].filter((r) => r.currency === (q.currency || "CNY")).reverse();
+  const maxDay = Math.max(0.000001, ...days.map((r) => r.cost));
+  const table = (rows, label) => rows.length ? `<table class="cost-table"><tr><th>${label}</th><th class="n">请求</th><th class="n">输入</th><th class="n">缓存命中</th><th class="n">输出</th><th class="n">费用</th></tr>${
+    rows.map((r) => `<tr><td>${esc(r.key || "—")}${r.unpriced ? ' <span class="pill warn">没有单价</span>' : ""}${r.estimated ? ' <span class="pill">含估算</span>' : ""}</td>
+      <td class="n">${r.requests}</td><td class="n">${num(r.prompt)}</td><td class="n">${num(r.cache_hit)}</td><td class="n">${num(r.completion)}</td>
+      <td class="n">${sym(r.currency)}${r.cost.toFixed(4)}</td></tr>`).join("")}</table>` : '<p class="muted small">本月还没有记录</p>';
+  const PURPOSE = { chat: "对话", summary: "记忆总结", intent: "意图识别", search: "联网搜索", vision: "看图" };
+
+  root.innerHTML = `
+    <div class="page-head"><div><h1>费用</h1><p class="sub">每次请求大模型的 token 和费用记在本机（data/usage.db），按北京时间（${esc(st.timezone)}）分日、分月。
+      费用 = 未命中缓存的输入 × 输入单价 + 缓存命中 × 命中单价 + 输出 × 输出单价，单价按请求那一刻所在的时段算（比如 DeepSeek 高峰和空闲价不同）。
+      被打断、接口没给用量的请求按字数估算，标「含估算」。Claude Code 用它自己报的费用（美元；用订阅登录时是按 API 价折算的参考值）。</p></div></div>
+    ${d.unpriced.length ? `<div class="banner warn">这些模型还没有单价，费用按 0 算：${d.unpriced.map(esc).join("、")}。在下面「单价」里加上。</div>` : ""}
+    ${d.prices_default ? '<div class="banner info">单价现在用的是内置的参考价（DeepSeek，2026-11-08 按官网核对）。厂商会调价，请核对后保存；其他厂商的价格要自己填。</div>' : ""}
+    <div class="cost-stats">
+      ${stat("今天 " + esc(d.day), d.today, d.tokens.today, q.used_today, q.daily)}
+      ${stat("本月 " + esc(d.month), d.month, d.tokens.month, q.used_month, q.monthly)}
+      ${stat("累计", d.total, d.tokens.total, 0, 0)}
+    </div>
+    <div class="card panel"><b>近 30 天（${esc(sym(q.currency || "CNY"))}）</b>
+      <div class="bars">${days.map((r) => `<div title="${esc(r.key)}：${sym(r.currency)}${r.cost.toFixed(4)}，${r.requests} 次" style="height:${(r.cost / maxDay * 100).toFixed(1)}%"></div>`).join("") || '<span class="muted small">还没有记录</span>'}</div>
+    </div>
+    <div class="card panel"><b>本月按模型</b>${table(d.models, "模型")}</div>
+    <div class="card panel"><b>本月按设备</b>${table(d.devices, "设备")}</div>
+    <div class="card panel"><b>本月按用途</b>${table(d.purposes.map((r) => ({ ...r, key: PURPOSE[r.key] || r.key })), "用途")}</div>
+
+    <div class="card panel"><b>额度</b><p class="muted small" style="margin:4px 0 10px">填 0 表示不限。超额后：拒绝（设备念一句「额度用完了」，不请求模型），或者改用下面选的便宜模型接着答（只对这台设备这一次连接，不改后台默认）。</p>
+      <div class="price-row" style="grid-template-columns: 90px repeat(3, 1fr) 1fr 1.4fr">
+        <label>币种<select class="in" data-q="currency">${Object.keys(d.currencies).map((c) => `<option ${quota.currency === c ? "selected" : ""}>${c}</option>`).join("")}</select></label>
+        <label>每天<input class="in" data-q="daily" type="number" min="0" step="0.01" value="${quota.daily}"></label>
+        <label>每月<input class="in" data-q="monthly" type="number" min="0" step="0.01" value="${quota.monthly}"></label>
+        <label>每台设备每天<input class="in" data-q="device_daily" type="number" min="0" step="0.01" value="${quota.device_daily}"></label>
+        <label>超额后<select class="in" data-q="action"><option value="block" ${quota.action === "block" ? "selected" : ""}>拒绝</option><option value="downgrade" ${quota.action === "downgrade" ? "selected" : ""}>改用便宜模型</option></select></label>
+        <label>便宜模型<select class="in" data-q="downgrade_to"><option value="">（不选）</option>${(d.entries || []).map((e) => `<option value="${esc(e.entry)}" ${quota.downgrade_to === e.entry ? "selected" : ""}>${esc(e.label)}</option>`).join("")}</select></label>
+      </div>
+      <div class="actions"><button class="btn primary" id="cost-save-quota">保存额度</button></div></div>
+
+    <div class="card panel"><b>单价</b><p class="muted small" style="margin:4px 0 0">每百万 token 的价格。模型名可以写多个（逗号分隔），支持 * 通配。时段：星期写 workday（工作日，按下面的节假日和调休）、weekend、all 或 1-5；时间写 09:00-12:00,14:00-18:00，可以跨午夜。
+      命中第一个时段就用它的价格，都不命中用这一行的价格。</p>
+      <div id="cost-prices"></div>
+      <div class="actions"><button class="btn" id="cost-add">＋ 加一个模型</button><button class="btn primary" id="cost-save-prices">保存单价</button></div></div>
+
+    <div class="card panel"><b>日历</b><p class="muted small" style="margin:4px 0 10px">「工作日」时段按这里算：法定节假日当天算休息日（DeepSeek 等按空闲价），调休上班的周末算工作日。每行一个日期，格式 2026-10-01。</p>
+      <div class="price-row" style="grid-template-columns: 1fr 1fr 1fr">
+        <label>法定节假日<textarea class="in" rows="5" data-s="holidays">${esc(st.holidays)}</textarea></label>
+        <label>调休上班日<textarea class="in" rows="5" data-s="workdays">${esc(st.workdays)}</textarea></label>
+        <label>时区<input class="in" data-s="timezone" value="${esc(st.timezone)}">
+          <span style="margin-top:10px"><input type="checkbox" data-s="count_claude_code" ${st.count_claude_code ? "checked" : ""}> 统计 Claude Code 报的费用</span></label>
+      </div>
+      <div class="actions"><button class="btn danger" id="cost-clear">清空全部费用记录</button><button class="btn primary" id="cost-save-settings">保存日历</button></div></div>`;
+
+  const drawPrices = () => {
+    $("cost-prices").innerHTML = prices.map((r, i) => `<div class="price-rule" data-i="${i}">
+      <div class="price-row">
+        <label>模型名<input class="in" data-k="match" value="${esc(r.match)}" placeholder="deepseek-flash, deepseek-v4-flash"></label>
+        <label>显示名<input class="in" data-k="label" value="${esc(r.label || "")}"></label>
+        <label>币种<select class="in" data-k="currency">${Object.keys(d.currencies).map((c) => `<option ${r.currency === c ? "selected" : ""}>${c}</option>`).join("")}</select></label>
+        <label>输入（未命中）<input class="in" data-k="input" type="number" min="0" step="any" value="${r.input}"></label>
+        <label>输入（缓存命中）<input class="in" data-k="cache_hit" type="number" min="0" step="any" value="${r.cache_hit}"></label>
+        <label>输出<input class="in" data-k="output" type="number" min="0" step="any" value="${r.output}"></label>
+        <button class="btn" data-del>删除</button>
+      </div>
+      ${(r.tiers || []).map((t, j) => `<div class="tier-row" data-j="${j}">
+        <label>时段名<input class="in" data-t="name" value="${esc(t.name)}"></label>
+        <label>星期<input class="in" data-t="days" value="${esc(t.days)}"></label>
+        <label>时间<input class="in" data-t="hours" value="${esc(t.hours)}"></label>
+        <label>输入<input class="in" data-t="input" type="number" min="0" step="any" value="${t.input}"></label>
+        <label>缓存命中<input class="in" data-t="cache_hit" type="number" min="0" step="any" value="${t.cache_hit}"></label>
+        <label>输出<input class="in" data-t="output" type="number" min="0" step="any" value="${t.output}"></label>
+        <button class="btn" data-tdel>删除</button></div>`).join("")}
+      <div class="muted small" style="margin-top:8px">${r.checked ? "核对：" + esc(r.checked) + " · " : ""}<a href="#" data-tadd>＋ 加一个时段</a>（比如高峰价、夜间价）</div>
+    </div>`).join("") || '<p class="muted small">没有单价：所有请求费用按 0 算</p>';
+    $("cost-prices").querySelectorAll(".price-rule").forEach((el) => {
+      const r = prices[+el.dataset.i];
+      el.querySelectorAll("[data-k]").forEach((inp) => (inp.oninput = () => { r[inp.dataset.k] = inp.type === "number" ? +inp.value : inp.value; }));
+      el.querySelectorAll(".tier-row").forEach((row) => {
+        const t = r.tiers[+row.dataset.j];
+        row.querySelectorAll("[data-t]").forEach((inp) => (inp.oninput = () => { t[inp.dataset.t] = inp.type === "number" ? +inp.value : inp.value; }));
+        row.querySelector("[data-tdel]").onclick = () => { r.tiers.splice(+row.dataset.j, 1); drawPrices(); };
+      });
+      el.querySelector("[data-del]").onclick = () => { prices.splice(+el.dataset.i, 1); drawPrices(); };
+      el.querySelector("[data-tadd]").onclick = (e) => {
+        e.preventDefault();
+        (r.tiers = r.tiers || []).push({ name: "高峰", days: "workday", hours: "09:00-12:00,14:00-18:00", input: r.input, cache_hit: r.cache_hit, output: r.output });
+        drawPrices();
+      };
+    });
+  };
+  drawPrices();
+  root.querySelectorAll("[data-q]").forEach((inp) => (inp.oninput = inp.onchange = () => { quota[inp.dataset.q] = inp.type === "number" ? +inp.value : inp.value; }));
+  root.querySelectorAll("[data-s]").forEach((inp) => (inp.oninput = inp.onchange = () => { st[inp.dataset.s] = inp.type === "checkbox" ? inp.checked : inp.value; }));
+  $("cost-add").onclick = () => { prices.push({ match: "", label: "", currency: "CNY", input: 0, cache_hit: 0, output: 0, tiers: [] }); drawPrices(); };
+  const save = (btn, body, msg) => busy(btn, async () => { await api("billing", body); page.dirty = null; toast(msg); openPage("cost", true); });
+  $("cost-save-prices").onclick = (e) => save(e.currentTarget, { prices }, "单价已保存，之后的请求按新单价算");
+  $("cost-save-quota").onclick = (e) => save(e.currentTarget, { quota }, "额度已保存，下一次提问就按新额度检查");
+  $("cost-save-settings").onclick = (e) => save(e.currentTarget, { settings: {
+    timezone: st.timezone, count_claude_code: !!st.count_claude_code,
+    holidays: st.holidays.split(/\s+/).filter(Boolean), workdays: st.workdays.split(/\s+/).filter(Boolean) } }, "已保存");
+  $("cost-clear").onclick = (e) => { if (confirm("清空全部费用记录？今天、本月、累计都会从 0 开始，额度也按 0 重新算。")) busy(e.currentTarget, async () => { await api("billing/clear", {}); toast("费用记录已清空"); openPage("cost", true); }); };
 }
 
 async function renderCallNames(root) {

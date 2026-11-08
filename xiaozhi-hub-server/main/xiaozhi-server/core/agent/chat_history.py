@@ -513,7 +513,9 @@ def maybe_summarize(conn) -> None:
                 return
             llm = _summary_llm(conn, key[1], cfg)
             if llm is not None:
-                summarize_now(llm, device, cfg, config)
+                from core import billing
+                with billing.context(device=device, entry=cfg.get("summary_llm") or key[1], purpose="summary"):
+                    summarize_now(llm, device, cfg, config)
         except Exception as e:
             logger.bind(tag=TAG).error(f"总结聊天记录失败: {e}")
         finally:

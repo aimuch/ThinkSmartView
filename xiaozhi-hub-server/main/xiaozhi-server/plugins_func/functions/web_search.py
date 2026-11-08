@@ -220,8 +220,9 @@ def _parse(data) -> SearchResult:
     return result
 
 
-async def search(settings: dict, query: str) -> SearchResult:
-    """搜一次。失败时抛 SearchError，原因写在 message 里。"""
+async def search(settings: dict, query: str, bill: dict = None) -> SearchResult:
+    """搜一次。失败时抛 SearchError，原因写在 message 里。
+    bill：{"device", "entry"} 时把这次请求的 token 记进费用统计（core/billing；后台的测试不传，不记）。"""
     if not settings.get("api_key"):
         raise SearchError("还没有填写 API Key", CONFIG, "联网搜索还没开通，需要先填 API Key")
     url = messages_url(settings["base_url"])
@@ -251,6 +252,10 @@ async def search(settings: dict, query: str) -> SearchResult:
         data = response.json()
     except ValueError:
         raise SearchError("接口返回的不是 Anthropic 协议的格式", CONFIG, "联网搜索的接口地址不对")
+    if bill is not None and isinstance(data, dict) and data.get("usage"):
+        from core import billing
+        billing.record(settings["model"], billing.usage_of(data["usage"]), purpose="search",
+                       device=bill.get("device"), entry=bill.get("entry"))
     result = _parse(data)
     result.seconds = round(time.monotonic() - started, 1)
     return result
@@ -299,7 +304,7 @@ async def web_search(conn: "ConnectionHandler", query: str = None):
     if settings["api_key"]:
         _say_searching(conn)
     try:
-        result = await search(settings, query)
+        result = await search(settings, query, bill={"device": getattr(conn, "device_id", None), "entry": "web_search"})
     except SearchError as e:
         logger.bind(tag=TAG).error(f"联网搜索失败（{e.kind}）: {e}")
         if e.kind == CONFIG:

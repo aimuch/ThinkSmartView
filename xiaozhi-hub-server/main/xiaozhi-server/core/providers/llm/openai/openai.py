@@ -3,10 +3,10 @@ import threading
 
 import httpx
 import openai
-from openai.types import CompletionUsage
 from config.logger import setup_logging
 from core.utils.util import check_model_key
 from core.providers.llm.base import LLMProviderBase
+from core import billing
 from urllib.parse import urlparse
 
 TAG = __name__
@@ -23,6 +23,19 @@ THINKING_DISABLED_DOMAINS = {
     # 官方兼容接口会忽略 reasoning_effort，要用 thinking 参数关闭（经第三方代理时可在配置里写 extra_body）
     "anthropic.com": {"thinking": {"type": "disabled"}},
 }
+
+
+# [xiaozhi-hub] 接口不认 stream_options（一些本地服务、旧代理）时记下，之后不再带
+_NO_STREAM_USAGE = set()
+
+
+def _chunk_usage(chunk):
+    """[xiaozhi-hub] 这块数据带的用量：标准位置是 chunk.usage（最后一块，有的厂商和 choices 放在同一块），
+    Kimi 放在 choices[0].usage。"""
+    u = getattr(chunk, "usage", None)
+    if u is None and getattr(chunk, "choices", None):
+        u = getattr(chunk.choices[0], "usage", None)
+    return u
 
 
 class LLMProvider(LLMProviderBase):
@@ -105,6 +118,25 @@ class LLMProvider(LLMProviderBase):
             except Exception as e:
                 logger.bind(tag=TAG).debug(f"断开流式响应失败: {e}")
 
+    def _create(self, request_params):
+        """[xiaozhi-hub] 流式请求，带上 stream_options.include_usage 让最后一块带用量（费用统计）。
+        接口不认这个参数时去掉重试一次，并记住这个地址。"""
+        if self.base_url not in _NO_STREAM_USAGE:
+            try:
+                return self.client.chat.completions.create(**request_params, stream_options={"include_usage": True})
+            except openai.BadRequestError as e:
+                if "stream_options" not in str(e) and "include_usage" not in str(e):
+                    raise
+                _NO_STREAM_USAGE.add(self.base_url)
+                logger.bind(tag=TAG).info(f"{self.base_url} 不支持 stream_options，之后不再带（用量改为估算）")
+        return self.client.chat.completions.create(**request_params)
+
+    def _bill(self, session_id, dialogue, usage, text):
+        if usage is not None:
+            billing.record(self.model_name, billing.usage_of(usage), session_id)
+        else:   # 被打断或接口不给用量：按字数估算
+            billing.record(self.model_name, billing.estimate(dialogue, text), session_id, estimated=True)
+
     @staticmethod
     def normalize_dialogue(dialogue):
         """自动修复 dialogue 中缺失 content 的消息"""
@@ -150,12 +182,14 @@ class LLMProvider(LLMProviderBase):
         # 禁用思考模式
         self._apply_thinking_disabled(request_params)
 
-        responses = self.client.chat.completions.create(**request_params)
+        responses = self._create(request_params)
         self._track(session_id, responses)
 
         is_active = True
+        usage, out = None, []
         try:
             for chunk in responses:
+                usage = _chunk_usage(chunk) or usage
                 try:
                     delta = chunk.choices[0].delta if getattr(chunk, "choices", None) else None
                     content = getattr(delta, "content", "") if delta else ""
@@ -169,10 +203,12 @@ class LLMProvider(LLMProviderBase):
                         is_active = True
                         content = content.split("</think>")[-1]
                     if is_active:
+                        out.append(content)
                         yield content
         finally:
             self._track(session_id, responses, False)
             responses.close()
+            self._bill(session_id, dialogue, usage, "".join(out))
 
     def response_with_functions(self, session_id, dialogue, functions=None, **kwargs):
         dialogue = self.normalize_dialogue(dialogue)
@@ -198,23 +234,21 @@ class LLMProvider(LLMProviderBase):
         # 禁用思考模式
         self._apply_thinking_disabled(request_params)
 
-        stream = self.client.chat.completions.create(**request_params)
+        stream = self._create(request_params)
         self._track(session_id, stream)
 
+        usage, out = None, []
         try:
             for chunk in stream:
+                usage = _chunk_usage(chunk) or usage
                 if getattr(chunk, "choices", None):
                     delta = chunk.choices[0].delta
                     content = getattr(delta, "content", "")
                     tool_calls = getattr(delta, "tool_calls", None)
+                    if content:
+                        out.append(content)
                     yield content, tool_calls
-                elif isinstance(getattr(chunk, "usage", None), CompletionUsage):
-                    usage_info = getattr(chunk, "usage", None)
-                    logger.bind(tag=TAG).info(
-                        f"Token 消耗：输入 {getattr(usage_info, 'prompt_tokens', '未知')}，"
-                        f"输出 {getattr(usage_info, 'completion_tokens', '未知')}，"
-                        f"共计 {getattr(usage_info, 'total_tokens', '未知')}"
-                    )
         finally:
             self._track(session_id, stream, False)
             stream.close()
+            self._bill(session_id, dialogue, usage, "".join(out))

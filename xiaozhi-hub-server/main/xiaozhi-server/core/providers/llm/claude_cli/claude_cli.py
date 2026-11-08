@@ -207,6 +207,12 @@ class Turn:
 class LLMProvider(LLMProviderBase):
     # 日志和提示里对这个 Agent 的称呼。其他 Agent 的 provider（grok_bot）继承本类，改掉它和 _ensure_agent 即可
     AGENT_LABEL = "Claude Code"
+
+    def _bill_result(self, st):
+        """[xiaozhi-hub] Claude Code 每轮报的费用（美元；用订阅登录时是按 API 价折算的参考值）记进费用统计。"""
+        from core import billing
+        return lambda msg: billing.record_cost(self.model_name, getattr(msg, "total_cost_usd", None), "USD",
+                                               device=st.key, entry="ClaudeCLI")
     # 设备这边结束一轮时，在干正经活的转到后台接着做（见模块说明）。grok_bot 的会话自己有后台盯着的机制，关掉
     BACKGROUND_TURNS = True
     REPORT_ID = "claude_cli"  # 待汇报箱里标记是谁的话
@@ -502,6 +508,7 @@ class LLMProvider(LLMProviderBase):
         cfg = ClaudeSessionConfig(**{**self.session_config.__dict__,
                                      "system_prompt_append": (system_prompt or "") + "\n" + VOICE_RULES})
         agent = ClaudeSession(cfg, resume_id=resume_id, logger=logger.bind(tag=TAG))
+        agent.on_result = self._bill_result(st)
         t0 = time.time()
         try:
             await agent.start()
@@ -510,6 +517,7 @@ class LLMProvider(LLMProviderBase):
                 raise
             logger.bind(tag=TAG).warning(f"接续会话 {resume_id} 失败，改为新开会话")
             agent = ClaudeSession(cfg, logger=logger.bind(tag=TAG))
+            agent.on_result = self._bill_result(st)
             await agent.start()  # 新会话也启动失败时（如未登录、网络问题）保留旧记录，下次还能接续
             self.store.forget(st.key)
             if keyword:

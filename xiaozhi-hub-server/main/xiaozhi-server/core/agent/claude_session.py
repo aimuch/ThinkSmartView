@@ -119,6 +119,7 @@ class ClaudeSession(AgentSession):
         self._client: Optional[ClaudeSDKClient] = None
         self._interrupting = False
         self._stderr_tail = deque(maxlen=20)
+        self.on_result = None   # [xiaozhi-hub] 每轮的 ResultMessage（费用统计用 total_cost_usd）
 
     @property
     def session_id(self) -> Optional[str]:
@@ -266,6 +267,11 @@ class ClaudeSession(AgentSession):
             self._log("info" if not msg.is_error else "warning",
                       f"本轮结果 {msg.subtype} 轮数={msg.num_turns} API耗时={msg.duration_api_ms}ms "
                       f"费用={msg.total_cost_usd} 出错={msg.is_error}")
+            if self.on_result:
+                try:
+                    self.on_result(msg)
+                except Exception as e:
+                    self._log("warning", f"记录费用失败: {e}")
 
     # ---------- 一轮对话 ----------
 

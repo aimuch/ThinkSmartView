@@ -46,6 +46,7 @@ from core.utils.voiceprint_provider import VoiceprintProvider
 from core.utils.util import get_system_error_response
 from core.utils import reply_progress, textUtils, turn_gen
 from core.utils.tool_markup import ToolMarkupFilter, strip_tool_markup
+from core import billing
 from core.agent import chat_history, llm_router
 
 
@@ -1106,6 +1107,20 @@ class ConnectionHandler:
                 for sentence_type, content_type, detail in (
                         (SentenceType.FIRST, ContentType.ACTION, None),
                         (SentenceType.MIDDLE, ContentType.TEXT, not_ready),
+                        (SentenceType.LAST, ContentType.ACTION, None)):
+                    self.tts.tts_text_queue.put(TTSMessageDTO(
+                        sentence_id=current_sentence_id, sentence_type=sentence_type,
+                        content_type=content_type, content_detail=detail))
+                return None
+            # [xiaozhi-hub] 费用额度（core/billing）：超了就不请求，念一句；设了降级就换成便宜的模型接着答
+            over = billing.check_quota(self)
+            if over and over["action"] == "downgrade" and llm_router.switch(self, over["to"], remember=False):
+                self.logger.bind(tag=TAG).warning(f"{over['text']}，这一轮起改用 {over['to']}")
+            elif over:
+                self.logger.bind(tag=TAG).warning(f"{over['text']}，不请求: {query}")
+                for sentence_type, content_type, detail in (
+                        (SentenceType.FIRST, ContentType.ACTION, None),
+                        (SentenceType.MIDDLE, ContentType.TEXT, over["text"]),
                         (SentenceType.LAST, ContentType.ACTION, None)):
                     self.tts.tts_text_queue.put(TTSMessageDTO(
                         sentence_id=current_sentence_id, sentence_type=sentence_type,
