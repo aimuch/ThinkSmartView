@@ -14,6 +14,7 @@
 | `thinksmart_client/aec.py` | WebRTC APM 回声消除（改自 py-xiaozhi 的 AecEngine） |
 | `thinksmart_client/kws.py` | sherpa-onnx 唤醒词，单线程、40 ms 一批、安静时跳过（声音停后再解码 1 秒）、模型前加 10 dB 增益 |
 | `thinksmart_client/wake_verify.py` | 唤醒二次确认（默认关，`wake_verify: 'hub'` 打开）：命中后把最近 3 秒交给网关识别（`POST /kiosk/asr`），按拼音比对唤醒词；`pinyin.txt` 是它用的常用字拼音表（`eval/wake/make_pinyin.py` 生成） |
+| `thinksmart_client/wake_words.py` | 自定义唤醒词：设置页「唤醒词」卡片按住说新词（暂停唤醒、最长 4 秒，交给网关识别），或语音工具 `self.wake_word.update`；每个字按 `kws_pinyin.txt`（`eval/wake/make_pinyin.py` 生成，声母 + 带调韵母、多音字全部读音）换成唤醒词模型的音，两个字以下、和已有的读音几乎一样、模型不认的音不让加，三个字提醒。存进 `config.json` 的 `wake_words`（恢复默认就删掉这一项），改完马上重建唤醒模型和二次确认，不用重启；屏幕上的「说『……』」提示用第一个唤醒词 |
 | `eval/wake/` | 唤醒评测：漏唤醒率、误唤醒率，见其中 README |
 | `thinksmart_client/hub.py` | 小智 WebSocket 协议（hello 只声明 `mcp`：不让网关一听到声音就打断回复） |
 | `thinksmart_client/mcp.py` | 给模型用的设备工具：音量、睡眠时段、屏幕亮度、倒计时/闹钟/提醒（新建、查看、取消、再睡）、闹钟音量 |
@@ -34,6 +35,7 @@
 
 - `GET /events`：事件流，`snapshot`、`state`、`message`、`thread`、`model`、`level`、`toast`、`volume`（`source`：`key`/`voice`/`page`；`ring` 为 true 是响铃时音量键调的这一次铃声）、`alarms`（列表、错过的、是否对过时、正在响的、闹钟音量和铃声）、`bluetooth`（见 `/api/bluetooth`）
 - `POST /api/wake`、`/api/end`、`/api/abort`、`/api/ptt/start`、`/api/ptt/stop`
+- `POST /api/wake-words/record/start`、`/record/stop`（返回识别结果和检查）、`/add`（`label`、`picks` 每个字用第几种读音）、`/remove`、`/reset`
 - `POST /api/text {"text": "..."}`：文字提问（服务端按识别出的话处理）
 - `POST /api/model {"kind": "...", "vendor": "..."}`：切换模型（转给服务端的 `/kiosk/llm/use`）
 - `POST /api/brightness {"level": 0-100}`：屏幕亮度（存用户配置，默认 100，没有自动亮度；睡眠时段内设的亮度用到时段结束）

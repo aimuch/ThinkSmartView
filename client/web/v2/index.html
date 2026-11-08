@@ -74,7 +74,7 @@
           <b class="gloss"></b>
         </div>
       </div>
-      <h1 class="title" id="title">说<em>「小麦小麦」</em></h1>
+      <h1 class="title" id="title">说<em>「<span class="ww-name">小麦小麦</span>」</em></h1>
       <p class="hint" id="hint">或者点麦克风；按住可以直接说</p>
       <div class="controls">
         <button class="ctl" id="btnAbort" aria-label="打断">
@@ -173,18 +173,29 @@
       </div>
       <p class="opt-note">设备音量是平时说话的音量，和音量键、语音调的是同一个。闹钟音量只管倒计时、闹钟和提醒：响铃时自动切过去，响完改回来；响铃时按音量键只调这一次。</p>
     </div>
+    <div class="alarms-card ww-card" id="wwCard">
+      <div class="bright-head"><b>唤醒词</b><span class="bright-num" id="wwCount"></span></div>
+      <div class="alarm-list" id="wwList"></div>
+      <div class="ww-pre" id="wwPre" hidden>
+        <div class="ww-chars" id="wwChars"></div>
+        <p class="ww-msg" id="wwMsg"></p>
+        <div class="ww-btns"><button class="upd-btn" id="wwRetry">重说</button><button class="upd-btn pri" id="wwAdd">添加</button></div>
+      </div>
+      <button class="bt-add ww-hold" id="wwHold"><span class="ww-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="wwHoldText">＋ 按住，说一个新的唤醒词</span></button>
+      <p class="opt-note">四个字、读音少见的词最不容易被电视和聊天误唤醒。也可以直接说「<span class="ww-name">小麦小麦</span>，唤醒词加一个小天小天」。<button class="link-btn" id="wwReset" hidden>恢复默认</button></p>
+    </div>
     <div class="alarms-card">
       <div class="bright-head"><b>闹钟和提醒</b><span class="bright-num" id="alarmCount"></span></div>
       <p class="alarm-warn" id="alarmWarn">设备时间还没和网络同步，闹钟暂停，同步后自动恢复</p>
       <div class="alarm-list" id="alarmList"></div>
-      <p class="opt-note">直接说：「小麦小麦，明早 7 点叫我」「倒计时 5 分钟」「10 分钟后提醒我晾衣服」「工作日早上 7 点半叫我」「我有哪些闹钟」「取消明早的闹钟」</p>
+      <p class="opt-note">直接说：「<span class="ww-name">小麦小麦</span>，明早 7 点叫我」「倒计时 5 分钟」「10 分钟后提醒我晾衣服」「工作日早上 7 点半叫我」「我有哪些闹钟」「取消明早的闹钟」</p>
       <div class="bright-head"><b class="sub">铃声</b><span class="bright-num">点一下试听</span></div>
       <div class="minutes tones" id="tones"></div>
     </div>
     <div class="opt">
       <div class="opt-text">
         <b>自动熄屏</b>
-        <span>一段时间没碰屏幕、也没在对话就熄屏；碰一下屏幕、走近或叫「小麦小麦」就亮。关掉就一直亮着，睡眠时段照常调暗。</span>
+        <span>一段时间没碰屏幕、也没在对话就熄屏；碰一下屏幕、走近或叫「<span class="ww-name">小麦小麦</span>」就亮。关掉就一直亮着，睡眠时段照常调暗。</span>
       </div>
       <button class="switch" id="offSwitch" role="switch" aria-checked="true" aria-label="自动熄屏"><i></i></button>
     </div>
@@ -206,7 +217,7 @@
         <div class="stepper"><button data-k="end" data-d="-30" aria-label="提前半小时">−</button><b id="sleepEnd">07:00</b><button data-k="end" data-d="30" aria-label="推后半小时">+</button></div></div>
     </div>
     <p class="opt-note" id="sleepNote"></p>
-    <p class="opt-note">也可以直接说：「小麦小麦，晚上十点到早上七点别念了」「关掉睡眠模式」</p>
+    <p class="opt-note">也可以直接说：「<span class="ww-name">小麦小麦</span>，晚上十点到早上七点别念了」「关掉睡眠模式」</p>
     <div class="opt">
       <div class="opt-text">
         <b>聊天记录</b>
@@ -214,7 +225,7 @@
       </div>
       <button class="upd-btn clear-btn" id="clearBtn">清除</button>
     </div>
-    <p class="opt-note">也可以直接说：「小麦小麦，清除聊天记录」，它会再问一遍。<button class="link-btn" id="clearMemBtn">只清除记忆、保留记录</button></p>
+    <p class="opt-note">也可以直接说：「<span class="ww-name">小麦小麦</span>，清除聊天记录」，它会再问一遍。<button class="link-btn" id="clearMemBtn">只清除记忆、保留记录</button></p>
     <div class="opt">
       <div class="opt-text">
         <b>WiFi</b>
@@ -361,7 +372,7 @@
     <button class="ring-snooze" id="ringSnooze">再睡 10 分钟</button>
     <button class="ring-stop" id="ringStop">停止</button>
   </div>
-  <p class="ring-hint">也可以喊「小麦小麦」停下</p>
+  <p class="ring-hint">也可以喊「<span class="ww-name">小麦小麦</span>」停下</p>
 </div>
 <div class="power-off" id="powerOff"><b>正在关机</b><span>屏幕变黑后等 10 秒再拔掉电源</span></div>
 <div class="toast" id="toast"></div>

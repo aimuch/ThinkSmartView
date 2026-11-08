@@ -200,6 +200,40 @@ def make_app(client: Client):
             return web.json_response({'ok': False, 'error': str(e)}, status=400)
         return web.json_response({'ok': True, 'rotation': view})
 
+    async def wake_call(fn, *args):
+        try:
+            return web.json_response({'ok': True, **(await fn(*args) or {})})
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)})
+
+    async def wake_record_start(_request):
+        return await wake_call(client.wake_record_start)
+
+    async def wake_record_stop(_request):
+        async def stop():
+            return {'heard': await client.wake_record_stop()}
+        return await wake_call(stop)
+
+    async def wake_add(request):
+        body = await request.json()
+
+        async def add():
+            view, warning = await client.add_wake_word(str(body.get('label') or ''), body.get('picks'))
+            return {'wake_words': view, 'warning': warning}
+        return await wake_call(add)
+
+    async def wake_remove(request):
+        body = await request.json()
+
+        async def remove():
+            return {'wake_words': await client.remove_wake_word(str(body.get('label') or ''))}
+        return await wake_call(remove)
+
+    async def wake_reset(_request):
+        async def reset():
+            return {'wake_words': await client.reset_wake_words()}
+        return await wake_call(reset)
+
     async def health(_request):
         return web.json_response({'version': __version__, **client.health()})
 
@@ -259,6 +293,11 @@ def make_app(client: Client):
     app.router.add_post('/api/mijia/control', mijia_control)
     app.router.add_get('/api/billing', billing)
     app.router.add_post('/api/rotation', rotation_set)
+    app.router.add_post('/api/wake-words/record/start', wake_record_start)
+    app.router.add_post('/api/wake-words/record/stop', wake_record_stop)
+    app.router.add_post('/api/wake-words/add', wake_add)
+    app.router.add_post('/api/wake-words/remove', wake_remove)
+    app.router.add_post('/api/wake-words/reset', wake_reset)
     app.router.add_get('/api/health', health)
     app.router.add_get('/api/network', network)
     app.router.add_post('/api/power-off', power_off)

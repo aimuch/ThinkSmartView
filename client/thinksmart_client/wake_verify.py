@@ -124,6 +124,14 @@ class Matcher:
             return True, 'unclear'
         return False, 'other speech'
 
+def prepare(audio):
+    """Bring the loudest 100 ms to a normal speaking level and add 0.5 s of silence: the hit comes
+    right as the wake word ends; without some silence after it the recogniser lacks right context
+    for the last syllable (小麦小麦 came out as 洗澡麦洗脚麦)."""
+    loudest = max(np.sqrt(np.mean(audio[i:i + 1600] ** 2)) for i in range(0, max(len(audio) - 1599, 1), 800))
+    return np.concatenate([audio * min(LEVEL / max(loudest, 1e-6), MAX_GAIN), np.zeros(TAIL)]).astype(np.float32)
+
+
 class HubChecker:
     """Recognise with the hub's own speech recogniser (it is already loaded there)."""
 
@@ -191,10 +199,7 @@ class Verifier:
         """{'ok': is the wake word really there, 'text': what was recognised}. Fails open: if the
         recogniser can't be asked, the wake counts (a missed wake is worse than a false one)."""
         t0 = time.monotonic()
-        # the hit comes right as the wake word ends; without some silence after it the recogniser
-        # lacks right context for the last syllable (小麦小麦 came out as 洗澡麦洗脚麦)
-        loudest = max(np.sqrt(np.mean(audio[i:i + 1600] ** 2)) for i in range(0, max(len(audio) - 1599, 1), 800))
-        audio = np.concatenate([audio * min(LEVEL / max(loudest, 1e-6), MAX_GAIN), np.zeros(TAIL)]).astype(np.float32)
+        audio = prepare(audio)
         try:
             text = self.checker.text(audio)
         except Exception as e:

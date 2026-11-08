@@ -86,7 +86,23 @@ def save(**values):
     except (FileNotFoundError, ValueError):
         data = {}
     data.update(values)
+    save_all(data)
+
+
+def save_all(data):
     PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = PATH.with_suffix('.tmp')
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
     tmp.replace(PATH)
+
+
+def unset(*keys):
+    """Drop these keys from the user file: back to the defaults."""
+    try:
+        data = json.loads(PATH.read_text())
+    except (FileNotFoundError, ValueError):
+        return
+    if any(k in data for k in keys):
+        for k in keys:
+            data.pop(k, None)
+        save_all(data)

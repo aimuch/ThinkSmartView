@@ -14,7 +14,9 @@ const ui = {
   ptt: false,
   alarms: { synced: true, items: [], missed: [], ringing: null, volume: 70, tone: 'coffee', tones: {} },
   bluetooth: null,
+  wake: null,   // wake words (wake_words.py): {words: [{label, pinyin}], primary, custom, recording, max}
 };
+const wakeName = () => esc((ui.wake && ui.wake.primary) || '小麦小麦');
 
 const SUGGEST = [
   ['明天北京天气怎么样？', '#ffb54729', '#ffcf7a', '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6L6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/>'],
@@ -192,11 +194,11 @@ function renderStatus() {
   const shown = shownState();
   document.body.dataset.state = shown;
   const text = {
-    idle: ['说<em>「小麦小麦」</em>', connected ? '对话还在，唤醒后可以接着聊' : '或者点麦克风；按住可以直接说'],
+    idle: [`说<em>「${wakeName()}」</em>`, connected ? '对话还在，唤醒后可以接着聊' : '或者点麦克风；按住可以直接说'],
     connecting: ['正在连接…', '连上小智网关后就开始听'],
     listening: ui.ptt ? ['松开<em>发送</em>', '说完松开手指'] : ['我在听', '说完停一下，我就开始回答'],
     thinking: [`<em>${esc(modelName())}</em> 正在思考`, '复杂的问题可能要想一会儿'],
-    speaking: ['正在回答', '喊「小麦小麦」或点打断就能停下'],
+    speaking: ['正在回答', `喊「${(ui.wake && ui.wake.primary) || '小麦小麦'}」或点打断就能停下`],
   }[shown] || ['', ''];
   if (ui.status.recognising && !ui.ptt) text.splice(0, 2, '正在识别', '你说完了，正在把话转成文字');
   const micOff = ui.status.mic === false;
@@ -207,7 +209,7 @@ function renderStatus() {
   document.body.classList.toggle('sleeping', sleeping);
   $('reportText').textContent = reports > 1 ? `有 ${reports} 条待汇报` : '有一条待汇报';
   if (micOff && shown === 'idle') text.splice(0, 2, '麦克风已关', '拨开机身侧面的开关就能说话');
-  else if (reports && shown === 'idle') text[1] = '有待汇报：点右上角收听，或叫一声「小麦小麦」';
+  else if (reports && shown === 'idle') text[1] = `有待汇报：点右上角收听，或叫一声「${(ui.wake && ui.wake.primary) || '小麦小麦'}」`;
   else if (sleeping && shown === 'idle' && !connected) text[1] = '睡眠时段：汇报不会自动念';
   $('title').innerHTML = text[0];
   $('hint').textContent = text[1];
@@ -338,7 +340,7 @@ function renderBright() {
   $('brightRange').style.setProperty('--fill', b.level + '%');
   $('brightNum').textContent = b.level + '%';
   $('brightNote').textContent = b.dimmed ? '睡眠时段内屏幕调暗了；拖一下滑条，这次时段就按你调的亮度'
-    : '熄屏再亮也保持这个亮度；也可以说「小麦小麦，屏幕亮一点」「调到最亮」';
+    : `熄屏再亮也保持这个亮度；也可以说「${(ui.wake && ui.wake.primary) || '小麦小麦'}，屏幕亮一点」「调到最亮」`;
 }
 async function sendBright(body) {
   if (DEMO) { ui.status.brightness = { level: body.level, dimmed: false }; return; }
@@ -466,6 +468,114 @@ const renderVol = slider('volRange', 'volNum', () => ui.status.volume,
   v => (DEMO ? (ui.status.volume = v) : postJson('/api/volume', { volume: v })));
 const renderAlarmVol = slider('alarmVolRange', 'alarmVolNum', () => ui.alarms.volume,
   v => (DEMO ? (ui.alarms.volume = v) : postJson('/api/alarm-volume', { volume: v })));
+
+/* ---- wake words (wake_words.py): hold the button and say a new one; the hub writes it down ---- */
+const ww = { holding: false, busy: false, heard: null, picks: [], resetArmed: 0 };
+function renderWake() {
+  const w = ui.wake;
+  for (const el of document.querySelectorAll('.ww-name')) el.textContent = (w && w.primary) || '小麦小麦';
+  if (!w) return;
+  const one = w.words.length <= 1;
+  $('wwCount').textContent = `${w.words.length} 个${w.words.length > 1 ? '，叫哪个都行' : ''}`;
+  $('wwList').innerHTML = w.words.map(v => `<div class="al"><div class="al-text"><b>${esc(v.label)}</b><span>${esc(v.pinyin)}</span></div>` +
+    (one ? '' : `<button class="al-del" data-ww="${esc(v.label)}">删除</button>`) + '</div>').join('');
+  $('wwReset').hidden = !w.custom;
+  $('wwReset').classList.toggle('armed', Date.now() - ww.resetArmed < 4000);
+  $('wwReset').textContent = $('wwReset').classList.contains('armed') ? '确定恢复默认' : '恢复默认';
+  const h = ww.heard;
+  $('wwPre').hidden = !h;
+  if (h) {
+    $('wwPre').classList.toggle('risky', !!(h.error || h.warning));
+    $('wwChars').innerHTML = h.chars.map((c, i) => {
+      const multi = c.pinyin.length > 1;
+      return `<button class="ww-ch${multi ? ' multi' : ''}" data-i="${i}" ${multi ? '' : 'tabindex="-1"'}>` +
+        `<b>${esc(c.ch)}</b><span>${esc(c.pinyin[ww.picks[i] || 0] || '?')}</span></button>`;
+    }).join('');
+    const msg = h.error || h.warning;
+    $('wwMsg').className = 'ww-msg' + (msg ? ' warn' : '');
+    $('wwMsg').textContent = msg ? '⚠ ' + msg
+      : h.chars.some(c => c.pinyin.length > 1) ? '读音不对就点那个字换一个（虚线框的字有几种读法）' : '听到的是这几个字，确认后添加';
+    $('wwAdd').hidden = !!h.error;
+    $('wwAdd').textContent = h.warning ? '仍然添加' : '添加';
+    $('wwAdd').classList.toggle('pri', !h.warning);
+    $('wwRetry').classList.toggle('pri', !!(h.error || h.warning));
+    $('wwChars').hidden = !h.chars.length;
+  }
+  const full = w.words.length >= w.max;
+  $('wwHold').disabled = full || ww.busy;
+  $('wwHold').classList.toggle('on', ww.holding);
+  $('wwHoldText').textContent = ww.holding ? '正在听，说完松手' : ww.busy ? '正在识别…'
+    : full ? `最多 ${w.max} 个，先删掉一个` : '＋ 按住，说一个新的唤醒词';
+}
+function wakeMeter(v) {
+  const bars = $('wwHold').querySelectorAll('.ww-meter i');
+  bars.forEach((b, i) => {
+    const shape = [.45, .75, 1, .6, .9, .5, .3][i];
+    b.style.transform = `scaleY(${Math.max(.15, Math.min(1, v * shape * (0.8 + Math.random() * 0.4)))})`;
+  });
+}
+async function wakeHoldStart(e) {
+  e.preventDefault();
+  if (ww.holding || ww.busy || $('wwHold').disabled) return;
+  ww.holding = true; ww.heard = null; renderWake();
+  if (DEMO !== null) return;
+  const r = await postJson('/api/wake-words/record/start');
+  if (!r.ok) { ww.holding = false; renderWake(); }
+}
+async function wakeHoldEnd() {
+  if (!ww.holding) return;
+  ww.holding = false; ww.busy = true; renderWake();
+  if (DEMO !== null) {
+    ww.busy = false; ww.picks = [0, 0, 0, 0];
+    ww.heard = { label: '小乐同学', error: null, warning: null, chars: [
+      { ch: '小', pinyin: ['xiǎo'] }, { ch: '乐', pinyin: ['lè', 'yuè'] }, { ch: '同', pinyin: ['tóng', 'tòng'] }, { ch: '学', pinyin: ['xué'] }] };
+    return renderWake();
+  }
+  const r = await postJson('/api/wake-words/record/stop');
+  ww.busy = false;
+  if (r.ok) { ww.heard = r.heard; ww.picks = r.heard.chars.map(() => 0); }
+  renderWake();
+}
+$('wwHold').addEventListener('pointerdown', wakeHoldStart);
+$('wwHold').addEventListener('pointerup', wakeHoldEnd);
+$('wwHold').addEventListener('pointercancel', wakeHoldEnd);
+$('wwHold').addEventListener('pointerleave', wakeHoldEnd);
+$('wwChars').addEventListener('click', e => {
+  const b = e.target.closest('.ww-ch.multi');
+  if (!b || !ww.heard) return;
+  const i = Number(b.dataset.i);
+  ww.picks[i] = ((ww.picks[i] || 0) + 1) % ww.heard.chars[i].pinyin.length;
+  renderWake();
+});
+$('wwRetry').addEventListener('click', () => { ww.heard = null; renderWake(); });
+$('wwAdd').addEventListener('click', async () => {
+  const h = ww.heard;
+  if (!h || h.error) return;
+  if (DEMO !== null) { ui.wake.words.push({ label: h.label, pinyin: h.chars.map((c, i) => c.pinyin[ww.picks[i]]).join(' ') }); ww.heard = null; return renderWake(); }
+  const r = await postJson('/api/wake-words/add', { label: h.label, picks: ww.picks });
+  if (r.ok) { ww.heard = null; ui.wake = r.wake_words; renderWake(); renderStatus(); toast(`已添加「${h.label}」，现在就能叫`); }
+});
+$('wwList').addEventListener('click', e => {
+  const b = e.target.closest('.al-del');
+  if (!b) return;
+  if (!b.classList.contains('armed')) {
+    b.classList.add('armed');
+    b.textContent = '确认删除';
+    setTimeout(() => { b.classList.remove('armed'); b.textContent = '删除'; }, 4000);
+    return;
+  }
+  if (DEMO !== null) { ui.wake.words = ui.wake.words.filter(v => v.label !== b.dataset.ww); return renderWake(); }
+  postJson('/api/wake-words/remove', { label: b.dataset.ww }).then(r => { if (r.ok) toast('已删除'); });
+});
+$('wwReset').addEventListener('click', () => {
+  if (Date.now() - ww.resetArmed >= 4000) {
+    ww.resetArmed = Date.now(); renderWake();
+    setTimeout(renderWake, 4100);
+    return;
+  }
+  ww.resetArmed = 0;
+  postJson('/api/wake-words/reset').then(r => { if (r.ok) toast('已恢复默认的唤醒词'); });
+});
 
 /* ---- countdowns, alarms and reminders (alarms.py: the client keeps and rings them) ---- */
 const KIND_ICON = { timer: '计时', alarm: '闹钟', reminder: '提醒' };
@@ -1235,7 +1345,8 @@ const handlers = {
     if (s.update) { ui.version = s.version; ui.update = s.update; }   // the demo's snapshots have none
     if (s.alarms) ui.alarms = s.alarms;
     if (s.bluetooth) ui.bluetooth = s.bluetooth;
-    renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth();
+    if (s.wake_words) ui.wake = s.wake_words;
+    renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth(); renderWake();
     updateFinished((s.update || {}).job);
   },
   power(p) {
@@ -1274,8 +1385,12 @@ const handlers = {
   bluetooth(b) {
     ui.bluetooth = b; renderBluetooth();
   },
+  wake_words(w) {
+    ui.wake = w; renderWake(); renderStatus(); renderBright();
+  },
   level(l) {
     level.target = ui.status.state === 'speaking' ? Math.min(1, l.out * 6) : micLevel(l.mic);
+    if (ww.holding) wakeMeter(micLevel(l.mic));
   },
 };
 
@@ -1395,6 +1510,9 @@ const demo = DEMO === null ? null : (() => {
   const steps = [
     ['idle', 4000, () => {
       handlers.snapshot({ status: { state: 'idle', connected: false, uploading: false, volume: 60 }, alarms: alarmsDemo(),
+                          wake_words: { primary: '小麦小麦', custom: true, recording: false, max: 6, words: [
+                            { label: '小麦小麦', pinyin: 'xiǎo mài xiǎo mài' }, { label: '哈喽小麦', pinyin: 'hā lóu xiǎo mài' },
+                            { label: '小麦同学', pinyin: 'xiǎo mài tóng xué' }] },
                           bluetooth: { available: true, enabled: true, powered: true, window: 0, name: 'ThinkSmart View', direct: false,
                                        devices: [{ address: 'AA:BB:CC:DD:EE:01', name: '小张的 iPhone', paired: true, connected: true, streaming: true,
                                                    title: '晴天', artist: '周杰伦' },

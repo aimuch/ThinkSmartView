@@ -42,7 +42,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import alarms, bt, config, mcp, rotation, sleep, update, wake_verify
+from . import alarms, bt, config, mcp, rotation, sleep, update, wake_verify, wake_words
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
 from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off
@@ -171,6 +171,8 @@ class Events:
 
 
 class Client:
+    wake_rec = None   # a new wake word being said on the settings page: mic blocks (wake_words.py)
+
     def __init__(self, cfg):
         self.cfg = cfg
         self.events = Events()
@@ -209,6 +211,8 @@ class Client:
         self.kws = Kws(str(ROOT / 'models' / 'kws-zh'), cfg['wake_words'],
                        cfg['kws_score'], cfg['kws_threshold'], cfg['kws_paths'], cfg['kws_gain_db'])
         self.verifier = wake_verify.make(cfg['wake_verify'], cfg['wake_words'], cfg['hub_http'])
+        self.wake_rec_t = 0.0
+        self.wake_lock = asyncio.Lock()
         self.backlog = None           # mic blocks since a wake word hit, uploaded once listening starts
         self.audio = Audio(self._on_block)
         self.hub = Hub(cfg['hub_ws'], cfg['device_id'], cfg['client_id'], cfg['token'],
@@ -267,6 +271,95 @@ class Client:
         self._card_seq = 0
         self._load_cards()
 
+    # ---- wake words (wake_words.py) ----
+
+    def wake_label(self):
+        return wake_words.parse((self.cfg.get('wake_words') or config.DEFAULTS['wake_words'])[0])['label']
+
+    def wake_view(self):
+        lines = self.cfg['wake_words']
+        return {'words': [wake_words.parse(x) for x in lines], 'primary': self.wake_label(),
+                'custom': lines != config.DEFAULTS['wake_words'], 'recording': self.wake_rec is not None,
+                'max': wake_words.MAX_WORDS}
+
+    async def set_wake_words(self, lines):
+        """Use these keyword lines from now on: rebuild the wake word model and the second look off the
+        event loop (loading the model takes ~1 s here), swap them in, store the list."""
+        lines = wake_words.validate(list(lines))
+        cfg = self.cfg
+
+        def build():
+            kws = Kws(str(ROOT / 'models' / 'kws-zh'), lines,
+                      cfg['kws_score'], cfg['kws_threshold'], cfg['kws_paths'], cfg['kws_gain_db'])
+            return kws, wake_verify.make(cfg['wake_verify'], lines, cfg['hub_http'])
+
+        async with self.wake_lock:
+            self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(None, build)
+            cfg['wake_words'] = lines
+            if lines == config.DEFAULTS['wake_words']:
+                config.unset('wake_words')
+            else:
+                config.save(wake_words=lines)
+        log.info('wake words now: %s', ', '.join(wake_words.parse(x)['label'] for x in lines))
+        view = self.wake_view()
+        self.events.publish('wake_words', view)
+        return view
+
+    def wake_labels(self):
+        return [w['label'] for w in self.wake_view()['words']]
+
+    async def add_wake_word(self, text, picks=None):
+        """Add a wake word (Chinese text; picks: reading per character). Returns (view, warning);
+        ValueError with the reason when it can't be added."""
+        found = wake_words.analyse(text, self.wake_labels())
+        if found['error']:
+            raise ValueError(found['error'])
+        if len(self.cfg['wake_words']) >= wake_words.MAX_WORDS:
+            raise ValueError(f'最多 {wake_words.MAX_WORDS} 个唤醒词，先删掉一个')
+        line = wake_words.keyword(found['label'], picks)
+        return await self.set_wake_words(self.cfg['wake_words'] + [line]), found['warning']
+
+    async def remove_wake_word(self, label):
+        lines = [x for x in self.cfg['wake_words'] if wake_words.parse(x)['label'] != label]
+        if len(lines) == len(self.cfg['wake_words']):
+            raise ValueError(f'没有「{label}」这个唤醒词')
+        if not lines:
+            raise ValueError('至少要留一个唤醒词')
+        return await self.set_wake_words(lines)
+
+    async def reset_wake_words(self):
+        return await self.set_wake_words(config.DEFAULTS['wake_words'])
+
+    async def wake_record_start(self):
+        if not self.keys.mic_on:
+            raise ValueError('麦克风关着，拨开机身侧面的开关再说')
+        if self.uploading or self.in_turn() or self.state != 'idle':
+            raise ValueError('正在对话，等它说完再录')
+        self.screen.poke()
+        self.play('report')   # a few notes, no voice (the wake chime's 在 would be recognised too)
+        self.wake_rec_t = time.monotonic()
+        self.wake_rec = []
+        self.events.publish('wake_words', self.wake_view())
+
+    async def wake_record_stop(self):
+        """Stop recording; recognise it with the hub's recogniser -> wake_words.analyse result."""
+        rec, self.wake_rec = self.wake_rec, None
+        self.events.publish('wake_words', self.wake_view())
+        if rec is None:
+            raise ValueError('没在录音')
+        audio = np.concatenate(rec) if rec else np.zeros(0, np.float32)
+        audio = audio[int(0.3 * 16000):]   # the start notes
+        if len(audio) < 0.3 * 16000 or float(np.sqrt(np.mean(audio ** 2))) < 10 ** (-55 / 20):
+            return wake_words.analyse('', self.wake_labels())
+        checker = wake_verify.HubChecker(self.cfg['hub_http'])
+        try:
+            text = await asyncio.get_running_loop().run_in_executor(None, checker.text, wake_verify.prepare(audio))
+        except Exception as e:
+            log.warning('recognising a new wake word failed: %s', e)
+            raise ValueError('连不上小麦网关，没法识别，稍后再试')
+        log.info('new wake word heard as %r', text)
+        return wake_words.analyse(text, self.wake_labels())
+
     # ---- startup ----
 
     async def start(self):
@@ -289,6 +382,15 @@ class Client:
     # ---- microphone (worker thread) ----
 
     def _on_block(self, block, wake_block):
+        rec = self.wake_rec
+        if rec is not None:
+            # saying a new wake word: it must not wake (it may well be the current one), and nothing
+            # is streaming (wake_record_start checks). A page that never lets go stops it here
+            if time.monotonic() - self.wake_rec_t > wake_words.RECORD_SECONDS + 3:
+                self.wake_rec = None
+            elif sum(len(b) for b in rec) < wake_words.RECORD_SECONDS * 16000:
+                rec.append(block.copy())
+            return
         # While streaming to the hub the wake word isn't needed (speech already reaches it), and
         # the CPU it would take is better left to the hub's speech recognition. wake_block: what the
         # wake word hears (during a reply, echo-cancelled without suppressing the voice; audio.py)
@@ -367,7 +469,7 @@ class Client:
 
     def snapshot(self):
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
-                'mijia': self.mijia.view(), 'rotation': self.rotation.view(),
+                'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
                 'thread': {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])}}
 
     def view_entry(self):
@@ -474,7 +576,7 @@ class Client:
         self.deadline = None
         if missed:
             self.play('miss')
-            self.events.publish('toast', {'kind': 'info', 'text': '没听清，可以再说一次「小麦小麦」'})
+            self.events.publish('toast', {'kind': 'info', 'text': f'没听清，可以再说一次「{self.wake_label()}」'})
         self.set_state('idle')
 
     async def abort(self, reason=None):
@@ -1556,7 +1658,7 @@ class Client:
                 elif self.state == 'thinking' and not self.uploading:
                     missed, self.awaiting_text = self.awaiting_text and not self.heard, False
                     await self.stop_uploading(missed=missed)
-            if self.state in ('listening', 'speaking') and now - last_level >= 0.1:
+            if (self.state in ('listening', 'speaking') or self.wake_rec is not None) and now - last_level >= 0.1:
                 last_level = now
                 self.events.publish('level', {'mic': round(self.audio.mic_level, 4),
                                               'out': round(self.audio.player.level, 4)})

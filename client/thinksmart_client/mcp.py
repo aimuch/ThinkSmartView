@@ -132,6 +132,22 @@ TOOLS = [
     },
 ]
 
+WAKE_TOOLS = [
+    {
+        'name': 'self.wake_word.update',
+        'description': '查看或修改设备的唤醒词（叫醒设备说的词，如「小麦小麦」）。'
+                       '「现在有哪些唤醒词」action=list；「唤醒词加一个小天小天」action=add, word="小天小天"；'
+                       '「把哈喽小麦删掉」action=remove, word="哈喽小麦"；「唤醒词恢复默认」action=reset。'
+                       'word 只写中文的词本身，不带引号和标点；至少三个字，四个字最好。改完马上生效。'
+                       '返回 success=false 时把 reason 告诉用户；有 warning 也提一句。'
+                       '这里只改唤醒词，不改设备自称的名字。',
+        'inputSchema': {'type': 'object',
+                        'properties': {'action': {'type': 'string', 'enum': ['list', 'add', 'remove', 'reset']},
+                                       'word': {'type': 'string', 'description': '要加或删的唤醒词（中文）'}},
+                        'required': ['action']},
+    },
+]
+
 CARD_TOOLS = [
     {
         'name': 'self.screen.show_card',
@@ -146,7 +162,7 @@ CARD_TOOLS = [
                         'required': ['title', 'markdown']},
     },
 ]
-TOOLS += CARD_TOOLS + home_tools.TOOLS
+TOOLS += WAKE_TOOLS + CARD_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -157,6 +173,31 @@ def _alarm_args(args):
     repeat = rule and {'type': rule, 'days': args.get('weekdays'), 'day': args.get('month_day')}
     return {'kind': args.get('kind'), 'label': args.get('label') or '', 'say': args.get('say') or '',
             'repeat': repeat, **{k: args[k] for k in ALARM_WHEN if args.get(k) is not None}}
+
+
+async def _wake_word(client, action, word):
+    try:
+        warning = None
+        if action == 'list':
+            view = client.wake_view()
+        elif action == 'add':
+            view, warning = await client.add_wake_word(word)
+        elif action == 'remove':
+            view = await client.remove_wake_word(word)
+        elif action == 'reset':
+            view = await client.reset_wake_words()
+        else:
+            return {'success': False, 'reason': 'action 只能是 list、add、remove、reset'}
+    except ValueError as e:
+        return {'success': False, 'reason': str(e), 'wake_words': client.wake_labels()}
+    out = {'success': True, 'wake_words': [w['label'] for w in view['words']]}
+    if action == 'add':
+        out['added'] = next((w for w in view['words'] if w['label'] == ''.join(re.findall(r'[\u4e00-\u9fff]', word))), None)
+    if warning:
+        out['warning'] = warning
+    if action != 'list':
+        out['note'] = '已经生效；设置页「唤醒词」里能看、能删'
+    return out
 
 
 def _brief(view):
@@ -246,6 +287,8 @@ async def handle(payload, client=None):
                     volume=args.get('volume'), change=args.get('change'))})
             elif name == 'self.alarm.get_volume' and client:
                 text = json.dumps({'volume': client.alarm_volume})
+            elif name == 'self.wake_word.update' and client:
+                text = _dumps(await _wake_word(client, args.get('action'), str(args.get('word') or '').strip()))
             elif name == 'self.screen.show_card' and client:
                 client.show_card(args.get('title'), args.get('markdown'), args.get('images'))
                 text = _dumps({'success': True, 'note': '已经显示在屏幕的对话里了，回答只用一句话，不要念内容'})
