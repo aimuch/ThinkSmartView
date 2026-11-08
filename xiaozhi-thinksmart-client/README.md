@@ -19,6 +19,8 @@
 | `thinksmart_client/mcp.py` | 给模型用的设备工具：音量、睡眠时段、屏幕亮度、倒计时/闹钟/提醒（新建、查看、取消、再睡）、闹钟音量 |
 | `thinksmart_client/alarms.py` | 倒计时、闹钟、提醒（共用一种数据，可循环：每天、工作日、每周几、每月几号）：模型只传意思，几点由这里算；存在 `~/.local/share/thinksmart-client/alarms/`（临时文件 + fsync + 改名，防断电）；系统对时前不判断；关机错过不到 1 小时的开机补响一次；闹钟和倒计时没人停就响 10 分钟，提醒是短钢琴和弦加念内容、反复 3 分钟；错过的显示在首页，点「知道了」清掉；铃声 5 选 1：钢琴曲「咖啡时光」（默认）「晨曦」「元气早晨」「阳光小跳跃」和程序合成的木琴 |
 | `thinksmart_client/device.py` | 屏幕和按键：给系统熄屏程序写提示（对话中不熄屏、用户设的自动熄屏（1/3/5/10/30 分钟或不熄，默认 5 分钟，触摸和对话结束都按它）、唤醒词亮屏、睡眠时段调暗、用户设的亮度 0-100），读音量键和麦克风开关 |
+| `thinksmart_client/mijia/` | 米家直连（本仓库加的，参考 MenuBarMijia 改写）：`cloud.py` 扫码登录和签名请求（RC4、nonce、签名，用 MenuBarMijia 的已知结果做单测），`spec.py` 从 miot-spec.org 取规格并缓存，`devices.py` 按规格合成设备卡片（灯、开关插座、空调暖气、风扇、净化加湿、窗帘、传感器、门锁只读…，有分键的面板显示各个键，双轨窗帘拆成布帘和纱帘），`policy.py` 哪些操作要先确认，`service.py` 登录状态、家庭、轮询（家居页打开时每 6 秒）和控制，`tools.py` 语音工具 `self.home.list_devices` / `get_state` / `control`。会话存在 `~/.local/share/thinksmart-client/mijia/session.json`（0600，不含密码和 passToken） |
+| `thinksmart_client/rotation.py` | 屏幕方向：调系统的 `kiosk-mode rotation` + `restart`（sudo -n，和关机一样）；「跟随摆放方向」读 bma253 加速度计，放稳 3 秒才转 |
 | `thinksmart_client/sleep.py` | 睡眠时段（可跨午夜）：回复音量减半、屏幕调暗、补报不主动念；设置存在用户配置里（`config.save`），页面设置页和语音工具都能改 |
 | `thinksmart_client/bt.py`、`bt_helper.py` | 蓝牙音箱：手机配对后把歌放到设备上。`bt_helper.py` 用系统自带的 python3（dbus、GLib）管 BlueZ：配对代理（免密码，只在设置页点了「添加手机」后的 3 分钟内接受，配过的手机设为信任、以后点一下就重连）、开关、忘记手机、闹钟响时让手机暂停；`bt.py` 在手机推流时用 `pw-record` 录它的音源，混进 `audio.Background`（和回复相加后送喇叭，回声消除知道它，放歌时照样能唤醒）；对话时压到 20%、闹钟响或试听铃声时静音。需要系统层的 `bluetooth/` 配置（手机的声音变成音源而不是直接送喇叭）；没有时手机照样能放，但声音绕过客户端，放歌时很难唤醒，设置页会提示 |
 | `thinksmart_client/opus.py` | 系统 libopus 的 ctypes 封装 |
@@ -43,11 +45,20 @@
 - `POST /api/power-off`：关机（`systemctl halt`，插着电也不会自己重新开机，屏幕变黑后等 10 秒再拔电源；正在更新时不执行）。页面先收到 `power {"state": "off"}` 显示「正在关机」
 - `POST /api/history/clear {}` 或 `{"memory_only": true}`：清除聊天记录（转给服务端的 `/kiosk/chat/clear`，只清服务端本机存的所有模型的记录和总结记忆，Claude Code、Grok Bot 自己的会话不动；`memory_only` 只清记忆）。聊天页的记录来自服务端存的 `GET /kiosk/chat/history`（每个模型最近 50 条），没连着时载入，断开、重启后还在；说「清除聊天记录」确认后服务端发 `{"type": "chat_history", "state": "cleared"}`，页面清空
 
+- `GET /api/mijia`：米家状态（`state`：logged_out / loading / ready / expired / error；`login` 扫码进度和 `login_url`；`account`；`homes`；`rooms` 里每个设备的 `summary`、`state`、`controls`），变化时推事件 `mijia`
+- `POST /api/mijia/login/start {"region": "cn"}`、`/login/cancel`、`/logout`、`/home {"id"}`、`/refresh`、`/visible {"visible": bool}`（家居页开着才轮询）
+- `POST /api/mijia/control {"id", "op", "value", "confirm"}`：op 同语音工具；要先确认时返回 `need_confirm` 和要问的话
+- `POST /api/card/close`：关掉内容卡片（卡片由模型调 `self.screen.show_card` 显示，事件 `card`）
+- `POST /api/rotation {"value": "90|270|normal|180"}` 或 `{"auto": bool}`：屏幕方向，事件 `rotation`
+- `GET /api/billing`：转发网关的 `/kiosk/billing`（今日、本月、累计费用和额度）
+
 ## 第三方
 
 - `thinksmart_client/webrtc_apm/`：py-xiaozhi 的 WebRTC APM ctypes 封装和 arm64 库，MIT（`LICENSE-py-xiaozhi`）
 - `models/kws-zh/`：sherpa-onnx 中文唤醒词模型（wenetspeech），Apache-2.0
 - `web/logos/`：LobeHub icons 1.95.1，MIT
+- `thinksmart_client/mijia/`：米家登录、签名、MIoT 规格处理参考 [MenuBarMijia](https://gitlab.com/jryang1997/MenuBarMijia)（MIT，jryang1997）改写；`tests/fixtures/miot_golden.json` 来自它的测试
+- `web/v2/vendor/qrcode.js`：QR Code Generator（Kazuhiko Arase），MIT；`web/v2/vendor/mermaid.min.js`：Mermaid 10.9.1，MIT
 - `web/sounds/alarm-*.ogg`（Ogg Opus 64 kbit/s，客户端用系统 libopus 解码）：闹钟铃声（原创曲「咖啡时光」「晨曦」「元气早晨」「阳光小跳跃」和提醒用的短和弦），用 [Salamander Grand Piano V3](https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html) 的采样渲染（Alexander Holm，CC BY 3.0）；渲染脚本在 `tools/ringtone/`
 - 依赖：numpy、sounddevice、soxr、websockets、aiohttp、sherpa-onnx
 
