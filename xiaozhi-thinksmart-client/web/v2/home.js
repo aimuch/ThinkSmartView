@@ -1,5 +1,8 @@
 // 家居 (Mijia devices), the model's content cards and screen rotation. Loaded after app.js and uses
 // its helpers ($, esc, toast, postJson, handlers); app.js connects the event stream once this has run.
+// Everything here lives in its own scope: app.js is a classic script too, and a top-level name in
+// both (KIND_ICON once was) makes the whole of this file fail to load.
+(() => {
 
 /* ---------------- 家居 ---------------- */
 const mi = { view: null, open: false, detail: null, region: 'cn', qrShown: null };
@@ -421,3 +424,4 @@ handlers.snapshot = s => {
 handlers.mijia = v => { mi.view = v; renderHome(); };
 handlers.card = c => renderCard(c);
 handlers.rotation = r => { rot = r; renderRotation(); };
+})();
