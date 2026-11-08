@@ -42,7 +42,8 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import alarms, bt, config, mcp, sleep, update, wake_verify
+from . import alarms, bt, config, mcp, rotation, sleep, update, wake_verify
+from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
 from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off
 from .hub import Hub
@@ -60,6 +61,7 @@ SPEECH_RMS = 0.005
 # halt, not poweroff: with the power cable in, the board powers straight back on after a poweroff;
 # halted it stays dark with the file systems unmounted, so the cable can be pulled safely
 HALT = ('sudo', '-n', 'systemctl', 'halt')
+CARD_TITLE_MAX, CARD_TEXT_MAX, CARD_MERMAID_MAX, CARD_IMAGES_MAX = 80, 12000, 6000, 6
 HALT_AFTER = 3           # seconds to read "正在关机 … 等 10 秒再拔" before the screen goes dark
 UPDATE_BUSY = ('preparing', 'downloading', 'installing', 'testing', 'rolling_back')
 # installing for a page request, or finishing an interrupted one at boot (self-test, rollback)
@@ -258,6 +260,10 @@ class Client:
         self.alarm_volume = max(0, min(100, int(level)))
         self.alarm_tone = cfg.get('alarm_tone') if cfg.get('alarm_tone') in alarms.TONES else alarms.DEFAULT_TONE
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
+        self.mijia = MijiaService(self.events.publish)
+        self.rotation = rotation.Rotation(cfg.get('rotation_auto'), self.events.publish, config.save)
+        self.card = None              # the content card on the screen (self.screen.show_card)
+        self._card_seq = 0
 
     # ---- startup ----
 
@@ -275,6 +281,8 @@ class Client:
         asyncio.create_task(self._alarm_loop())
         await self.bt.start()
         asyncio.create_task(self._bluetooth_loop())
+        await self.mijia.start()
+        self.rotation.start()
 
     # ---- microphone (worker thread) ----
 
@@ -357,6 +365,7 @@ class Client:
 
     def snapshot(self):
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
+                'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'card': self.card,
                 'thread': {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])}}
 
     def view_entry(self):
@@ -865,6 +874,30 @@ class Client:
             self.powering_off = False
             self.events.publish('power', {'state': 'failed'})
             self.events.publish('toast', {'kind': 'error', 'text': '没能关机，请稍后再试'})
+
+    # ---- content card (self.screen.show_card) ----
+
+    def show_card(self, title, markdown=None, mermaid=None, images=None):
+        """Show a recipe / list / table / flowchart / pictures on the screen until closed or replaced.
+        The page renders markdown itself (escaped, no raw HTML) and mermaid with its bundled copy."""
+        title = str(title or '').strip()[:CARD_TITLE_MAX]
+        if not title:
+            raise ValueError('title 不能为空')
+        imgs = []
+        for u in images or []:
+            u = str(u).strip()
+            if u.startswith('https://') and len(u) <= 2000 and len(imgs) < CARD_IMAGES_MAX:
+                imgs.append(u)
+        self._card_seq += 1
+        self.card = {'id': self._card_seq, 'title': title, 'markdown': str(markdown or '')[:CARD_TEXT_MAX],
+                     'mermaid': str(mermaid or '')[:CARD_MERMAID_MAX], 'images': imgs, 'at': time.time()}
+        self.screen.poke()
+        self.events.publish('card', self.card)
+        return self.card
+
+    def close_card(self):
+        self.card = None
+        self.events.publish('card', None)
 
     async def clear_history(self, memory_only=False):
         """Clear every model's conversation on the hub (and the page). memory_only: just the summary

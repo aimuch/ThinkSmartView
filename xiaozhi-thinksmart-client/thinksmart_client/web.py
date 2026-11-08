@@ -143,6 +143,59 @@ def make_app(client: Client):
         ok = await client.bluetooth(**args)
         return web.json_response({'ok': bool(ok), **({} if ok else {'error': '蓝牙没有响应'})})
 
+    # ---- Mijia (thinksmart_client/mijia) ----
+
+    async def mijia_view(_request):
+        return web.json_response(client.mijia.view())
+
+    async def mijia_login(request):
+        body = await request.json()
+        await client.mijia.login_start(body.get('region') or 'cn')
+        return web.json_response({'ok': True})
+
+    async def mijia_login_cancel(_request):
+        await client.mijia.login_cancel()
+        client.mijia._changed()
+        return web.json_response({'ok': True})
+
+    async def mijia_logout(_request):
+        await client.mijia.logout()
+        return web.json_response({'ok': True})
+
+    async def mijia_home(request):
+        body = await request.json()
+        asyncio.create_task(client.mijia.set_home(str(body.get('id') or '')))
+        return web.json_response({'ok': True})
+
+    async def mijia_visible(request):
+        body = await request.json()
+        await client.mijia.set_visible(bool(body.get('visible')))
+        return web.json_response({'ok': True})
+
+    async def mijia_refresh(_request):
+        asyncio.create_task(client.mijia.reload())
+        return web.json_response({'ok': True})
+
+    async def mijia_control(request):
+        body = await request.json()
+        r = await client.mijia.control(str(body.get('id') or ''), str(body.get('op') or ''), body.get('value'),
+                                       confirm=bool(body.get('confirm')), by_voice=False)
+        return web.json_response({'ok': r['ok'], 'need_confirm': r.get('need_confirm', False),
+                                  **({} if r['ok'] or r.get('need_confirm') else {'error': r['text']}),
+                                  'text': r['text']})
+
+    async def card_close(_request):
+        client.close_card()
+        return web.json_response({'ok': True})
+
+    async def rotation_set(request):
+        body = await request.json()
+        try:
+            view = await client.rotation.set(value=body.get('value'), auto=body.get('auto'))
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)}, status=400)
+        return web.json_response({'ok': True, 'rotation': view})
+
     async def health(_request):
         return web.json_response({'version': __version__, **client.health()})
 
@@ -192,6 +245,16 @@ def make_app(client: Client):
     app.router.add_post('/api/reports/play', action(client.play_reports))
     app.router.add_post('/api/history/clear', clear_history)
     app.router.add_post('/api/bluetooth', bluetooth)
+    app.router.add_get('/api/mijia', mijia_view)
+    app.router.add_post('/api/mijia/login/start', mijia_login)
+    app.router.add_post('/api/mijia/login/cancel', mijia_login_cancel)
+    app.router.add_post('/api/mijia/logout', mijia_logout)
+    app.router.add_post('/api/mijia/home', mijia_home)
+    app.router.add_post('/api/mijia/visible', mijia_visible)
+    app.router.add_post('/api/mijia/refresh', mijia_refresh)
+    app.router.add_post('/api/mijia/control', mijia_control)
+    app.router.add_post('/api/card/close', card_close)
+    app.router.add_post('/api/rotation', rotation_set)
     app.router.add_get('/api/health', health)
     app.router.add_get('/api/network', network)
     app.router.add_post('/api/power-off', power_off)

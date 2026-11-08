@@ -1471,5 +1471,5 @@ tick();
 setInterval(tick, 1000);
 renderStatus();
 renderThread();
-if (demo) demo.start();
-else connectEvents();
+// after the other scripts (home.js) have added their handlers
+document.addEventListener('DOMContentLoaded', () => { if (demo) demo.start(); else connectEvents(); });

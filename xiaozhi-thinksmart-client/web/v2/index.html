@@ -43,6 +43,10 @@
       </div>
       <div class="link" id="link"><i></i><span>待机</span></div>
       <div class="clock" id="clock"><span id="time">--:--</span></div>
+      <button class="gear" id="btnHome" aria-label="家居">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 11l8-6.5 8 6.5M6.5 9.5V19h11V9.5"/><path d="M10 19v-5h4v5"/></svg>
+      </button>
       <button class="gear" id="btnSettings" aria-label="设置"><i class="gear-dot" id="gearDot"></i>
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>
@@ -224,6 +228,21 @@
       <div class="alarm-list" id="btList"></div>
       <button class="bt-add" id="btAdd">＋ 添加手机</button>
     </div>
+    <div class="alarms-card" id="rotCard">
+      <div class="bright-head"><b>屏幕方向</b><span class="bright-num" id="rotNow"></span></div>
+      <div class="minutes" id="rotChoices"></div>
+      <div class="opt rot-auto">
+        <div class="opt-text"><b>跟随摆放方向</b><span id="rotAutoSub">设备转过来放稳 3 秒后，屏幕跟着转（会重新载入一次页面）</span></div>
+        <button class="switch" id="rotAuto" role="switch" aria-checked="false" aria-label="自动旋转"><i></i></button>
+      </div>
+    </div>
+    <div class="opt">
+      <div class="opt-text">
+        <b>米家账号</b>
+        <span id="miSub">没登录。登录后在「家居」页看设备状态，也能直接说「打开客厅灯」</span>
+      </div>
+      <button class="upd-btn" id="miBtn">登录</button>
+    </div>
     <div class="opt">
       <div class="opt-text">
         <b>本机 IP</b>
@@ -277,6 +296,57 @@
   </section>
 </div>
 
+<!-- 家居: Mijia devices (thinksmart_client/mijia). Login pane (QR) or rooms of device tiles; a tile opens its controls. -->
+<div class="sheet home" id="home">
+  <div class="sheet-bar">
+    <div><h2>家居</h2><p id="hSub">米家设备</p></div>
+    <div class="w-btns">
+      <button class="close" id="hRefresh" aria-label="刷新">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
+      <button class="close" id="hClose" aria-label="关闭">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </div>
+  <div class="h-homes" id="hHomes"></div>
+  <section class="h-login" id="hLogin">
+    <div class="h-qr-box">
+      <canvas id="hQr" width="360" height="360"></canvas>
+      <div class="h-qr-mask" id="hQrMask"></div>
+    </div>
+    <div class="h-login-text">
+      <b>用米家 App 扫码登录</b>
+      <p id="hLoginMsg">打开米家 App，点右上角的「＋」→「扫一扫」，扫左边的二维码并确认登录。</p>
+      <div class="minutes h-regions" id="hRegions"></div>
+      <p class="opt-note">账号在哪个服务器就选哪个，国内账号选「中国大陆」。登录只保存访问令牌，不保存密码，过期后重新扫码。</p>
+      <button class="upd-btn" id="hQrBtn">获取二维码</button>
+    </div>
+  </section>
+  <div class="h-msg" id="hMsg"></div>
+  <div class="h-rooms" id="hRooms"></div>
+</div>
+<div class="h-detail" id="hDetail">
+  <div class="h-detail-card">
+    <div class="h-detail-head"><div><b id="hdName"></b><span id="hdSum"></span></div>
+      <button class="close" id="hdClose" aria-label="关闭">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="h-controls" id="hdControls"></div>
+  </div>
+</div>
+<div class="h-confirm" id="hConfirm">
+  <div class="h-confirm-card"><b id="hcText"></b>
+    <div class="ring-btns"><button class="ring-snooze" id="hcNo">取消</button><button class="ring-stop" id="hcYes">确定</button></div></div>
+</div>
+
+<!-- Content card from the model (self.screen.show_card): markdown, a mermaid flowchart, pictures -->
+<div class="sheet cardsheet" id="cardSheet">
+  <div class="sheet-bar">
+    <div><h2 id="cardTitle"></h2><p id="cardSub"></p></div>
+    <button class="close" id="cardClose" aria-label="关闭">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="card-body" id="cardBody"></div>
+</div>
+
 <div class="ring" id="ring">
   <svg class="ring-bell" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>
@@ -299,6 +369,8 @@
   <div class="hud-num" id="hudNum">0</div>
 </div>
 
+<script src="/static/v2/vendor/qrcode.js"></script>
 <script src="/static/v2/app.js"></script>
+<script src="/static/v2/home.js"></script>
 </body>
 </html>

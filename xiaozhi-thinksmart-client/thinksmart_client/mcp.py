@@ -3,11 +3,17 @@ screen brightness, countdowns / alarms / reminders and their volume.
 
 For alarms the model passes what the user meant (a duration, or a clock time with a date, a repeat
 rule, what it is about); the device works out the time point and answers with it for the model to
-repeat (alarms.py)."""
+repeat (alarms.py).
+
+Also the self.home.* Mijia tools (mijia/tools.py) and self.screen.show_card / close_card: rich
+content (a recipe, a list, a table, a flowchart, pictures) shown on the screen while the reply
+itself stays one short spoken sentence."""
 import asyncio
 import json
 import logging
 import re
+
+from .mijia import tools as home_tools
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +132,30 @@ TOOLS = [
     },
 ]
 
+CARD_TOOLS = [
+    {
+        'name': 'self.screen.show_card',
+        'description': '把内容做成一张卡片显示在设备屏幕上。菜谱、做法步骤、清单、对比表格、行程、流程图、'
+                       '有图片的介绍这类适合看的内容都用它：卡片里放完整内容，嘴上只说一句简短的话'
+                       '（如「菜谱放在屏幕上了，一共 5 步」），不要把卡片内容念出来。'
+                       'markdown 支持标题、列表、表格、粗体、引用；流程图放 mermaid（Mermaid 语法，'
+                       '如 flowchart TD\n A[准备] --> B[下锅]），不要放进 markdown；'
+                       'images 放图片的 https 链接（只放你确定存在的链接，没有就不传）。',
+        'inputSchema': {'type': 'object',
+                        'properties': {'title': {'type': 'string'},
+                                       'markdown': {'type': 'string'},
+                                       'mermaid': {'type': 'string'},
+                                       'images': {'type': 'array', 'items': {'type': 'string'}}},
+                        'required': ['title']},
+    },
+    {
+        'name': 'self.screen.close_card',
+        'description': '关掉屏幕上的内容卡片。用户说「关掉」「不用看了」时调用。',
+        'inputSchema': {'type': 'object', 'properties': {}},
+    },
+]
+TOOLS += CARD_TOOLS + home_tools.TOOLS
+
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
 
@@ -224,6 +254,19 @@ async def handle(payload, client=None):
                     volume=args.get('volume'), change=args.get('change'))})
             elif name == 'self.alarm.get_volume' and client:
                 text = json.dumps({'volume': client.alarm_volume})
+            elif name == 'self.screen.show_card' and client:
+                card = client.show_card(args.get('title'), args.get('markdown'), args.get('mermaid'),
+                                        args.get('images'))
+                text = _dumps({'success': True, 'shown': card['id'],
+                               'note': '已经显示在屏幕上了，回答只用一句话，不要念卡片内容'})
+            elif name == 'self.screen.close_card' and client:
+                client.close_card()
+                text = _dumps({'success': True})
+            elif name in home_tools.NAMES and client:
+                try:
+                    text = await home_tools.handle(name, args, client.mijia)
+                except asyncio.TimeoutError:
+                    text = _dumps({'success': False, 'reason': '米家云没有及时响应，稍后再试'})
             else:
                 return error(f'Unknown tool: {name}')
         except Exception as e:

@@ -46,6 +46,7 @@ DEFAULTS = {
     'alarm_volume': 70,   # countdowns, alarms and reminders ring at this, whatever the device volume (alarms.py)
     'alarm_tone': 'coffee',   # alarms.TONES
     'bluetooth': True,    # the Bluetooth speaker switch (bt.py): off powers the adapter down
+    'rotation_auto': False,   # follow the accelerometer (rotation.py); the rotation itself lives in the kiosk config
 }
 
 
