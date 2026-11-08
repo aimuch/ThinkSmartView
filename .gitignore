@@ -6,3 +6,6 @@
 /.edl-venv/
 
 .DS_Store
+
+# 上游仓库缓存（scripts/sync-upstream.sh）
+/.upstream-cache/

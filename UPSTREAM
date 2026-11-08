@@ -1,0 +1,6 @@
+# Upstream of each directory: <dir> <git url> <commit this tree is in sync with>
+# scripts/sync-upstream.sh merges what upstream did since that commit and moves it forward.
+thinksmart-ubuntu-image https://github.com/justhalfbit/thinksmart-ubuntu-image.git d2e32393b30dfcc8397192747fced0fb7115fc33
+xiaozhi-thinksmart-client https://github.com/justhalfbit/xiaozhi-thinksmart-client.git 4a94d8edca88e6667b1e5acfecf20de1ca7f1ec4
+xiaozhi-hub-server https://github.com/justhalfbit/xiaozhi-hub-server.git 38b5daaf021ae071aa2b7589da6af08387c55673
+MenuBarMijia https://gitlab.com/jryang1997/MenuBarMijia.git 6353cd43ecaa4b5971c68ef910c49600bec3dbc4
