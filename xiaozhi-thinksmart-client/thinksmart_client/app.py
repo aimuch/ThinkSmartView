@@ -186,7 +186,8 @@ class Client:
         self.aborted_at = None        # monotonic: the last abort, until listening starts again (logged)
         self.abort_pending = None     # monotonic: abort sent, the hub hasn't confirmed it yet (its "tts stop")
         self.question = None          # the user's message of this turn, until its reply starts
-        self.heard = False            # anything recognised since this wake
+        self.heard = False            # anything recognised since this wake (so a listening window that
+                                      # times out after it is a follow-up: it ends quietly)
         self.mute_audio = False       # after an abort, drop the old reply's frames
         self.listen_after_reply = False   # the mic was closed for this reply: reopen it when played
         self.reply_samples = 0        # reply audio received since "tts start" (to tell what was heard)
@@ -587,6 +588,9 @@ class Client:
                     # said before this listening began (right after the wake word, in its backlog):
                     # the last time we heard talking belongs to an earlier turn
                     log.info('recognised: %s', text)
+                # a long sentence the client's deadline closed the mic on is still a spoken question:
+                # listen again after its reply too (not after push-to-talk, which never does)
+                late = self.awaiting_text and self.listen_mode == 'realtime'
                 self.heard = True
                 self.awaiting_text = False
                 self.recognising = self.vad_ended = False
@@ -594,6 +598,8 @@ class Client:
                 self.deadline = None
                 self.recognised += 1
                 self.reply_samples = 0    # an abort before this turn's audio has heard nothing of it
+                if late:
+                    self.listen_after_reply = True
                 if self.uploading:
                     # nothing said during the reply counts; the wake word is listened for instead
                     self.uploading = False
@@ -615,9 +621,10 @@ class Client:
                 self.hub_pending = self.vad_ended = False
                 log.info('the hub recognised nothing')
                 if self.awaiting_text:
-                    # the mic is closed and this was all we were waiting for
+                    # the mic is closed and this was all we were waiting for ("didn't catch that"
+                    # after a wake; a follow-up window ends quietly, as when nobody talks in it)
                     self.awaiting_text = False
-                    await self.stop_uploading(missed=True)
+                    await self.stop_uploading(missed=not self.heard)
                 elif self.recognising:
                     # the mic is still open: back to listening
                     self.recognising = False
@@ -1468,11 +1475,14 @@ class Client:
                 await self.ptt_stop()
             if self.deadline and now > self.deadline:
                 if self.state == 'listening' and self.uploading:
-                    # a hub that sends VAD events has answered everything it heard unless one is pending
-                    waiting = self.hub_pending or not self.hub.features.get('vad_end')
-                    if not self.heard and self.speech_end > self.listen_since and waiting:
+                    # a hub that sends VAD events has answered everything it heard unless one is pending.
+                    # In a follow-up window (heard) only that counts: an older hub would make any noise
+                    # after a reply wait 15 s
+                    waiting = self.hub_pending or (not self.heard and not self.hub.features.get('vad_end'))
+                    if self.speech_end > self.listen_since and waiting:
                         # they did talk; a long sentence takes the hub a while to recognise, so
                         # close the mic but wait for its text before saying "didn't catch that"
+                        # (or, in a follow-up window, before going idle: its answer would be lost)
                         self.uploading = False
                         self.awaiting_text = True
                         self.deadline = now + RECOGNITION_WAIT
@@ -1480,7 +1490,7 @@ class Client:
                     else:
                         await self.stop_uploading(missed=not self.heard)
                 elif self.state == 'thinking' and not self.uploading:
-                    missed, self.awaiting_text = self.awaiting_text, False
+                    missed, self.awaiting_text = self.awaiting_text and not self.heard, False
                     await self.stop_uploading(missed=missed)
             if self.state in ('listening', 'speaking') and now - last_level >= 0.1:
                 last_level = now
