@@ -1110,6 +1110,11 @@ function fmtTime(t) {
 
 // A reply grows sentence by sentence; the text just shows as it is (no per-sentence highlight)
 function fillMsg(el, m) {
+  if (m.role === 'card') {   // self.screen.show_card: a recipe, a list, a table (markdown rendered by home.js)
+    el.querySelector('.body').innerHTML = `<h3 class="rich-title">${esc(m.text)}</h3>`
+      + (window.cardHtml ? window.cardHtml(m.card || {}) : esc((m.card || {}).markdown || '')) + `<span class="ts">${fmtTime(m.time)}</span>`;
+    return;
+  }
   const html = esc(m.text) + (m.interrupted ? '<span class="cut">已打断</span>' : '') + `<span class="ts">${fmtTime(m.time)}</span>`;
   if (m.role === 'bot') el.querySelector('.body').innerHTML = html;
   else el.innerHTML = html;
@@ -1117,9 +1122,9 @@ function fillMsg(el, m) {
 
 function msgEl(m) {
   const el = document.createElement('div');
-  el.className = 'msg ' + m.role;
+  el.className = 'msg ' + (m.role === 'card' ? 'bot rich' : m.role);
   el.dataset.id = m.id;
-  if (m.role === 'bot') {
+  if (m.role === 'bot' || m.role === 'card') {
     el.innerHTML = `<img class="tile" src="${esc(logoSrc(entryModel(m.entry)))}" alt=""><div class="body"></div>`;
   }
   fillMsg(el, m);

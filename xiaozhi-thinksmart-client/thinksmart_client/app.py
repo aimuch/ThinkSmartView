@@ -61,7 +61,8 @@ SPEECH_RMS = 0.005
 # halt, not poweroff: with the power cable in, the board powers straight back on after a poweroff;
 # halted it stays dark with the file systems unmounted, so the cable can be pulled safely
 HALT = ('sudo', '-n', 'systemctl', 'halt')
-CARD_TITLE_MAX, CARD_TEXT_MAX, CARD_MERMAID_MAX, CARD_IMAGES_MAX = 80, 12000, 6000, 6
+CARD_TITLE_MAX, CARD_TEXT_MAX, CARD_IMAGES_MAX, CARDS_MAX = 80, 12000, 6, 30
+CARDS = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'cards.json'
 HALT_AFTER = 3           # seconds to read "正在关机 … 等 10 秒再拔" before the screen goes dark
 UPDATE_BUSY = ('preparing', 'downloading', 'installing', 'testing', 'rolling_back')
 # installing for a page request, or finishing an interrupted one at boot (self-test, rollback)
@@ -262,8 +263,9 @@ class Client:
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
         self.mijia = MijiaService(self.events.publish)
         self.rotation = rotation.Rotation(cfg.get('rotation_auto'), self.events.publish, config.save)
-        self.card = None              # the content card on the screen (self.screen.show_card)
+        self.cards = []               # content cards shown in the conversations (self.screen.show_card)
         self._card_seq = 0
+        self._load_cards()
 
     # ---- startup ----
 
@@ -365,7 +367,7 @@ class Client:
 
     def snapshot(self):
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
-                'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'card': self.card,
+                'mijia': self.mijia.view(), 'rotation': self.rotation.view(),
                 'thread': {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])}}
 
     def view_entry(self):
@@ -720,6 +722,8 @@ class Client:
         elif kind == 'chat_history' and msg.get('state') == 'cleared':
             # said "清除聊天记录" and confirmed: the hub has forgotten everything
             self.threads = {}
+            self.cards = []
+            self._save_cards()
             self.bot_msg = self.question = None
             self.events.publish('thread', {'entry': self.view_entry(), 'messages': [], 'reset': True})
         elif kind == 'server':
@@ -797,13 +801,13 @@ class Client:
 
     # ---- conversation threads (one per model, like the hub keeps them) ----
 
-    def add_message(self, role, text):
+    def add_message(self, role, text, id=None, **extra):
         entry = self.view_entry()
         if entry != self.entry:
             self.entry = entry
             self.events.publish('thread', {'entry': entry, 'messages': self.threads.get(entry, [])})
         self._seq += 1
-        m = {'id': self._seq, 'role': role, 'text': text, 'time': time.time(), 'entry': entry}
+        m = {'id': id or self._seq, 'role': role, 'text': text, 'time': time.time(), 'entry': entry, **extra}
         self.threads.setdefault(entry, []).append(m)
         del self.threads[entry][:-200]
         self.publish_message(m)
@@ -828,6 +832,7 @@ class Client:
                                  'entry': entry, **({'interrupted': True} if m.get('interrupted') else {})}
                                 for m in items]
                         for entry, items in (data.get('models') or {}).items()}
+        self._merge_cards()
         self.history_loaded = True
         self.events.publish('thread', {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), []),
                                        'reset': True})
@@ -875,11 +880,12 @@ class Client:
             self.events.publish('power', {'state': 'failed'})
             self.events.publish('toast', {'kind': 'error', 'text': '没能关机，请稍后再试'})
 
-    # ---- content card (self.screen.show_card) ----
+    # ---- content cards (self.screen.show_card): rich messages in the conversation ----
 
-    def show_card(self, title, markdown=None, mermaid=None, images=None):
-        """Show a recipe / list / table / flowchart / pictures on the screen until closed or replaced.
-        The page renders markdown itself (escaped, no raw HTML) and mermaid with its bundled copy."""
+    def show_card(self, title, markdown=None, images=None):
+        """A recipe / list / table / pictures as a message of its own in the current conversation (role
+        'card'; the page renders the markdown escaped, no raw HTML). The hub doesn't keep these, so the
+        client does (CARDS, last CARDS_MAX) and puts them back among the hub's history by time."""
         title = str(title or '').strip()[:CARD_TITLE_MAX]
         if not title:
             raise ValueError('title 不能为空')
@@ -888,16 +894,39 @@ class Client:
             u = str(u).strip()
             if u.startswith('https://') and len(u) <= 2000 and len(imgs) < CARD_IMAGES_MAX:
                 imgs.append(u)
+        card = {'title': title, 'markdown': str(markdown or '')[:CARD_TEXT_MAX], 'images': imgs}
         self._card_seq += 1
-        self.card = {'id': self._card_seq, 'title': title, 'markdown': str(markdown or '')[:CARD_TEXT_MAX],
-                     'mermaid': str(mermaid or '')[:CARD_MERMAID_MAX], 'images': imgs, 'at': time.time()}
+        m = self.add_message('card', title, id=f'c{int(time.time())}-{self._card_seq}', card=card)
+        self.cards = (self.cards + [m])[-CARDS_MAX:]
+        self._save_cards()
         self.screen.poke()
-        self.events.publish('card', self.card)
-        return self.card
+        return m
 
-    def close_card(self):
-        self.card = None
-        self.events.publish('card', None)
+    def _load_cards(self):
+        try:
+            data = json.loads(CARDS.read_text())
+            self.cards = [m for m in data if isinstance(m, dict) and m.get('role') == 'card'][-CARDS_MAX:]
+        except FileNotFoundError:
+            self.cards = []
+        except (OSError, ValueError):
+            log.warning('%s unreadable, starting without cards', CARDS)
+            self.cards = []
+
+    def _save_cards(self):
+        try:
+            CARDS.parent.mkdir(parents=True, exist_ok=True)
+            alarms.write_atomic(CARDS, json.dumps(self.cards, ensure_ascii=False).encode())
+        except OSError as e:
+            log.warning('cannot save cards: %s', e)
+
+    def _merge_cards(self):
+        """After the hub's history replaced the threads: put the saved cards back, by time."""
+        for m in getattr(self, 'cards', ()):
+            thread = self.threads.setdefault(m['entry'], [])
+            if not any(x['id'] == m['id'] for x in thread):
+                thread.append(m)
+        for thread in self.threads.values():
+            thread.sort(key=lambda x: x.get('time') or 0)
 
     async def clear_history(self, memory_only=False):
         """Clear every model's conversation on the hub (and the page). memory_only: just the summary
@@ -910,6 +939,8 @@ class Client:
             return {'ok': False, 'error': '连不上小智网关'}
         if result.get('ok') and not memory_only:
             self.threads = {}
+            self.cards = []
+            self._save_cards()
             self.bot_msg = self.question = None
             self.events.publish('thread', {'entry': self.view_entry(), 'messages': [], 'reset': True})
         return result

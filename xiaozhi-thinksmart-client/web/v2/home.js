@@ -1,4 +1,4 @@
-// 家居 (Mijia devices), the model's content cards and screen rotation. Loaded after app.js and uses
+// 家居 (Mijia devices), the model's content cards (rendered in the conversation) and screen rotation. Loaded after app.js and uses
 // its helpers ($, esc, toast, postJson, handlers); app.js connects the event stream once this has run.
 // Everything here lives in its own scope: app.js is a classic script too, and a top-level name in
 // both (KIND_ICON once was) makes the whole of this file fail to load.
@@ -270,7 +270,7 @@ $('miBtn').addEventListener('click', () => {
   miFetch('/api/mijia/logout');
 });
 
-/* ---------------- content cards (self.screen.show_card) ---------------- */
+/* ---------------- content cards (self.screen.show_card): markdown for the conversation ---------------- */
 // Markdown: everything is escaped first; only these marks become tags. No raw HTML, no links.
 function inline(text) {
   const codes = [];
@@ -330,54 +330,17 @@ function markdown(md) {
   return out.join('');
 }
 
-let mermaidReady = null;
-function loadMermaid() {
-  if (!mermaidReady) mermaidReady = new Promise((ok, fail) => {
-    const s = document.createElement('script');
-    s.src = '/static/v2/vendor/mermaid.min.js';
-    s.onload = () => {
-      window.mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict',
-        fontFamily: '"Noto Sans CJK SC", sans-serif', flowchart: { htmlLabels: false, useMaxWidth: true } });
-      ok(window.mermaid);
-    };
-    s.onerror = () => { mermaidReady = null; fail(new Error('mermaid')); };
-    document.head.appendChild(s);
-  });
-  return mermaidReady;
-}
-
-let shownCard = 0;
-async function renderCard(card) {
-  const sheet = $('cardSheet');
-  if (!card) { sheet.classList.remove('on'); shownCard = 0; return; }
-  if (card.id === shownCard) return;
-  shownCard = card.id;
-  $('cardTitle').textContent = card.title;
-  $('cardSub').textContent = new Date(card.at * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  const body = $('cardBody');
-  body.innerHTML = (card.images || []).map(u => `<img class="md-img" src="${esc(u)}" alt="" onerror="this.remove()">`).join('')
-    + (card.mermaid ? '<div class="mermaid-box" id="mermaidBox"><p class="opt-note">正在画图…</p></div>' : '')
-    + markdown(card.markdown);
-  body.scrollTop = 0;
-  sheet.classList.add('on');
-  if (card.mermaid) {
-    try {
-      const m = await loadMermaid();
-      const { svg } = await m.render('mm' + card.id, card.mermaid);
-      if (shownCard === card.id) $('mermaidBox').innerHTML = svg;
-    } catch (e) {
-      if (shownCard === card.id) $('mermaidBox').innerHTML = `<pre>${esc(card.mermaid)}</pre>`;
-    }
-  }
-}
-$('cardClose').addEventListener('click', () => { renderCard(null); if (!DEMO) miFetch('/api/card/close'); });
+// app.js renders role 'card' messages (self.screen.show_card) with this
+window.cardHtml = card => (card.images || []).map(u => `<img class="md-img" src="${esc(u)}" alt="" onerror="this.remove()">`).join('')
+  + markdown(card.markdown);
 
 /* ---------------- 屏幕方向 ---------------- */
 let rot = null;
 function renderRotation() {
   if (!rot) return;
-  $('rotNow').textContent = rot.applying ? '正在切换…' : (rot.choices[rot.value] || rot.value);
-  $('rotChoices').innerHTML = Object.entries(rot.choices).map(([k, name]) =>
+  const names = Object.fromEntries(rot.choices);   // [[value, name]]: a JS object would put '90', '180', '270' first
+  $('rotNow').textContent = rot.applying ? '正在切换…' : (names[rot.value] || rot.value);
+  $('rotChoices').innerHTML = rot.choices.map(([k, name]) =>
     `<button data-v="${k}" class="${k === rot.value ? 'on' : ''}">${esc(name)}</button>`).join('');
   $('rotAuto').setAttribute('aria-checked', rot.auto ? 'true' : 'false');
   $('rotAuto').closest('.opt').style.display = rot.sensor ? '' : 'none';
@@ -422,9 +385,7 @@ handlers.snapshot = s => {
   baseSnapshot(s);
   if (s.mijia) { mi.view = s.mijia; renderHome(); }
   if (s.rotation) { rot = s.rotation; renderRotation(); }
-  if ('card' in s) renderCard(s.card);
 };
 handlers.mijia = v => { mi.view = v; renderHome(); };
-handlers.card = c => renderCard(c);
 handlers.rotation = r => { rot = r; renderRotation(); };
 })();

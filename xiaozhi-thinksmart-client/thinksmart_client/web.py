@@ -192,10 +192,6 @@ def make_app(client: Client):
             return web.json_response({'ok': False, 'error': '连不上小智网关'})
         return web.json_response(data if isinstance(data, dict) else {'ok': False})
 
-    async def card_close(_request):
-        client.close_card()
-        return web.json_response({'ok': True})
-
     async def rotation_set(request):
         body = await request.json()
         try:
@@ -262,7 +258,6 @@ def make_app(client: Client):
     app.router.add_post('/api/mijia/refresh', mijia_refresh)
     app.router.add_post('/api/mijia/control', mijia_control)
     app.router.add_get('/api/billing', billing)
-    app.router.add_post('/api/card/close', card_close)
     app.router.add_post('/api/rotation', rotation_set)
     app.router.add_get('/api/health', health)
     app.router.add_get('/api/network', network)

@@ -48,7 +48,7 @@
 - `GET /api/mijia`：米家状态（`state`：logged_out / loading / ready / expired / error；`login` 扫码进度和 `login_url`；`account`；`homes`；`rooms` 里每个设备的 `summary`、`state`、`controls`），变化时推事件 `mijia`
 - `POST /api/mijia/login/start {"region": "cn"}`、`/login/cancel`、`/logout`、`/home {"id"}`、`/refresh`、`/visible {"visible": bool}`（家居页开着才轮询）
 - `POST /api/mijia/control {"id", "op", "value", "confirm"}`：op 同语音工具；要先确认时返回 `need_confirm` 和要问的话
-- `POST /api/card/close`：关掉内容卡片（卡片由模型调 `self.screen.show_card` 显示，事件 `card`）
+- 内容卡片：模型调 `self.screen.show_card` 时，对话里多一条 `role: "card"` 的消息（`card`: title、markdown、images），走普通的 `message` / `thread` 事件；客户端存最近 30 条到 `~/.local/share/thinksmart-client/cards.json`，载入网关的历史后按时间插回去，清除聊天记录时一起清掉
 - `POST /api/rotation {"value": "90|270|normal|180"}` 或 `{"auto": bool}`：屏幕方向，事件 `rotation`
 - `GET /api/billing`：转发网关的 `/kiosk/billing`（今日、本月、累计费用和额度）
 
@@ -58,7 +58,7 @@
 - `models/kws-zh/`：sherpa-onnx 中文唤醒词模型（wenetspeech），Apache-2.0
 - `web/logos/`：LobeHub icons 1.95.1，MIT
 - `thinksmart_client/mijia/`：米家登录、签名、MIoT 规格处理参考 [MenuBarMijia](https://gitlab.com/jryang1997/MenuBarMijia)（MIT，jryang1997）改写；`tests/fixtures/miot_golden.json` 来自它的测试
-- `web/v2/vendor/qrcode.js`：QR Code Generator（Kazuhiko Arase），MIT；`web/v2/vendor/mermaid.min.js`：Mermaid 10.9.1，MIT
+- `web/v2/vendor/qrcode.js`：QR Code Generator（Kazuhiko Arase），MIT
 - `web/sounds/alarm-*.ogg`（Ogg Opus 64 kbit/s，客户端用系统 libopus 解码）：闹钟铃声（原创曲「咖啡时光」「晨曦」「元气早晨」「阳光小跳跃」和提醒用的短和弦），用 [Salamander Grand Piano V3](https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html) 的采样渲染（Alexander Holm，CC BY 3.0）；渲染脚本在 `tools/ringtone/`
 - 依赖：numpy、sounddevice、soxr、websockets、aiohttp、sherpa-onnx
 

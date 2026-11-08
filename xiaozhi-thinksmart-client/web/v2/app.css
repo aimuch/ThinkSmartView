@@ -513,27 +513,24 @@ body[data-state="listening"] .mic-ring { opacity: .75; }
 .h-confirm-card .ring-btns { justify-content: center; }
 .h-confirm-card .ring-btns button { min-width: 240px; height: 88px; font-size: 28px; }
 
-/* ---- content card (self.screen.show_card) ---- */
-.sheet.cardsheet { z-index: 23; padding-bottom: 24px; }
-.card-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; max-width: 1040px; width: 100%; margin: 0 auto;
-             font-size: 24px; line-height: 1.65; color: var(--ink); user-select: text; -webkit-user-select: text; }
-.card-body::-webkit-scrollbar { display: none; }
-.card-body h2, .card-body h3, .card-body h4 { margin: 26px 0 10px; line-height: 1.3; }
-.card-body h2 { font-size: 32px; } .card-body h3 { font-size: 28px; } .card-body h4 { font-size: 25px; color: var(--ink2); }
-.card-body p { margin: 10px 0; }
-.card-body ul, .card-body ol { margin: 10px 0; padding-left: 36px; }
-.card-body li { margin: 6px 0; }
-.card-body li::marker { color: var(--accent2); font-weight: 700; }
-.card-body table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 21px; }
-.card-body th, .card-body td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
-.card-body th { color: var(--ink2); font-weight: 700; background: var(--card); }
-.card-body blockquote { margin: 14px 0; padding: 12px 20px; border-left: 4px solid var(--accent); background: var(--card); border-radius: 0 16px 16px 0; color: var(--ink2); }
-.card-body code { padding: 2px 8px; border-radius: 8px; background: var(--card2); font-family: "Noto Sans Mono", monospace; font-size: .9em; }
-.card-body pre { padding: 16px 20px; border-radius: 16px; background: #00000055; font-size: 18px; white-space: pre-wrap; word-break: break-word; }
-.card-body hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
-.card-body .md-img { display: block; max-width: 100%; max-height: 460px; margin: 14px auto; border-radius: 20px; }
-.mermaid-box { margin: 10px 0 20px; padding: 18px; border-radius: 22px; background: var(--card); text-align: center; }
-.mermaid-box svg { max-width: 100%; height: auto; }
+/* ---- content cards in the conversation (self.screen.show_card) ---- */
+.msg.rich .body { white-space: normal; font-size: 22px; line-height: 1.6; padding: 18px 22px; border-radius: 8px 24px 24px 24px;
+                  background: var(--card); border: 1px solid var(--line); min-width: 0; }
+.rich-title { margin: 0 0 6px; font-size: 26px; }
+.msg.rich .body h2, .msg.rich .body h3, .msg.rich .body h4 { margin: 26px 0 10px; line-height: 1.3; }
+.msg.rich .body h2 { font-size: 32px; } .msg.rich .body h3 { font-size: 28px; } .msg.rich .body h4 { font-size: 25px; color: var(--ink2); }
+.msg.rich .body p { margin: 10px 0; }
+.msg.rich .body ul, .msg.rich .body ol { margin: 10px 0; padding-left: 36px; }
+.msg.rich .body li { margin: 6px 0; }
+.msg.rich .body li::marker { color: var(--accent2); font-weight: 700; }
+.msg.rich .body table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 21px; }
+.msg.rich .body th, .msg.rich .body td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+.msg.rich .body th { color: var(--ink2); font-weight: 700; background: var(--card); }
+.msg.rich .body blockquote { margin: 14px 0; padding: 12px 20px; border-left: 4px solid var(--accent); background: var(--card); border-radius: 0 16px 16px 0; color: var(--ink2); }
+.msg.rich .body code { padding: 2px 8px; border-radius: 8px; background: var(--card2); font-family: "Noto Sans Mono", monospace; font-size: .9em; }
+.msg.rich .body pre { padding: 16px 20px; border-radius: 16px; background: #00000055; font-size: 18px; white-space: pre-wrap; word-break: break-word; }
+.msg.rich .body hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
+.msg.rich .body .md-img { display: block; max-width: 100%; max-height: 460px; margin: 14px auto; border-radius: 20px; }
 
 /* ---- 屏幕方向 ---- */
 #rotChoices { grid-template-columns: repeat(4, 1fr); }
@@ -569,3 +566,8 @@ body[data-state="listening"] .mic-ring { opacity: .75; }
 .cost-quota .bar { height: 10px; margin-top: 8px; border-radius: 5px; background: #ffffff1c; overflow: hidden; }
 .cost-quota .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transform-origin: left; }
 .cost-quota .bar i.warn { background: var(--warn); } .cost-quota .bar i.over { background: var(--bad); }
+.msg.rich .body .rich-title { margin: 0 0 6px; font-size: 26px; }
+.msg.rich .body h2 { font-size: 26px; } .msg.rich .body h3 { font-size: 23px; } .msg.rich .body h4 { font-size: 22px; }
+.msg.rich .body h2, .msg.rich .body h3, .msg.rich .body h4 { margin: 16px 0 6px; }
+.msg.rich .body table { font-size: 19px; }
+.msg.rich .body .md-img { max-height: 320px; }

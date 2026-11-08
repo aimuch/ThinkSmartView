@@ -27,8 +27,12 @@ from thinksmart_client import app, mcp, rotation  # noqa: E402
 def make_client():
     c = app.Client.__new__(app.Client)
     c.events = app.Events()
-    c.card = None
+    c.cards = []
     c._card_seq = 0
+    c._seq = 0
+    c.threads = {}
+    c.entry = 'e1'
+    c.view_entry = lambda: 'e1'
     c.screen = types.SimpleNamespace(poke=lambda: None)
     q = asyncio.Queue()
     c.events.queues.add(q)
@@ -42,29 +46,46 @@ def call(c, name, **args):
 
 def test_tools_are_listed():
     names = [t['name'] for t in asyncio.run(mcp.handle({'id': 1, 'method': 'tools/list'}))['result']['tools']]
-    assert {'self.screen.show_card', 'self.screen.close_card', 'self.home.control', 'self.home.list_devices',
-            'self.home.get_state'} <= set(names)
+    assert {'self.screen.show_card', 'self.home.control', 'self.home.list_devices', 'self.home.get_state'} <= set(names)
+    assert 'self.screen.close_card' not in names
     assert len(names) == len(set(names))
 
 
-def test_show_and_close_card():
+def test_card_is_a_message_in_the_conversation(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, 'CARDS', tmp_path / 'cards.json')
     c, q = make_client()
-    r = call(c, 'self.screen.show_card', title='番茄炒蛋', markdown='## 食材\n- 番茄 2 个', mermaid='flowchart TD\nA-->B',
+    r = call(c, 'self.screen.show_card', title='番茄炒蛋', markdown='## 食材\n- 番茄 2 个',
              images=['https://example.com/a.jpg', 'http://insecure/b.jpg', 'javascript:alert(1)'])
     assert r['isError'] is False and json.loads(r['content'][0]['text'])['success']
-    event, card = q.get_nowait()
-    assert event == 'card' and card['title'] == '番茄炒蛋' and card['images'] == ['https://example.com/a.jpg']
-    assert c.card['id'] == 1
-    call(c, 'self.screen.close_card')
-    assert c.card is None and q.get_nowait() == ('card', None)
+    event, m = q.get_nowait()
+    assert event == 'message' and m['role'] == 'card' and m['text'] == '番茄炒蛋'
+    assert m['card']['images'] == ['https://example.com/a.jpg'] and '番茄' in m['card']['markdown']
+    assert c.threads['e1'][-1] is m and json.loads((tmp_path / 'cards.json').read_text())[0]['id'] == m['id']
 
 
-def test_card_needs_a_title_and_is_capped():
+def test_cards_survive_the_hubs_history_and_a_restart(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, 'CARDS', tmp_path / 'cards.json')
     c, _ = make_client()
-    r = call(c, 'self.screen.show_card', title='  ')
+    card = c.show_card('清单', '- 牛奶')
+    c.threads = {'e1': [{'id': 'h1', 'role': 'user', 'text': '早', 'time': card['time'] - 5, 'entry': 'e1'},
+                        {'id': 'h2', 'role': 'bot', 'text': '好', 'time': card['time'] + 5, 'entry': 'e1'}]}
+    c._merge_cards()                                   # what load_history does after the hub's copy arrives
+    assert [m['id'] for m in c.threads['e1']] == ['h1', card['id'], 'h2']
+    c2, _ = make_client()
+    c2._load_cards()
+    assert c2.cards[0]['card']['markdown'] == '- 牛奶'
+
+
+def test_card_needs_a_title_and_is_capped(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, 'CARDS', tmp_path / 'cards.json')
+    c, _ = make_client()
+    r = call(c, 'self.screen.show_card', title='  ', markdown='x')
     assert r['isError'] is True
-    card = c.show_card('x' * 500, 'y' * 50000)
-    assert len(card['title']) == app.CARD_TITLE_MAX and len(card['markdown']) == app.CARD_TEXT_MAX
+    m = c.show_card('x' * 500, 'y' * 50000)
+    assert len(m['text']) == app.CARD_TITLE_MAX and len(m['card']['markdown']) == app.CARD_TEXT_MAX
+    for i in range(app.CARDS_MAX + 5):
+        c.show_card(f't{i}', 'm')
+    assert len(c.cards) == app.CARDS_MAX
 
 
 def test_orientation():

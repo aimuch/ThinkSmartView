@@ -76,7 +76,7 @@ class Rotation:
         self._task = None
 
     def view(self):
-        return {'value': self.value, 'auto': self.auto, 'choices': CHOICES,
+        return {'value': self.value, 'auto': self.auto, 'choices': list(CHOICES.items()),   # pairs: keep the order
                 'sensor': read_accel() is not None, 'applying': self.applying}
 
     def start(self):
