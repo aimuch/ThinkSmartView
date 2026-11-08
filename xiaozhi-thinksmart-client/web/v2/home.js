@@ -5,7 +5,7 @@
 (() => {
 
 /* ---------------- 家居 ---------------- */
-const mi = { view: null, open: false, detail: null, region: 'cn', qrShown: null };
+const mi = { view: null, open: false, detail: null, region: 'cn', qrShown: null, room: '全屋', scrollTab: true };
 
 async function miFetch(path, body) {
   try {
@@ -69,18 +69,51 @@ function renderHome() {
   $('hRefresh').style.display = loggedIn ? '' : 'none';
   $('hSub').textContent = loggedIn ? `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
     : '用米家 App 扫码登录后显示家里的设备';
-  // homes
-  $('hHomes').innerHTML = loggedIn && v.homes.length > 1 ? v.homes.map(h =>
-    `<button data-id="${esc(h.id)}" class="${h.id === (v.home_id || (v.homes[0] || {}).id) ? 'on' : ''}">${esc(h.name)}${h.shared ? ' · 共享' : ''}</button>`).join('') : '';
+  // the home: its name with ▾, the others in a menu
+  const homes = loggedIn ? v.homes : [];
+  const current = homes.find(h => h.id === v.home_id) || homes[0];
+  $('hHomeName').textContent = current ? current.name : '家居';
+  $('hHomePick').classList.toggle('many', homes.length > 1);
+  $('hHomeMenu').innerHTML = homes.map(h =>
+    `<button data-id="${esc(h.id)}" class="${current && h.id === current.id ? 'on' : ''}">${esc(h.name)}${h.shared ? '<small>共享</small>' : ''}</button>`).join('');
   // message line
   const msg = v.state === 'expired' ? '米家登录已过期，请重新扫码' : v.state === 'loading' ? '正在读取米家设备…'
     : v.state === 'error' ? v.error : loggedIn && !v.rooms.length ? '这个家里还没有能显示的设备' : '';
   $('hMsg').textContent = msg;
   $('hMsg').classList.toggle('bad', v.state === 'error' || v.state === 'expired');
   if (!loggedIn) renderLogin(v);
-  $('hRooms').innerHTML = loggedIn ? v.rooms.map(r => `<div class="h-room"><h3>${esc(r.name)}</h3><div class="h-tiles">${
-    r.cards.map(tile).join('')}</div></div>`).join('') : '';
+  // rooms as tabs: 全屋 and each room; the summary chips and tiles follow the tab
+  const rooms = loggedIn ? v.rooms : [];
+  if (mi.room !== ALL && !rooms.some(r => r.name === mi.room)) mi.room = ALL;
+  $('hTabs').style.display = $('hChips').style.display = loggedIn && rooms.length ? '' : 'none';
+  $('hTabs').innerHTML = [ALL, ...rooms.map(r => r.name)].map(n =>
+    `<button data-room="${esc(n)}" class="${n === mi.room ? 'on' : ''}">${esc(n)}</button>`).join('');
+  const shown = mi.room === ALL ? rooms : rooms.filter(r => r.name === mi.room);
+  $('hChips').innerHTML = chips(shown.flatMap(r => r.cards));
+  $('hRooms').innerHTML = shown.map(r => `<div class="h-room">${mi.room === ALL ? `<h3>${esc(r.name)}</h3>` : ''}<div class="h-tiles">${
+    r.cards.map(tile).join('')}</div></div>`).join('');
+  const tab = $('hTabs').querySelector('.on');
+  if (tab && mi.scrollTab) { tab.scrollIntoView({ inline: 'nearest', block: 'nearest' }); mi.scrollTab = false; }
   if (mi.detail) renderDetail();
+}
+
+const ALL = '全屋';
+const CHIP_ICON = {
+  temp: '<path d="M14 14.8V5a2 2 0 1 0-4 0v9.8a4 4 0 1 0 4 0z"/>',
+  humidity: '<path d="M12 3.5s-6 6.6-6 10.5a6 6 0 0 0 12 0c0-3.9-6-10.5-6-10.5z"/>',
+  light: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
+};
+// what the tab's devices say: temperature and humidity ranges (room sensors, not switch chips), lights on
+function chips(cards) {
+  const nums = k => cards.filter(c => c.online && typeof c.state[k] === 'number').map(c => c.state[k]);
+  const range = (xs, unit) => xs.length ? (Math.min(...xs) === Math.max(...xs) ? `${Math.min(...xs)}${unit}`
+    : `${Math.min(...xs)} - ${Math.max(...xs)}${unit}`) : null;
+  const isLight = c => c.kind === 'light' || (c.kind === 'plug' && /灯/.test(c.name));
+  const lights = cards.filter(c => isLight(c) && c.state.on === true).length;
+  const out = [['temp', range(nums('temp'), '°')], ['humidity', range(nums('humidity'), '%')],
+               ['light', cards.some(isLight) ? (lights ? `亮灯 ${lights}` : '灯都关着') : null]];
+  return out.filter(([, t]) => t).map(([k, t]) => `<div class="h-chip">${
+    `<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" stroke="none">${CHIP_ICON[k]}</svg>`}<span>${esc(t)}</span></div>`).join('');
 }
 
 function tile(c) {
@@ -204,10 +237,25 @@ $('hRegions').addEventListener('click', e => {
   renderLogin(mi.view);
   if ((mi.view.login || {}).state === 'waiting') miFetch('/api/mijia/login/start', { region: mi.region });
 });
-$('hHomes').addEventListener('click', e => {
-  const b = e.target.closest('button');
-  if (b) miFetch('/api/mijia/home', { id: b.dataset.id });
+$('hHomePick').addEventListener('click', e => {
+  e.stopPropagation();
+  if ($('hHomePick').classList.contains('many')) $('hHomeMenu').classList.toggle('on');
 });
+$('hHomeMenu').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  $('hHomeMenu').classList.remove('on');
+  if (b && b.dataset.id !== (mi.view || {}).home_id) { mi.room = ALL; mi.scrollTab = true; miFetch('/api/mijia/home', { id: b.dataset.id }); }
+});
+$('home').addEventListener('click', e => { if (!e.target.closest('.h-head')) $('hHomeMenu').classList.remove('on'); });
+$('hTabs').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  mi.room = b.dataset.room;
+  try { localStorage.setItem('mijiaRoom', mi.room); } catch (err) { /* private storage */ }
+  renderHome();
+  $('hRooms').scrollTop = 0;
+});
+try { mi.room = localStorage.getItem('mijiaRoom') || ALL; } catch (err) { /* private storage */ }
 $('hRooms').addEventListener('click', e => {
   const p = e.target.closest('[data-power]');
   if (p) {

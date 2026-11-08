@@ -10,7 +10,7 @@ import types
 gi = types.ModuleType('gi')
 gi.require_version = lambda *a: None
 repo = types.ModuleType('gi.repository')
-repo.GLib = repo.Gtk = repo.WebKit2 = None
+repo.GLib = repo.Gdk = repo.Gtk = repo.WebKit2 = None
 sys.modules.setdefault('gi', gi)
 sys.modules.setdefault('gi.repository', repo)
 

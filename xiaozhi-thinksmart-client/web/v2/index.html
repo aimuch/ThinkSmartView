@@ -305,7 +305,12 @@
 <!-- 家居: Mijia devices (thinksmart_client/mijia). Login pane (QR) or rooms of device tiles; a tile opens its controls. -->
 <div class="sheet home" id="home">
   <div class="sheet-bar">
-    <div><h2>家居</h2><p id="hSub">米家设备</p></div>
+    <div class="h-head">
+      <button class="h-home-pick" id="hHomePick" aria-label="选择家庭"><b id="hHomeName">家居</b>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></button>
+      <p id="hSub">米家设备</p>
+      <div class="h-home-menu" id="hHomeMenu"></div>
+    </div>
     <div class="w-btns">
       <button class="close" id="hRefresh" aria-label="刷新">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
@@ -313,7 +318,8 @@
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
   </div>
-  <div class="h-homes" id="hHomes"></div>
+  <div class="h-tabs" id="hTabs"></div>
+  <div class="h-chips" id="hChips"></div>
   <section class="h-login" id="hLogin">
     <div class="h-qr-box">
       <canvas id="hQr" width="360" height="360"></canvas>

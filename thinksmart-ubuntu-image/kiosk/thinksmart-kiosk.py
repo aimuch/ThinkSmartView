@@ -31,7 +31,7 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 gi.require_version('WebKit2', '4.1')
-from gi.repository import GLib, Gtk, WebKit2  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk, WebKit2  # noqa: E402
 
 CONF = '/etc/thinksmart-kiosk.conf'
 SHARE = '/usr/local/share/thinksmart-kiosk'
@@ -372,6 +372,9 @@ def main():
     ucm.add_script(WebKit2.UserScript.new(shell, WebKit2.UserContentInjectedFrames.TOP_FRAME,
                                           WebKit2.UserScriptInjectionTime.START, None, None))
     view = WebKit2.WebView(web_context=context, website_policies=policies, user_content_manager=ucm)
+    # Dark until the page paints (the client's background): when gpu-watchdog restarts the browser
+    # after a GPU fault, the screen dims for a moment instead of flashing white
+    view.set_background_color(Gdk.RGBA(red=5 / 255, green=8 / 255, blue=19 / 255, alpha=1))
     settings = view.get_settings()
     # Developer tools only when profiling: WEBKIT_ENV="... WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9222",
     # then open http://127.0.0.1:9222 through an ssh tunnel
@@ -510,6 +513,9 @@ def main():
     GLib.timeout_add_seconds(RETRY_SECONDS, check_target)
 
     window = Gtk.Window(title='ThinkSmart Kiosk')
+    css = Gtk.CssProvider()
+    css.load_from_data(b'window { background-color: #050813; }')
+    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
     window.add(view)
     window.connect('destroy', Gtk.main_quit)
     window.fullscreen()
