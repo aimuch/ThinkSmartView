@@ -1339,11 +1339,6 @@ struct CameraLivePanelView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             AdaptiveGlassContainer(spacing: 6) {
                 HStack(spacing: 6) {
-                    if controller.ptzClientReady,
-                       controller.ptzBinding?.capability.confidence == .pendingRealDevice {
-                        CameraPTZPendingBadge()
-                    }
-
                     if spec.powerWritable {
                         Button {
                             if let dev = device {

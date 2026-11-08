@@ -154,12 +154,8 @@ export class CameraLiveController {
     this.liveCameraLoading = false;
     this.liveCameraError = null;
     this.liveCameraShowingURLInput = false;
-    if (closingId) {
-      if (this.host.settings.connectionMode === "xiaomiCloud" && closingDev) {
-        void this.releaseCameraP2PSession(closingDev, this.liveCameraToken);
-      }
-      // Release the P2P session or bridged stream so the next open negotiates a fresh one.
-      invokeTauriVoid("stop_xiaomi_camera_bridge", { did: closingId });
+    if (closingId && this.host.settings.connectionMode === "xiaomiCloud" && closingDev) {
+      void this.releaseCameraP2PSession(closingDev, this.liveCameraToken);
     }
     invokeTauriVoid("set_pin_popover", { pin: false });
     this.host.render();
@@ -206,7 +202,7 @@ export class CameraLiveController {
     return tracked;
   }
 
-  /** Drops the MJPEG image and any pending negotiation. */
+  /** Drops the MJPEG image, any pending negotiation, and the backend stream bridge/reader. */
   public stopLiveTransport(): void {
     this.liveCameraToken += 1;
     this.liveCameraAbort?.abort();
@@ -224,6 +220,9 @@ export class CameraLiveController {
     this.liveCameraRawMediaEl?.remove();
     this.liveCameraRawMediaEl = null;
     this.liveCameraMode = null;
+    if (this.activeLiveCameraId) {
+      invokeTauriVoid("stop_xiaomi_camera_bridge", { did: this.activeLiveCameraId });
+    }
   }
 
   /** Puts the live element back after `render()` rebuilds the panel markup. */
@@ -294,12 +293,16 @@ export class CameraLiveController {
     const invoke = window.__TAURI_INTERNALS__?.invoke;
     if (!invoke) return;
     let failureStarted: number | null = null;
+    let lastJpeg = "";
     while (token === this.liveCameraToken && !signal.aborted) {
       try {
         const jpeg = await invoke<string>("go2rtc_jpeg_frame", { src: name });
         if (token !== this.liveCameraToken || signal.aborted) return;
         if (!jpeg) throw new Error(t("go2rtc 未返回画面"));
-        img.src = `data:image/jpeg;base64,${jpeg}`;
+        if (jpeg !== lastJpeg) {
+          img.src = `data:image/jpeg;base64,${jpeg}`;
+          lastJpeg = jpeg;
+        }
         failureStarted = null;
         if (this.liveCameraImgEl !== img) {
           this.liveCameraImgEl = img;

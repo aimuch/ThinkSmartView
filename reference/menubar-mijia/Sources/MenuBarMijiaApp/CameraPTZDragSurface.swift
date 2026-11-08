@@ -100,21 +100,3 @@ struct CameraPTZNoticeBanner: View {
     }
 }
 
-/// A PTZ-capable model whose motor behaviour still needs a real-device check.
-struct CameraPTZPendingBadge: View {
-    var body: some View {
-        Label(
-            L10n.tr("云台待真机验证", "PTZ pending device check"),
-            systemImage: "exclamationmark.triangle"
-        )
-        .font(.system(size: 10.5, weight: .semibold))
-        .foregroundStyle(.orange.opacity(0.95))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(Color.orange.opacity(0.14)))
-        .help(L10n.tr(
-            "该型号的云台运动模式尚未在真机确认：每次拖动先发一步，松手必发停止",
-            "This model's motor mode is not device-verified yet: one step per drag, stop always sent"
-        ))
-    }
-}

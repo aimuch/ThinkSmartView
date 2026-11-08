@@ -101,6 +101,7 @@ pub(crate) async fn bridge_hls_camera_stream(
         .timeout(Duration::from_secs(6))
         .build()
         .map_err(|e| e.to_string())?;
+    stop_mjpeg_streams(&[&mjpeg_name]);
     let _ = authed(
         http.delete(api_url(
             &session,
@@ -133,6 +134,9 @@ pub(crate) async fn stop_xiaomi_camera_bridge(did: String) -> Result<(), String>
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '_')
         .collect();
+    if clean_did.is_empty() {
+        stop_all_mjpeg_streams();
+    }
     let http = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(3))
@@ -186,6 +190,7 @@ pub(crate) async fn stop_bridge(
     clean_did: &str,
     names: &[&str],
 ) {
+    stop_mjpeg_streams(names);
     if let Some(session) = session {
         for name in names {
             let url = api_url(
@@ -247,6 +252,7 @@ pub(crate) fn scrub_persisted_streams_from_config() {
 }
 
 pub(crate) fn shutdown_camera_daemons() {
+    stop_all_mjpeg_streams();
     if let Ok(mut relays) = CAMERA_RELAYS.lock() {
         for (_, relay) in relays.drain() {
             relay.stop.store(true, Ordering::SeqCst);
@@ -1239,6 +1245,7 @@ pub(crate) fn is_go2rtc_stream_name(src: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
+#[cfg(test)]
 pub(crate) fn go2rtc_jpeg_frame_url(session: &Go2RtcSession, src: &str) -> Result<String, String> {
     if !is_go2rtc_stream_name(src) {
         return Err("无效的摄像机流名称".to_string());
@@ -1252,30 +1259,729 @@ pub(crate) fn go2rtc_jpeg_frame_url(session: &Go2RtcSession, src: &str) -> Resul
     ))
 }
 
+pub(crate) fn go2rtc_mjpeg_stream_url(session: &Go2RtcSession, src: &str) -> Result<String, String> {
+    if !is_go2rtc_stream_name(src) {
+        return Err("无效的摄像机流名称".to_string());
+    }
+    if !is_acceptable_go2rtc_listen(&session.api_listen) {
+        return Err("本地流媒体地址无效".to_string());
+    }
+    Ok(api_url(
+        session,
+        &format!("/api/stream.mjpeg?src={}", urlencoding_simple(src)),
+    ))
+}
+
+const MAX_JPEG_FRAME_BYTES: usize = 4 * 1024 * 1024;
+const MJPEG_FRAME_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+const MJPEG_STEADY_FRAME_WAIT: Duration = Duration::from_millis(1500);
+const MJPEG_CONCEALMENT_GRACE: Duration = Duration::from_millis(5500);
+const MJPEG_READER_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Extracts complete JPEG frames (`FF D8 ... FF D9`) from a streaming `multipart/x-mixed-replace`
+/// byte buffer. Segment lengths before `SOS` (`FF DA`) are skipped so `FF D9` bytes inside header
+/// metadata never truncate a frame early; after `SOS`, the entropy scan only contains stuffed
+/// `FF 00`, fill bytes (`FF FF`), or restart markers (`FF D0`..`FF D7`) until `EOI` (`FF D9`).
+pub(crate) fn drain_complete_jpeg_frames(buffer: &mut Vec<u8>) -> Vec<Vec<u8>> {
+    let mut frames = Vec::new();
+    let mut consumed = 0usize;
+
+    loop {
+        let slice = &buffer[consumed..];
+        let Some(soi_rel) = slice.windows(2).position(|w| w == [0xFF, 0xD8]) else {
+            let keep_tail = usize::from(slice.last() == Some(&0xFF));
+            consumed = buffer.len().saturating_sub(keep_tail);
+            break;
+        };
+        let soi = consumed + soi_rel;
+        consumed = soi;
+
+        let mut cursor = soi + 2;
+        let mut in_scan = false;
+        let mut found_eoi = None;
+        let mut restart_at_soi = None;
+
+        while cursor + 1 < buffer.len() {
+            if !in_scan {
+                if buffer[cursor] != 0xFF {
+                    // Valid JPEG headers only contain marker segments between SOI and SOS;
+                    // a non-0xFF byte means this SOI was truncated or false.
+                    restart_at_soi = Some(cursor);
+                    break;
+                }
+                while cursor + 1 < buffer.len() && buffer[cursor + 1] == 0xFF {
+                    cursor += 1;
+                }
+                if cursor + 1 >= buffer.len() {
+                    break;
+                }
+                let marker_pos = cursor;
+                let marker = buffer[cursor + 1];
+                cursor += 2;
+                match marker {
+                    0xD8 => {
+                        // A new SOI before SOS means the previous header was truncated; restart there.
+                        restart_at_soi = Some(marker_pos);
+                        break;
+                    }
+                    0x00 | 0xD9 => {
+                        restart_at_soi = Some(cursor);
+                        break;
+                    }
+                    0x01 | 0xD0..=0xD7 => continue,
+                    0xDA => {
+                        if cursor + 2 > buffer.len() {
+                            break;
+                        }
+                        let seg_len = u16::from_be_bytes([buffer[cursor], buffer[cursor + 1]]) as usize;
+                        if seg_len < 2 {
+                            restart_at_soi = Some(cursor + 2);
+                            break;
+                        }
+                        if cursor + seg_len > buffer.len() {
+                            break;
+                        }
+                        cursor += seg_len;
+                        in_scan = true;
+                    }
+                    _ => {
+                        if cursor + 2 > buffer.len() {
+                            break;
+                        }
+                        let seg_len = u16::from_be_bytes([buffer[cursor], buffer[cursor + 1]]) as usize;
+                        if seg_len < 2 {
+                            restart_at_soi = Some(cursor + 2);
+                            break;
+                        }
+                        if cursor + seg_len > buffer.len() {
+                            break;
+                        }
+                        cursor += seg_len;
+                    }
+                }
+            } else {
+                let Some(ff_rel) = buffer[cursor..].iter().position(|&b| b == 0xFF) else {
+                    break;
+                };
+                let ff = cursor + ff_rel;
+                if ff + 1 >= buffer.len() {
+                    break;
+                }
+                match buffer[ff + 1] {
+                    0xD9 => {
+                        found_eoi = Some(ff + 2);
+                        break;
+                    }
+                    0xD8 => {
+                        // A new SOI before EOI means the previous frame was truncated; drop it.
+                        restart_at_soi = Some(ff);
+                        break;
+                    }
+                    0xFF => {
+                        // Advance by 1 byte on fill bytes so `FF FF D9` / `FF FF D8` is not skipped.
+                        cursor = ff + 1;
+                    }
+                    _ => {
+                        cursor = ff + 2;
+                    }
+                }
+            }
+        }
+
+        if let Some(next_soi) = restart_at_soi {
+            consumed = next_soi;
+            continue;
+        }
+        let Some(end) = found_eoi else {
+            break;
+        };
+        let frame_len = end - soi;
+        if frame_len <= MAX_JPEG_FRAME_BYTES {
+            frames.push(buffer[soi..end].to_vec());
+        }
+        consumed = end;
+    }
+
+    if consumed > 0 {
+        buffer.drain(..consumed);
+    }
+    if buffer.len() > MAX_JPEG_FRAME_BYTES * 2 {
+        let keep_from = buffer.len() - MAX_JPEG_FRAME_BYTES;
+        buffer.drain(..keep_from);
+    }
+    frames
+}
+
+/// Detects FFmpeg's initial HEVC error-concealed gray frames (`Y=128, U=128, V=128`) across the
+/// initial GOP before the first clean IDR keyframe arrives. In baseline 4:2:0 MJPEG, each flat
+/// 16x16 MCU encodes six zero-AC blocks as 32 bits (`4` bytes) under default Annex K Huffman
+/// tables (`0x28A28A00` cyclically shifted) or 12 zero bits (`0x00000000` every 4 bytes) under
+/// FFmpeg 7.x optimal Huffman tables. Across a 4-second HEVC GOP, inter-prediction residuals on
+/// concealed P-frames gradually reduce adjacent 4-byte word repetition from ~62% down to ~12.4%,
+/// while real camera scenes measure ~1.0-1.5% adjacent word repetition (`max_run <= 5`).
+pub(crate) fn is_likely_concealed_gray_jpeg(jpeg: &[u8]) -> bool {
+    if jpeg.len() < 4096 || !jpeg.starts_with(&[0xFF, 0xD8]) {
+        return false;
+    }
+    let mut cursor = 2usize;
+    let mut scan_start = None;
+    while cursor + 1 < jpeg.len() {
+        if jpeg[cursor] != 0xFF {
+            cursor += 1;
+            continue;
+        }
+        while cursor + 1 < jpeg.len() && jpeg[cursor + 1] == 0xFF {
+            cursor += 1;
+        }
+        if cursor + 1 >= jpeg.len() {
+            break;
+        }
+        let marker = jpeg[cursor + 1];
+        cursor += 2;
+        match marker {
+            0x00 | 0x01 | 0xD0..=0xD8 => continue,
+            0xD9 => break,
+            0xDA => {
+                if cursor + 2 <= jpeg.len() {
+                    let seg_len = u16::from_be_bytes([jpeg[cursor], jpeg[cursor + 1]]) as usize;
+                    if seg_len >= 2 && cursor + seg_len <= jpeg.len() {
+                        scan_start = Some(cursor + seg_len);
+                    }
+                }
+                break;
+            }
+            _ => {
+                if cursor + 2 > jpeg.len() {
+                    break;
+                }
+                let seg_len = u16::from_be_bytes([jpeg[cursor], jpeg[cursor + 1]]) as usize;
+                if seg_len < 2 || cursor + seg_len > jpeg.len() {
+                    break;
+                }
+                cursor += seg_len;
+            }
+        }
+    }
+    let Some(start) = scan_start else {
+        return false;
+    };
+    let end = jpeg.len().saturating_sub(2);
+    if end <= start {
+        return false;
+    }
+    let scan = &jpeg[start..end];
+    let mut chunks = scan.chunks_exact(4);
+    let Some(first) = chunks.next() else {
+        return false;
+    };
+    let mut prev = u32::from_be_bytes([first[0], first[1], first[2], first[3]]);
+    let mut total = 0usize;
+    let mut same_as_prev = 0usize;
+    let mut zero_words = usize::from(prev == 0);
+    let mut cur_run = 0usize;
+    let mut max_run = 0usize;
+    let mut long_run_words = 0usize;
+    for chunk in chunks {
+        let word = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        if word == 0 {
+            zero_words += 1;
+        }
+        if word == prev {
+            same_as_prev += 1;
+            cur_run += 1;
+            if cur_run > max_run {
+                max_run = cur_run;
+            }
+        } else {
+            if cur_run >= 16 {
+                long_run_words += cur_run;
+            }
+            cur_run = 0;
+        }
+        prev = word;
+        total += 1;
+    }
+    if cur_run >= 16 {
+        long_run_words += cur_run;
+    }
+    total >= 512
+        && (same_as_prev * 100 >= total * 5
+            || zero_words * 100 >= total * 10
+            || max_run >= 64
+            || long_run_words >= 512)
+}
+
+struct MjpegStreamState {
+    seq: u64,
+    last_returned_seq: u64,
+    latest_jpeg: Option<std::sync::Arc<Vec<u8>>>,
+    fallback_jpeg: Option<std::sync::Arc<Vec<u8>>>,
+    first_concealed_at: Option<std::time::Instant>,
+    last_frame_at: Option<std::time::Instant>,
+    last_polled_at: std::time::Instant,
+    error: Option<String>,
+    closed: bool,
+}
+
+/// Keeps a single `GET /api/stream.mjpeg?src=...` connection open per stream so go2rtc sees a
+/// continuous consumer. Polling one-shot `/api/frame.jpeg` drops the consumer count to 0 after
+/// every frame, which makes go2rtc kill `ffmpeg-silent.exe` and close the Xiaomi CS2 P2P session
+/// right after the initial gray error-concealed frame.
+struct MjpegStreamReader {
+    url: String,
+    username: String,
+    password: String,
+    stop: std::sync::Arc<AtomicBool>,
+    state: std::sync::Arc<std::sync::Mutex<MjpegStreamState>>,
+    task: std::sync::Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+}
+
+static CAMERA_MJPEG_STREAMS: LazyLock<std::sync::Mutex<HashMap<String, std::sync::Arc<MjpegStreamReader>>>> =
+    LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
+
+pub(crate) fn stop_mjpeg_streams(names: &[&str]) {
+    if let Ok(mut streams) = CAMERA_MJPEG_STREAMS.lock() {
+        for name in names {
+            if let Some(reader) = streams.remove(*name) {
+                reader.shutdown();
+            }
+        }
+    }
+}
+
+pub(crate) fn stop_all_mjpeg_streams() {
+    if let Ok(mut streams) = CAMERA_MJPEG_STREAMS.lock() {
+        for (_, reader) in streams.drain() {
+            reader.shutdown();
+        }
+    }
+}
+
+impl MjpegStreamReader {
+    fn spawn(session: &Go2RtcSession, url: String, concealment_grace: Duration) -> std::sync::Arc<Self> {
+        let stop = std::sync::Arc::new(AtomicBool::new(false));
+        let now = std::time::Instant::now();
+        let state = std::sync::Arc::new(std::sync::Mutex::new(MjpegStreamState {
+            seq: 0,
+            last_returned_seq: 0,
+            latest_jpeg: None,
+            fallback_jpeg: None,
+            first_concealed_at: None,
+            last_frame_at: None,
+            last_polled_at: now,
+            error: None,
+            closed: false,
+        }));
+        let reader = std::sync::Arc::new(Self {
+            url: url.clone(),
+            username: session.username.clone(),
+            password: session.password.clone(),
+            stop: std::sync::Arc::clone(&stop),
+            state: std::sync::Arc::clone(&state),
+            task: std::sync::Mutex::new(None),
+        });
+
+        let session_clone = session.clone();
+        let handle = tauri::async_runtime::spawn(async move {
+            let http = match reqwest::Client::builder()
+                .no_proxy()
+                .connect_timeout(Duration::from_secs(5))
+                .build()
+            {
+                Ok(client) => client,
+                Err(error) => {
+                    if let Ok(mut guard) = state.lock() {
+                        guard.error = Some(error.to_string());
+                        guard.closed = true;
+                    }
+                    return;
+                }
+            };
+
+            let mut response = match tokio::time::timeout(
+                Duration::from_secs(8),
+                authed(http.get(&url), &session_clone).send(),
+            )
+            .await
+            {
+                Ok(Ok(resp)) => resp,
+                Ok(Err(error)) => {
+                    if let Ok(mut guard) = state.lock() {
+                        guard.error = Some(error.to_string());
+                        guard.closed = true;
+                    }
+                    return;
+                }
+                Err(_) => {
+                    if let Ok(mut guard) = state.lock() {
+                        guard.error = Some("连接摄像机画面流超时".to_string());
+                        guard.closed = true;
+                    }
+                    return;
+                }
+            };
+
+            if !response.status().is_success() {
+                if let Ok(mut guard) = state.lock() {
+                    guard.error = Some(format!("读取摄像机画面失败 (HTTP {})", response.status()));
+                    guard.closed = true;
+                }
+                return;
+            }
+
+            let mut buffer = Vec::with_capacity(256 * 1024);
+            while !stop.load(Ordering::SeqCst) {
+                if let Ok(guard) = state.lock() {
+                    if guard.last_polled_at.elapsed() > MJPEG_READER_IDLE_TIMEOUT {
+                        break;
+                    }
+                }
+                match tokio::time::timeout(Duration::from_secs(10), response.chunk()).await {
+                    Ok(Ok(Some(chunk))) => {
+                        buffer.extend_from_slice(&chunk);
+                        let frames = drain_complete_jpeg_frames(&mut buffer);
+                        if frames.is_empty() {
+                            continue;
+                        }
+                        if let Ok(mut guard) = state.lock() {
+                            let frame_now = std::time::Instant::now();
+                            for jpeg in frames {
+                                let suppress_concealed = guard.latest_jpeg.is_none()
+                                    && guard
+                                        .first_concealed_at
+                                        .map_or(true, |since| since.elapsed() < concealment_grace)
+                                    && is_likely_concealed_gray_jpeg(&jpeg);
+                                if suppress_concealed {
+                                    if guard.first_concealed_at.is_none() {
+                                        guard.first_concealed_at = Some(frame_now);
+                                    }
+                                    guard.fallback_jpeg = Some(std::sync::Arc::new(jpeg));
+                                } else {
+                                    guard.seq += 1;
+                                    guard.latest_jpeg = Some(std::sync::Arc::new(jpeg));
+                                    guard.fallback_jpeg = None;
+                                    guard.last_frame_at = Some(frame_now);
+                                    guard.error = None;
+                                }
+                            }
+                        }
+                    }
+                    Ok(Ok(None)) => {
+                        if let Ok(mut guard) = state.lock() {
+                            if guard.latest_jpeg.is_none() {
+                                if let Some(fallback) = guard.fallback_jpeg.take() {
+                                    guard.seq += 1;
+                                    guard.latest_jpeg = Some(fallback);
+                                    guard.last_frame_at = Some(std::time::Instant::now());
+                                }
+                            }
+                            if guard.error.is_none() {
+                                guard.error = Some("摄像机流已结束".to_string());
+                            }
+                            guard.closed = true;
+                        }
+                        return;
+                    }
+                    Ok(Err(error)) => {
+                        if let Ok(mut guard) = state.lock() {
+                            guard.error = Some(error.to_string());
+                            guard.closed = true;
+                        }
+                        return;
+                    }
+                    Err(_) => {
+                        if let Ok(mut guard) = state.lock() {
+                            guard.error = Some("读取摄像机画面超时".to_string());
+                            guard.closed = true;
+                        }
+                        return;
+                    }
+                }
+            }
+
+            if let Ok(mut guard) = state.lock() {
+                guard.closed = true;
+            }
+        });
+
+        if let Ok(mut task_guard) = reader.task.lock() {
+            *task_guard = Some(handle);
+        }
+
+        reader
+    }
+
+    fn shutdown(&self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Ok(mut guard) = self.state.lock() {
+            guard.closed = true;
+            if guard.error.is_none() {
+                guard.error = Some("摄像机流已停止".to_string());
+            }
+        }
+        if let Ok(mut task_guard) = self.task.lock() {
+            if let Some(handle) = task_guard.take() {
+                handle.abort();
+            }
+        }
+    }
+
+    fn matches(&self, url: &str, session: &Go2RtcSession) -> bool {
+        !self.stop.load(Ordering::SeqCst)
+            && self.url == url
+            && self.username == session.username
+            && self.password == session.password
+            && self.state.lock().map_or(false, |guard| !guard.closed)
+    }
+
+    async fn next_frame_jpeg(
+        &self,
+        timeout: Duration,
+        concealment_grace: Duration,
+    ) -> Result<std::sync::Arc<Vec<u8>>, String> {
+        let start = std::time::Instant::now();
+        loop {
+            if self.stop.load(Ordering::SeqCst) {
+                return Err("摄像机流已停止".to_string());
+            }
+            if let Ok(mut guard) = self.state.lock() {
+                let now = std::time::Instant::now();
+                guard.last_polled_at = now;
+                if guard.latest_jpeg.is_none() {
+                    if let Some(since) = guard.first_concealed_at {
+                        if since.elapsed() >= concealment_grace {
+                            if let Some(fallback) = guard.fallback_jpeg.take() {
+                                guard.seq += 1;
+                                guard.latest_jpeg = Some(fallback);
+                                guard.last_frame_at = Some(now);
+                            }
+                        }
+                    }
+                }
+
+                if guard.seq > guard.last_returned_seq {
+                    if let Some(frame) = guard.latest_jpeg.as_ref().cloned() {
+                        guard.last_returned_seq = guard.seq;
+                        return Ok(frame);
+                    }
+                }
+
+                if guard.closed {
+                    return Err(guard
+                        .error
+                        .clone()
+                        .unwrap_or_else(|| "摄像机流已断开".to_string()));
+                }
+
+                if let Some(frame) = guard.latest_jpeg.as_ref() {
+                    let frame_still_fresh = guard
+                        .last_frame_at
+                        .is_some_and(|at| at.elapsed() < timeout);
+                    if frame_still_fresh && start.elapsed() >= timeout.min(MJPEG_STEADY_FRAME_WAIT) {
+                        return Ok(std::sync::Arc::clone(frame));
+                    }
+                }
+            } else {
+                return Err("摄像机流状态不可用".to_string());
+            }
+
+            if start.elapsed() >= timeout {
+                if let Ok(mut guard) = self.state.lock() {
+                    if let Some(fallback) = guard.fallback_jpeg.take() {
+                        guard.seq += 1;
+                        guard.last_returned_seq = guard.seq;
+                        guard.latest_jpeg = Some(std::sync::Arc::clone(&fallback));
+                        guard.last_frame_at = Some(std::time::Instant::now());
+                        return Ok(fallback);
+                    }
+                }
+                return Err("等待摄像机画面超时".to_string());
+            }
+
+            tokio::time::sleep(Duration::from_millis(12)).await;
+        }
+    }
+}
+
+pub(crate) async fn fetch_mjpeg_stream_frame(
+    session: &Go2RtcSession,
+    src: &str,
+    timeout: Duration,
+    concealment_grace: Duration,
+) -> Result<std::sync::Arc<Vec<u8>>, String> {
+    let url = go2rtc_mjpeg_stream_url(session, src)?;
+    let reader = {
+        let mut streams = CAMERA_MJPEG_STREAMS
+            .lock()
+            .map_err(|_| "摄像机流列表不可用".to_string())?;
+        if let Some(existing) = streams.get(src) {
+            if existing.matches(&url, session) {
+                std::sync::Arc::clone(existing)
+            } else {
+                existing.shutdown();
+                let fresh = MjpegStreamReader::spawn(session, url, concealment_grace);
+                streams.insert(src.to_string(), std::sync::Arc::clone(&fresh));
+                fresh
+            }
+        } else {
+            let fresh = MjpegStreamReader::spawn(session, url, concealment_grace);
+            streams.insert(src.to_string(), std::sync::Arc::clone(&fresh));
+            fresh
+        }
+    };
+
+    match reader.next_frame_jpeg(timeout, concealment_grace).await {
+        Ok(frame) => Ok(frame),
+        Err(error) => {
+            reader.shutdown();
+            if let Ok(mut streams) = CAMERA_MJPEG_STREAMS.lock() {
+                if streams
+                    .get(src)
+                    .is_some_and(|current| std::sync::Arc::ptr_eq(current, &reader))
+                {
+                    streams.remove(src);
+                }
+            }
+            Err(error)
+        }
+    }
+}
+
 #[tauri::command]
 pub(crate) async fn go2rtc_jpeg_frame(src: String) -> Result<String, String> {
     let session = current_go2rtc_session()?;
-    let url = go2rtc_jpeg_frame_url(&session, &src)?;
-    let http = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(8))
-        .build()
-        .map_err(|e| e.to_string())?;
-    let response = authed(http.get(&url), &session)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "读取摄像机画面失败 (HTTP {})",
-            response.status()
-        ));
-    }
-    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-    if bytes.len() > 4 * 1024 * 1024 {
+    let bytes = fetch_mjpeg_stream_frame(
+        &session,
+        &src,
+        MJPEG_FRAME_WAIT_TIMEOUT,
+        MJPEG_CONCEALMENT_GRACE,
+    )
+    .await?;
+    if bytes.len() > MAX_JPEG_FRAME_BYTES {
         return Err("摄像机画面过大".to_string());
     }
     Ok(base64_encode(&bytes))
+}
+
+/// Caps inbound CS2 command-channel (`channel = 0`) `DRW` packets forwarded to `go2rtc`.
+///
+/// After the initial command handshake (`CMD 102`login, `CMD 100` start video, and response),
+/// `go2rtc` stops reading channel 0 while only reading video channel 1 and audio channel 2.
+/// Xiaomi cameras continue sending periodic channel-0 status `DRW` messages; once 6 accumulate
+/// in `go2rtc`'s 6-slot channel-0 buffer, `go2rtc` aborts the entire session with
+/// `cs2: pop buffer is full`. For channel-0 packets past the first 6 unique sequence numbers,
+/// the relay drops the packet before `go2rtc` and replies with `DRW_ACK` directly to the camera.
+pub(crate) struct Cs2CommandChannelGate {
+    allowed_sequences: Vec<u16>,
+}
+
+impl Cs2CommandChannelGate {
+    pub(crate) const PASSTHROUGH_LIMIT: usize = 6;
+
+    pub(crate) fn new() -> Self {
+        Self {
+            allowed_sequences: Vec::with_capacity(Self::PASSTHROUGH_LIMIT),
+        }
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.allowed_sequences.clear();
+    }
+
+    /// Inspects an inbound camera UDP packet and returns `Some((seq_hi, seq_lo))` when it is a
+    /// channel-0 `DRW` packet that must be dropped before `go2rtc` and acknowledged directly.
+    pub(crate) fn should_drop(&mut self, buf: &[u8]) -> Option<(u8, u8)> {
+        if buf.len() < 8 || buf[0] != 0xF1 || buf[1] != 0xD0 {
+            return None;
+        }
+        // DRW body starts at offset 4: `0xD1`, channel, seq_hi, seq_lo.
+        if buf[4] != 0xD1 || buf[5] != 0x00 {
+            return None;
+        }
+        let seq_hi = buf[6];
+        let seq_lo = buf[7];
+        let seq = u16::from_be_bytes([seq_hi, seq_lo]);
+        if self.allowed_sequences.contains(&seq) {
+            return None;
+        }
+        if self.allowed_sequences.len() < Self::PASSTHROUGH_LIMIT {
+            self.allowed_sequences.push(seq);
+            return None;
+        }
+        Some((seq_hi, seq_lo))
+    }
+
+    pub(crate) fn drw_ack(seq_hi: u8, seq_lo: u8) -> [u8; 10] {
+        [0xF1, 0xD1, 0x00, 0x06, 0xD1, 0x00, 0x00, 0x01, seq_hi, seq_lo]
+    }
+}
+
+fn configure_cs2_udp_socket(sock: &std::net::UdpSocket) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawSocket;
+        const SOL_SOCKET: i32 = 0xFFFF;
+        const SO_SNDBUF: i32 = 0x1001;
+        const SO_RCVBUF: i32 = 0x1002;
+        const SIO_UDP_CONNRESET: u32 = 0x9800_000C;
+
+        extern "system" {
+            fn setsockopt(
+                s: usize,
+                level: i32,
+                optname: i32,
+                optval: *const u8,
+                optlen: i32,
+            ) -> i32;
+            fn WSAIoctl(
+                s: usize,
+                dwIoControlCode: u32,
+                lpvInBuffer: *const core::ffi::c_void,
+                cbInBuffer: u32,
+                lpvOutBuffer: *mut core::ffi::c_void,
+                cbOutBuffer: u32,
+                lpcbBytesReturned: *mut u32,
+                lpOverlapped: *mut core::ffi::c_void,
+                lpCompletionRoutine: *mut core::ffi::c_void,
+            ) -> i32;
+        }
+
+        let raw = sock.as_raw_socket() as usize;
+        // 2.5K/4K HEVC keyframes arrive as back-to-back ~1 KB UDP datagrams that overflow the
+        // 64 KB Windows default socket buffer and drop slices before user space can read them.
+        let buf_size: i32 = 4 * 1024 * 1024;
+        let disable_connreset: u32 = 0;
+        let mut bytes_returned: u32 = 0;
+        unsafe {
+            let _ = setsockopt(
+                raw,
+                SOL_SOCKET,
+                SO_RCVBUF,
+                (&buf_size as *const i32).cast::<u8>(),
+                core::mem::size_of::<i32>() as i32,
+            );
+            let _ = setsockopt(
+                raw,
+                SOL_SOCKET,
+                SO_SNDBUF,
+                (&buf_size as *const i32).cast::<u8>(),
+                core::mem::size_of::<i32>() as i32,
+            );
+            // Disable Windows UDP `WSAECONNRESET` (10054) triggered by ICMP Port Unreachable
+            // after broadcasting LAN_SEARCH to `.255`.
+            let _ = WSAIoctl(
+                raw,
+                SIO_UDP_CONNRESET,
+                (&disable_connreset as *const u32).cast::<core::ffi::c_void>(),
+                core::mem::size_of::<u32>() as u32,
+                core::ptr::null_mut(),
+                0,
+                &mut bytes_returned,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+            );
+        }
+    }
 }
 
 pub(crate) fn spawn_cs2_udp_relay(
@@ -1300,14 +2006,16 @@ pub(crate) fn spawn_cs2_udp_relay(
 
     let local_relay = UdpSocket::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
     let relay_port = local_relay.local_addr().map_err(|e| e.to_string())?.port();
+    configure_cs2_udp_socket(&local_relay);
     local_relay
-        .set_read_timeout(Some(Duration::from_millis(25)))
+        .set_nonblocking(true)
         .map_err(|e| e.to_string())?;
 
     let lan_sock = UdpSocket::bind(SocketAddrV4::new(local_ip, 0)).map_err(|e| e.to_string())?;
     lan_sock.set_broadcast(true).map_err(|e| e.to_string())?;
+    configure_cs2_udp_socket(&lan_sock);
     lan_sock
-        .set_read_timeout(Some(Duration::from_millis(25)))
+        .set_nonblocking(true)
         .map_err(|e| e.to_string())?;
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -1315,26 +2023,58 @@ pub(crate) fn spawn_cs2_udp_relay(
     std::thread::spawn(move || {
         let mut go2rtc_addr: Option<std::net::SocketAddr> = None;
         let mut cam_dynamic_port: u16 = 32108;
-        let mut buf = [0u8; 2048];
+        let mut cmd_gate = Cs2CommandChannelGate::new();
+        let mut buf = vec![0u8; 65_536];
 
         while !stop_for_thread.load(Ordering::SeqCst) {
-            if let Ok((n, src)) = local_relay.recv_from(&mut buf) {
-                go2rtc_addr = Some(src);
-                if n >= 2 && buf[0] == 0xf1 && buf[1] == 0x30 {
-                    let _ = lan_sock.send_to(&buf[..n], SocketAddrV4::new(broadcast_ip, 32108));
-                    let _ = lan_sock.send_to(&buf[..n], SocketAddrV4::new(cam_ip, 32108));
-                } else {
-                    let _ = lan_sock.send_to(&buf[..n], SocketAddrV4::new(cam_ip, cam_dynamic_port));
+            let mut transferred = false;
+
+            loop {
+                match local_relay.recv_from(&mut buf) {
+                    Ok((n, src)) => {
+                        transferred = true;
+                        go2rtc_addr = Some(src);
+                        if n >= 2 && buf[0] == 0xF1 && buf[1] == 0x30 {
+                            cmd_gate.reset();
+                            let _ =
+                                lan_sock.send_to(&buf[..n], SocketAddrV4::new(broadcast_ip, 32108));
+                            let _ = lan_sock.send_to(&buf[..n], SocketAddrV4::new(cam_ip, 32108));
+                        } else {
+                            let _ = lan_sock
+                                .send_to(&buf[..n], SocketAddrV4::new(cam_ip, cam_dynamic_port));
+                        }
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                    Err(ref e) if matches!(e.raw_os_error(), Some(10040 | 10054)) => continue,
+                    Err(_) => break,
                 }
             }
 
-            while let Ok((n, src)) = lan_sock.recv_from(&mut buf) {
-                if src.ip() == std::net::IpAddr::V4(cam_ip) {
-                    cam_dynamic_port = src.port();
-                    if let Some(client_addr) = go2rtc_addr {
-                        let _ = local_relay.send_to(&buf[..n], client_addr);
+            loop {
+                match lan_sock.recv_from(&mut buf) {
+                    Ok((n, src)) => {
+                        transferred = true;
+                        if src.ip() == std::net::IpAddr::V4(cam_ip) {
+                            cam_dynamic_port = src.port();
+                            if let Some((seq_hi, seq_lo)) = cmd_gate.should_drop(&buf[..n]) {
+                                let ack = Cs2CommandChannelGate::drw_ack(seq_hi, seq_lo);
+                                let _ = lan_sock
+                                    .send_to(&ack, SocketAddrV4::new(cam_ip, cam_dynamic_port));
+                                continue;
+                            }
+                            if let Some(client_addr) = go2rtc_addr {
+                                let _ = local_relay.send_to(&buf[..n], client_addr);
+                            }
+                        }
                     }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                    Err(ref e) if matches!(e.raw_os_error(), Some(10040 | 10054)) => continue,
+                    Err(_) => break,
                 }
+            }
+
+            if !transferred {
+                std::thread::sleep(Duration::from_millis(1));
             }
         }
     });

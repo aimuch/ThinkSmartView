@@ -2807,6 +2807,7 @@ describe("Smart camera support and live view (#97)", () => {
     hlsBridge?: () => Promise<string>;
   }): Promise<{
     bridgeCalls: Array<Record<string, unknown>>;
+    stopBridgeCalls: Array<Record<string, unknown>>;
     frameSrcs: string[];
     p2pStarts: { count: number };
     p2pStops: { count: number };
@@ -2839,6 +2840,7 @@ describe("Smart camera support and live view (#97)", () => {
     });
     const security = "AQIDBAUGBwgJCgsMDQ4PEA==";
     const bridgeCalls: Array<Record<string, unknown>> = [];
+    const stopBridgeCalls: Array<Record<string, unknown>> = [];
     const frameSrcs: string[] = [];
     const p2pStarts = { count: 0 };
     const p2pStops = { count: 0 };
@@ -2847,6 +2849,10 @@ describe("Smart camera support and live view (#97)", () => {
       if (name === "start_xiaomi_camera_bridge") {
         bridgeCalls.push(args);
         return "cam_h264_cam1|cam_mjpeg_cam1";
+      }
+      if (name === "stop_xiaomi_camera_bridge") {
+        stopBridgeCalls.push(args);
+        return undefined;
       }
       if (name === "go2rtc_jpeg_frame") {
         const src = String(args.src ?? "");
@@ -2918,7 +2924,7 @@ describe("Smart camera support and live view (#97)", () => {
     app.cameraLive.cameraFrameRetryMs = options.retryMs;
     await waitFor(() => document.querySelector('[data-body-device="cam-1"]') !== null);
     await click('[data-body-device="cam-1"]');
-    return { bridgeCalls, frameSrcs, p2pStarts, p2pStops };
+    return { bridgeCalls, stopBridgeCalls, frameSrcs, p2pStarts, p2pStops };
   }
 
   it("shows a picture after one missed Xiaomi cloud frame without opening a second bridge", async () => {
@@ -2981,7 +2987,48 @@ describe("Smart camera support and live view (#97)", () => {
 
     await click("#btn-reload-camera-live");
     await waitFor(() => live.bridgeCalls.length === 2);
+    assert.deepEqual(live.stopBridgeCalls, [{ did: "cam-1" }]);
     assert.equal(live.p2pStarts.count, 2);
+  });
+
+  it("tears down the running bridge when switching stream quality and skips redundant img.src writes on identical frames", async () => {
+    let framePolls = 0;
+    const live = await openXiaomiCloudP2PCamera({
+      budgetMs: 5_000,
+      retryMs: 0,
+      frame: async () => {
+        framePolls += 1;
+        return framePolls <= 2 ? "aGVsbG8" : "d29ybGQ";
+      },
+    });
+    await waitFor(
+      () =>
+        (document.querySelector("#cc-camera-live-img") as HTMLImageElement | null)?.getAttribute("src") ===
+        "data:image/jpeg;base64,aGVsbG8",
+      800,
+    );
+    const img = document.querySelector("#cc-camera-live-img") as HTMLImageElement;
+    assert.ok(img);
+    let srcMutations = 0;
+    const origDesc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(img), "src");
+    Object.defineProperty(img, "src", {
+      configurable: true,
+      get() {
+        return origDesc?.get ? origDesc.get.call(this) : this.getAttribute("src") ?? "";
+      },
+      set(v: string) {
+        srcMutations += 1;
+        if (origDesc?.set) origDesc.set.call(this, v);
+        else this.setAttribute("src", v);
+      },
+    });
+    await waitFor(() => framePolls >= 3 && img.getAttribute("src") === "data:image/jpeg;base64,d29ybGQ", 800);
+    assert.equal(srcMutations, 1, "identical consecutive base64 frame must not reassign img.src");
+
+    await click('[data-cameraquality="cam-1"][data-cameraquality-value="max"]');
+    await waitFor(() => live.bridgeCalls.length === 2, 800);
+    assert.deepEqual(live.stopBridgeCalls, [{ did: "cam-1" }]);
+    assert.equal(live.bridgeCalls[1]?.["quality"], "max");
   });
 
   it("keeps the pending Xiaomi handshake alive when the live modal is reopened before the first frame", async () => {

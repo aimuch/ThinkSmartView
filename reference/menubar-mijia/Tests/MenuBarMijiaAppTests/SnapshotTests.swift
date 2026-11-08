@@ -1139,7 +1139,7 @@ struct SnapshotTests {
 
     // MARK: - Camera PTZ conditional UI (#97)
 
-    @Test("The compact live panel shows the longest PTZ stop-failure banner and the pending badge")
+    @Test("The compact live panel shows the longest PTZ stop-failure banner")
     func cameraPTZPanelNoticeSnapshot() async throws {
         let fixture = try await SnapshotFixture(includeCamera: true)
         defer { fixture.restore() }
@@ -1170,41 +1170,6 @@ struct SnapshotTests {
             snapshotReady(CameraLivePanelView(controller: controller, store: fixture.store), scheme: .dark),
             size: CGSize(width: CameraLivePanelController.compactSize.width, height: CameraLivePanelController.compactSize.height),
             named: "camera-ptz-panel-notice-dark",
-            scheme: .dark
-        )
-    }
-
-    @Test("The compact live panel shows the pending badge beside the normal control bar")
-    func cameraPTZPanelPendingSnapshot() async throws {
-        let fixture = try await SnapshotFixture(includeCamera: true)
-        defer { fixture.restore() }
-        let camera = try #require(fixture.store.devices.first { device in
-            if case .camera = device.kind { return true } else { return false }
-        })
-        let controller = CameraLivePanelController.shared
-        controller.isExpandedSize = false
-        controller.configurePTZPreview(
-            store: fixture.store,
-            deviceId: camera.id,
-            binding: CameraPTZBinding(
-                capability: CameraPTZCapability(
-                    model: "chuangmi.camera.061a01",
-                    vendor: "cs2",
-                    mode: .unknown,
-                    confidence: .pendingRealDevice
-                ),
-                streamName: "cam_raw_test"
-            ),
-            stream: .demo(deviceId: camera.id),
-            notice: nil,
-            ready: true
-        )
-        defer { controller.configurePTZPreview(deviceId: nil, binding: nil, stream: nil, notice: nil, ready: false) }
-
-        assertRendered(
-            snapshotReady(CameraLivePanelView(controller: controller, store: fixture.store), scheme: .dark),
-            size: CGSize(width: CameraLivePanelController.compactSize.width, height: CameraLivePanelController.compactSize.height),
-            named: "camera-ptz-panel-pending-dark",
             scheme: .dark
         )
     }
