@@ -292,6 +292,9 @@
   .bars div { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 1px; opacity: .85; }
   .bars div.peak { background: var(--warn); }
   .btn.danger { color: var(--err); }
+  .asr-group { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 8px; }
+  .dl { margin-top: 8px; } .dl-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-bottom: 4px; }
+  .dl-bar i { display: block; height: 100%; background: var(--accent); }
   .cost-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .cost-table th, .cost-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   .cost-table td.n, .cost-table th.n { text-align: right; font-variant-numeric: tabular-nums; }
@@ -831,7 +834,7 @@ async function renderLLM(root) {
         <label class="f">模型${x.models.length ? '<span class="hint">可从列表选，也可以手填</span>' : ""}
           <input class="in mono" id="api-model" value="${esc(x.model)}" list="api-models" placeholder="模型名称">
           <datalist id="api-models">${x.models.map((m) => `<option value="${esc(m)}">`).join("")}</datalist></label>
-        <label class="f full">API Key${x.id === "custom" ? '<span class="hint">本机服务不需要 Key 时可以留空</span>' : ""}
+        <label class="f full">API Key${x.key_optional ? '<span class="hint">本机服务不需要 Key 时可以留空</span>' : ""}
           <input class="in mono" id="api-key" type="password" autocomplete="off"
             placeholder="${x.key_set ? `已设置 ${esc(x.key_hint)}，输入新值可替换` : "未设置，粘贴后保存"}"></label>
       </div>
@@ -880,29 +883,47 @@ let asrView = null;  // 正在查看的识别方式：local / doubao
 async function renderASR(root) {
   const d = await api("asr");
   const b = d.doubao, lm = d.local.model;
-  if (!asrView) asrView = d.choice === "doubao" ? "doubao" : "local";
+  const prov = Object.fromEntries((d.providers || []).map((x) => [x.id, x]));
+  if (!asrView || !(asrView === "local" || asrView === "doubao" || prov[asrView])) asrView = d.choice === "other" ? "local" : d.choice;
   const tag = (using, ok) => using ? '<span class="pill ok">使用中</span>' : ok ? '<span class="pill">已配置</span>' : '<span class="pill">未配置</span>';
+  const provChoice = (x) => `<button class="choice ${asrView === x.id ? "on" : ""}" data-asr="${esc(x.id)}">
+        <div class="mark" style="background:${x.group === "local" ? "var(--accent-soft);color:var(--accent)" : "#f1f5f9;color:#334155"}">${esc(x.mark)}</div>
+        <div><b>${esc(x.label)}</b> ${tag(d.choice === x.id, x.configured)}<small>${esc(x.desc)}</small></div></button>`;
+  const mb = (n) => (n / 1048576).toFixed(0);
+  const dlLine = (dl) => !dl || dl.state === "idle" ? "" : dl.state === "running"
+    ? `<div class="dl"><div class="dl-bar"><i style="width:${dl.total ? (dl.done / dl.total * 100).toFixed(1) : 0}%"></i></div><span class="muted small">正在下载 ${mb(dl.done)} / ${mb(dl.total)} MB ${esc(dl.file || "")}</span></div>`
+    : dl.state === "failed" ? `<div class="banner err" style="margin:8px 0 0">下载失败：${esc(dl.error || "")}，可以再试一次（已下载的文件会跳过）</div>`
+    : '<div class="muted small" style="margin-top:8px;color:var(--ok)">下载完成</div>';
+  const downloading = (d.providers || []).some((x) => x.download && x.download.state === "running")
+    || (d.local.variants || []).some((v) => v.download.state === "running");
+  if (downloading) page.timer = setInterval(() => { if (!(page.dirty && page.dirty())) openPage("asr", true); }, 2500);
   root.innerHTML = `
-    <div class="page-head"><div><h1>语音识别</h1><p class="sub">把设备说的话转成文字。一次只能用一种：本地识别，或者豆包云端识别。</p></div>
+    <div class="page-head"><div><h1>语音识别</h1><p class="sub">把设备说的话转成文字。一次只用一种：本地模型在这台电脑上识别、不联网；云端服务要开通、按用量付费。</p></div>
       <span class="pill ok">当前：${esc(d.selected)}</span></div>
     ${d.choice === "other" ? `<div class="banner warn">当前使用的 ${esc(d.selected)} 不在后台管理范围内（可能是手动改了配置文件）。在下面选择一种并使用即可切换。</div>` : ""}
     ${d.running && d.running !== d.selected ? `<div class="banner warn">配置里选的是 ${esc(d.selected)}，但服务仍在使用 ${esc(d.running)}，重启服务后生效。</div>` : ""}
+    <h3 class="asr-group">本地模型</h3>
     <div class="choices">
       <button class="choice ${asrView === "local" ? "on" : ""}" data-asr="local">
-        <div class="mark" style="background:var(--accent-soft);color:var(--accent)">本</div>
-        <div><b>本地 X-ASR</b> ${tag(d.choice === "local", d.local.exists && lm && lm.ok)}
-          <small>中英混合，在这台电脑上识别，不需要联网</small></div></button>
+        <div class="mark" style="background:var(--accent-soft);color:var(--accent)">X</div>
+        <div><b>X-ASR 中英混合</b> ${tag(d.choice === "local", d.local.exists && lm && lm.ok)}
+          <small>默认模型，快；中英夹杂也能认</small></div></button>
+      ${(d.providers || []).filter((x) => x.group === "local").map(provChoice).join("")}
+    </div>
+    <h3 class="asr-group">云端服务</h3>
+    <div class="choices">
       <button class="choice ${asrView === "doubao" ? "on" : ""}" data-asr="doubao">
         <div class="mark" style="background:#e0f2fe;color:#0369a1">豆</div>
         <div><b>豆包流式语音识别</b> ${tag(d.choice === "doubao", b.configured)}
-          <small>火山引擎云端识别，边说边识别；需要开通服务，按用量付费</small></div></button>
+          <small>火山引擎，边说边识别</small></div></button>
+      ${(d.providers || []).filter((x) => x.group === "cloud").map(provChoice).join("")}
     </div>
     <div class="card panel" id="asr-form"></div>
     ${vadCard(d.vad)}
     ${hotwordsCard(d.hotwords)}
     <div class="card" style="margin-top:16px" id="cor-card"></div>
     ${recentCard(d.recent)}
-    <p class="muted small" style="margin-top:14px">其他语音识别方案（阿里、讯飞、其他本地模型）暂不支持在后台设置。</p>`;
+    `;
   let formDirty = () => false;
   const use = (btn, choice, before) => busy(btn, async () => {
     try {
@@ -911,6 +932,38 @@ async function renderASR(root) {
       toast(r.note, r.failed); page.dirty = null; await openPage("asr", true);
     } catch (err) { toast(err.message, true); }
   });
+  const wireDownloads = (box) => box.querySelectorAll("[data-dl]").forEach((btn) => (btn.onclick = () => busy(btn, async () => {
+    try { await api("asr/download", { id: btn.dataset.dl }); toast("开始下载，可以离开这个页面"); await openPage("asr", true); }
+    catch (err) { toast(err.message, true); }
+  })));
+  const renderProvider = (box, x) => {
+    const using = d.choice === x.id;
+    box.innerHTML = `
+      ${x.conflict ? `<div class="banner err">配置里已有一个叫 ${esc(x.entry)} 的条目，但类型不对，请在配置文件里改名或删掉它。</div>` : ""}
+      ${x.missing.length ? `<div class="banner warn">还缺 Python 包：${x.missing.map(esc).join("、")}。在服务器上运行 <code>bash scripts/update.sh</code>（或部署新版网关）会自动补装。</div>` : ""}
+      <p style="margin:0 0 14px">${esc(x.desc)}${x.link ? `，在<a href="${esc(x.link)}" target="_blank" rel="noopener">控制台</a>开通后把密钥填在这里` : ""}。</p>
+      ${x.model ? `<div class="kv" style="grid-template-columns:max-content minmax(0,1fr)"><div class="k">模型文件</div>
+        <div style="color:${x.model.ok ? "var(--ok)" : "var(--err)"}">${esc(x.model.detail)}</div></div>
+        ${x.model.ok ? "" : `<div style="margin-top:8px"><button class="btn" data-dl="${esc(x.id)}" ${x.download && x.download.state === "running" ? "disabled" : ""}>下载模型（${esc(x.download_size)}）</button>${dlLine(x.download)}</div>`}` : ""}
+      ${x.fields.length ? `<div class="grid2" style="margin-top:6px">${x.fields.map((f) => `<label class="f">${esc(f.label)}
+        <input class="in mono" data-k="${esc(f.key)}" ${f.secret ? 'type="password" autocomplete="off"' : ""}
+          ${f.secret ? `placeholder="${f.set ? `已设置 ${esc(f.hint)}，输入新值可替换` : "未设置，粘贴后保存"}"` : `value="${esc(f.value)}"`}></label>`).join("")}</div>
+        <p class="muted small" style="margin:8px 0 0">密钥只保存在这台电脑的配置文件里，页面上只显示首尾 4 位。</p>` : ""}
+      <div class="actions"><span class="result muted">切换后新连接马上生效，在线设备重新连接后生效。</span>
+        ${x.fields.length ? `<button class="btn ${using ? "primary" : ""}" id="pv-save">保存</button>` : ""}
+        ${using ? "" : `<button class="btn primary" id="pv-use">${x.fields.length ? "保存并使用" : "使用"}</button>`}</div>`;
+    const values = () => Object.fromEntries([...box.querySelectorAll("[data-k]")].map((i) => [i.dataset.k, i.value.trim()]));
+    const initial = JSON.stringify(values());
+    formDirty = () => JSON.stringify(values()) !== initial;
+    page.dirty = () => formDirty();
+    const save = async () => api("asr/provider", { id: x.id, values: values() });
+    if ($("pv-save")) $("pv-save").onclick = (e) => busy(e.target, async () => {
+      try { const r = await save(); toast(r.note || "已保存", r.failed); page.dirty = null; await openPage("asr", true); }
+      catch (err) { toast(err.message, true); }
+    });
+    if ($("pv-use")) $("pv-use").onclick = (e) => use(e.target, x.id, x.fields.length ? save : null);
+    wireDownloads(box);
+  };
   const renderForm = () => {
     const box = $("asr-form");
     if (asrView === "local") {
@@ -921,12 +974,23 @@ async function renderASR(root) {
           ${using ? d.info.map((i) => `<div class="k">${esc(i.label)}</div><code>${esc(i.value)}</code>`).join("") : ""}
           ${lm ? `<div class="k">模型文件</div><div style="color:${lm.ok ? "var(--ok)" : "var(--err)"}">${esc(lm.detail)}</div>` : ""}
         </div>
+        <div class="cli-row" style="margin-top:10px"><div class="cli-k">模型文件</div><div>
+          <div class="seg" id="xasr-var">${(d.local.variants || []).map((v) => `<button type="button" data-v="${esc(v.value)}" class="${v.current ? "on" : ""}">${esc(v.label)}<small>${esc(v.hint)}${v.ready ? "" : "，未下载"}</small></button>`).join("")}</div>
+          ${(d.local.variants || []).map((v) => v.ready ? "" : `<div style="margin-top:6px"><button class="btn" data-dl="xasr:${esc(v.value)}" ${v.download.state === "running" ? "disabled" : ""}>下载${esc(v.label)}</button>${dlLine(v.download)}</div>`).join("")}
+          <div class="small muted" style="margin-top:6px">两种是同一个模型：精度版远场略好，每句多约 0.03 秒。</div></div></div>
         ${using ? "" : `<div class="actions"><span class="result muted">切换后新连接马上生效，在线设备重新连接后生效。</span>
           <button class="btn primary" id="local-use" ${lm && lm.ok ? "" : "disabled"}>使用本地 X-ASR</button></div>`}`;
       formDirty = () => false;
       if ($("local-use")) $("local-use").onclick = (e) => use(e.target, "local");
+      box.querySelectorAll("#xasr-var button").forEach((btn) => (btn.onclick = () => busy(btn, async () => {
+        if (btn.classList.contains("on")) return;
+        try { const r = await api("asr/xasr", { variant: btn.dataset.v }); toast(r.note || "已切换"); await openPage("asr", true); }
+        catch (err) { toast(err.message, true); }
+      })));
+      wireDownloads(box);
       return;
     }
+    if (prov[asrView]) { renderProvider(box, prov[asrView]); return; }
     const using = d.choice === "doubao";
     box.innerHTML = `
       ${b.conflict ? `<div class="banner err">配置里已有一个叫 ${esc(b.entry)} 的条目，但不是豆包流式识别，请在配置文件里改名或删掉它。</div>` : ""}

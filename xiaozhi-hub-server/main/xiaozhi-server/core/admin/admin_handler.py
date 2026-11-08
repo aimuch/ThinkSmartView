@@ -106,6 +106,9 @@ class AdminHandler:
                 web.get("/admin/api/devices", self.handle_devices),
                 web.get("/admin/api/memory", self.handle_memory),
                 web.get("/admin/api/billing", self.handle_billing),
+                web.post("/admin/api/asr/provider", self.handle_asr_provider_save),
+                web.post("/admin/api/asr/xasr", self.handle_asr_xasr),
+                web.post("/admin/api/asr/download", self.handle_asr_download),
                 web.post("/admin/api/billing", self.handle_billing_save),
                 web.post("/admin/api/billing/clear", self.handle_billing_clear),
                 web.get("/kiosk/billing", self.handle_kiosk_billing),
@@ -892,13 +895,68 @@ class AdminHandler:
             name = catalog.DOUBAO_ASR_ENTRY
             if not d["doubao"]["configured"]:
                 return self._error("豆包还没配置好，请先填写 API Key（或 APP ID 和 Access Token）并保存", 400)
+        elif choice in catalog.ASR_PROVIDER_BY_ID:
+            p = next(x for x in d["providers"] if x["id"] == choice)
+            name = p["entry"]
+            if p["missing"]:
+                return self._error(f"{p['label']} 需要的 Python 包还没装（{', '.join(p['missing'])}），"
+                                   "请在服务器上运行 bash scripts/update.sh 或重新运行安装脚本", 400)
+            if p["model"] is not None and not p["model"]["ok"]:
+                return self._error(f"{p['label']} 的模型文件还没下载好（{p['model']['detail']}）", 400)
+            if not p["configured"]:
+                return self._error(f"{p['label']} 还没配置好，请先填好并保存", 400)
+            if not p["exists"]:   # a local model: write its entry (catalog defaults) before switching to it
+                try:
+                    await self._blocking(pages.save_asr_provider, choice, {}, merged, self.config_path)
+                except ValueError as e:
+                    return self._error(str(e), 400)
         else:
-            return self._error("只能选本地 X-ASR 或豆包", 400)
+            return self._error("不支持这个语音识别", 400)
         try:
             result = await self._switch("ASR", name)
         except KeyError:
             return self._error(f"配置里没有 {name}", 404)
         return self._json(result) if result["ok"] else self._error(result["note"], 400)
+
+    async def handle_asr_provider_save(self, request: web.Request):
+        """{"id", "values"}：保存某个识别服务（catalog.ASR_PROVIDERS）；正在用它时重新加载。"""
+        self._require_login(request)
+        body = await self._read_json(request)
+        pid = str(body.get("id") or "")
+        try:
+            merged = await self._blocking(self._merged)
+            changed = await self._blocking(pages.save_asr_provider, pid, body.get("values"), merged, self.config_path)
+        except KeyError:
+            return self._error("没有这个语音识别服务", 404)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        entry = catalog.ASR_PROVIDER_BY_ID[pid]["entry"]
+        self.logger.bind(tag=TAG).info(f"管理后台更新了语音识别 {entry}: {', '.join(changed) or '无变化'}")
+        return self._json({"ok": True, "changed": changed, **await self._apply_if_selected("ASR", entry, changed)})
+
+    async def handle_asr_xasr(self, request: web.Request):
+        """{"variant": "fast" | "full"}：本地 X-ASR 用快速版还是精度版的模型文件。"""
+        self._require_login(request)
+        body = await self._read_json(request)
+        try:
+            merged = await self._blocking(self._merged)
+            changed = await self._blocking(pages.save_x_asr_variant, str(body.get("variant") or ""), merged, self.config_path)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        return self._json({"ok": True, "changed": changed,
+                           **await self._apply_if_selected("ASR", catalog.LOCAL_ASR_ENTRY, changed)})
+
+    async def handle_asr_download(self, request: web.Request):
+        """{"id": <识别服务 id> | "xasr:fast" | "xasr:full"}：在后台下载本地模型。"""
+        self._require_login(request)
+        from core.admin import model_download
+        body = await self._read_json(request)
+        try:
+            model_dir, repo, files = pages.download_target(str(body.get("id") or ""))
+        except KeyError:
+            return self._error("这个识别服务没有可下载的模型", 404)
+        self.logger.bind(tag=TAG).info(f"管理后台开始下载模型 {repo} → {model_dir}")
+        return self._json({"ok": True, "download": model_download.start(model_dir, repo, files)})
 
     async def handle_doubao_save(self, request: web.Request):
         self._require_login(request)

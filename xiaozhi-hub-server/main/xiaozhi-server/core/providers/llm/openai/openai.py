@@ -22,6 +22,8 @@ THINKING_DISABLED_DOMAINS = {
     # [xiaozhi-hub] Claude 5 默认开启思考：首字延迟 3~6 秒且可能耗尽 max_tokens。
     # 官方兼容接口会忽略 reasoning_effort，要用 thinking 参数关闭（经第三方代理时可在配置里写 extra_body）
     "anthropic.com": {"thinking": {"type": "disabled"}},
+    # [xiaozhi-hub] 硅基流动上的 Qwen3 等混合推理模型默认会想很久，语音用不上
+    "siliconflow.cn": {"enable_thinking": False},
 }
 
 

@@ -64,6 +64,12 @@ def _placeholder(value) -> bool:
     return value is None or str(value).strip() == "" or "你" in str(value)
 
 
+def _key_optional(name: str) -> bool:
+    """本机服务（Ollama、LM Studio、Magpie、自定义）可以不填 Key（core/admin/catalog.py 的 key_optional）。"""
+    from core.admin import catalog
+    return bool((catalog.VENDOR_BY_ENTRY.get(name) or {}).get("key_optional"))
+
+
 def model_ready(config: dict, name: str) -> bool:
     """配置里有这个条目，而且填好了：API 条目要有模型名和接口地址，有 api_key 字段时不能是占位文字。"""
     entry = (config.get("LLM") or {}).get(name)
@@ -73,7 +79,7 @@ def model_ready(config: dict, name: str) -> bool:
     if kind == "openai":
         if _placeholder(entry.get("model_name")) or _placeholder(entry.get("base_url") or entry.get("url")):
             return False
-        if "api_key" in entry and _placeholder(entry.get("api_key")) and name != "CustomOpenAILLM":
+        if "api_key" in entry and _placeholder(entry.get("api_key")) and not _key_optional(name):
             return False
     if kind == "grok_bot" and not str(entry.get("bot_id") or "").strip():
         return False

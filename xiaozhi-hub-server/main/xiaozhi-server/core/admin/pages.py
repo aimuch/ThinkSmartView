@@ -58,8 +58,9 @@ def describe_vendor(vendor: dict, merged: dict) -> dict:
         "hint": vendor.get("hint", ""),
         "key_set": key_set,
         "key_hint": config_store.mask_key(key),
-        # 自定义服务（本机代理、LM Studio）可能不需要 Key
-        "configured": exists and bool(base_url and model) and (key_set or vendor["id"] == "custom"),
+        # 本机服务（Ollama、LM Studio、Magpie、自定义）可能不需要 Key
+        "configured": exists and bool(base_url and model) and (key_set or bool(vendor.get("key_optional"))),
+        "key_optional": bool(vendor.get("key_optional")),
         "conflict": bool(entry) and entry.get("type") != "openai",
     }
 
@@ -372,7 +373,7 @@ def vendor_test_config(vendor_id: str, payload: dict, merged: dict) -> dict:
         raise ValueError("接口地址需要以 http:// 或 https:// 开头")
     if not model:
         raise ValueError("请填写模型名称")
-    if not api_key and vendor_id != "custom":
+    if not api_key and not vendor.get("key_optional"):
         raise ValueError("请先填写 API Key")
     config = {k: v for k, v in entry.items() if k not in ("url", "base_url")}
     config.update({"type": "openai", "base_url": base_url, "model_name": model,
@@ -461,6 +462,9 @@ def asr_choice(merged: dict) -> str:
         return "local"
     if name == catalog.DOUBAO_ASR_ENTRY and entry.get("type") == "doubao_stream":
         return "doubao"
+    provider = catalog.ASR_PROVIDER_BY_ENTRY.get(name)
+    if provider and entry.get("type") == provider["type"]:
+        return provider["id"]
     return "other"
 
 
@@ -478,13 +482,124 @@ def describe_asr(merged: dict) -> dict:
         "model": asr_model_check(entry),
         "choice": asr_choice(merged),
         "local": {"exists": local.get("type") == "sherpa_onnx_local", "label": asr_label(local),
-                  "model": asr_model_check(local)},
+                  "model": asr_model_check(local), "variants": describe_x_asr_variants(local)},
         "doubao": describe_doubao(merged),
+        "providers": [describe_asr_provider(p, merged) for p in catalog.ASR_PROVIDERS],
         "vad": describe_vad(merged),
         "hotwords": describe_hotwords(merged),
         "corrections": describe_corrections(merged),
         "recent": asr_text.recent(),
     }
+
+
+# ---------- [xiaozhi-hub] 其他语音识别服务（catalog.ASR_PROVIDERS）和 X-ASR 的两种模型文件 ----------
+
+def describe_x_asr_variants(local: dict) -> list:
+    from core.admin import model_download
+    current = str(local.get("model_dir") or "")
+    out = []
+    for v in catalog.X_ASR_VARIANTS:
+        check = asr_model_check({"type": "sherpa_onnx_local", "model_type": "transducer", "model_dir": v["model_dir"]})
+        out.append({"value": v["value"], "label": v["label"], "hint": v["hint"], "current": v["model_dir"] == current,
+                    "ready": bool(check and check["ok"]), "download": model_download.state(v["model_dir"])})
+    return out
+
+
+def save_x_asr_variant(value: str, merged: dict, path: Path = None) -> list:
+    variant = next((v for v in catalog.X_ASR_VARIANTS if v["value"] == value), None)
+    if variant is None:
+        raise ValueError("只能选快速版或精度版")
+    entry = _entry(merged, "ASR", catalog.LOCAL_ASR_ENTRY)
+    if entry.get("type") != "sherpa_onnx_local":
+        raise ValueError(f"配置里没有本地 X-ASR（{catalog.LOCAL_ASR_ENTRY}）")
+    check = asr_model_check({"type": "sherpa_onnx_local", "model_type": "transducer", "model_dir": variant["model_dir"]})
+    if not (check and check["ok"]):
+        raise ValueError(f"{variant['label']}的模型文件还没下载好（{check['detail'] if check else ''}）")
+    if _text(entry.get("model_dir")) == variant["model_dir"]:
+        return []
+    with config_store.edit_custom(path) as data:
+        data.setdefault("ASR", CommentedMap()).setdefault(catalog.LOCAL_ASR_ENTRY, CommentedMap())["model_dir"] = variant["model_dir"]
+    return ["model_dir"]
+
+
+def download_target(provider_id: str):
+    """(model_dir, repo, files) for a downloadable local model: an ASR_PROVIDERS id or xasr:<variant>."""
+    if provider_id.startswith("xasr:"):
+        v = next((v for v in catalog.X_ASR_VARIANTS if v["value"] == provider_id[5:]), None)
+        if v:
+            return v["model_dir"], v["repo"], v["files"]
+    p = catalog.ASR_PROVIDER_BY_ID.get(provider_id)
+    if p and p.get("download"):
+        return p["defaults"]["model_dir"], p["download"]["repo"], p["download"]["files"]
+    raise KeyError(provider_id)
+
+
+def _asr_values(p: dict, entry: dict) -> dict:
+    return {**p.get("defaults", {}), **{k: v for k, v in entry.items()}}
+
+
+def describe_asr_provider(p: dict, merged: dict) -> dict:
+    from core.admin import deps, model_download
+    entry = _entry(merged, "ASR", p["entry"])
+    exists = entry.get("type") == p["type"]
+    cfg = {**_asr_values(p, entry if exists else {}), "type": p["type"]}
+    fields = []
+    for f in p.get("fields", []):
+        raw = entry.get(f["key"]) if exists else None
+        is_set = not config_store.is_placeholder(raw)
+        item = {"key": f["key"], "label": f["label"], "secret": bool(f.get("secret")), "set": is_set}
+        if f.get("secret"):
+            item["hint"] = config_store.mask_key(raw)
+        else:
+            item["value"] = _text(raw) if is_set else f.get("default", "")
+        fields.append(item)
+    model = asr_model_check(cfg) if p["group"] == "local" else None
+    missing = list(deps.missing_packages("ASR", p["type"]))
+    return {
+        "id": p["id"], "group": p["group"], "label": p["label"], "mark": p.get("mark", ""), "entry": p["entry"],
+        "desc": p.get("desc", ""), "link": p.get("link", ""), "fields": fields, "model": model,
+        "download": model_download.state(cfg["model_dir"]) if p.get("download") else None,
+        "download_size": (p.get("download") or {}).get("size", ""),
+        "missing": missing, "exists": exists, "conflict": bool(entry) and not exists,
+        # a local model needs no form: it is usable once its files are here (the entry is made on 使用)
+        "configured": (exists or not fields) and all(f["set"] for f in fields) and (model is None or model["ok"])
+                      and not missing and not (bool(entry) and not exists),
+    }
+
+
+def save_asr_provider(provider_id: str, values: dict, merged: dict, path: Path = None) -> list:
+    """保存某个识别服务的密钥和设置；条目不存在时按 catalog 的默认值新建。密钥留空就用已保存的。"""
+    p = catalog.ASR_PROVIDER_BY_ID.get(provider_id)
+    if p is None:
+        raise KeyError(provider_id)
+    entry = _entry(merged, "ASR", p["entry"])
+    if entry and entry.get("type") != p["type"]:
+        raise ValueError(f"配置里的 {p['entry']} 不是 {p['label']}，请在配置文件里改名或删掉它")
+    values = values or {}
+    changes = {}
+    for f in p.get("fields", []):
+        raw = str(values.get(f["key"]) or "").strip()
+        if any(c.isspace() for c in raw):
+            raise ValueError(f"{f['label']} 里不能有空格或换行")
+        if not raw:
+            if f.get("secret") or not config_store.is_placeholder(entry.get(f["key"])):
+                continue
+            raw = f.get("default", "")
+        if raw != _text(entry.get(f["key"])):
+            changes[f["key"]] = raw
+    if not entry:
+        changes = {"type": p["type"], **p.get("defaults", {}), **changes}
+    final = {**entry, **changes}
+    for f in p.get("fields", []):
+        if config_store.is_placeholder(final.get(f["key"])):
+            raise ValueError(f"请填写 {f['label']}")
+    if not changes:
+        return []
+    with config_store.edit_custom(path) as data:
+        target = data.setdefault("ASR", CommentedMap()).setdefault(p["entry"], CommentedMap())
+        for k, v in changes.items():
+            target[k] = v
+    return [k for k in changes if k != "type"]
 
 
 # ---------- 豆包流式语音识别 ----------
@@ -818,7 +933,8 @@ def call_targets(merged: dict) -> list:
     for vendor in catalog.LLM_VENDORS:
         if describe_vendor(vendor, merged)["configured"]:
             result.append({"entry": vendor["entry"], "label": f"{vendor['label']}（API）",
-                           "defaults": [] if vendor["id"] in ("claude", "custom") else [vendor["id"]]})
+                           "defaults": [] if vendor["id"] in ("claude", "custom")
+                           else list(vendor.get("calls") or [vendor["id"]])})
     return result
 
 
