@@ -45,6 +45,4 @@ scripts/publish-release.sh --note "客户端这次改了什么" --system-note "�
 scripts/deploy-server.sh
 ```
 
-把 `server/` 用 `git subtree split` 拆成独立历史，推到服务器的 `~/repos/xiaozhi-hub-server.git`。服务器上网关的上游就是它，所以脚本会接着跑网关自己的 `update.sh`：依赖变了就补装，然后重启，起不来自动退回。只推不装用 `--push`，之后在后台点「更新网关」也能装。
-
-目录在 2026-11-08 从 `xiaozhi-hub-server/` 改成 `server/`，拆出来的是一段新历史；服务器上的网关是浅克隆，`update.sh` 会直接切到新历史，之后照常快进。
+每次部署在服务器 `~/repos/xiaozhi-hub-server.git` 的 `main` 上加一个提交：内容是本仓库已提交的 `server/`，说明里列出上次部署以来的改动（并记下来源提交）。服务器上网关的上游就是它，所以脚本会接着跑网关自己的 `update.sh`：依赖变了就补装，然后重启，起不来自动退回。推送永远是快进，服务器上的历史只增不改；本仓库里目录改名也不影响它。只推不装用 `--push`，之后在后台点「更新网关」也能装。
