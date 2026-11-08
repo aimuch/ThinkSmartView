@@ -5,3 +5,4 @@ claude-agent-sdk==0.1.81
 # [xiaozhi-hub] 后台能选的云端语音识别：阿里百炼 Qwen3-ASR-Flash（dashscope）、百度（baidu-aip）
 dashscope
 baidu-aip
+chardet  # baidu-aip 的 aip/nlp.py 要用，但它的包没声明
