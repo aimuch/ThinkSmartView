@@ -1115,7 +1115,7 @@ class AdminHandler:
                             headers={**SECURITY_HEADERS, "Cache-Control": "private, max-age=86400"})
 
     async def _qwen3_preview(self, voice: str):
-        from core.providers.tts import qwen3_tts
+        from core.utils import qwen3_tts_api
 
         info = next((v for v in catalog.QWEN3_TTS_VOICES if v["value"] == voice), None)
         if info is None:
@@ -1128,14 +1128,16 @@ class AdminHandler:
             if entry.get("type") != "qwen3_tts" or config_store.is_placeholder(entry.get("api_key")):
                 return self._error("先填写百炼的 API Key 并保存，才能试听千问 TTS", 400)
             try:
-                tts = qwen3_tts.TTSProvider({**entry, "voice": voice, "tts_timeout": 20}, True)
-                pcm = await asyncio.wait_for(tts.synthesize(catalog.voice_sample(info["group"])), timeout=25)
+                pcm = await asyncio.wait_for(qwen3_tts_api.synthesize(
+                    catalog.voice_sample(info["group"]), str(entry.get("api_key") or "").strip(), voice,
+                    str(entry.get("model") or "qwen3-tts-flash"), str(entry.get("language_type") or "Chinese"),
+                    str(entry.get("url") or qwen3_tts_api.DEFAULT_URL), 20), timeout=25)
             except Exception as e:
                 self.logger.bind(tag=TAG).warning(f"千问 TTS 试听失败 {voice}: {e}")
                 return self._error(f"试听合成失败：{e}", 502)
             if not pcm:
                 return self._error("试听合成失败：没有返回音频", 502)
-            audio = qwen3_tts.pcm_to_wav(pcm)
+            audio = qwen3_tts_api.pcm_to_wav(pcm)
             self._voice_samples[cache_key] = audio
         return web.Response(body=audio, content_type="audio/wav",
                             headers={**SECURITY_HEADERS, "Cache-Control": "private, max-age=86400"})

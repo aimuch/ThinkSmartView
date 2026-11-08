@@ -161,10 +161,28 @@ async def _test_web_search(values: dict) -> dict:
         raise ValueError(str(e))
     if not result.results:
         raise ValueError("接口执行了搜索，但没有返回结果")
-    return {"seconds": result.seconds, "count": len(result.results), "first": result.results[0]["title"]}
+    return {"seconds": result.seconds, "count": len(result.results), "first": result.results[0]["title"],
+            "message": f"搜到 {len(result.results)} 条，用时 {result.seconds} 秒。第一条：{result.results[0]['title']}"}
 
 
-TESTS = {"web_search": _test_web_search}
+async def _test_get_weather(values: dict) -> dict:
+    from plugins_func.functions import get_weather
+    from core.utils import open_meteo
+
+    settings = get_weather.weather_settings({"plugins": {"get_weather": values}})
+    place = settings["home_location"] or settings["default_location"]
+    try:
+        if settings["qweather_key"] and settings["qweather_host"]:
+            report = await get_weather.qweather_report(place, settings["qweather_key"], settings["qweather_host"])
+        else:
+            report = await open_meteo.report(place)
+    except Exception as e:
+        raise ValueError(f"没查到：{e}")
+    lines = [line for line in report.splitlines() if line.strip()]
+    return {"message": "；".join(lines[:3])}
+
+
+TESTS = {"web_search": _test_web_search, "get_weather": _test_get_weather}
 
 
 def _redact(message: str, values: dict, settings_id: str) -> str:

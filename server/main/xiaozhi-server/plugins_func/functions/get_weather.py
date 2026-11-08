@@ -18,14 +18,14 @@ GET_WEATHER_FUNCTION_DESC = {
         "description": (
             "获取某个地点的天气，用户应提供一个位置，比如用户说杭州天气，参数为：杭州。"
             "如果用户说的是省份，默认用省会城市。如果用户说的不是省份或城市而是一个地名，默认用该地所在省份的省会城市。"
-            "重要：本地未来7天天气已在上下文中提供，用户未指明其他城市时绝对不要调用此工具。"
+            "重要：本地未来7天天气已在上下文中提供，用户未指明其他城市时不要调用此工具；只有上下文里写着天气没查到时，才调用它重试。"
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "location": {
                     "type": "string",
-                    "description": "地点名，例如杭州。可选参数，如果不提供则不传",
+                    "description": "地点名。国内写城市或区县的全称，如 杭州市、青浦区；国外写英文名，如 Tokyo、Paris。可选参数，问本地天气时不传",
                 },
                 "lang": {
                     "type": "string",
@@ -161,71 +161,76 @@ def parse_weather_info(soup):
     return city_name, current_abstract, current_basic, temps_list
 
 
-@register_function("get_weather", GET_WEATHER_FUNCTION_DESC, ToolType.SYSTEM_CTL)
-async def get_weather(conn: "ConnectionHandler", location: str = None, lang: str = "zh_CN"):
+def weather_settings(config: dict) -> dict:
+    """[xiaozhi-hub] 后台「查天气 → 设置」存的值（plugins.get_weather）：
+    home_location 设备所在地（填了就不按 IP 猜）；qweather_key / qweather_host 自己的和风天气 Key（填了才用和风）。
+    上游配置里的 api_key 是项目共用的和风 Key（已失效），不再使用。"""
+    cfg = (config.get("plugins") or {}).get("get_weather") or {}
+    text = lambda k: str(cfg.get(k) or "").strip()
+    return {"home_location": text("home_location"), "qweather_key": text("qweather_key"),
+            "qweather_host": text("qweather_host"), "default_location": text("default_location") or "上海"}
+
+
+def resolve_location(conn, location: str = None) -> str:
+    """用户说的地点 > 后台设置的所在地 > 按网关的公网 IP 推断 > 默认城市。"""
     from core.utils.cache.manager import cache_manager, CacheType
 
-    weather_config = conn.config.get("plugins", {}).get("get_weather", {})
-    api_host = weather_config.get("api_host", "mj7p3y7naa.re.qweatherapi.com")
-    api_key = weather_config.get("api_key", "a861d0d5e7bf4ee1a83d9a9e4f96d4da")
-    default_location = weather_config.get("default_location", "广州")
-    client_ip = conn.client_ip
+    if location:
+        return location
+    settings = weather_settings(conn.config)
+    if settings["home_location"]:
+        return settings["home_location"]
+    client_ip = getattr(conn, "client_ip", None)
+    if client_ip:
+        info = cache_manager.get(CacheType.IP_INFO, client_ip) or get_ip_info(client_ip, logger)
+        if info and info.get("city"):
+            cache_manager.set(CacheType.IP_INFO, client_ip, info)
+            return info["city"]
+    return settings["default_location"]
 
-    # 优先使用用户提供的location参数
-    if not location:
-        # 通过客户端IP解析城市
-        if client_ip:
-            # 先从缓存获取IP对应的城市信息
-            cached_ip_info = cache_manager.get(CacheType.IP_INFO, client_ip)
-            if cached_ip_info:
-                location = cached_ip_info.get("city")
-            else:
-                # 缓存未命中，调用API获取
-                ip_info = get_ip_info(client_ip, logger)
-                if ip_info:
-                    cache_manager.set(CacheType.IP_INFO, client_ip, ip_info)
-                    location = ip_info.get("city")
 
-            if not location:
-                location = default_location
-        else:
-            # 若无IP，使用默认位置
-            location = default_location
-    # 尝试从缓存获取完整天气报告
+async def qweather_report(location, api_key, api_host):
+    city_info = await fetch_city_info(location, api_key, api_host)
+    if not city_info:
+        raise Exception(f"和风天气没找到「{location}」，或者 Key 不对")
+    soup = await fetch_weather_page(city_info["fxLink"])
+    if not soup:
+        raise Exception("和风天气的网页打不开")
+    city_name, current_abstract, current_basic, temps_list = parse_weather_info(soup)
+    weather_report = f"您查询的位置是：{city_name}\n\n当前天气: {current_abstract}\n"
+    if current_basic:
+        weather_report += "详细参数：\n"
+        for key, value in current_basic.items():
+            if value != "0":
+                weather_report += f"  · {key}: {value}\n"
+    weather_report += "\n未来7天预报：\n"
+    for date, weather, high, low in temps_list:
+        weather_report += f"{date}: {weather}，气温 {low}~{high}\n"
+    return weather_report
+
+
+@register_function("get_weather", GET_WEATHER_FUNCTION_DESC, ToolType.SYSTEM_CTL)
+async def get_weather(conn: "ConnectionHandler", location: str = None, lang: str = "zh_CN"):
+    """[xiaozhi-hub] 默认用 Open-Meteo（免费、不用 Key）；后台填了自己的和风天气 Key 才用和风。
+    失败时 response 为 "failed"（prompt_manager 不缓存它），result 里写明原因让大模型如实告诉用户。"""
+    from core.utils import open_meteo
+    from core.utils.cache.manager import cache_manager, CacheType
+
+    location = resolve_location(conn, location)
+    settings = weather_settings(conn.config)
     weather_cache_key = f"full_weather_{location}_{lang}"
     cached_weather_report = cache_manager.get(CacheType.WEATHER, weather_cache_key)
     if cached_weather_report:
         return ActionResponse(Action.REQLLM, cached_weather_report, None)
-
-    # 缓存未命中，获取实时天气数据
-    city_info = await fetch_city_info(location, api_key, api_host)
-    if not city_info:
+    try:
+        if settings["qweather_key"] and settings["qweather_host"]:
+            weather_report = await qweather_report(location, settings["qweather_key"], settings["qweather_host"])
+        else:
+            weather_report = await open_meteo.report(location)
+    except Exception as e:
+        logger.bind(tag=TAG).warning(f"查天气失败（{location}）: {e}")
         return ActionResponse(
-            Action.REQLLM, f"未找到相关的城市: {location}，请确认地点是否正确", None
+            Action.REQLLM, f"天气没查到：{e}。请直接告诉用户现在查不到天气和原因，不要编造天气。", "failed"
         )
-    soup = await fetch_weather_page(city_info["fxLink"])
-    if not soup:
-        return ActionResponse(Action.REQLLM, None, "请求失败")
-    city_name, current_abstract, current_basic, temps_list = parse_weather_info(soup)
-
-    weather_report = f"您查询的位置是：{city_name}\n\n当前天气: {current_abstract}\n"
-
-    # 添加有效的当前天气参数
-    if current_basic:
-        weather_report += "详细参数：\n"
-        for key, value in current_basic.items():
-            if value != "0":  # 过滤无效值
-                weather_report += f"  · {key}: {value}\n"
-
-    # 添加7天预报
-    weather_report += "\n未来7天预报：\n"
-    for date, weather, high, low in temps_list:
-        weather_report += f"{date}: {weather}，气温 {low}~{high}\n"
-
-    # 提示语
-    weather_report += "\n（如需某一天的具体天气，请告诉我日期）"
-
-    # 缓存完整的天气报告
     cache_manager.set(CacheType.WEATHER, weather_cache_key, weather_report)
-
     return ActionResponse(Action.REQLLM, weather_report, None)

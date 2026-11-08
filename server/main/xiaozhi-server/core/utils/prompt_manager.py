@@ -143,6 +143,10 @@ class PromptManager:
 
     def _get_location_info(self, client_ip: str) -> str:
         """获取位置信息"""
+        # [xiaozhi-hub] 后台设置了设备所在地就用它（设备走隧道连网关，IP 是网关的，按 IP 只能猜到网关所在的城市）
+        home = str(((self.config.get("plugins") or {}).get("get_weather") or {}).get("home_location") or "").strip()
+        if home:
+            return home
         try:
             # 先从缓存获取
             cached_location = self.cache_manager.get(self.CacheType.LOCATION, client_ip)
@@ -200,7 +204,9 @@ class PromptManager:
             result = result_holder[0]
             if isinstance(result, ActionResponse):
                 weather_report = result.result
-                self.cache_manager.set(self.CacheType.WEATHER, location, weather_report)
+                # [xiaozhi-hub] 失败的结果不缓存：下一次对话再试，不会一整天都是"没查到"
+                if result.response != "failed":
+                    self.cache_manager.set(self.CacheType.WEATHER, location, weather_report)
                 return weather_report
             return "天气信息获取失败"
 

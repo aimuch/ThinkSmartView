@@ -246,7 +246,8 @@ async def test_admin_test_button(client, fake_api):
     r = await client.post("/admin/api/plugin-settings/web_search/test", json={})
     assert r.status == 400 and "API Key" in (await r.json())["error"]
     r = await (await client.post("/admin/api/plugin-settings/web_search/test", json={"api_key": "sk-good"})).json()
-    assert r == {"ok": True, "seconds": r["seconds"], "count": 2, "first": "第二条"}
+    assert r == {"ok": True, "seconds": r["seconds"], "count": 2, "first": "第二条", "message": r["message"]}
+    assert r["message"].startswith("搜到 2 条") and "第二条" in r["message"]
     await client.post("/admin/api/plugin-settings/web_search/test",
                       json={"api_key": "sk-good", "base_url": "http://10.0.0.2:8317/v1"})
     assert str(fake_api.calls[-1].url) == "http://10.0.0.2:8317/v1/messages"

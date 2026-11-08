@@ -200,7 +200,8 @@ ALWAYS_ON_PLUGINS = [
     {"name": "get_lunar", "label": "查日期", "desc": "今天几号、星期几、农历和节气"},
 ]
 PLUGINS = [
-    {"name": "get_weather", "label": "查天气", "desc": "实时天气和预报（使用项目共用的天气 Key，用多了可能被限制）"},
+    {"name": "get_weather", "label": "查天气", "desc": "实时天气、空气质量和 7 天预报（Open-Meteo，免费、不用 Key），点「设置」填设备所在地",
+     "config": "get_weather", "settings": "get_weather"},
     {"name": "get_news_from_newsnow", "label": "热点新闻", "desc": "澎湃新闻、百度热搜、财联社等热榜"},
     {"name": "get_news_from_chinanews", "label": "中新网新闻", "desc": "中国新闻网的社会、国际、财经新闻"},
     {"name": "play_music", "label": "放音乐", "desc": "播放电脑上 music 目录里的歌曲"},
@@ -227,6 +228,18 @@ PLUGIN_NAMES = {p["name"] for p in PLUGINS}
 #   保存时删掉这些字段并清掉旧密钥；legacy_note 是页面上的提示。
 # 要有「测试」按钮，在 core/admin/plugin_settings.py 的 TESTS 里登记测试函数。
 PLUGIN_SETTINGS = {
+    "get_weather": {
+        "note": "默认用 Open-Meteo，免费、不用注册。设备通过网关上网，按 IP 只能猜到网关所在的城市，"
+                "所以最好填上设备所在地；问别的城市的天气不受影响。",
+        "fields": [
+            {"key": "home_location", "label": "设备所在地", "type": "text",
+             "hint": "写区县或城市的全称，比如「青浦区」「杭州市」；留空按网关的公网 IP 推断"},
+            {"key": "qweather_key", "label": "和风天气 Key（选填）", "type": "secret",
+             "hint": "填了 Key 和 API Host 就改用和风天气（在 console.qweather.com 申请）"},
+            {"key": "qweather_host", "label": "和风天气 API Host（选填）", "type": "text",
+             "hint": "和风控制台「设置」里的 API Host，形如 xxxx.re.qweatherapi.com"},
+        ],
+    },
     "web_search": {
         "note": "需要 Anthropic 协议、支持自带搜索（web_search）的接口，比如 DeepSeek、Anthropic 官方。"
                 "聊天模型用哪家都可以，和这里无关。注意：网关装在设备上时，127.0.0.1 指设备自己。",
