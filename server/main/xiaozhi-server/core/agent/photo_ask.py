@@ -67,8 +67,11 @@ def vision_settings(merged: dict) -> dict:
     out = []
     for pid, p in PROVIDERS.items():
         entry = vllm.get(p["entry"]) or {}
+        model = entry.get("model_name") or p["model_name"]
+        if pid == "qwen" and model == "qwen3.5-flash":   # 上游配置里的默认值，保存时换成看图用的 qwen-vl-plus
+            model = p["model_name"]
         out.append({"id": pid, "label": p["label"], "note": p["note"], "key_url": p["key_url"],
-                    "configured": not _placeholder(entry.get("api_key")), "model": entry.get("model_name") or p["model_name"]})
+                    "configured": not _placeholder(entry.get("api_key")), "model": model})
     ready = bool(selected) and next(o for o in out if o["id"] == selected)["configured"]
     return {"selected": selected, "ready": ready, "providers": out}
 

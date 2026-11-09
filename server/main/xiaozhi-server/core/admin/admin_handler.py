@@ -1558,12 +1558,15 @@ class AdminHandler:
         self._require_login(request)
         devices = connections.snapshot()
         from core.agent import llm_router
+        from core.utils import device_homes
 
         for d in devices:
             d["emotion_test"] = self._emotion_progress(d["session_id"])
             # 这台设备此刻在跟谁说话（呼名切到的模型）；和大模型页的全局默认是两回事
             d["model_label"] = ("Claude Code" if d.get("model") == llm_router.CLAUDE_CLI_ENTRY
                                 else llm_router.model_label(d["model"])) if d.get("model") else ""
+            home = device_homes.get(d.get("device_id") or "")
+            d["home"] = home["name"] if home else ""
         return self._json({"ok": True, "devices": devices, "now": int(time.time()),
                            "emotions": [{"emotion": name, "emoji": emoji, "label": catalog.EMOTION_LABELS.get(name, name)}
                                         for emoji, name in EMOJI_MAP.items()]})

@@ -15,7 +15,7 @@
     --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 1px 3px rgba(15, 23, 42, .06);
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --side: #0b1120; --side-hover: #172033; --side-line: #172033;
       --bg: #0f172a; --card: #111a2e; --text: #e2e8f0; --muted: #94a3b8; --line: #23304a; --field: #0b1324; --soft: #0d1629;
       --accent: #8fa6ff; --btn: #5a78f0; --btn-hover: #4a66e0; --accent-soft: #1a2350; --accent-line: #34407a;
@@ -23,6 +23,14 @@
       --shadow: none;
     }
   }
+  /* [xiaozhi-hub] 「界面」里选了深色：不管系统 */
+  :root[data-theme="dark"] {
+      --side: #0b1120; --side-hover: #172033; --side-line: #172033;
+      --bg: #0f172a; --card: #111a2e; --text: #e2e8f0; --muted: #94a3b8; --line: #23304a; --field: #0b1324; --soft: #0d1629;
+      --accent: #8fa6ff; --btn: #5a78f0; --btn-hover: #4a66e0; --accent-soft: #1a2350; --accent-line: #34407a;
+      --ok: #34d399; --ok-soft: #0f2a24; --warn: #fbbf24; --warn-soft: #2a2110; --err: #f87171; --err-soft: #2c1517;
+      --shadow: none;
+    }
   * { box-sizing: border-box; }
   body { margin: 0; font: 14px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
          color: var(--text); background: var(--bg); }
@@ -304,6 +312,74 @@
   .tier-row { display: grid; grid-template-columns: 1fr 1fr 2fr repeat(3, 1fr) auto; gap: 8px; align-items: end; margin-top: 8px; padding-left: 18px; }
   .price-row label, .tier-row label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
   @media (max-width: 900px) { .cost-stats { grid-template-columns: 1fr; } .price-row, .tier-row { grid-template-columns: 1fr 1fr; } }
+
+  /* ---------- [xiaozhi-hub] 界面（设计画布第 9 块）：强调色、宽度、侧栏、密度、抽屉、可调表格 ---------- */
+  :root[data-accent="purple"] { --accent: #7c5cf0; --btn: #7c5cf0; --btn-hover: #6a48e0; }
+  :root[data-accent="green"] { --accent: #0f9f6e; --btn: #0f9f6e; --btn-hover: #0b8a5f; }
+  :root[data-accent="orange"] { --accent: #d9730d; --btn: #d9730d; --btn-hover: #c0650a; }
+  :root[data-accent="pink"] { --accent: #d63f8c; --btn: #d63f8c; --btn-hover: #bf3379; }
+  :root[data-accent]:not([data-accent="blue"]) { --accent-soft: color-mix(in srgb, var(--btn) 12%, var(--card));
+    --accent-line: color-mix(in srgb, var(--btn) 40%, var(--card)); }
+  :root[data-width="fluid"] main { max-width: none; }
+  :root[data-density="compact"] main { padding: 18px 24px 56px; }
+  :root[data-density="compact"] .panel { padding: 12px 14px; }
+  :root[data-density="compact"] .cost-table th, :root[data-density="compact"] .cost-table td { padding: 4px 6px; }
+  :root[data-density="compact"] body { font-size: 13px; }
+  @media (min-width: 901px) {
+    :root[data-side="rail"] .app { grid-template-columns: 64px minmax(0, 1fr); }
+    :root[data-side="rail"] aside { padding: 16px 8px; }
+    :root[data-side="rail"] .brand span, :root[data-side="rail"] #online-text, :root[data-side="rail"] .side-foot a,
+    :root[data-side="rail"] #logout { display: none; }
+    :root[data-side="rail"] .brand { padding: 0 9px 18px; }
+    :root[data-side="rail"] .nav button { font-size: 0; justify-content: center; padding: 10px 0; }
+    :root[data-side="rail"] .nav .ico { font-size: 16px; width: auto; }
+    :root[data-side="rail"] .side-foot { padding: 10px 0 0; text-align: center; }
+    :root[data-side="rail"] .side-foot .row { justify-content: center; }
+    :root[data-side="drawer"] .app { grid-template-columns: minmax(0, 1fr); }
+    :root[data-side="drawer"] aside { position: fixed; left: 0; top: 0; width: 232px; z-index: 40; transform: translateX(-100%);
+      transition: transform .22s ease; box-shadow: 12px 0 30px rgba(15, 23, 42, .25); }
+    :root[data-side="drawer"] aside.open { transform: none; }
+    :root[data-side="drawer"] main { padding-top: 64px; }
+  }
+  #nav-toggle { display: none; position: fixed; top: 14px; left: 14px; z-index: 35; width: 38px; height: 38px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 18px; cursor: pointer; box-shadow: var(--shadow); }
+  @media (min-width: 901px) { :root[data-side="drawer"] #nav-toggle { display: block; } }
+  #ui-btn { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; text-decoration: none !important; }
+  .scrim { position: fixed; inset: 0; z-index: 38; background: rgba(2, 6, 23, .5); opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 41; width: min(420px, 94vw); background: var(--card); color: var(--text);
+    border-left: 1px solid var(--line); box-shadow: -12px 0 30px rgba(15, 23, 42, .2); transform: translateX(105%);
+    transition: transform .22s ease; display: flex; flex-direction: column; }
+  .drawer.open { transform: none; }
+  .drawer-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+  .drawer-head h2 { margin: 0; font-size: 17px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .drawer-body { padding: 16px 18px 28px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  .drawer .x { border: 0; background: none; font-size: 18px; color: var(--muted); cursor: pointer; }
+  .ui-field .seg { align-self: flex-start; }
+  .swatches { display: flex; gap: 10px; }
+  .swatches button { width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer; }
+  .swatches button.on { outline: 2px solid var(--text); outline-offset: 2px; }
+  .ui-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+  .nav-order div { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px;
+    margin-bottom: 4px; color: var(--text); background: var(--card); cursor: grab; }
+  .nav-order div.off { opacity: .45; }
+  .nav-order div.over { border-top: 2px solid var(--accent); }
+  .nav-order button { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; }
+  .dt-wrap { overflow-x: auto; }
+  table.dt { table-layout: fixed; }
+  table.dt th { position: relative; cursor: grab; user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  table.dt td { overflow: hidden; text-overflow: ellipsis; }
+  table.dt th .rz { position: absolute; right: 0; top: 3px; bottom: 3px; width: 7px; cursor: col-resize; border-right: 2px solid transparent; }
+  table.dt th:hover .rz { border-right-color: var(--accent-line); }
+  table.dt th .so { color: var(--accent); margin-left: 3px; font-size: 11px; }
+  table.dt th.over { box-shadow: inset 3px 0 0 var(--accent); }
+  table.dt td.h, table.dt th.h { width: 22px; color: var(--muted); cursor: grab; padding-left: 2px; padding-right: 0; }
+  table.dt.sorted td.h { visibility: hidden; }
+  table.dt tr.over td { box-shadow: inset 0 2px 0 var(--accent); }
+  table.dt tr.drag td { background: var(--accent-soft); }
+  .device .btn.detail { margin-left: auto; }
+  .dkv { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; font-size: 13px; }
+  .dkv span { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -345,12 +421,16 @@
       <button data-page="update"><span class="ico">⟳</span>更新网关</button>
     </nav>
     <div class="side-foot"><span class="dot" id="online-dot"></span><span id="online-text">没有设备在线</span><span id="online-short">无设备</span>
-      <div class="row"><button id="logout">退出登录</button>
+      <div class="row"><button id="logout">退出登录</button><button id="ui-btn" title="主题、布局、侧栏、菜单顺序">界面 ⚙</button>
         <a href="https://github.com/justhalfbit/xiaozhi-hub-server" target="_blank" rel="noopener" title="xiaozhi-hub-server 开源仓库">GitHub ↗</a></div></div>
   </aside>
   <main id="page"></main>
 </div>
 <div id="toast"></div>
+<button id="nav-toggle" aria-label="菜单">☰</button>
+<div class="scrim" id="scrim"></div>
+<div class="drawer" id="drawer" role="dialog" aria-hidden="true"><div class="drawer-head"><h2 id="drawer-title"></h2><button class="x" id="drawer-x" aria-label="关闭">✕</button></div>
+  <div class="drawer-body" id="drawer-body"></div></div>
 
 <script>
 "use strict";
@@ -462,6 +542,7 @@ async function openPage(name, force) {
   if (audio) { audio.pause(); audio = null; }
   if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.page === name));
+  applyUi();  // 隐藏了的菜单项，正在看的那一页照样显示
   const root = $("page");
   if (!force) root.innerHTML = '<p class="muted">加载中…</p>';
   try { await PAGES[name](root); }
@@ -564,7 +645,6 @@ async function renderStatus(root) {
   }, 1500);
 }
 
-const openEmotion = new Set();  // 展开了表情测试的设备
 let lastDevices = null;  // 最近一次查到的在线设备，状态页据此决定多久再查
 // 连不上服务时不能继续显示上一次的列表，否则侧边栏说"连不上服务"，这里还列着设备
 function devicesOffline() {
@@ -582,44 +662,64 @@ function renderDevices(dev) {
     box.innerHTML = '<div class="panel muted">暂无设备在线。唤醒设备后会自动出现在这里。</div>';
     return;
   }
-  const key = JSON.stringify(dev.devices.map((d) => [d.session_id, d.model_label, d.emotion_test, openEmotion.has(d.session_id)]));  // 设备切了模型也要重绘
+  const key = JSON.stringify(dev.devices.map((d) => [d.session_id, d.model_label, d.home]));  // 设备切了模型也要重绘
+  if (deviceDrawer) renderDeviceDrawer(dev);
   if (box.dataset.key === key) {  // 只更新连接时长，避免重绘打断点击
     box.querySelectorAll("[data-since]").forEach((el) => (el.textContent = duration(dev.now - +el.dataset.since)));
     return;
   }
   box.dataset.key = key;
-  box.innerHTML = dev.devices.map((d) => {
-    const t = d.emotion_test, open = openEmotion.has(d.session_id), running = t && t.running;
-    const progress = !t ? "点一个表情单独发送，或者依次播放全部，对照设备屏幕看哪些有变化。"
-      : running ? `正在依次播放：第 ${t.index}/${t.total} 个 ${t.emoji} ${esc(t.emotion)}`
-      : t.stopped ? `已停止（播放到第 ${t.index}/${t.total} 个）。` : "依次播放已结束。";
-    return `<div class="device" data-sid="${esc(d.session_id)}">
+  box.innerHTML = dev.devices.map((d) => `<div class="device" data-sid="${esc(d.session_id)}">
       <div class="device-top"><span class="dot on"></span><b class="mono">${esc(d.device_id || "未知设备")}</b>
         ${d.model_label ? `<span class="pill" title="这台设备此刻在跟谁说话（叫称呼切换）；和大模型页的全局默认是两回事">当前：${esc(d.model_label)}</span>` : ""}
-        <span class="muted small">${esc(d.ip || "")}</span><span class="muted small" data-since="${d.connected_at}">${duration(dev.now - d.connected_at)}</span>
-        <button class="btn sm" data-act="toggle" style="margin-left:auto">${open ? "收起" : "表情测试"}</button></div>
-      ${open ? `<p class="muted small" style="margin:10px 0 0">${progress}</p>
-        <div class="emogrid">${dev.emotions.map((e) => `<button class="emo ${running && t.emotion === e.emotion ? "now" : ""}" data-emo="${e.emotion}">
-          <span>${e.emoji}</span><small>${esc(e.label)}</small></button>`).join("")}</div>
-        <div class="actions" style="justify-content:flex-start">
-          <button class="btn sm primary" data-act="all" ${running ? "disabled" : ""}>依次播放全部（每个 2 秒）</button>
-          <button class="btn sm" data-act="stop" ${running ? "" : "disabled"}>停止</button></div>` : ""}
-    </div>`;
-  }).join("");
+        ${d.home ? `<span class="muted small">${esc(d.home)}</span>` : ""}
+        <span class="muted small" data-since="${d.connected_at}">${duration(dev.now - d.connected_at)}</span>
+        <button class="btn sm detail" data-act="detail">详情 ›</button></div>
+    </div>`).join("");
   box.querySelectorAll(".device").forEach((el) => {
-    const sid = el.dataset.sid, url = `devices/${encodeURIComponent(sid)}/`;
-    const act = (name) => el.querySelector(`[data-act="${name}"]`);
-    const refresh = async () => { box.dataset.key = ""; renderDevices(await api("devices")); };
-    act("toggle").onclick = () => { openEmotion.has(sid) ? openEmotion.delete(sid) : openEmotion.add(sid); refresh(); };
-    if (act("all")) act("all").onclick = (e) => busy(e.target, async () => {
-      try { await api(url + "emotion-test", {}); await refresh(); } catch (err) { toast(err.message, true); } });
-    if (act("stop")) act("stop").onclick = (e) => busy(e.target, async () => {
-      try { await api(url + "emotion-test/stop", {}); await refresh(); } catch (err) { toast(err.message, true); } });
-    el.querySelectorAll("[data-emo]").forEach((b) => (b.onclick = async () => {
-      try { await api(url + "emotion", { emotion: b.dataset.emo }); toast(`已发送 ${b.querySelector("span").textContent} ${b.dataset.emo}`); await refresh(); }
-      catch (err) { toast(err.message, true); }
-    }));
+    el.querySelector('[data-act="detail"]').onclick = () => {
+      deviceDrawer = el.dataset.sid;
+      openDrawer("", "");
+      openDrawer.onclose = () => { deviceDrawer = null; };
+      renderDeviceDrawer(lastDevices);
+    };
   });
+}
+
+// 在线设备的详情（设计画布第 9 块 C）：模型、住宅地址、连接时长、表情测试
+let deviceDrawer = null;
+function renderDeviceDrawer(dev) {
+  const d = (dev.devices || []).find((x) => x.session_id === deviceDrawer);
+  if (!d) { $("drawer-title").textContent = "设备已断开"; $("drawer-body").innerHTML = '<p class="muted">这台设备已经断开连接。</p>'; return; }
+  const t = d.emotion_test, running = t && t.running, url = `devices/${encodeURIComponent(d.session_id)}/`;
+  const progress = !t ? "点一个表情单独发送，或者依次播放全部，对照设备屏幕看哪些有变化。"
+    : running ? `正在依次播放：第 ${t.index}/${t.total} 个 ${t.emoji} ${esc(t.emotion)}`
+    : t.stopped ? `已停止（播放到第 ${t.index}/${t.total} 个）。` : "依次播放已结束。";
+  const sig = JSON.stringify([d.session_id, d.model_label, d.home, t]);
+  $("drawer-title").textContent = d.device_id || "未知设备";
+  if ($("drawer-body").dataset.sig === sig) {
+    $("drawer-body").querySelectorAll("[data-since]").forEach((el) => (el.textContent = duration(dev.now - +el.dataset.since)));
+    return;
+  }
+  $("drawer-body").dataset.sig = sig;
+  $("drawer-body").innerHTML = `
+    <div class="dkv"><span>当前模型</span><b>${esc(d.model_label || "默认")}</b><span>住宅地址</span><b>${esc(d.home || "没设（用「查天气」里的设备所在地）")}</b>
+      <span>IP</span><b class="mono">${esc(d.ip || "")}</b><span>连接时长</span><b data-since="${d.connected_at}">${duration(dev.now - d.connected_at)}</b></div>
+    <div><b>表情测试</b><p class="muted small" style="margin:6px 0 0">${progress}</p>
+      <div class="emogrid">${dev.emotions.map((e) => `<button class="emo ${running && t.emotion === e.emotion ? "now" : ""}" data-emo="${e.emotion}">
+        <span>${e.emoji}</span><small>${esc(e.label)}</small></button>`).join("")}</div>
+      <div class="actions" style="justify-content:flex-start">
+        <button class="btn sm primary" data-act="all" ${running ? "disabled" : ""}>依次播放全部（每个 2 秒）</button>
+        <button class="btn sm" data-act="stop" ${running ? "" : "disabled"}>停止</button></div></div>`;
+  const body = $("drawer-body"), refresh = async () => { body.dataset.sig = ""; renderDevices(await api("devices")); };
+  body.querySelector('[data-act="all"]').onclick = (e) => busy(e.target, async () => {
+    try { await api(url + "emotion-test", {}); await refresh(); } catch (err) { toast(err.message, true); } });
+  body.querySelector('[data-act="stop"]').onclick = (e) => busy(e.target, async () => {
+    try { await api(url + "emotion-test/stop", {}); await refresh(); } catch (err) { toast(err.message, true); } });
+  body.querySelectorAll("[data-emo]").forEach((b) => (b.onclick = async () => {
+    try { await api(url + "emotion", { emotion: b.dataset.emo }); toast(`已发送 ${b.querySelector("span").textContent} ${b.dataset.emo}`); await refresh(); }
+    catch (err) { toast(err.message, true); }
+  }));
 }
 
 // ---------- 工作原理 ----------
@@ -895,7 +995,7 @@ async function renderVision(box) {
       <div class="choices">${d.providers.map((x) => `
         <button class="choice ${x.id === visionPick ? "on" : ""}" data-vision="${esc(x.id)}">
           <div class="mark" style="background:${x.id === "zhipu" ? "#eef2ff;color:#4f46e5" : "#fff7ed;color:#c2410c"}">${x.id === "zhipu" ? "智" : "千"}</div>
-          <div><b>${esc(x.label)}</b> ${x.id === d.selected ? '<span class="pill ok">使用中</span>' : x.configured ? '<span class="pill">已配置</span>' : '<span class="pill">未配置</span>'}<small>${esc(x.note)} · ${esc(x.model)}</small></div></button>`).join("")}</div>
+          <div><b>${esc(x.label)}</b> ${x.id === d.selected ? (x.configured ? '<span class="pill ok">使用中</span>' : '<span class="pill warn">已选，缺 Key</span>') : x.configured ? '<span class="pill">已配置</span>' : '<span class="pill">未配置</span>'}<small>${esc(x.note)} · ${esc(x.model)}</small></div></button>`).join("")}</div>
       <div class="grid2" style="margin-top:14px"><label class="f">${esc(p.label)} 的 API Key
         <input class="in mono" id="vision-key" type="password" autocomplete="off" placeholder="${p.configured ? "已设置，输入新值可替换" : "未设置，粘贴后保存"}"></label></div>
       <p class="muted small" style="margin:8px 0 14px"><a href="${esc(p.key_url)}" target="_blank" rel="noopener">去这里创建 API Key</a>。Key 只保存在这台电脑的配置文件里。</p>
@@ -1974,6 +2074,202 @@ function renderUpdating(root, u) {
     }
   }, 2000);
 }
+
+// ---------- [xiaozhi-hub] 界面（设计画布第 9 块）：主题、强调色、宽度、侧栏、密度、菜单顺序；抽屉；可调表格 ----------
+// 都是这台浏览器自己的偏好，存在 localStorage；读写失败（隐私模式）时用默认值，页面照常能用。
+const UI_KEY = "xhub-ui", TABLE_KEY = "xhub-tables";
+const UI_DEFAULT = { theme: "auto", accent: "blue", width: "fixed", side: "full", density: "comfy", nav: [], hidden: [] };
+const store = {
+  get(k, d) { try { return Object.assign(Array.isArray(d) ? [] : {}, d, JSON.parse(localStorage.getItem(k) || "null") || {}); } catch (e) { return { ...d }; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+};
+let ui = store.get(UI_KEY, UI_DEFAULT);
+function applyUi() {
+  const r = document.documentElement;
+  if (ui.theme === "auto") delete r.dataset.theme; else r.dataset.theme = ui.theme;
+  r.dataset.accent = ui.accent; r.dataset.width = ui.width; r.dataset.side = ui.side; r.dataset.density = ui.density;
+  const nav = $("nav"), buttons = [...nav.querySelectorAll("button[data-page]")];
+  const order = ui.nav.filter((p) => buttons.some((b) => b.dataset.page === p));
+  buttons.map((b) => b.dataset.page).forEach((p) => { if (!order.includes(p)) order.push(p); });
+  order.forEach((p) => { const b = buttons.find((x) => x.dataset.page === p); nav.appendChild(b); b.hidden = ui.hidden.includes(p) && page.name !== p; b.title = b.textContent.trim(); });
+}
+function saveUi(change) { Object.assign(ui, change); store.set(UI_KEY, ui); applyUi(); }
+
+function openDrawer(title, html, mount) {
+  $("drawer-title").textContent = title;
+  $("drawer-body").innerHTML = html;
+  $("drawer").classList.add("open"); $("drawer").setAttribute("aria-hidden", "false");
+  $("scrim").classList.add("on");
+  openDrawer.onclose = null;
+  if (mount) mount($("drawer-body"));
+}
+function closeDrawer() {
+  $("drawer").classList.remove("open"); $("drawer").setAttribute("aria-hidden", "true");
+  $("scrim").classList.toggle("on", document.querySelector("aside").classList.contains("open"));
+  if (openDrawer.onclose) openDrawer.onclose();
+  openDrawer.onclose = null;
+}
+const drawerOpen = () => $("drawer").classList.contains("open");
+$("drawer-x").onclick = closeDrawer;
+$("scrim").onclick = () => { closeDrawer(); document.querySelector("aside").classList.remove("open"); $("scrim").classList.remove("on"); };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && drawerOpen()) closeDrawer(); });
+$("nav-toggle").onclick = () => { const a = document.querySelector("aside"); a.classList.toggle("open"); $("scrim").classList.toggle("on", a.classList.contains("open")); };
+$("nav").addEventListener("click", () => { if (ui.side === "drawer") { document.querySelector("aside").classList.remove("open"); if (!drawerOpen()) $("scrim").classList.remove("on"); } });
+
+const ACCENTS = { blue: "#3f5fe0", purple: "#7c5cf0", green: "#0f9f6e", orange: "#d9730d", pink: "#d63f8c" };
+function seg(key, options) {
+  return `<div class="seg" data-ui="${key}">${options.map(([v, label]) => `<button data-v="${v}" class="${ui[key] === v ? "on" : ""}">${label}</button>`).join("")}</div>`;
+}
+function renderUiDrawer(body) {
+  const labels = Object.fromEntries([...$("nav").querySelectorAll("button[data-page]")].map((b) => [b.dataset.page, b.textContent.trim()]));
+  const order = [...$("nav").querySelectorAll("button[data-page]")].map((b) => b.dataset.page);
+  body.innerHTML = `
+    <label class="ui-field">主题${seg("theme", [["auto", "跟随系统"], ["light", "浅色"], ["dark", "深色"]])}</label>
+    <div class="ui-field">强调色<div class="swatches">${Object.entries(ACCENTS).map(([k, c]) => `<button data-accent="${k}" class="${ui.accent === k ? "on" : ""}" style="background:${c}" aria-label="${k}"></button>`).join("")}</div></div>
+    <label class="ui-field">内容宽度${seg("width", [["fixed", "固定 1080"], ["fluid", "自适应铺满"]])}</label>
+    <label class="ui-field">侧栏${seg("side", [["full", "展开"], ["rail", "图标"], ["drawer", "抽屉"]])}<span class="small">窗口窄于 900px 时侧栏变成顶部的一排。</span></label>
+    <label class="ui-field">密度${seg("density", [["comfy", "舒适"], ["compact", "紧凑"]])}</label>
+    <div class="ui-field">菜单顺序（拖动排序，点 ⊘ 隐藏，当前页总会显示）<div class="nav-order" id="nav-order">${order.map((p) =>
+      `<div draggable="true" data-p="${p}" class="${ui.hidden.includes(p) ? "off" : ""}">⋮⋮ ${esc(labels[p])}<button data-hide="${p}" title="${ui.hidden.includes(p) ? "显示" : "隐藏"}">${ui.hidden.includes(p) ? "◎" : "⊘"}</button></div>`).join("")}</div></div>
+    <div class="actions" style="justify-content:flex-start;gap:8px"><button class="btn sm" id="ui-reset">界面恢复默认</button><button class="btn sm" id="tables-reset">表格恢复默认</button></div>`;
+  body.querySelectorAll(".seg[data-ui] button").forEach((b) => (b.onclick = () => { saveUi({ [b.closest(".seg").dataset.ui]: b.dataset.v }); renderUiDrawer(body); }));
+  body.querySelectorAll("[data-accent]").forEach((b) => (b.onclick = () => { saveUi({ accent: b.dataset.accent }); renderUiDrawer(body); }));
+  body.querySelectorAll("[data-hide]").forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    const p = b.dataset.hide;
+    saveUi({ hidden: ui.hidden.includes(p) ? ui.hidden.filter((x) => x !== p) : ui.hidden.concat(p) });
+    renderUiDrawer(body);
+  }));
+  dragList($("nav-order"), "div[data-p]", (keys) => { saveUi({ nav: keys }); renderUiDrawer(body); });
+  $("ui-reset").onclick = () => { ui = { ...UI_DEFAULT }; store.set(UI_KEY, ui); applyUi(); renderUiDrawer(body); toast("界面已恢复默认"); };
+  $("tables-reset").onclick = () => { store.set(TABLE_KEY, {}); toast("表格的列宽、顺序已恢复默认"); openPage(page.name, true); };
+}
+$("ui-btn").onclick = () => openDrawer("界面", "", renderUiDrawer);
+
+// 拖动排序一组元素（菜单顺序、表格的行）：放下后按新顺序回调 data-p / data-row 的值
+function dragList(box, selector, done) {
+  let dragged = null;
+  box.querySelectorAll(selector).forEach((el) => {
+    el.draggable = true;
+    el.ondragstart = (e) => { dragged = el; el.classList.add("drag"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ""); };
+    el.ondragend = () => { el.classList.remove("drag"); box.querySelectorAll(".over").forEach((x) => x.classList.remove("over")); };
+    el.ondragover = (e) => { if (dragged && dragged !== el) { e.preventDefault(); box.querySelectorAll(".over").forEach((x) => x.classList.remove("over")); el.classList.add("over"); } };
+    el.ondrop = (e) => {
+      e.preventDefault();
+      if (!dragged || dragged === el) return;
+      el.parentNode.insertBefore(dragged, el);
+      done([...box.querySelectorAll(selector)].map((x) => x.dataset.p ?? x.dataset.row));
+    };
+  });
+}
+
+// 可调表格：点表头排序（降序 → 升序 → 原样），拖表头换列位置，拖表头右边缘调列宽，拖行首 ⋮⋮ 调行序。
+// 每个表格按「页面 + 表头文字」各存一份。表格重绘（保存、刷新）后再套一次。
+function cellValue(td) {
+  const t = (td ? td.textContent : "").trim();
+  const n = parseFloat(t.replace(/[¥$€£,\s]/g, ""));
+  return isNaN(n) || !/^[¥$€£]?[-\d,.\s]+%?$/.test(t.split(" ")[0]) ? t : n;
+}
+function enhanceTable(table, key) {
+  if (table.dataset.dt) return;
+  const head = table.querySelector("tr");
+  if (!head || !head.querySelector("th")) return;
+  table.dataset.dt = key;
+  table.classList.add("dt");
+  const all = store.get(TABLE_KEY, {}), st = all[key] || {};
+  const save = () => { const a = store.get(TABLE_KEY, {}); a[key] = st; store.set(TABLE_KEY, a); };
+  const rows = () => [...table.querySelectorAll("tr")].slice(1);
+  const labelOf = (th) => th.dataset.label || (th.dataset.label = th.textContent.trim());
+  // 行首的拖动把手
+  const h = document.createElement("th"); h.className = "h"; head.insertBefore(h, head.firstChild);
+  rows().forEach((tr) => {
+    tr.dataset.row = (tr.children[0] ? tr.children[0].textContent.trim() : "");
+    const td = document.createElement("td"); td.className = "h"; td.textContent = "⋮⋮"; td.title = "拖动调整顺序"; tr.insertBefore(td, tr.firstChild);
+  });
+  const ths = () => [...head.children].slice(1);
+  // 列顺序
+  if (st.order) {
+    const want = st.order.filter((l) => ths().some((th) => labelOf(th) === l));
+    want.forEach((l, i) => {
+      const from = ths().findIndex((th) => labelOf(th) === l) + 1;
+      [head, ...rows()].forEach((tr) => { const c = tr.children[from]; if (c) tr.insertBefore(c, tr.children[i + 1] || null); });
+    });
+  }
+  // 行顺序（手动）
+  const body = head.parentNode;
+  if (st.rows && !st.sort) {
+    st.rows.forEach((k) => { const tr = rows().find((r) => r.dataset.row === k); if (tr) body.appendChild(tr); });
+  }
+  // 排序
+  const original = rows();
+  const sortNow = () => {
+    table.classList.toggle("sorted", !!st.sort);
+    ths().forEach((th) => { th.querySelector(".so")?.remove(); });
+    if (!st.sort) { original.forEach((tr) => body.appendChild(tr)); if (st.rows) st.rows.forEach((k) => { const tr = rows().find((r) => r.dataset.row === k); if (tr) body.appendChild(tr); }); return; }
+    const idx = ths().findIndex((th) => labelOf(th) === st.sort.col) + 1;
+    if (idx < 1) { st.sort = null; return sortNow(); }
+    const th = ths()[idx - 1];
+    th.insertAdjacentHTML("beforeend", `<span class="so">${st.sort.dir > 0 ? "▲" : "▼"}</span>`);
+    rows().sort((a, b) => {
+      const x = cellValue(a.children[idx]), y = cellValue(b.children[idx]);
+      return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "zh")) * st.sort.dir;
+    }).forEach((tr) => body.appendChild(tr));
+  };
+  // 列宽：先按现在的样子量好，固定下来
+  const widths = ths().map((th) => th.getBoundingClientRect().width);
+  const cg = document.createElement("colgroup");
+  cg.innerHTML = '<col style="width:24px">' + ths().map((th, i) => `<col data-l="${esc(labelOf(th))}" style="width:${(st.widths && st.widths[labelOf(th)]) || Math.max(60, Math.round(widths[i]))}px">`).join("");
+  table.insertBefore(cg, table.firstChild);
+  if (!st.widths) { cg.querySelectorAll("col[data-l]").forEach((c) => (c.style.width = "")); table.style.tableLayout = "auto"; }
+  ths().forEach((th) => {
+    const rz = document.createElement("span"); rz.className = "rz"; th.appendChild(rz);
+    rz.onmousedown = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      // 第一次调宽：把所有列定成现在的像素宽度
+      if (!st.widths) { st.widths = {}; ths().forEach((x) => (st.widths[labelOf(x)] = Math.round(x.getBoundingClientRect().width))); table.style.tableLayout = "";
+        cg.querySelectorAll("col[data-l]").forEach((c) => (c.style.width = st.widths[c.dataset.l] + "px")); }
+      const col = cg.querySelector(`col[data-l="${CSS.escape(labelOf(th))}"]`), x0 = e.clientX, w0 = st.widths[labelOf(th)];
+      const move = (ev) => { const w = Math.max(48, w0 + ev.clientX - x0); col.style.width = w + "px"; st.widths[labelOf(th)] = w; };
+      const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); save(); };
+      document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+    };
+    th.onclick = (e) => {
+      if (e.target.classList.contains("rz")) return;
+      const l = labelOf(th);
+      st.sort = !st.sort || st.sort.col !== l ? { col: l, dir: -1 } : st.sort.dir < 0 ? { col: l, dir: 1 } : null;
+      save(); sortNow();
+    };
+    // 拖表头换列
+    th.draggable = true;
+    th.ondragstart = (e) => { table._dragCol = th; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ""); };
+    th.ondragover = (e) => { if (table._dragCol && table._dragCol !== th) { e.preventDefault(); th.classList.add("over"); } };
+    th.ondragleave = () => th.classList.remove("over");
+    th.ondrop = (e) => {
+      e.preventDefault(); th.classList.remove("over");
+      const from = [...head.children].indexOf(table._dragCol), to = [...head.children].indexOf(th);
+      table._dragCol = null;
+      if (from < 1 || to < 1 || from === to) return;
+      [head, ...rows()].forEach((tr) => { const c = tr.children[from]; if (c) tr.insertBefore(c, tr.children[to]); });
+      const c = cg.children[from]; cg.insertBefore(c, cg.children[to]);
+      st.order = ths().map(labelOf); save();
+    };
+  });
+  // 拖行
+  const rowDrag = () => dragList(body, "tr[data-row]", (keys) => { st.rows = keys; st.sort = null; save(); sortNow(); });
+  rows().forEach((tr) => { tr.draggable = false; tr.children[0].onmousedown = () => { if (!st.sort) { rowDrag(); } }; });
+  if (!st.sort) rowDrag();
+  sortNow();
+  if (!table.parentNode.classList.contains("dt-wrap")) { const w = document.createElement("div"); w.className = "dt-wrap"; table.parentNode.insertBefore(w, table); w.appendChild(table); }
+}
+function enhanceTables(root) {
+  root.querySelectorAll("table.cost-table, table.enh").forEach((t) => {
+    const head = t.querySelector("tr");
+    if (head) enhanceTable(t, `${page.name}:${[...head.querySelectorAll("th")].map((x) => x.textContent.trim()).join("|")}`);
+  });
+}
+new MutationObserver(() => { clearTimeout(enhanceTables.t); enhanceTables.t = setTimeout(() => enhanceTables($("page")), 30); })
+  .observe($("page"), { childList: true, subtree: true });
+applyUi();
 
 route();
 </script>
