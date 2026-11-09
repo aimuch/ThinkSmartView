@@ -267,3 +267,18 @@ body.both-bars .now-bar { top: 288px; }
   .tr-sub, .alert-time { display: none; }
   .alert-bar, .tr-bar { font-size: 22px; } .alert-bar b { font-size: 24px; }
 }
+
+/* 竖屏顶栏放成一行（原来放不下就把右边的状态和按钮挤到第二行；设计画布第 24 块 C） */
+@media (orientation: portrait) {
+  .top { flex-wrap: nowrap; gap: 12px; }
+  .brand { flex: none; } .brand .name { white-space: nowrap; }
+  .right { gap: 10px; flex: none; }
+  .clock { display: none; }                                  /* 首页正文里有大时钟 */
+  .model-pill { min-width: 0; flex: 0 1 auto; gap: 10px; padding-right: 12px; }
+  .pill-text { min-width: 0; }
+  .pill-text b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill-text small { display: none; }                        /* 型号在「选择模型」里看 */
+  .sleep-chip span, #btChipText, #reportText { display: none; }   /* 只留图标，倒计时保留数字 */
+  .sleep-chip, .bt-chip { padding: 0 11px; }
+  .report-pill { padding: 0 13px; }
+}
