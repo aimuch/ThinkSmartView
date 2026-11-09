@@ -22,6 +22,7 @@ STILL = Path('~/.cache/thinksmart-client/camera-still.jpg').expanduser()
 # 屏幕方向（/etc/thinksmart-kiosk.conf 的 ROTATION）→ 把画面转正的 ffmpeg 滤镜
 ROTATE = {'90': '', 'normal': 'transpose=1', '270': 'hflip,vflip', '180': 'transpose=2'}
 IDLE_STOP = 4.0          # 秒：没人用之后多久关
+PREVIEW_MAX = 120.0      # 秒：一次实时画面最多看这么久（页面忘了断开也不会一直开着摄像头）
 STILL_FRESH = 1.5        # 秒：整图比这旧就再等一张
 SOI, EOI = b'\xff\xd8', b'\xff\xd9'
 
@@ -35,7 +36,8 @@ def ffmpeg_args(rotation, still=STILL):
     pre = f'{rot},' if rot else ''
     portrait = rotation in ('normal', '180')
     scale = 'scale=-2:640' if portrait else 'scale=-2:360'
-    graph = f'[0:v]{pre}split=2[p][s];[p]fps=8,{scale},hflip[pv];[s]fps=2[st]'
+    # 先降到每秒 8 帧再旋转、编码：按 30 帧处理 720p 要 3 个多核（2026-11-10 实测 338%）
+    graph = f'[0:v]fps=8,{pre}split=2[p][s];[p]{scale},hflip[pv];[s]fps=2[st]'
     return ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-f', 'v4l2', '-input_format', 'yuyv422',
             '-video_size', '1280x720', '-i', str(DEVICE), '-filter_complex', graph,
             '-map', '[pv]', '-f', 'mjpeg', '-q:v', '7', 'pipe:1',
@@ -128,7 +130,8 @@ class Camera:
         log.info('camera preview: a page is watching')
         try:
             seen = self.seq if self.frame is None else self.seq - 1   # 刚打开还没出画面：等第一帧，别拿空的就走
-            while True:
+            until = time.monotonic() + PREVIEW_MAX
+            while time.monotonic() < until:
                 async with self.changed:
                     await asyncio.wait_for(self.changed.wait_for(
                         lambda: (self.seq != seen and self.frame is not None) or self.proc.returncode is not None), 10)

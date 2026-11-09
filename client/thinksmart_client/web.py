@@ -481,12 +481,17 @@ def make_app(client: Client):
         resp = web.StreamResponse(headers={'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
                                            'Cache-Control': 'no-store'})
         await resp.prepare(request)
+        frames = client.camera.frames()
         try:
-            async for jpeg in client.camera.frames():
+            async for jpeg in frames:
                 await resp.write(b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: '
                                  + str(len(jpeg)).encode() + b'\r\n\r\n' + jpeg + b'\r\n')
         except (ConnectionResetError, asyncio.CancelledError, asyncio.TimeoutError):
             pass
+        finally:
+            # 页面断开时生成器停在 yield 上：不主动关，它的 finally（放开摄像头）就不会跑，
+            # ffmpeg 一直开着（2026-11-10 实测占了 3 个多核几个小时）
+            await frames.aclose()
         return resp
 
     async def camera_shoot(_request):
