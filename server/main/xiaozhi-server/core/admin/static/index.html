@@ -2117,7 +2117,7 @@ function renderAgentForm(box, d, root) {
       <div class="small muted" style="margin-top:6px">${esc(kind.hint)}</div></div></div>` : ""}
     <div class="grid2" style="margin-top:8px">
       <label class="f">名字<span class="hint">播报和设备上显示</span><input class="in" id="ag-name" maxlength="20" value="${esc(a.name)}" placeholder="${a.kind === "openai" ? "Hermes" : a.kind === "dify" ? "菜谱助手" : "我的扣子"}"></label>
-      <label class="f">称呼<span class="hint">逗号分隔，说「嗨 + 称呼」叫它；留空用名字</span><input class="in" id="ag-aliases" value="${esc((a.aliases || []).join("，"))}" placeholder="hermes，赫尔墨斯"></label>
+      <label class="f">称呼<span class="hint">逗号分隔，说「嗨 + 称呼」叫它；留空用名字</span><input class="in" id="ag-aliases" value="${esc((a.aliases || []).join("，"))}" placeholder="${a.kind === "openai" ? "hermes，赫尔墨斯" : a.kind === "dify" ? "菜谱助手" : "扣子"}"></label>
       ${a.kind !== "coze" ? `<label class="f full">接口地址<span class="hint">${a.kind === "openai" ? "Hermes：在它的 ~/.hermes/.env 里开 API_SERVER_ENABLED=true，默认 http://127.0.0.1:8642/v1；在别的电脑上要把 API_SERVER_HOST 设成 0.0.0.0" : "自己部署的 Dify 填它的 /v1 地址"}</span>
         <input class="in mono" id="ag-url" value="${esc(a.base_url || kind.base_url)}"></label>` : ""}
       ${a.kind === "openai" ? `<label class="f">模型<span class="hint">Hermes 不看这个，留空就行</span><input class="in mono" id="ag-model" value="${esc(a.model)}"></label>` : ""}
