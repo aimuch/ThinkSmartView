@@ -576,7 +576,13 @@ class AdminHandler:
             stages = pipeline.describe_stages(merged)
         except Exception:  # noqa: BLE001
             stages = []
-        return {"stages": stages, "uptime": int(now - self.started_at), "hours": hours, "hours_since": since,
+        try:
+            intent = pages.describe_intent(merged)
+            on = [p["label"] for p in intent["plugins"] if p["enabled"]]
+            plugins = {"mode": intent["mode"], "count": len(on), "names": on[:4]}
+        except Exception:  # noqa: BLE001
+            plugins = None
+        return {"stages": stages, "plugins": plugins, "uptime": int(now - self.started_at), "hours": hours, "hours_since": since,
                 "turns_today": sum(today), "cost": {k: cost.get(k) for k in ("today", "month", "currencies")}}
 
     # ---------- 更新网关 ----------
@@ -924,7 +930,11 @@ class AdminHandler:
         reports.set_quiet(device, bool(body.get("quiet")))
         presence.beat(device, str(body.get("version") or ""))   # 设备每 10 秒查一次：顺便当心跳（状态页的在线/待机）
         playing = bool(body.get("play")) and reports.deliver_now(device)
-        return self._json({"ok": True, "count": reports.count(device), "playing": playing})
+        # admin：网关后台的局域网地址。设备经隧道连网关，自己不知道网关在局域网里的地址，设置页「本机 IP」要用
+        from core.utils.util import get_local_ip
+        port = int((self.config.get("server") or {}).get("http_port", 8003))
+        return self._json({"ok": True, "count": reports.count(device), "playing": playing,
+                           "admin": f"http://{get_local_ip()}:{port}/admin"})
 
     async def handle_kiosk_asr(self, request: web.Request):
         """只识别、不对话：body 是 10 秒以内的 16kHz 单声道 16 位 PCM，返回 {"text", "ms"}。

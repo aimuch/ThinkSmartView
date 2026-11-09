@@ -331,6 +331,20 @@ class Client:
                 'custom': lines != config.DEFAULTS['wake_words'], 'recording': self.wake_rec is not None,
                 'max': wake_words.MAX_WORDS}
 
+    def _kws_extra(self):
+        """唤醒词模型里除了唤醒词还要听的：做菜模式的「下一步」等、断网时的几句口令。两种模式可能同时开着，
+        所以每次重建都按现在的状态一起算（以前各自重建，会把对方的词丢掉）。"""
+        extra = [wake_words.keyword(w) for w in cook.WORDS] if self.cooking else []
+        if time.monotonic() < self.offline_until:
+            extra += [wake_words.keyword(w) for w in offline.WORDS]
+        return extra
+
+    async def _rebuild_kws(self, lines=None):
+        """按现在的唤醒词和模式重建唤醒词模型（约 1 秒，在线程里）。调用方已经改好状态。"""
+        async with self.wake_lock:
+            self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(
+                None, self._build_kws, lines or self.cfg['wake_words'], self._kws_extra())
+
     def _build_kws(self, lines, extra=()):
         cfg = self.cfg
         kws = Kws(str(ROOT / 'models' / 'kws-zh'), list(lines) + list(extra),
@@ -342,7 +356,7 @@ class Client:
         event loop (loading the model takes ~1 s here), swap them in, store the list."""
         lines = wake_words.validate(list(lines))
         cfg = self.cfg
-        extra = [wake_words.keyword(w) for w in cook.WORDS] if self.cooking else []
+        extra = self._kws_extra()
 
         async with self.wake_lock:
             self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(None, self._build_kws, lines, extra)
@@ -593,19 +607,15 @@ class Client:
         self.offline_until = time.monotonic() + offline.WINDOW
         self.events.publish('toast', {'kind': 'error', 'text': '连不上小麦网关。现在可以直接说：' + '、'.join(offline.WORDS)
                                       + f'（{offline.WINDOW} 秒内）'})
-        async with self.wake_lock:
-            self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(
-                None, self._build_kws, self.cfg['wake_words'], [wake_words.keyword(w) for w in offline.WORDS])
+        await self._rebuild_kws()
         self._play_clips(['hint'])
-        asyncio.create_task(self._offline_end())
+        if not getattr(self, '_offline_task', None) or self._offline_task.done():   # 一个窗口只要一个收尾任务
+            self._offline_task = asyncio.create_task(self._offline_end())
 
     async def _offline_end(self):
         while time.monotonic() < self.offline_until:
             await asyncio.sleep(0.5)
-        async with self.wake_lock:
-            extra = [wake_words.keyword(w) for w in cook.WORDS] if self.cooking else []
-            self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(
-                None, self._build_kws, self.cfg['wake_words'], extra)
+        await self._rebuild_kws()
 
     async def offline_command(self, label):
         self.offline_until = time.monotonic() + offline.WINDOW   # another one may follow
@@ -847,7 +857,10 @@ class Client:
     # ---- 电台和助眠声 (media.py) ----
 
     def media_view(self):
-        return self.media.view() if self.media else {'playing': None, 'stations': [], 'sounds': []}
+        # 播放器第一次放的时候才建；在那之前设置页也要能列出电台和助眠声（以前是空的，屏幕上点不了）
+        return self.media.view() if self.media else {'playing': None,
+                                                     'stations': [{'id': k, 'name': v[0]} for k, v in media.STATIONS.items()],
+                                                     'sounds': [{'id': k, 'name': v} for k, v in media.SOUNDS.items()]}
 
     def _media_player(self):
         if self.media is None:
@@ -976,9 +989,7 @@ class Client:
         first = self.cooking is None
         self.cooking = {'title': card['text'], 'steps': found, 'i': 0, 'touched': time.monotonic()}
         if first:
-            async with self.wake_lock:
-                self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(
-                    None, self._build_kws, self.cfg['wake_words'], [wake_words.keyword(w) for w in cook.WORDS])
+            await self._rebuild_kws()
         log.info('cooking %r: %d steps', card['text'], len(found))
         self.publish_cook()
         if read:
@@ -989,9 +1000,7 @@ class Client:
         if not self.cooking:
             return {'on': False}
         self.cooking = None
-        async with self.wake_lock:
-            self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(
-                None, self._build_kws, self.cfg['wake_words'])
+        await self._rebuild_kws()
         log.info('cooking mode ended')
         self.publish_cook()
         return {'on': False}
@@ -2214,6 +2223,8 @@ class Client:
         except Exception:
             return None
         self.hub_seen = time.monotonic()
+        if data.get('admin'):
+            self.hub_admin = str(data['admin'])   # 设置页「本机 IP」那里写网关后台的地址（网关不在设备上）
         count = int(data.get('count') or 0)
         new = count > self.reports
         if count != self.reports:

@@ -938,7 +938,9 @@ async function renderStatus(root) {
         <div class="tnode hub"><span class="ic"><span class="logo" data-logo></span><span class="s ${bad.some((c) => c.level === "error") ? "err" : bad.length ? "idle" : "ok"}"></span></span>
           <b data-brand-name>小麦网关</b><small>${esc(s.addresses.ip)}</small></div>
         <div class="tlink"><span class="p" style="animation-delay:1.2s"></span></div>
-        <div class="tmods">${mod("asr", "📝", "语音识别", modWarn("ASR"))}${mod("llm", "✦", "大模型", modWarn("LLM"))}${mod("tts", "🔊", "语音合成", modWarn("TTS"))}</div>
+        <div class="tmods">${mod("asr", "📝", "语音识别", modWarn("ASR"))}${mod("llm", "✦", "大模型", modWarn("LLM"))}${mod("tts", "🔊", "语音合成", modWarn("TTS"))}
+          ${s.plugins ? `<button class="tmod" data-go="intent"><span class="ic">🧩<span class="s ${s.plugins.mode === "function_call" ? "" : "warn"}"></span></span>
+            <span><b>插件</b><small>${s.plugins.mode === "function_call" ? `${s.plugins.count} 个开着 · ${esc(s.plugins.names.join("、"))}` : "当前模型不用插件"}</small></span></button>` : ""}</div>
       </div></div>
     <div class="u-two">
       <div class="card u-panel"><div class="h">设备<span>待机时每 10 秒一次心跳</span></div><div id="devices"></div></div>
@@ -1075,6 +1077,7 @@ async function renderHow(root) {
     <div class="card u-panel" style="margin-top:0!important"><div class="h">一句话怎么走<span>点一步看说明，再点「去设置」</span></div>
       <div class="hflow">${stages.map((x, i) => `<button class="hstage ${i === selStage ? "sel" : ""}" data-stage="${i}" style="animation-delay:${i * 40}ms">
         <span class="where">${esc(x.where)}</span><span class="i">${x.icon}</span><b>${esc(x.title)}</b><span class="v">${esc(x.value)}</span></button>`).join("")}</div>
+      ${(f.branches || []).length ? `<div class="hbranch">${f.branches.map((b) => `<div ${b.page ? `data-go="${esc(b.page)}" style="cursor:pointer"` : ""}><b>${esc(b.title)}</b>${esc(b.text)}</div>`).join("")}</div>` : ""}
       <div class="hdetail" id="hdetail"></div></div>
 
     <div class="section-title">怎么跟它说话</div>

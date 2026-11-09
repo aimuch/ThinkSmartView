@@ -826,7 +826,8 @@ $('sbThumbs').addEventListener('click', e => {
 $('sbAdd').addEventListener('click', () => DEMO === null && postJson('/api/album/start').then(r => { if (!r.ok) toast(r.error || '没开成', 'error'); }));
 function standbyBusy() {
   const st = ui.status || {};
-  return st.state !== 'idle' || document.querySelector('.sheet.on') || ui.photo || (ui.cook && ui.cook.on) || !$('qrOv').hidden
+  // 设备详情、确认框不是 .sheet：也算在用，待机页不盖上来
+  return st.state !== 'idle' || document.querySelector('.sheet.on, .h-detail.on, .h-confirm.on') || ui.photo || (ui.cook && ui.cook.on) || !$('qrOv').hidden
     || (ui.alarms && ui.alarms.ringing) || ww.holding || bc.holding;
 }
 function showStandby(on) {
@@ -1451,12 +1452,14 @@ renderClear();
 
 // The device's address, read each time the sheet opens (it can change with the WiFi)
 async function renderIp() {
-  let ip = DEMO !== null ? '192.168.1.23' : null;
+  let ip = DEMO !== null ? '192.168.1.23' : null, admin = null;
   if (DEMO === null) {
-    try { ip = (await (await fetch('/api/network')).json()).ip; } catch (e) { ip = null; }
+    try { ({ ip, admin } = await (await fetch('/api/network')).json()); } catch (e) { ip = null; }
   }
   $('ipNum').textContent = ip || '未联网';
-  $('ipSub').textContent = ip ? `在同一网络的电脑上打开 http://${ip}:16688/admin 进网关后台` : '连上 WiFi 后这里显示设备的地址';
+  // 网关后台在网关那台电脑上（地址由网关告诉设备），不是这台设备的 IP
+  $('ipSub').textContent = !ip ? '连上 WiFi 后这里显示设备的地址'
+    : admin ? `网关后台：在同一网络的电脑上打开 ${admin}` : '网关后台的地址在网关连上后显示';
 }
 $('btnSettings').addEventListener('click', () => { $('settings').classList.add('on'); renderIp(); renderWifiCard(); });
 /* ---- settings: WiFi (the kiosk shell scans and joins: thinksmart-kiosk.py, the same code as its welcome page) ---- */

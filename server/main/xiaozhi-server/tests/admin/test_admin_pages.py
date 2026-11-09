@@ -463,10 +463,10 @@ async def test_kiosk_reports(kiosk):
         assert (await kiosk.post("/kiosk/reports", json={})).status == 400
         reports.add("dev-1", "bot-1", "孙悟空做完了：好。")
         data = await (await kiosk.post("/kiosk/reports", json={"device": "dev-1", "quiet": True})).json()
-        assert data == {"ok": True, "count": 1, "playing": False}
+        assert {k: data[k] for k in ("ok", "count", "playing")} == {"ok": True, "count": 1, "playing": False}
         assert "dev-1" in reports._quiet
         data = await (await kiosk.post("/kiosk/reports", json={"device": "dev-1", "play": True})).json()
-        assert data == {"ok": True, "count": 1, "playing": False}  # 设备没连着，念不了
+        assert {k: data[k] for k in ("ok", "count", "playing")} == {"ok": True, "count": 1, "playing": False}  # 设备没连着，念不了
         assert "dev-1" not in reports._quiet
     finally:
         reports.clear()

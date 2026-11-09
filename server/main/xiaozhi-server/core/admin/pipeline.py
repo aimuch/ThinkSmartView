@@ -224,8 +224,29 @@ def describe_tips(merged: dict) -> list:
     return tips
 
 
+def describe_branches(merged: dict) -> list:
+    """[xiaozhi-hub] 主路径旁边的两条支路（设计画布第 14 块 D 的虚线框）：叫名字换模型、认出是谁在说话。"""
+    out = []
+    calls = pages.describe_call_names(merged)
+    named = [m for m in calls["models"] if m["aliases"] and m["ready"]]
+    if calls["enabled"] and named:
+        examples = "；".join(f"「嗨 {m['aliases'][0]}」→ {m['label'].split('（')[0]}" for m in named[:2])
+        out.append({"id": "calls", "title": "叫名字换模型", "text": examples, "page": "calls"})
+    try:
+        from core.utils import local_voiceprint
+
+        if local_voiceprint.available():
+            people = sum(len(v) for v in local_voiceprint._load().values() if isinstance(v, dict))
+            out.append({"id": "voiceprint", "title": "认出是谁",
+                        "text": f"声纹 · 家人声音 {people} 人" if people else "声纹模型已装，在设备设置「家人声音」里录",
+                        "page": None})
+    except Exception:  # noqa: BLE001 —— 声纹模块出问题不影响这一页
+        pass
+    return out
+
+
 def describe_flow(merged: dict) -> dict:
-    return {"stages": describe_stages(merged), "tips": describe_tips(merged)}
+    return {"stages": describe_stages(merged), "tips": describe_tips(merged), "branches": describe_branches(merged)}
 
 
 # ---------- 提示词拆解 ----------

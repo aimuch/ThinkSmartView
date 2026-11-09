@@ -266,7 +266,7 @@ def make_app(client: Client):
         return web.json_response(await client.power_off())
 
     async def network(_request):
-        return web.json_response({'ip': local_ip()})
+        return web.json_response({'ip': local_ip(), 'admin': getattr(client, 'hub_admin', None)})
 
     async def update_check(_request):
         return web.json_response({'ok': update.request('check')})

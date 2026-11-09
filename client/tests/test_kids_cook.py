@@ -177,3 +177,38 @@ def test_standby_setting_and_album(tmp_path, monkeypatch):
         await c.set_standby(minutes=2, album=True)
         assert 'standby' not in json.loads(config.PATH.read_text())     # back to the default
     asyncio.run(run())
+
+
+def test_cooking_and_offline_keep_each_others_words(tmp_path, monkeypatch):
+    """做菜模式和断网口令可能同时开着：重建唤醒词模型时两边的词都要在（以前各自重建，会把对方的丢掉）。"""
+    from thinksmart_client import offline
+
+    c = make_client(tmp_path, monkeypatch)
+    c.cards = [{'id': 'c1', 'role': 'card', 'text': '番茄炒蛋', 'card': {'markdown': RECIPE}}]
+    c.offline_until = 0.0
+    c._play_clips = lambda names: None
+    words = lambda: ' '.join(c.kws.keywords)
+
+    async def run():
+        await c.cook_start('c1', read=False)
+        c.events.publish = lambda *a: None
+        await c.offline_start()
+        assert '@下一步' in words() and '@音量大一点' in words()      # 断网时还能「下一步」
+        await c.cook_stop()
+        assert '@下一步' not in words() and '@音量大一点' in words()  # 退出做菜不丢断网口令
+        await c.cook_start('c1', read=False)
+        assert '@下一步' in words() and '@音量大一点' in words()
+        c.offline_until = 0.0                                         # 断网窗口结束：收尾任务每 0.5 秒看一次
+        for _ in range(60):
+            if '@音量大一点' not in words():
+                break
+            await asyncio.sleep(0.1)
+        assert '@下一步' in words() and '@音量大一点' not in words()
+    asyncio.run(run())
+
+
+def test_media_card_lists_stations_before_anything_played(tmp_path, monkeypatch):
+    c = make_client(tmp_path, monkeypatch)
+    c.media = None
+    v = c.media_view()
+    assert v['playing'] is None and len(v['stations']) == 6 and {s['id'] for s in v['sounds']} == {'rain', 'ocean', 'fan', 'white'}
