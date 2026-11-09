@@ -43,7 +43,7 @@
   .hidden { display: none !important; }
 
   /* ---------- 布局 ---------- */
-  .app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+  .app { display: grid; grid-template-columns: var(--side-w, 232px) minmax(0, 1fr); min-height: 100vh; }
   aside { background: var(--side); color: var(--side-text); padding: 20px 14px; position: sticky; top: 0; height: 100vh;
           display: flex; flex-direction: column; }
   .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 600; font-size: 15px; padding: 0 8px 22px; }
@@ -57,7 +57,20 @@
                 background: none; color: inherit; cursor: pointer; text-align: left; margin-bottom: 2px; }
   .nav button:hover { background: var(--side-hover); color: #e2e8f0; }
   .nav button.active { background: var(--side-hover); color: #fff; box-shadow: inset 3px 0 0 #818cf8; }
-  .nav .ico { width: 18px; text-align: center; }
+  /* 图标放在圆角小方块里（设计画布第 28 块）；图标本身由脚本换成线条 SVG */
+  .nav button { gap: 12px; padding: 6px 8px; }
+  .nav .ico { width: 30px; height: 30px; border-radius: 9px; background: #ffffff0f; display: grid; place-items: center; flex: none; font-size: 15px; }
+  .nav .ico svg { width: 18px; height: 18px; display: block; }
+  .nav button.active .ico { background: color-mix(in srgb, var(--accent) 30%, transparent); color: #fff; }
+  .nav button.active { box-shadow: none; }
+  /* 拖动调宽度、一键折叠 */
+  aside { position: sticky; }
+  .side-resize { position: absolute; top: 0; bottom: 0; right: -4px; width: 8px; cursor: col-resize; z-index: 3; touch-action: none; }
+  .side-resize::after { content: ""; position: absolute; left: 3px; top: 0; bottom: 0; width: 2px; background: var(--accent); opacity: 0; transition: opacity .15s; }
+  .side-resize:hover::after, .side-resize.drag::after { opacity: .8; }
+  .side-col { margin-left: auto; width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--side-line); background: none;
+              color: var(--side-text); display: grid; place-items: center; cursor: pointer; font-size: 13px; flex: none; }
+  .side-col:hover { background: var(--side-hover); color: #fff; }
   .side-foot { margin-top: auto; font-size: 12px; padding: 12px 10px 0; border-top: 1px solid var(--side-line); }
   .side-foot button { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; }
   .side-foot .row { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
@@ -389,13 +402,16 @@
   :root[data-density="compact"] .cost-table th, :root[data-density="compact"] .cost-table td { padding: 4px 6px; }
   :root[data-density="compact"] body { font-size: 13px; }
   @media (min-width: 901px) {
-    :root[data-side="rail"] .app { grid-template-columns: 64px minmax(0, 1fr); }
+    :root[data-side="rail"] .app { grid-template-columns: 68px minmax(0, 1fr); }
+    :root[data-side="rail"] .side-resize { display: none; }
+    :root[data-side="rail"] .brand { flex-direction: column; gap: 10px; }
+    :root[data-side="rail"] .side-col { margin: 0; }
     :root[data-side="rail"] aside { padding: 16px 8px; }
     :root[data-side="rail"] .brand span, :root[data-side="rail"] .hb-txt, :root[data-side="rail"] .side-foot a,
     :root[data-side="rail"] #logout { display: none; }
     :root[data-side="rail"] .brand { padding: 0 9px 18px; }
     :root[data-side="rail"] .nav button { font-size: 0; justify-content: center; padding: 10px 0; }
-    :root[data-side="rail"] .nav .ico { font-size: 16px; width: auto; }
+    :root[data-side="rail"] .nav .ico { font-size: 15px; }
     :root[data-side="rail"] .side-foot { padding: 10px 0 0; text-align: center; }
     :root[data-side="rail"] .side-foot .row { justify-content: center; }
     :root[data-side="rail"] .side-status { justify-content: center; padding: 6px 0; } :root[data-side="rail"] .hb-line { width: 40px; }
@@ -643,7 +659,8 @@
 
 <div id="app" class="app hidden">
   <aside>
-    <div class="brand"><div class="logo" data-logo></div><span data-brand-name>小麦网关</span></div>
+    <div class="side-resize" id="side-resize" title="拖动调宽度，双击恢复"></div>
+    <div class="brand"><div class="logo" data-logo></div><span data-brand-name>小麦网关</span><button class="side-col" id="side-col" type="button" title="收起侧栏">‹‹</button></div>
     <nav class="nav" id="nav">
       <button data-page="status"><span class="ico">◎</span>状态</button>
       <button data-page="devices"><span class="ico">▣</span>设备</button>
@@ -3042,12 +3059,50 @@ function applyUi() {
   const r = document.documentElement;
   if (ui.theme === "auto") delete r.dataset.theme; else r.dataset.theme = ui.theme;
   r.dataset.accent = ui.accent; r.dataset.width = ui.width; r.dataset.side = ui.side; r.dataset.density = ui.density;
+  r.style.setProperty("--side-w", `${Math.min(SIDE_MAX, Math.max(SIDE_MIN, +ui.sideW || 232))}px`);
+  const col = $("side-col"); if (col) { const rail = ui.side === "rail"; col.textContent = rail ? "››" : "‹‹"; col.title = rail ? "展开侧栏" : "收起侧栏"; }
   const nav = $("nav"), buttons = [...nav.querySelectorAll("button[data-page]")];
   const order = ui.nav.filter((p) => buttons.some((b) => b.dataset.page === p));
   buttons.map((b) => b.dataset.page).forEach((p) => { if (!order.includes(p)) order.push(p); });
   order.forEach((p) => { const b = buttons.find((x) => x.dataset.page === p); nav.appendChild(b); b.hidden = ui.hidden.includes(p) && page.name !== p; b.title = b.textContent.trim(); });
 }
 function saveUi(change) { Object.assign(ui, change); store.set(UI_KEY, ui); applyUi(); }
+
+// ---- 侧栏：线条图标、拖动调宽度、一键折叠（设计画布第 28 块） ----
+const SIDE_MIN = 190, SIDE_MAX = 380;
+const NAV_ICONS = {
+  status: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  devices: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M10 18h4"/>',
+  how: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h4a4 4 0 0 0 4-4V8"/>',
+  llm: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
+  calls: '<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>',
+  agents: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 13v1M15 13v1"/><circle cx="12" cy="3.5" r="1"/>',
+  grokbot: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 13v1M15 13v1"/>',
+  memory: '<path d="M4 19V6a2 2 0 0 1 2-2h12v15H6a2 2 0 0 0-2 2z"/><path d="M8 8h6"/>',
+  cost: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/>',
+  asr: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  tts: '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
+  intent: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  update: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+};
+document.querySelectorAll("#nav button[data-page] .ico").forEach((el) => {
+  const d = NAV_ICONS[el.parentElement.dataset.page];
+  if (d) el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+});
+$("side-col").onclick = () => saveUi({ side: ui.side === "rail" ? "full" : "rail" });
+(() => {
+  const h = $("side-resize");
+  let start = null;
+  h.addEventListener("pointerdown", (e) => { start = { x: e.clientX, w: +ui.sideW || 232 }; h.setPointerCapture(e.pointerId); h.classList.add("drag"); e.preventDefault(); });
+  h.addEventListener("pointermove", (e) => {
+    if (!start) return;
+    const w = Math.min(SIDE_MAX, Math.max(SIDE_MIN, start.w + e.clientX - start.x));
+    document.documentElement.style.setProperty("--side-w", `${w}px`); start.now = w;
+  });
+  const end = () => { if (!start) return; h.classList.remove("drag"); if (start.now) saveUi({ sideW: start.now }); start = null; };
+  h.addEventListener("pointerup", end); h.addEventListener("pointercancel", end);
+  h.addEventListener("dblclick", () => saveUi({ sideW: 232 }));
+})();
 
 function openDrawer(title, html, mount) {
   $("drawer-title").textContent = title;
