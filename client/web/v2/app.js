@@ -661,7 +661,10 @@ $('tasksList').addEventListener('click', e => {
   if (taskArmed !== b.dataset.task) { taskArmed = b.dataset.task; renderTasks(); setTimeout(() => { taskArmed = null; renderTasks(); }, 3000); return; }
   taskArmed = null; proPost('tasks', { delete: b.dataset.task });
 });
-function banners() { document.body.classList.toggle('has-banner', !$('alertBar').hidden || !$('trBar').hidden); }
+function banners() {
+  document.body.classList.toggle('has-banner', !$('alertBar').hidden || !$('trBar').hidden);
+  document.body.classList.toggle('both-bars', !$('alertBar').hidden && !$('trBar').hidden);   // 两条都在：翻译条排在告警条下面
+}
 function renderAlertsUi() {
   const a = ui.alerts;
   if (!a) return;

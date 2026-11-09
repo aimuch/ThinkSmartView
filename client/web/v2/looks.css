@@ -227,3 +227,43 @@ body.has-banner .now-bar { top: 176px; }
 .voices-say:empty { display: none; }
 #voicesHold.on { border-style: solid; border-color: #5ee0ff66; color: var(--accent2); background: #5ee0ff10; }
 #voicesHold.on .ww-meter { display: flex; }
+
+/* 告警条和翻译条同时出现：依次往下排，不叠在一起（设计画布第 24 块 B） */
+body.both-bars .tr-bar { top: 190px; }
+body.both-bars .now-bar { top: 288px; }
+
+/* ---- 竖屏（设备竖着放，800×1280）：待机页、做菜、拍照和二维码弹窗、横条（设计画布第 24 块） ---- */
+@media (orientation: portrait) {
+  /* 待机页没有照片：时钟在视觉中心，日期、天气依次往下 */
+  .standby.plain .sb-shade { background: radial-gradient(620px 560px at 50% 38%, var(--glow1, #18245a) 0%, transparent 70%),
+                                         linear-gradient(160deg, var(--bg1), var(--bg0) 70%); }
+  .standby.plain .sb-time { left: 0; right: 0; bottom: auto; top: 28%; text-align: center; font-size: 220px; }
+  .standby.plain .sb-date { left: 0; right: 0; bottom: auto; top: calc(28% + 252px); text-align: center; font-size: 30px; }
+  .standby.plain .sb-wx { left: 50%; right: auto; bottom: auto; top: calc(28% + 322px); transform: translateX(-50%); }
+  /* 有照片：三行左对齐叠在底部渐暗处 */
+  .standby:not(.plain) .sb-shade { background: linear-gradient(180deg, transparent 40%, #000d); }
+  .standby:not(.plain) .sb-time { left: 52px; bottom: 300px; font-size: 190px; }
+  .standby:not(.plain) .sb-date { left: 58px; bottom: 250px; font-size: 30px; }
+  .standby:not(.plain) .sb-wx { left: 52px; right: auto; bottom: 90px; }
+  .sb-wx { padding: 12px 30px 12px 22px; border-radius: 999px; background: #ffffff14; white-space: nowrap; font-size: 26px; }
+  .sb-wx b { font-size: 64px; }
+  .sb-alarm { right: 36px; top: 36px; }
+
+  /* 做菜：四个按钮两行两列 */
+  .cook-ov { padding: 40px 36px 30px; gap: 22px; }
+  .cook-text { font-size: 52px; }
+  .cook-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .ctl-big { padding: 0 20px; white-space: nowrap; }
+  .ctl-big.pri { order: -1; grid-column: 1 / -1; }     /* 「下一步」最常用：一整行放最上面 */
+
+  /* 拍照问、二维码：上下排，二维码在上 */
+  .photo-sheet { flex-direction: column; text-align: center; gap: 30px; padding: 44px 40px; width: min(680px, 92vw); }
+  .photo-txt { align-items: center; gap: 16px; }
+  .photo-txt h2 { font-size: 40px; }
+  .photo-btns { justify-content: center; }
+  .photo-time { white-space: nowrap; }
+
+  /* 横条：窄了，副标题不放 */
+  .tr-sub, .alert-time { display: none; }
+  .alert-bar, .tr-bar { font-size: 22px; } .alert-bar b { font-size: 24px; }
+}
