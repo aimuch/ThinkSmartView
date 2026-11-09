@@ -1021,7 +1021,7 @@ function renderPhoto() {
     return;
   }
   if (avatar) {
-    $('photoTitle').innerHTML = failed ? '没成功' : p.state === 'waiting' ? '用手机拍一张<br>正脸照' : p.state === 'received' ? '选一个画风'
+    $('photoTitle').innerHTML = failed ? '没成功' : p.state === 'waiting' ? '拍一张正脸照<br>或者你的公仔' : p.state === 'received' ? '选一个画风'
       : p.state === 'generating' ? '正在画…' : '画好了';
     $('photoNote').textContent = failed || p.error ? (p.error || '出错了') : p.state === 'waiting' ? '脸要清楚、光线亮一点；手机和小麦连同一个 Wi‑Fi'
       : p.state === 'generating' ? '大约 15 秒' : p.state === 'generated' ? '满意就用它，不满意换个画风' : '通义万相会把照片画成卡通形象';

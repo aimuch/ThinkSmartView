@@ -85,6 +85,19 @@ body[data-avatar="robot"] .deco .antenna::after { content: ""; position: absolut
 /* a cartoon made from a photo: the picture itself, the state shown by its ring and the glow */
 body.av-photo-on .core i, body.av-photo-on .face, body.av-photo-on .gloss, body.av-photo-on .deco { display: none; }
 body.av-photo-on .av-photo { display: block; }
+/* 照片形象（比如孩子自己的公仔，设计画布第 26 块）：白边像徽章，四种状态各有动作，只用 transform */
+body.av-photo-on .av-photo { box-shadow: 0 0 0 6px #ffffffee, 0 14px 30px #0009, 0 0 34px var(--c2); will-change: transform;
+                             transition: transform .45s cubic-bezier(.3, .7, .2, 1), box-shadow .6s; }
+body.av-photo-on[data-state="idle"] .av-photo { animation: av-bob 3.2s ease-in-out infinite; }
+body.av-photo-on[data-state="connecting"] .av-photo { animation: av-bob 1.2s ease-in-out infinite; }
+body.av-photo-on[data-state="listening"] .av-photo { transform: scale(1.1);
+                             box-shadow: 0 0 0 7px #fff, 0 16px 34px #0009, 0 0 60px var(--c1); }
+body.av-photo-on[data-state="thinking"] .av-photo { animation: av-sway 1.6s ease-in-out infinite; }
+body.av-photo-on[data-state="speaking"] .av-photo { animation: av-talk .38s ease-in-out infinite alternate; transform-origin: 50% 90%; }
+@keyframes av-bob { 50% { transform: translateY(-8px); } }
+@keyframes av-sway { 25% { transform: rotate(-6deg) translateX(-5px); } 75% { transform: rotate(6deg) translateX(5px); } }
+@keyframes av-talk { from { transform: scale(1.04, .95); } to { transform: scale(.98, 1.04); } }
+@media (prefers-reduced-motion: reduce) { body.av-photo-on .av-photo { animation: none !important; } }
 
 /* ---- 首页「常用设备」（设计画布第 16 块 A；上游 client issue #1 网友的建议）：轻点开关，长按看详情 ---- */
 .home-devices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 20px; max-width: 640px; }
