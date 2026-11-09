@@ -28,6 +28,7 @@
 | 后台登录、状态、工作原理 | 登录页「保持登录 30 天」；侧栏底部账号菜单：界面、名称和图标、修改密码、仓库链接、退出登录 | — |
 | 设备在线状态 | 后台按设备每 10 秒的心跳显示 待机 / 对话中 / 离线 和客户端版本 | 客户端 0.1.625 以上 |
 | DSH（DeepSeek Harness） | 后台「大模型 → 本地 CLI 与智能体 → DeepSeek Harness」；说「嗨 DSH，……」 | 网关上装 `@deepseek-ai/dsh`（`~/.local/dsh`）和 Node 24（`~/.local/node24`）；用 DeepSeek 的 Key |
+| 智能体页 | 后台侧栏「智能体」（原 Grok Bot）：加 Hermes Agent（OpenAI 兼容，默认 http://127.0.0.1:8642/v1）、Dify 工作流、Coze，配称呼后说「嗨 + 称呼」派活；卡片上能测试 | Hermes 要在它的 `~/.hermes/.env` 里开 `API_SERVER_ENABLED=true` |
 | 看图模型 12 家 | 后台「大模型 → 看图模型」；DeepSeek V4.1 Flash 沿用大模型的 Key，已设为默认 | — |
 | 读取模型列表 | 后台大模型页、看图模型的「读取模型列表」：Ollama、LM Studio 等本机或局域网服务 | Ollama 给局域网用要设 `OLLAMA_HOST=0.0.0.0` |
 | 局域网语音服务 | 后台「语音识别 → 局域网识别服务」「语音合成 → 局域网合成服务」 | 家里另一台电脑上跑 Speaches、Kokoro-FastAPI 等 OpenAI 兼容服务 |
@@ -47,6 +48,8 @@
 | 用真实录音挑语音识别模型 | 要录家里人平时说的话 | 方法见 [scripts/asr-eval/](../scripts/asr-eval/README.md) |
 | Claude Code 用国产模型 | DeepSeek、Kimi、智谱、千问都有 Anthropic 兼容接口，把 Claude Code 的 ANTHROPIC_BASE_URL 指过去就能用；但网关上没装 Claude Code，改了也验证不了，而且 Anthropic 不支持这种用法 | 想用的话先在网关上装 Claude Code；国产模型直接用上面的 DSH 更省事 |
 | Codex CLI | 后台卡片一直是「即将支持」，上游也还没做 | 等上游 |
+| 智能体页的 Webhook 类型 | 没有统一的协议（n8n、自己写的服务各不一样） | 先用 OpenAI 兼容或 Dify；有具体服务再接 |
+| 按设备分别配置 | 现在默认模型、语音识别、语音合成和音色、插件、人设是所有设备共用的；按设备分开的只有记住的模型、住宅地址、儿童/翻译模式、清单、家人声音、聊天记录和记忆 | 后台加一个「设备」页，每台设备可以覆盖音色、默认模型、人设、插件 |
 | Grok Bot 新发送接口的真机验证 | 2026-11-05 起网关的 sendPrompt 返回 502（上游 issue #4），已改成被拒时走 Cursor 后台；这台网关上没登录 Grok Bot，没法实测 | 在后台 Grok Bot 页登录后叫一次，看日志里有没有「改走 Cursor 后台发送」 |
 | 功放的设备树（上游 image issue #3） | 喇叭现在能响；改设备树要重编内核、重刷，网友的补丁是配他们自己的驱动测的 | 以后重编内核时一起改 |
 | ath10k 组密钥更新断线（上游 image issue #2） | 这台设备连续 16 小时没出现过一次 `failed to install key`，镜像里应该已经带了修好的驱动 | 有人遇到再说 |
