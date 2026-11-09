@@ -1956,6 +1956,12 @@ const handlers = {
   },
   snapshot(s) {
     if (ui.build && s.build && s.build !== ui.build) return location.reload();   // client restarted (deployed)
+    if (!ui.build && !DEMO) setTimeout(() => {   // 第一份状态画完后，把屏幕上实际显示的记到设备日志（排查屏幕不动用）
+      try {
+        navigator.sendBeacon('/api/page-log', JSON.stringify({ kind: 'rendered', model: $('pillLabel').textContent, time: $('time').textContent,
+          hidden: document.hidden, visibility: document.visibilityState, size: `${innerWidth}x${innerHeight}`, status: ui.status }));
+      } catch (e) { /* ignore */ }
+    }, 1500);
     ui.build = s.build;
     ui.status = s.status; ui.models = server.models = s.models; ui.thread = server.thread = s.thread;
     switching = null;
