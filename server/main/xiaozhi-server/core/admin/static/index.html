@@ -292,24 +292,15 @@
 
   /* 侧栏底部（第 14 块 B）：在线状态 + 账号菜单 */
   .side-status { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 0 4px 8px; }
-  /* 侧栏底部的设备心跳（设计画布第 22 块）：每收到一次新心跳跳一下，颜色就是状态 */
+  /* 侧栏底部的设备心跳（设计画布第 22 块，第 31 块改成卡片）：每收到一次新心跳波纹扩一下，颜色就是状态 */
   .hb { --hb: var(--muted); margin: 0 0 8px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--hb) 28%, transparent); border-radius: 10px; color: var(--hb); }
-  .hb-line { width: 56px; height: 18px; flex: none; overflow: visible; }
-  .hb-line polyline { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
-  .hb-base { opacity: .35; }
-  .hb-beat { stroke-dasharray: 100; stroke-dashoffset: 100; opacity: 0; }
-  .hb.beat .hb-beat { animation: hbBeat 1.4s ease-out; }
-  .hb[data-st="talk"] .hb-beat { animation: hbBeat 1.1s linear infinite; }
-  @keyframes hbBeat { 0% { stroke-dashoffset: 100; opacity: 1; } 70% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
   .hb-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
   .hb-txt b { font-size: 12.5px; font-weight: 600; }
   .hb-txt small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
   .hb[data-st="talk"] { --hb: var(--accent); } .hb[data-st="idle"] { --hb: var(--ok); } .hb[data-st="slow"] { --hb: var(--warn); }
   .hb[data-st="off"] { --hb: var(--err); background: var(--err-soft); border-color: color-mix(in srgb, var(--err) 35%, transparent); }
   .hb[data-st="expired"] { --hb: var(--warn); background: var(--warn-soft); }
-  .hb[data-st="off"] .hb-base, .hb[data-st="expired"] .hb-base { stroke-dasharray: 3 3; opacity: .8; }
   .hb[data-st="none"] .hb-txt b { color: var(--text); }
-  @media (prefers-reduced-motion: reduce) { .hb .hb-beat { animation: none !important; } }
   .dot.idle { background: #f5a524; box-shadow: 0 0 0 3px rgba(245, 165, 36, .18); }
   .side-foot .acct { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px; border-radius: 9px; border: 0; cursor: pointer;
           background: var(--side-hover); color: inherit; text-align: left; text-decoration: none !important; }
@@ -414,7 +405,7 @@
     :root[data-side="rail"] .nav .ico { font-size: 15px; }
     :root[data-side="rail"] .side-foot { padding: 10px 0 0; text-align: center; }
     :root[data-side="rail"] .side-foot .row { justify-content: center; }
-    :root[data-side="rail"] .side-status { justify-content: center; padding: 6px 0; } :root[data-side="rail"] .hb-line { width: 40px; }
+    :root[data-side="rail"] .side-status { justify-content: center; padding: 6px 0; }
     :root[data-side="rail"] .side-foot .acct { justify-content: center; background: none; }
     :root[data-side="rail"] .side-foot .acct > span:not(.av) { display: none; }
     :root[data-side="drawer"] .app { grid-template-columns: minmax(0, 1fr); }
@@ -422,6 +413,50 @@
       transition: transform .22s ease; box-shadow: 12px 0 30px rgba(15, 23, 42, .25); }
     :root[data-side="drawer"] aside.open { transform: none; }
     :root[data-side="drawer"] main { padding-top: 64px; }
+  }
+  /* [xiaozhi-hub] 侧栏底部改版（设计画布第 31 块）：设备状态、账号、主题收进一张卡片 */
+  .side-foot { border-top: 0; padding: 12px 0 0; }
+  .sf-box { border: 1px solid var(--side-line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 9px;
+            background: rgba(255, 255, 255, .02); transition: background .2s, border-color .2s; }
+  .sf-box:has(.hb[data-st="off"]) { border-color: color-mix(in srgb, var(--err) 40%, transparent); background: color-mix(in srgb, var(--err) 8%, transparent); }
+  .sf-box:has(.hb[data-st="expired"]) { border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 7%, transparent); }
+  .sf-box .hb { margin: 0; padding: 0; border: 0; background: none; gap: 9px; min-width: 0; }
+  .sf-box .hb-txt b { font-size: 13px; font-weight: 500; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .hb[data-st="off"] .hb-txt b { color: var(--err); } .hb[data-st="expired"] .hb-txt b { color: var(--warn); }
+  .hb-ico { width: 18px; height: 18px; flex: none; overflow: visible; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .hb-dot { fill: currentColor; stroke: none; }
+  .hb-w1, .hb-w2 { transform-origin: 12px 12px; transform-box: view-box; }
+  .hb-w2 { opacity: .55; }
+  .hb[data-st="none"] .hb-w1, .hb[data-st="none"] .hb-w2 { opacity: .35; }
+  .hb[data-st="off"] .hb-w1, .hb[data-st="off"] .hb-w2, .hb[data-st="expired"] .hb-w1, .hb[data-st="expired"] .hb-w2 { stroke-dasharray: 2 2.6; opacity: .8; }
+  .hb.beat .hb-w1 { animation: hbWave 1.4s ease-out; } .hb.beat .hb-w2 { animation: hbWave 1.4s ease-out .15s; }
+  .hb[data-st="talk"] .hb-w1 { animation: hbWave 1.2s ease-out infinite; } .hb[data-st="talk"] .hb-w2 { animation: hbWave 1.2s ease-out .2s infinite; }
+  @keyframes hbWave { 0% { transform: scale(.7); opacity: .2; } 35% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); opacity: .55; } }
+  .side-foot .sf-out { margin-left: auto; text-decoration: none; background: none; border: 0; padding: 0; color: #7aa2ff; font-size: 12.5px; cursor: pointer; white-space: nowrap; flex: none; }
+  .side-foot .sf-out:hover { color: #a9c2ff; text-decoration: underline; }
+  .sf-sub { font-size: 11.5px; color: var(--side-text); opacity: .8; padding-left: 27px; margin-top: -5px; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .sf-box .acct { background: none; padding: 2px 0; gap: 9px; border-radius: 7px; font-size: 12.5px; }
+  .sf-box .acct:hover { color: #e2e8f0; }
+  .sf-box .acct .av { width: 18px; height: 18px; background: none; color: inherit; border-radius: 0; }
+  .sf-box .av svg, .sf-theme svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .sf-who { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sf-theme { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; border-radius: 10px; background: rgba(0, 0, 0, .28);
+              border: 1px solid var(--side-line); }
+  .sf-theme button { height: 30px; border: 0; border-radius: 8px; background: none; color: var(--side-text); display: grid; place-items: center; cursor: pointer;
+                     transition: background .15s, color .15s; }
+  .sf-theme button:hover { color: #e2e8f0; }
+  .sf-theme button[aria-pressed="true"] { background: var(--side-hover); color: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); }
+  @media (prefers-reduced-motion: reduce) { .hb .hb-w1, .hb .hb-w2 { animation: none !important; } }
+  @media (max-width: 900px) {
+    .sf-box { flex-direction: row; align-items: center; padding: 0; border: 0; background: none !important; gap: 8px; }
+    .sf-sub, .sf-theme, .sf-who, .sf-box .more { display: none; }
+    .sf-box .hb { gap: 6px; }
+  }
+  @media (min-width: 901px) {
+    :root[data-side="rail"] .sf-box { padding: 10px 0; align-items: center; }
+    :root[data-side="rail"] .sf-sub, :root[data-side="rail"] .sf-theme, :root[data-side="rail"] .sf-who, :root[data-side="rail"] .sf-box .more { display: none; }
+    :root[data-side="rail"] .sf-box .hb, :root[data-side="rail"] .sf-box .acct { justify-content: center; width: auto; }
   }
   #nav-toggle { display: none; position: fixed; top: 14px; left: 14px; z-index: 35; width: 38px; height: 38px; border-radius: 10px;
     border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 18px; cursor: pointer; box-shadow: var(--shadow); }
@@ -675,11 +710,17 @@
       <button data-page="intent"><span class="ico">⚙</span>意图识别</button>
       <button data-page="update"><span class="ico">⟳</span>更新网关</button>
     </nav>
-    <div class="side-foot"><div class="side-status hb" id="hb" data-st="none">
-        <svg class="hb-line" viewBox="0 0 56 18" aria-hidden="true"><polyline class="hb-base" points="1,11 55,11"/><polyline class="hb-beat" pathLength="100" points="1,11 20,11 24,11 27,2 31,16 34,7 37,11 55,11"/></svg>
-        <span class="hb-txt"><b id="online-text">没有设备在线</b><small id="hb-sub"></small></span><span id="online-short">无设备</span></div>
-      <button class="acct" id="acct-btn" aria-haspopup="menu"><span class="av">管</span><span><b>管理员</b><small id="acct-sub">已登录</small></span><span class="more">⋯</span></button>
-      <button id="logout" class="hidden">退出登录</button><button id="ui-btn" class="hidden">界面</button></div>
+    <div class="side-foot"><div class="sf-box">
+      <div class="side-status hb" id="hb" data-st="none"><svg class="hb-ico" viewBox="0 0 24 24" aria-hidden="true"><circle class="hb-dot" cx="12" cy="12" r="2.2"/><path class="hb-w1" d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7"/><path class="hb-w2" d="M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>
+        <span class="hb-txt"><b id="online-text">没有设备在线</b></span><span id="online-short">无设备</span>
+        <button id="logout" class="sf-out" type="button">退出登录</button></div>
+      <small class="sf-sub" id="hb-sub"></small>
+      <button class="acct" id="acct-btn" aria-haspopup="menu" title="账号菜单"><span class="av"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="sf-who">管理员 · <span id="acct-sub">已登录</span></span><span class="more">⋯</span></button>
+      <div class="sf-theme" role="group" aria-label="主题">
+        <button type="button" data-th="auto" title="跟随系统"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button>
+        <button type="button" data-th="light" title="浅色"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+        <button type="button" data-th="dark" title="深色"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button></div>
+    </div><button id="ui-btn" class="hidden">界面</button></div>
   </aside>
   <main id="page"></main>
 </div>
@@ -777,7 +818,7 @@ async function route() {
   if (st.brand) applyBrand(st.brand);
   $("auth-foot").textContent = `${st.host || location.host} · ${st.online ? st.online + " 台设备在线" : "没有设备在线"}`;
   if (st.session_expires) $("acct-sub").textContent = st.session_expires - Date.now() / 1000 > 86400
-    ? `保持登录到 ${new Date(st.session_expires * 1000).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}` : "关掉浏览器后需要重新登录";
+    ? `保持到 ${new Date(st.session_expires * 1000).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}` : "关掉浏览器要重新登录";
   if (st.needs_setup || !st.logged_in) {
     authMode = st.needs_setup ? "setup" : "login";
     clearInterval(page.timer); page.name = ""; applyBrand();
@@ -3060,6 +3101,7 @@ function applyUi() {
   if (ui.theme === "auto") delete r.dataset.theme; else r.dataset.theme = ui.theme;
   r.dataset.accent = ui.accent; r.dataset.width = ui.width; r.dataset.side = ui.side; r.dataset.density = ui.density;
   r.style.setProperty("--side-w", `${Math.min(SIDE_MAX, Math.max(SIDE_MIN, +ui.sideW || 232))}px`);
+  document.querySelectorAll(".sf-theme button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.th === (ui.theme || "auto"))));
   const col = $("side-col"); if (col) { const rail = ui.side === "rail"; col.textContent = rail ? "››" : "‹‹"; col.title = rail ? "展开侧栏" : "收起侧栏"; }
   const nav = $("nav"), buttons = [...nav.querySelectorAll("button[data-page]")];
   const order = ui.nav.filter((p) => buttons.some((b) => b.dataset.page === p));
@@ -3154,6 +3196,7 @@ function renderUiDrawer(body) {
   $("tables-reset").onclick = () => { store.set(TABLE_KEY, {}); toast("表格的列宽、顺序已恢复默认"); openPage(page.name, true); };
 }
 $("ui-btn").onclick = () => openDrawer("界面", "", renderUiDrawer);
+document.querySelectorAll(".sf-theme button").forEach((b) => { b.onclick = () => saveUi({ theme: b.dataset.th }); });
 
 // 拖动排序一组元素（菜单顺序、表格的行）：放下后按新顺序回调 data-p / data-row 的值
 function dragList(box, selector, done) {
