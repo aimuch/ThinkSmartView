@@ -473,6 +473,11 @@ def make_app(client: Client):
             raise web.HTTPNotFound()
         return web.FileResponse(path, headers={'Cache-Control': 'max-age=31536000'})
 
+    # ---- 性能页（perf.py，设计画布第 30 块）：页面打开时每 2 秒取一次 ----
+    async def perf_get(_request):
+        data = await asyncio.get_running_loop().run_in_executor(None, client.perf.sample)
+        return web.json_response(data)
+
     # ---- 机身摄像头（camera.py，设计画布第 27 块）----
     async def camera_preview(request):
         """实时画面：multipart/x-mixed-replace 的 JPEG（页面上 <img> 直接显示），摄像头只在有人看时开。"""
@@ -623,6 +628,7 @@ def make_app(client: Client):
     app.router.add_post('/api/looks', looks_set)
     app.router.add_get('/api/avatars/{name}', avatar_file)
     app.router.add_get('/api/camera/preview', camera_preview)
+    app.router.add_get('/api/perf', perf_get)
     app.router.add_post('/api/camera/shoot', camera_shoot)
     app.router.add_post('/api/camera/phone', camera_phone)
     app.router.add_get('/api/avatars/poses/{name}', avatar_pose_file)

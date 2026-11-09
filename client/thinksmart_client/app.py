@@ -49,7 +49,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import alarms, broadcast, bt, camera, config, cook, daily, kids, looks, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, camera, config, cook, perf, daily, kids, looks, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -270,6 +270,7 @@ class Client:
         self.connecting = asyncio.Lock()      # one connection: a second wake while connecting waits for it
         self.screen = Screen()
         self.camera = camera.Camera(rotation.current)   # 机身摄像头（设计画布第 27 块）
+        self.perf = perf.Perf()                         # 性能页（设计画布第 30 块）
         self.slides = photos.Slides(photos.spool_root())   # 照片轮播 (photos.py, upstream PR #3)
         self._slides_timer = None     # closes the open show after its minutes
         try:

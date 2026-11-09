@@ -148,6 +148,36 @@
   <div class="grid" id="grid"></div>
 </div>
 
+<!-- 性能（perf.py，设计画布第 30 块）：打开时每 2 秒刷新 -->
+<div class="sheet" id="perf">
+  <div class="sheet-bar">
+    <div><h2>性能</h2><p id="perfHead">正在读取…</p></div>
+    <button class="close" id="perfClose" aria-label="关闭">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="panel perf-panel">
+    <div class="pf-grid">
+      <div class="pf-side">
+      <section class="pf-card pf-cpu"><div class="pf-t"><b>CPU</b><span id="pfCpuSub"></span><span class="pf-big" id="pfCpu">--</span></div>
+        <svg class="pf-spark" id="pfSpark" viewBox="0 0 300 60" preserveAspectRatio="none"><polygon id="pfSparkFill"/><polyline id="pfSparkLine"/></svg>
+        <div class="pf-cores" id="pfCores"></div></section>
+        <div class="pf-row">
+          <section class="pf-card"><div class="pf-t"><b>内存</b><span id="pfMemTotal"></span></div><div class="pf-big" id="pfMem">--</div>
+            <div class="pf-meter"><i id="pfMemBar"></i></div><small id="pfMemSub"></small></section>
+          <section class="pf-card"><div class="pf-t"><b>存储 · 网络</b></div><div class="pf-meter"><i id="pfDiskBar"></i></div><small id="pfDisk"></small><small id="pfNet"></small></section>
+        </div>
+      </div>
+      <div class="pf-side">
+        <div class="pf-row">
+          <section class="pf-card"><div class="pf-t"><b>GPU</b><span>Adreno 506</span></div><div class="pf-big" id="pfGpu">--</div><div class="pf-temp" id="pfGpuT"></div></section>
+          <section class="pf-card"><div class="pf-t"><b>温度</b><span>最高</span></div><div id="pfTemps"></div></section>
+        </div>
+        <section class="pf-card"><div class="pf-t"><b>最占资源</b><span>CPU · 内存</span></div><div class="pf-procs" id="pfProcs"></div></section>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="sheet" id="settings">
   <div class="sheet-bar">
     <div><h2>设置</h2><p>这台设备自己的偏好，升级客户端也会保留</p></div>
@@ -385,6 +415,13 @@
         <span id="miSub">没登录。登录后在「家居」页看设备状态，也能直接说「打开客厅灯」</span>
       </div>
       <button class="upd-btn" id="miBtn">登录</button>
+    </div>
+    <div class="opt">
+      <div class="opt-text">
+        <b>性能</b>
+        <span id="perfSub">CPU、GPU、内存、温度，以及谁在占资源。也可以说「设备温度多少」</span>
+      </div>
+      <button class="upd-btn" id="perfBtn">打开</button>
     </div>
     <div class="opt">
       <div class="opt-text">

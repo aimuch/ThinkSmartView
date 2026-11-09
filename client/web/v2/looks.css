@@ -341,3 +341,39 @@ body.av-photo-on.sleeping .av-photo { animation: av-bob 6s ease-in-out infinite 
 body.av-photo-on.sleeping:not(.av-has-sleep) .av-photo { opacity: .55; }
 body.av-photo-on .zzz { z-index: 2; }
 @media (prefers-reduced-motion: reduce) { .zzz i { animation: none; opacity: .7; } }
+
+/* ---- 性能页（设计画布第 30 块）---- */
+.perf-panel { max-width: 1200px; }
+.pf-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 18px; }
+.pf-side { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.pf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.pf-card { border-radius: 24px; background: var(--card); border: 1px solid var(--line); padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pf-t { display: flex; align-items: center; gap: 10px; font-size: 18px; color: var(--ink3); }
+.pf-t b { font-size: 22px; color: var(--ink); }
+.pf-big { font-size: 46px; font-weight: 300; font-variant-numeric: tabular-nums; color: var(--ink); line-height: 1.1; }
+.pf-t .pf-big { margin-left: auto; font-size: 40px; }
+.pf-big small { font-size: 20px; color: var(--ink3); }
+.pf-spark { width: 100%; height: 90px; }
+.pf-spark polyline { fill: none; stroke: var(--accent2); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.pf-spark polygon { fill: color-mix(in srgb, var(--accent2) 16%, transparent); }
+.pf-cores { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.pf-core { border-radius: 14px; background: var(--card2); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; color: var(--ink3); }
+.pf-core b { font-size: 22px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.pf-bar, .pf-meter { height: 8px; border-radius: 4px; background: #ffffff14; overflow: hidden; }
+.pf-bar i, .pf-meter i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent2));
+                         transform-origin: left; transition: transform .6s ease; }
+.pf-meter i { width: 100%; }
+#pfMemBar { background: #9b8cff; } #pfDiskBar { background: var(--good, #3ecf74); }
+.pf-card small { font-size: 16px; color: var(--ink3); }
+.pf-temp, .pf-tl { display: flex; align-items: center; gap: 8px; font-size: 18px; color: var(--ink2); }
+.pf-tl b, .pf-temp b { font-size: 24px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.pf-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--ink3); }
+.pf-dot.ok { background: #3ecf74; } .pf-dot.warn { background: #f5a524; } .pf-dot.hot { background: #ff6b81; }
+.pf-procs { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px 18px; font-size: 18px; color: var(--ink2); }
+.pf-procs span:nth-child(3n+2), .pf-procs span:nth-child(3n) { text-align: right; font-variant-numeric: tabular-nums; }
+.pf-procs .hot { color: #ff6b81; font-weight: 700; }
+@media (orientation: portrait) {
+  .pf-grid { grid-template-columns: 1fr; }
+  .pf-big { font-size: 38px; } .pf-t .pf-big { font-size: 34px; }
+  .pf-core b { font-size: 19px; } .pf-core { font-size: 13px; padding: 8px 10px; }
+}

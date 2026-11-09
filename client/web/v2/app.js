@@ -2063,6 +2063,51 @@ $('slides').addEventListener('pointerup', e => {
 });
 $('slideClose').addEventListener('click', () => post('/api/photos/close'));
 
+/* ---- 性能页（perf.py，设计画布第 30 块）：打开时每 2 秒取一次，关上就不取 ---- */
+let perfTimer = null;
+const pfMb = b => b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.round(b / 1e6) + ' MB';
+const pfRate = b => b == null ? '—' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB/s' : Math.round(b / 1e3) + ' KB/s';
+const pfTmp = (c, lvl) => c == null ? '' : `<span class="pf-dot ${lvl || ''}"></span><b>${Math.round(c)}℃</b>`;
+const pfLvl = c => c == null ? '' : c < 55 ? 'ok' : c < 70 ? 'warn' : 'hot';
+function openPerf(on) {
+  $('perf').classList.toggle('on', on);
+  clearInterval(perfTimer); perfTimer = null;
+  if (on) { loadPerf(); perfTimer = setInterval(loadPerf, 2000); }
+}
+async function loadPerf() {
+  if (DEMO) return;
+  let s;
+  try { s = await (await fetch('/api/perf', { cache: 'no-store' })).json(); } catch (e) { $('perfHead').textContent = '读不到：客户端没有响应'; return; }
+  const up = s.uptime, h = Math.floor(up / 3600), m = Math.floor(up % 3600 / 60);
+  $('perfHead').textContent = `运行 ${h ? h + ' 小时 ' : ''}${m} 分 · 负载 ${s.load ? s.load[0].toFixed(1) : '—'}`;
+  $('pfCpu').innerHTML = `${Math.round(s.cpu.usage)}<small>%</small>`;
+  $('pfCpuSub').textContent = `${s.cpu.cores.length} 核 · 最高 ${s.cpu.max_mhz ? (s.cpu.max_mhz / 1000).toFixed(1) + ' GHz' : '—'}`;
+  const hist = s.cpu.history.length ? s.cpu.history : [0];
+  const pts = hist.map((v, i) => `${(i / Math.max(1, hist.length - 1)) * 300},${60 - Math.min(100, v) * 0.58}`).join(' ');
+  $('pfSparkLine').setAttribute('points', pts);
+  $('pfSparkFill').setAttribute('points', `0,60 ${pts} 300,60`);
+  $('pfCores').innerHTML = s.cpu.cores.map(c => `<div class="pf-core"><b>${Math.round(c.usage)}%</b>
+    <div class="pf-bar"><i style="transform:scaleX(${Math.min(100, c.usage) / 100})"></i></div>
+    <span>${c.mhz ? (c.mhz / 1000).toFixed(1) + 'G' : '—'}${c.temp != null ? ' · ' + Math.round(c.temp) + '℃' : ''}</span></div>`).join('');
+  $('pfGpu').innerHTML = s.gpu.mhz ? `${s.gpu.mhz}<small> MHz</small>` : '—';
+  $('pfGpuT').innerHTML = pfTmp(s.gpu.temp, s.gpu.level);
+  $('pfTemps').innerHTML = [['CPU', s.temps.cpu], ['GPU', s.temps.gpu], ['电源', s.temps.pmic]].filter(([, c]) => c != null)
+    .map(([n, c]) => `<div class="pf-tl">${pfTmp(c, pfLvl(c))}<span>${n}</span></div>`).join('');
+  const mem = s.mem, pct = mem.total ? mem.used / mem.total : 0;
+  $('pfMem').innerHTML = `${Math.round(pct * 100)}<small>%</small>`;
+  $('pfMemTotal').textContent = pfMb(mem.total);
+  $('pfMemBar').style.transform = `scaleX(${pct})`;
+  $('pfMemSub').textContent = `可用 ${pfMb(mem.available)} · 压缩交换 ${mem.swap_total ? Math.round(100 * mem.swap_used / mem.swap_total) : 0}%`;
+  const d = s.disk.root;
+  $('pfDiskBar').style.transform = `scaleX(${d ? d.used / d.total : 0})`;
+  $('pfDisk').textContent = d ? `系统 ${pfMb(d.used)} / ${pfMb(d.total)}` : '';
+  $('pfNet').textContent = `Wi‑Fi ↓ ${pfRate(s.net.rx)}  ↑ ${pfRate(s.net.tx)}`;
+  $('pfProcs').innerHTML = s.top.map(p => `<span>${esc(p.name)}</span><span class="${p.cpu > 150 ? 'hot' : ''}">${p.cpu}%</span><span>${pfMb(p.mem)}</span>`).join('')
+    || '<span>正在读取…</span><span></span><span></span>';
+}
+$('perfBtn').addEventListener('click', () => openPerf(true));
+$('perfClose').addEventListener('click', () => openPerf(false));
+
 /* ---- events from the client ---- */
 const handlers = {
   snapshot(s) {
@@ -2185,6 +2230,7 @@ const handlers = {
     ui.photo = p.state === 'closed' ? null : p; renderPhoto();
   },
   slides: p => renderSlides(p),
+  perf_open: () => { $('settings').classList.remove('on'); openPerf(true); },
   level(l) {
     level.target = ui.status.state === 'speaking' ? Math.min(1, l.out * 6) : micLevel(l.mic);
     if (ww.holding) wakeMeter(micLevel(l.mic));

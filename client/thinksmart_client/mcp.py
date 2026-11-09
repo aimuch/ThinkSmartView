@@ -65,6 +65,12 @@ TOOLS = [
         'inputSchema': {'type': 'object', 'properties': {}},
     },
     {
+        'name': 'self.device.performance',
+        'description': '用户问小麦这台设备自己的状态时调用：「设备温度多少」「性能怎么样」「CPU 占多少」「内存够不够」「怎么这么烫」「是不是卡了」。'
+                       '会在屏幕上打开性能页，并返回一句话（CPU、最热温度、内存）。直接念返回的那句，不要编数字。',
+        'inputSchema': {'type': 'object', 'properties': {}},
+    },
+    {
         'name': 'self.screen.close_photos',
         'description': '关掉屏幕上正在轮播的照片，回到对话界面。用户说「关掉照片」「不看了」「把照片关了」时调用。'
                        '照片是设备上别的程序放上去的，这个工具只能关，不能打开或找照片。',
@@ -480,6 +486,10 @@ async def handle(payload, client=None):
             elif name == 'self.screen.set_brightness' and client:
                 text = json.dumps({'success': True, **await client.set_brightness(
                     level=args.get('brightness'), change=args.get('change'))})
+            elif name == 'self.device.performance' and client:
+                say, _ = await asyncio.get_running_loop().run_in_executor(None, client.perf.brief)
+                client.events.publish('perf_open', {})
+                text = _dumps({'action': 'RESPONSE', 'response': say})
             elif name == 'self.screen.get_brightness' and client:
                 text = json.dumps(client.brightness())
             elif name == 'self.screen.close_photos' and client:
