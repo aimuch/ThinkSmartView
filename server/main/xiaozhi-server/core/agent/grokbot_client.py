@@ -36,6 +36,11 @@ from core.agent.agent_session import ErrorKind
 BACKEND = "https://api2.cursor.sh"
 WEBSITE = "https://cursor.com"
 CLIENT_ID = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB"  # 桌面 App 的公开 OAuth client_id
+# [xiaozhi-hub] 上游 xiaozhi-hub-server issue #4：2026-11-05 起网关的 sendPrompt、promptAcceptanceStatus 对云端电脑会话
+# 一律返回 502「A Sand box session is not permitted on this endpoint」，桌面 App 改走 Cursor 后台的
+# GrokBotService/SendGrokBotUserMessage（Connect，application/proto）。原作者说新接口风险更高，所以只在旧接口被这样拒绝时才用它
+SAND_REFUSED = "sand box session is not permitted"
+MACHINE_ID = str(uuid.uuid4())   # SendGrokBotUserMessage 的 machine_id：和桌面 App 一样每个进程一个
 CLIENT_VERSION = "0.75.3"  # 发给服务端的客户端版本号，跟着本机桌面 App 的版本走；实测服务端不校验客户端身份
 GATEWAY_SUFFIXES = (".cursor.sh", ".cursor.com", ".cursorvm.com")
 REFRESH_AHEAD = 300  # access token 到期前这么多秒就续期
@@ -479,16 +484,52 @@ class GrokBotClient:
         return [a for a in agents if isinstance(a, dict)] if isinstance(agents, list) else []
 
     async def send_prompt(self, agent_id: str, text: str, nonce: str, timeout: float = 60) -> dict:
-        res = await self.call("sendPrompt", {
-            "agentId": agent_id, "prompt": text, "clientNonce": nonce,
-            "directAddressedAcceptance": True, "source": "desktop", "sendSource": "chat",
-            "initiator": "user", "composedAtMs": int(time.time() * 1000),
-        }, retry=False, timeout=timeout)
+        try:
+            res = await self.call("sendPrompt", {
+                "agentId": agent_id, "prompt": text, "clientNonce": nonce,
+                "directAddressedAcceptance": True, "source": "desktop", "sendSource": "chat",
+                "initiator": "user", "composedAtMs": int(time.time() * 1000),
+            }, retry=False, timeout=timeout)
+        except GrokBotError as e:
+            if SAND_REFUSED not in e.detail.lower():
+                raise
+            self._log("info", "网关的 sendPrompt 不收云端电脑会话的消息（issue #4），改走 Cursor 后台发送")
+            return await self.backend_send(agent_id, text, nonce, timeout=timeout)
         return res if isinstance(res, dict) else {"raw": res}
 
+    async def backend_send(self, agent_id: str, text: str, nonce: str, timeout: float = 60) -> dict:
+        """经 Cursor 后台发一句话（SendGrokBotUserMessage）。被拒绝抛 GrokBotError(SEND_FAILED)，其他失败抛 SERVER。"""
+        headers = {**await self._backend_headers(), "content-type": "application/proto",
+                   "x-cursor-client-source": "sand-desktop", "x-cursor-client-os": "linux"}
+        body = encode_send_request(agent_id, nonce, text, int(time.time() * 1000))
+        url = self.backend + "/aiserver.v1.GrokBotService/SendGrokBotUserMessage"
+        try:
+            async with self.session().post(url, data=body, headers=headers, allow_redirects=False,
+                                           timeout=aiohttp.ClientTimeout(total=timeout)) as res:
+                raw = await res.read()
+                status = res.status
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            raise GrokBotError(ErrorKind.SERVER, f"SendGrokBotUserMessage: {e!r}") from e
+        if status in (401, 403):
+            raise GrokBotError(ErrorKind.AUTH, f"SendGrokBotUserMessage HTTP {status}")
+        if not 200 <= status < 300:
+            raise GrokBotError(ErrorKind.SERVER, f"SendGrokBotUserMessage HTTP {status} {raw[:200].decode(errors='replace')}")
+        refusal = refusal_message(raw)
+        if refusal is not None:
+            raise GrokBotError(ErrorKind.SEND_FAILED, f"SendGrokBotUserMessage 被拒绝：{refusal}")
+        return {"accepted": True, "via": "backend"}
+
     async def acceptance_status(self, agent_id: str, nonce: str, timeout: float = 60) -> dict:
-        res = await self.call("promptAcceptanceStatus", {"accountSlot": "host", "agentId": agent_id, "clientNonce": nonce},
-                              timeout=timeout)
+        try:
+            res = await self.call("promptAcceptanceStatus", {"accountSlot": "host", "agentId": agent_id, "clientNonce": nonce},
+                                  timeout=timeout)
+        except GrokBotError as e:
+            if SAND_REFUSED not in e.detail.lower():
+                raise
+            # 这个接口也不收了：按 clientNonce 在对话记录里找这句话（和 issue #4 里网友的做法一样）
+            entries = await self.transcript_tail(agent_id, 20)
+            hit = next((x for x in entries if x.get("clientNonce") == nonce), None)
+            return {"status": "accepted", "messageId": hit.get("id")} if hit else {"status": "not-found", "via": "transcript"}
         return res if isinstance(res, dict) else {"raw": res}
 
     async def transcript_tail(self, agent_id: str, limit: int = 10) -> List[dict]:
@@ -721,3 +762,71 @@ def get_hub(cred_path: Path = None, logger=None, backend: str = None) -> GrokBot
         hub = GrokBotHub(GrokBotClient(Credentials(path), backend=backend or BACKEND, logger=logger), logger=logger)
         _hubs[key] = hub
     return hub
+
+
+# ---------- [xiaozhi-hub] SendGrokBotUserMessage 的最小 protobuf（字段号和桌面 App 0.79.2 的定义一致） ----------
+# 1 agent_id、2 message_id（= clientNonce）、3 text、4 sent_at_ms、13 source（1 = DESKTOP）、16 machine_id、20 language
+
+def _varint(value: int) -> bytes:
+    out = bytearray()
+    while value >= 0x80:
+        out.append((value & 0x7F) | 0x80)
+        value >>= 7
+    out.append(value)
+    return bytes(out)
+
+
+def _pb_str(field_no: int, text: str) -> bytes:
+    raw = text.encode("utf-8")
+    return _varint((field_no << 3) | 2) + _varint(len(raw)) + raw
+
+
+def _pb_int(field_no: int, value: int) -> bytes:
+    return _varint(field_no << 3) + _varint(value)
+
+
+def encode_send_request(agent_id: str, nonce: str, text: str, sent_at_ms: int, language: str = "zh") -> bytes:
+    return (_pb_str(1, agent_id) + _pb_str(2, nonce) + _pb_str(3, text) + _pb_int(4, sent_at_ms)
+            + _pb_int(13, 1) + _pb_str(16, MACHINE_ID) + _pb_str(20, language))
+
+
+def decode_fields(buf: bytes) -> dict:
+    """{字段号: 整数或 bytes}；只认 varint 和长度前缀两种，够读回执。"""
+    out, i = {}, 0
+
+    def varint():
+        nonlocal i
+        v, shift = 0, 0
+        while i < len(buf):
+            b = buf[i]
+            i += 1
+            v |= (b & 0x7F) << shift
+            shift += 7
+            if not b & 0x80:
+                break
+        return v
+    while i < len(buf):
+        key = varint()
+        field_no, wire = key >> 3, key & 7
+        if wire == 0:
+            out[field_no] = varint()
+        elif wire == 2:
+            n = varint()
+            out[field_no] = buf[i:i + n]
+            i += n
+        elif wire == 1:
+            i += 8
+        elif wire == 5:
+            i += 4
+        else:
+            break
+    return out
+
+
+def refusal_message(buf: bytes):
+    """回执里 4 = 4（拒收）或带拒绝原因（字段 5）时返回原因，否则 None。"""
+    data = decode_fields(buf)
+    if data.get(4) != 4 and not data.get(5):
+        return None
+    reason = decode_fields(data[5]).get(2) if isinstance(data.get(5), bytes) else None
+    return reason.decode("utf-8", "replace") if isinstance(reason, bytes) else "refused"
