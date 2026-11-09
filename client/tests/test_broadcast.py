@@ -278,3 +278,18 @@ def test_photo_tools(tmp_path, monkeypatch):
     r = call(c, 'self.photo.ask', question='这是什么')
     assert r['action'] == 'RESPONSE' and '二维码' in r['response'] and '看图模型' in r['response']
     assert call(c, 'self.photo.cancel')['action'] == 'RESPONSE' and started == ['这是什么', 'cancel']
+
+
+def test_page_and_scripts_are_never_304(tmp_path, monkeypatch):
+    """Release packages set file times to 0: an ETag of just the size kept the kiosk on a broken page."""
+    from aiohttp.test_utils import TestClient, TestServer
+    from thinksmart_client import web as web_mod
+
+    c = make_client(tmp_path, monkeypatch)
+
+    async def run():
+        async with TestClient(TestServer(web_mod.make_app(c))) as http:
+            for path in ('/', '/static/v2/app.js', '/static/v2/app.css'):
+                r = await http.get(path, headers={'If-None-Match': '"0-696e"', 'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT'})
+                assert r.status == 200 and 'ETag' not in r.headers and r.headers['Cache-Control'] == 'no-store'
+    asyncio.run(run())

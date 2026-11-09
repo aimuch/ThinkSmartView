@@ -17,8 +17,24 @@ WEB = ROOT / 'web'
 BUILD = str(int(time.time()))
 
 
+PAGE_PATHS = ('/', '/v1', '/v2')
+
+
+@web.middleware
+async def fresh_pages(request, handler):
+    """The page and its scripts are always sent whole, never "304 not modified": release packages set
+    every file's time to 0, so aiohttp's ETag is just the size, and a fix that kept a file's size
+    (0.1.617 moved a block in index.html) left the kiosk on the broken old page. Local files, tiny."""
+    if request.path in PAGE_PATHS or request.path.startswith('/static/'):
+        headers = request.headers.copy()
+        for h in ('If-None-Match', 'If-Modified-Since', 'If-Range'):
+            headers.popall(h, None)
+        request = request.clone(headers=headers)
+    return await handler(request)
+
+
 def make_app(client: Client):
-    app = web.Application()
+    app = web.Application(middlewares=[fresh_pages])
 
     async def index(_request):
         # the second design (orb with a face) is the UI since 2026-10-31; /v1 keeps the first one
@@ -358,7 +374,9 @@ def make_app(client: Client):
     async def revalidate(request, response):
         # the kiosk keeps a disk cache; without this it goes on running the old app.js/css after
         # an update (heuristic freshness from Last-Modified). no-cache = check the ETag every load.
-        if request.path.startswith('/static/'):
-            response.headers['Cache-Control'] = 'no-cache'
+        if request.path.startswith('/static/') or request.path in PAGE_PATHS:
+            response.headers['Cache-Control'] = 'no-store'
+            response.headers.popall('ETag', None)
+            response.headers.popall('Last-Modified', None)
     app.on_response_prepare.append(revalidate)
     return app
