@@ -386,7 +386,9 @@ def clear(device: str):
 WANX_MODEL = "wanx-style-repaint-v1"
 WANX_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image-generation/generation"
 WANX_TASK_URL = "https://dashscope.aliyuncs.com/api/v1/tasks/{}"
-AVATAR_STYLES = {1: "3D童话", 2: "二次元", 7: "炫彩卡通", 3: "小清新", 30: "童话世界", 31: "黏土世界"}
+# 0「原图」：不经过 AI、不用 Key，照片原样当形象（拍孩子自己的公仔，设计画布第 26 块）；其余是通义万相的画风
+ORIGINAL_STYLE = 0
+AVATAR_STYLES = {ORIGINAL_STYLE: "原图", 1: "3D童话", 2: "二次元", 7: "炫彩卡通", 3: "小清新", 30: "童话世界", 31: "黏土世界"}
 AVATAR_SECONDS = 90
 
 
@@ -446,11 +448,16 @@ def generate_avatar(token: str, style: int, merged: dict):
     if not s or s.get("purpose") != "avatar" or not s.get("photo"):
         return
     try:
-        key = dashscope_key(merged)
-        if not key:
-            raise PhotoError("要百炼 Key 才能生成形象：在网关后台「语音合成 → 千问 TTS」或「大模型 → 看图模型 → 千问 VL」里填")
-        with open(s["photo"], "rb") as f:
-            img = _wanx(key, f.read(), style)
+        if style == ORIGINAL_STYLE:
+            with open(s["photo"], "rb") as f:   # 手机页面上传前已经缩过、转成 JPEG
+                img = f.read()
+        else:
+            key = dashscope_key(merged)
+            if not key:
+                raise PhotoError("要百炼 Key 才能生成形象：在网关后台「语音合成 → 千问 TTS」或「大模型 → 看图模型 → 千问 VL」里填；"
+                                 "不想用 Key 就选「原图」")
+            with open(s["photo"], "rb") as f:
+                img = _wanx(key, f.read(), style)
         path = s["photo"].rsplit(".", 1)[0] + f"-avatar{style}.img"
         with open(path, "wb") as f:
             f.write(img)
