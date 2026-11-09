@@ -46,29 +46,39 @@ async def handle(conn: "ConnectionHandler", text: str):
     """返回 None 表示已经处理（让设备拍照了）；否则返回原话，照常往下走。"""
     if not is_photo_ask(text):
         return text
-    # 设备刚连上时工具清单还没到（叫醒后马上说的第一句）：最多等 3 秒
+    # 不能在这里原地等：设备发来的文字是在同一条消息循环里处理的，设备的回复（工具清单、工具结果）要等这里
+    # 返回才收得到，原地等只会超时（2026-11-10 实测）。所以接手后放到后台：设备刚连上、工具清单还没到时
+    # 最多等 3 秒，到了就让设备拍照，没到就照常把这句话交给模型
+    q = question_of(text)
+    asyncio.create_task(_ask_device(conn, text, q))
+    return None
+
+
+async def _ask_device(conn, text, q):
+    from core.agent.call_names import _speak
+    from core.providers.tools.device_mcp.mcp_handler import call_mcp_tool
+
     for _ in range(30):
         client = getattr(conn, "mcp_client", None)
         if client and client.has_tool(TOOL):
             break
         await asyncio.sleep(0.1)
     else:
-        return text
-    from core.agent.call_names import _speak
-    from core.providers.tools.device_mcp.mcp_handler import call_mcp_tool
+        from core.handle.sendAudioHandle import send_stt_message
 
-    q = question_of(text)
+        conn.logger.bind(tag=TAG).info(f"拍照快捷通道：设备没有拍照工具，交给模型：{text}")
+        await send_stt_message(conn, text)
+        conn.client_abort = False
+        conn.executor.submit(conn.chat, text)
+        return
+    conn.logger.bind(tag=TAG).info(f"拍照快捷通道：{text} → 让设备拍照（问：{q}）")
     try:
         raw = await call_mcp_tool(conn, client, TOOL, json.dumps({"question": q}, ensure_ascii=False), timeout=15)
-    except Exception as e:  # noqa: BLE001  拍不成就交给模型，它会自己处理
-        conn.logger.bind(tag=TAG).warning(f"拍照快捷通道：设备工具出错，交给模型：{e}")
-        return text
-    try:
         data = json.loads(raw) if isinstance(raw, str) else raw
-    except (TypeError, ValueError):
+    except Exception as e:  # noqa: BLE001
+        conn.logger.bind(tag=TAG).warning(f"拍照快捷通道：设备工具出错：{e}")
+        data = {"response": "没打开拍照，再说一次试试"}
+    if not isinstance(data, dict):
         data = {}
-    reply = (data or {}).get("response") or (data or {}).get("reason") or "好，拍张照片给我看看。"
-    conn.logger.bind(tag=TAG).info(f"拍照快捷通道：{text} → 让设备拍照（问：{q}）")
-    if await _speak(conn, text, reply):
-        return None
-    return text
+    reply = data.get("response") or data.get("reason") or "好，拍张照片给我看看。"
+    await _speak(conn, text, reply)
