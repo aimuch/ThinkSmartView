@@ -639,7 +639,7 @@ class Client:
         self.publish_photo()
         self.photo_card = (p['question'], answer, [p['image']] if p['image'] else [])
         hhmm = datetime.datetime.now().strftime('%H:%M')
-        await self.say(f"【拍照问 {hhmm}】我用手机拍了张照片问：「{p['question']}」。看图模型看到的是：{answer}"
+        await self.say(f"【拍照问 {hhmm}】我用{'小麦的摄像头' if p.get('camera') else '手机'}拍了张照片问：「{p['question']}」。看图模型看到的是：{answer}"
                        '\n请根据这些直接回答我，一两句话说清楚，不要提「看图模型」。')
 
     # ---- 断网兜底 (offline.py): a few commands without the hub ----

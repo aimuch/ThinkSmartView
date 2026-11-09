@@ -65,14 +65,16 @@ class Camera:
         self.users = 0
         self.changed = asyncio.Condition()
         self._stopper = None
+        self.stopping = False             # we terminated it (nobody watching): exit 255 is expected
 
     async def _start(self):
         if self.proc and self.proc.returncode is None:
             return
         STILL.parent.mkdir(parents=True, exist_ok=True)
         STILL.unlink(missing_ok=True)
+        self.stopping = False
         self.proc = await asyncio.create_subprocess_exec(*ffmpeg_args(self.rotation()), stdout=asyncio.subprocess.PIPE,
-                                                         stderr=asyncio.subprocess.DEVNULL, stdin=asyncio.subprocess.DEVNULL)
+                                                         stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.DEVNULL)
         log.info('camera on (ffmpeg %s, rotation %s)', self.proc.pid, self.rotation())
         asyncio.create_task(self._read(self.proc))
 
@@ -92,7 +94,9 @@ class Camera:
             async with self.changed:
                 self.changed.notify_all()
             if self.proc is proc:
-                log.info('camera off (ffmpeg exited %s)', await proc.wait())
+                code = await proc.wait()
+                err = (await proc.stderr.read()).decode('utf-8', 'replace').strip()[-300:] if code not in (0, 255) or not self.stopping else ''
+                log.info('camera off (ffmpeg exited %s%s)', code, f': {err}' if err else '')
 
     def _stop_later(self):
         if self._stopper:
@@ -101,6 +105,7 @@ class Camera:
         async def stop():
             await asyncio.sleep(IDLE_STOP)
             if self.users == 0 and self.proc and self.proc.returncode is None:
+                self.stopping = True
                 self.proc.terminate()
                 self.frame = None
         self._stopper = asyncio.create_task(stop())
@@ -120,6 +125,7 @@ class Camera:
     async def frames(self):
         """Preview JPEGs as they come (an async generator; the camera is held while it runs)."""
         await self.acquire()
+        log.info('camera preview: a page is watching')
         try:
             seen = -1
             while True:
@@ -130,6 +136,7 @@ class Camera:
                 seen = self.seq
                 yield self.frame
         finally:
+            log.info('camera preview: the page stopped watching')
             self.release()
 
     async def shoot(self, timeout=8.0):
