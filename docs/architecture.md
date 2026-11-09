@@ -315,7 +315,7 @@ sequenceDiagram
 | --- | --- | --- |
 | 设备 `~/.config/thinksmart-client/config.json` | 用户设置 | 唤醒词、天气播报、住宅地址、外观、儿童模式、待机页、场景、定时任务、告警、翻译模式（只存改过的） |
 | 设备 `~/.local/share/thinksmart-client/` | `alarms/`、`cards.json`、`notes.json`、`photos/`、`avatars/`、`album/`、`offline/`、`kids-usage.json` | 闹钟、图文消息、留言、拍照问答的照片、照片形象、家庭相册、断网时的回答录音、儿童模式今天用了多久 |
-| 网关 `data/` | `chat.db`、`usage.db` | 聊天记录和记忆、费用 |
+| 网关 `data/` | `chat.db`、`usage.db` | 聊天记录和记忆；费用（每次请求一条：token、费用、首字和总耗时、成没成功、失败原因）。同步来的单价写在 `.config.yaml` 的 `billing.prices` 里，带 `source`、`provider`、`synced_at` |
 | 网关 `data/` | `device_homes.json`、`device_prefs.json`、`device_lists.json`、`voiceprints.json` | 每台设备的住宅地址、儿童/翻译模式、清单、家人声纹（192 维向量，不存录音） |
 | 网关 `data/photos/` | 拍照问答、形象、相册上传的照片 | 7 天后删，清除聊天记录时一起删 |
 | 网关 `models/voiceprint/` | `3dspeaker_campplus_zh-cn_16k.onnx` | 声纹模型（不在仓库里，手动下载到这里） |

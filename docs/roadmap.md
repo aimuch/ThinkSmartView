@@ -29,6 +29,7 @@
 | 设备在线状态 | 后台按设备每 10 秒的心跳显示 待机 / 对话中 / 离线 和客户端版本 | 客户端 0.1.625 以上 |
 | DSH（DeepSeek Harness） | 后台「大模型 → 本地 CLI 与智能体 → DeepSeek Harness」；说「嗨 DSH，……」 | 网关上装 `@deepseek-ai/dsh`（`~/.local/dsh`）和 Node 24（`~/.local/node24`）；用 DeepSeek 的 Key |
 | 智能体页 | 后台侧栏「智能体」（原 Grok Bot）：加 Hermes Agent（OpenAI 兼容，默认 http://127.0.0.1:8642/v1）、Dify 工作流、Coze，配称呼后说「嗨 + 称呼」派活；卡片上能测试 | Hermes 要在它的 `~/.hermes/.env` 里开 `API_SERVER_ENABLED=true` |
+| 费用分析 | 后台「费用」：总览、排行、热力图、单价和额度四页；「同步单价」只补没有单价的模型，核对过的和手动的不动，认不准的放「待确认」 | 首字耗时和失败从 2026-11-09 起才记；同步要能上 models.dev 等网站 |
 | 按设备分别配置 | 后台「设备」：点一台设备，名字、默认模型、音色、人设、插件各自「跟着全局 / 单独设」；下一次对话就用上 | 语音识别还是所有设备共用 |
 | 看图模型 12 家 | 后台「大模型 → 看图模型」；DeepSeek V4.1 Flash 沿用大模型的 Key，已设为默认 | — |
 | 读取模型列表 | 后台大模型页、看图模型的「读取模型列表」：Ollama、LM Studio 等本机或局域网服务 | Ollama 给局域网用要设 `OLLAMA_HOST=0.0.0.0` |

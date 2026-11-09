@@ -24,7 +24,7 @@
 | 屏幕旋转 | `client/thinksmart_client/rotation.py` | 设置 →「屏幕方向」：横屏、竖屏和它们的倒置，或「跟随摆放方向」 |
 | 唤醒二次确认 | `client/thinksmart_client/wake_verify.py` | 唤醒词命中后经网关识别核对一次（约 0.3 秒），减少误唤醒；网关问不到时照常唤醒 |
 | 更多供应商 | `server/main/xiaozhi-server/core/admin/catalog.py` | 后台「大模型」21 家；「语音识别」分本地（X-ASR 快速版/精度版、Qwen3-ASR、SenseVoice，后台可下载模型）和云端（豆包、阿里百炼、腾讯、讯飞、百度、OpenAI、Groq） |
-| 大模型费用 | `server/main/xiaozhi-server/core/billing/` | 后台「费用」页：今日、本月、累计、近 30 天、按模型/设备/用途；分时单价、节假日、额度（拒绝或改用便宜模型）。设备设置页也能看。 |
+| 大模型费用 | `server/main/xiaozhi-server/core/billing/` | 后台「费用」页分四页：总览（时间范围、按小时/按天、和上一段比、趋势、token 构成）、排行（模型/设备/用途/条目）、热力图（星期几 × 几点）、单价和额度（分时单价、节假日、额度，可从 models.dev、LiteLLM、OpenRouter 同步单价）。每次请求还记首字耗时、总耗时和失败。设备设置页也能看。 |
 | 自定义唤醒词 | `client/thinksmart_client/wake_words.py` | 设置 →「唤醒词」：按住说出新词（网关识别成文字、换算成拼音），马上生效；也可以说「唤醒词加一个……」。默认小麦小麦、哈喽小麦、小麦同学 |
 | 天气 | `server/main/xiaozhi-server/core/utils/open_meteo.py` | Open-Meteo，不用 Key：当前天气、PM2.5、7 天预报和降水概率，国外城市也能查。设备所在地在后台「意图识别 → 查天气 → 设置」里改 |
 | 千问 TTS（方言音色） | `server/main/xiaozhi-server/core/providers/tts/qwen3_tts.py` | 后台「语音合成」切到千问 TTS、填百炼 Key，可选上海话、北京话、四川话、粤语等音色 |
@@ -52,5 +52,6 @@
 - 米家扫码登录、请求签名、MIoT 规格处理参考 [MenuBarMijia](https://gitlab.com/jryang1997/MenuBarMijia)（MIT，jryang1997）改写；客户端测试用了它的 `Tests/Fixtures/miot_golden.json`。
 - 二维码：qrcode.js（Kazuhiko Arase，MIT），在 `client/web/v2/vendor/`。
 - USB 网络的做法参考 [jethac/lenovo-thinksmart-view](https://github.com/jethac/lenovo-thinksmart-view)（MIT）。
+- 费用页的时间范围、和上一段比、趋势开关、排行、热力图、单价同步顺序参考 [CPA Manager Plus](https://github.com/seakee/CPA-Manager-Plus)（MIT，seakee）的用量分析和模型价格设计，代码是自己写的。
 - 网关后台的动效时长和缓动曲线参考 [Arc Library](https://github.com/kuratlielia/arc-library) 的 motion tokens（MIT）。
 - Grok Bot 改走 Cursor 后台发送的字段定义参考上游 issue #4 里网友的分析和 [grok-bot-cli#166](https://github.com/ScriptedAlchemy/grok-bot-cli/pull/166)。
