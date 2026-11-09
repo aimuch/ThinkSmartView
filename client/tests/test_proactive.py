@@ -124,3 +124,51 @@ def test_translate_mode(tmp_path, monkeypatch):
     assert c.follow_up_seconds() == 30 and c.closed   # idle: reconnects at once for the new prompt
     with pytest.raises(ValueError):
         asyncio.run(c.set_translate(True, '中文', '中文'))
+
+
+# ---- 断网兜底 (offline.py) ----
+
+def test_offline_phrases():
+    from thinksmart_client import offline
+    p = offline.phrases()
+    assert p['h2'] == '两点' and p['h21'] == '二十一点' and p['m7'] == '零七分。' and p['m45'] == '四十五分。'
+    assert offline.time_clips(9, 0) == ['now', 'h9', 'm0']
+
+
+def test_offline_commands(tmp_path, monkeypatch):
+    from thinksmart_client import offline
+    c = make_client(tmp_path, monkeypatch)
+    monkeypatch.setattr(offline, 'CLIPS', tmp_path / 'offline')
+    played, volumes = [], []
+    c.audio = types.SimpleNamespace(player=types.SimpleNamespace(trim=lambda n: None, push=played.append))
+    c.volume = 50
+
+    async def set_volume(v, source='page'):
+        volumes.append(v)
+        c.volume = v
+    c.set_volume = set_volume
+    controlled = []
+
+    async def control(card_id, op, value=None, confirm=False, by_voice=False):
+        controlled.append((card_id, op))
+        return {'ok': True}
+    c.mijia = types.SimpleNamespace(session=object(), control=control,
+                                    cards={'a': {'id': 'a', 'kind': 'light', 'online': True}, 'b': {'id': 'b', 'kind': 'plug', 'online': True}})
+
+    async def run():
+        await c.offline_command('音量大一点')
+        assert volumes == [65] and c.played == ['miss']        # no clips yet: a tone instead of words
+        offline.CLIPS.mkdir()
+        import io
+        import wave
+        for name in ('ok', 'now', 'h9', 'm5'):
+            buf = io.BytesIO()
+            with wave.open(buf, 'wb') as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(24000); w.writeframes(b'\x00\x00' * 240)
+            (offline.CLIPS / f'{name}.wav').write_bytes(buf.getvalue())
+        await c.offline_command('关掉所有灯')
+        assert controlled == [('a', 'off')] and len(played) == 1
+        monkeypatch.setattr(app.datetime, 'datetime', type('D', (datetime.datetime,), {'now': classmethod(lambda cls, tz=None: D(2026, 11, 9, 9, 5))}))
+        await c.offline_command('现在几点')
+        assert len(played) == 4
+    asyncio.run(run())

@@ -198,3 +198,8 @@ body.av-photo-on .av-photo { display: block; }
 .tr-sub { color: var(--ink2); font-size: 19px; }
 .tr-bar button { background: var(--card2); color: var(--ink); }
 body.has-banner .now-bar { top: 176px; }
+
+.voices-say { font-size: 28px; line-height: 1.5; font-weight: 500; }
+.voices-say:empty { display: none; }
+#voicesHold.on { border-style: solid; border-color: #5ee0ff66; color: var(--accent2); background: #5ee0ff10; }
+#voicesHold.on .ww-meter { display: flex; }

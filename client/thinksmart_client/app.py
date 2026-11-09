@@ -45,7 +45,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import alarms, broadcast, bt, config, cook, daily, kids, looks, mcp, media, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, config, cook, daily, kids, looks, mcp, media, offline, rotation, sleep, update, wake_verify, wake_words
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
 from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off
@@ -187,6 +187,7 @@ class Client:
     lists = None                              # 清单 (the hub keeps them: /kiosk/lists)
     alert = None                              # the red banner of a Mijia sensor alert
     reconnect_after_reply = False             # 翻译模式 changed: the next connection gets the new prompt
+    offline_until = 0.0                       # 断网兜底: its commands are listened for until then (monotonic)
     kids_seconds = 0.0
     kids_clips = {}
 
@@ -393,9 +394,9 @@ class Client:
         self.wake_rec = []
         self.events.publish('wake_words', self.wake_view())
 
-    async def _record_text(self, what):
-        """Stop the hold-to-say recording and recognise it with the hub's recogniser: the text, or ''
-        for nothing (or nothing loud enough) said. ValueError when the hub can't be asked."""
+    def _record_audio(self):
+        """Stop the hold-to-say recording: what was said (16 kHz float32, the start notes cut off),
+        or None for nothing loud enough."""
         rec, self.wake_rec = self.wake_rec, None
         self.events.publish('wake_words', self.wake_view())
         if rec is None:
@@ -403,6 +404,14 @@ class Client:
         audio = np.concatenate(rec) if rec else np.zeros(0, np.float32)
         audio = audio[int(0.3 * 16000):]   # the start notes
         if len(audio) < 0.3 * 16000 or float(np.sqrt(np.mean(audio ** 2))) < 10 ** (-55 / 20):
+            return None
+        return audio
+
+    async def _record_text(self, what):
+        """Stop the hold-to-say recording and recognise it with the hub's recogniser: the text, or ''
+        for nothing (or nothing loud enough) said. ValueError when the hub can't be asked."""
+        audio = self._record_audio()
+        if audio is None:
             return ''
         checker = wake_verify.HubChecker(self.cfg['hub_http'])
         try:
@@ -558,6 +567,132 @@ class Client:
         hhmm = datetime.datetime.now().strftime('%H:%M')
         await self.say(f"【拍照问 {hhmm}】我用手机拍了张照片问：「{p['question']}」。看图模型看到的是：{answer}"
                        '\n请根据这些直接回答我，一两句话说清楚，不要提「看图模型」。')
+
+    # ---- 断网兜底 (offline.py): a few commands without the hub ----
+
+    def _offline_clip(self, name):
+        path = offline.CLIPS / f'{name}.wav'
+        try:
+            return load_wav(path) if path.is_file() else None
+        except Exception:
+            return None
+
+    def _play_clips(self, names):
+        clips = [self._offline_clip(n) for n in names]
+        if all(c is not None for c in clips):
+            self.audio.player.trim(0)
+            for c in clips:
+                self.audio.player.push(c)
+            return True
+        self.play('miss')
+        return False
+
+    async def offline_start(self):
+        """The hub didn't answer a wake: listen for the offline commands for a while."""
+        self.offline_until = time.monotonic() + offline.WINDOW
+        self.events.publish('toast', {'kind': 'error', 'text': '连不上小麦网关。现在可以直接说：' + '、'.join(offline.WORDS)
+                                      + f'（{offline.WINDOW} 秒内）'})
+        async with self.wake_lock:
+            self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(
+                None, self._build_kws, self.cfg['wake_words'], [wake_words.keyword(w) for w in offline.WORDS])
+        self._play_clips(['hint'])
+        asyncio.create_task(self._offline_end())
+
+    async def _offline_end(self):
+        while time.monotonic() < self.offline_until:
+            await asyncio.sleep(0.5)
+        async with self.wake_lock:
+            extra = [wake_words.keyword(w) for w in cook.WORDS] if self.cooking else []
+            self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(
+                None, self._build_kws, self.cfg['wake_words'], extra)
+
+    async def offline_command(self, label):
+        self.offline_until = time.monotonic() + offline.WINDOW   # another one may follow
+        self.screen.poke()
+        log.info('offline command: %s', label)
+        if label in ('音量大一点', '音量小一点'):
+            await self.set_volume(max(0, min(100, self.volume + (15 if label == '音量大一点' else -15))), 'voice')
+            self._play_clips(['ok'])
+        elif label == '现在几点':
+            now = datetime.datetime.now()
+            self.events.publish('toast', {'kind': 'info', 'text': f'现在 {now:%H:%M}'})
+            self._play_clips(offline.time_clips(now.hour, now.minute))
+        else:
+            on = label == '打开所有灯'
+            m = self.mijia
+            lights = [c for c in (m.cards.values() if m and m.session else []) if c.get('kind') == 'light' and c.get('online')]
+            if not lights:
+                self._play_clips(['no_home'])
+                return
+            results = await asyncio.gather(*(m.control(c['id'], 'on' if on else 'off') for c in lights), return_exceptions=True)
+            done = sum(1 for r in results if isinstance(r, dict) and r.get('ok'))
+            self.events.publish('toast', {'kind': 'info', 'text': f"{'打开' if on else '关掉'}了 {done} 盏灯"})
+            self._play_clips(['ok'] if done else ['no_home'])
+
+    async def _offline_clips_loop(self):
+        """While the hub answers, have it synthesise the offline answers once (kept on disk)."""
+        await asyncio.sleep(60)
+        offline.CLIPS.mkdir(parents=True, exist_ok=True)
+        for name, words in offline.phrases().items():
+            path = offline.CLIPS / f'{name}.wav'
+            if path.is_file():
+                continue
+            wav = await self._speech(words)
+            if not wav:
+                return            # the hub is away: try again at the next start
+            path.write_bytes(wav)
+            await asyncio.sleep(1)
+        log.info('offline answers ready')
+
+    # ---- 家人声音 (the hub's core/utils/local_voiceprint.py): who is talking ----
+
+    VOICE_SENTENCES = ('今天天气不错，我们下午带宝宝去公园散步吧。', '小麦小麦，帮我看看明天早上要不要带伞。',
+                       '晚饭想吃番茄炒蛋，再做一个清炒西兰花。')
+
+    async def voices_view(self):
+        try:
+            data = await self._hub_http('/kiosk/voiceprint?' + urllib.parse.urlencode({'device': self.cfg['device_id']}))
+        except Exception:
+            return {'available': False, 'people': [], 'sentences': self.VOICE_SENTENCES, 'error': '连不上小麦网关'}
+        return {'available': data.get('available', False), 'people': data.get('people') or [],
+                'sentences': self.VOICE_SENTENCES}
+
+    async def voice_record_start(self):
+        await self.wake_record_start(seconds=9.0)
+
+    async def voice_name_stop(self):
+        """The name said on the settings page -> {'name'} or {'error'}."""
+        text = (await self._record_text('a family member\'s name')).strip().rstrip('。.！!？?，,')
+        if not text:
+            return {'error': '没听清，按住再说一次名字'}
+        return {'name': text[:12]}
+
+    async def voice_sample_stop(self, name, child=False):
+        """A sentence read by this person -> the hub adds it to their voiceprint."""
+        audio = self._record_audio()
+        if audio is None:
+            return {'error': '没听到声音，按住再念一次'}
+        pcm = np.clip(audio * 32768, -32768, 32767).astype('<i2').tobytes()
+        q = urllib.parse.urlencode({'device': self.cfg['device_id'], 'name': name, 'child': '1' if child else '0'})
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
+                async with s.post(f"{self.cfg['hub_http']}/kiosk/voiceprint/enroll?{q}", data=pcm) as r:
+                    data = await r.json(content_type=None)
+        except Exception as e:
+            log.warning('voiceprint enroll failed: %s', e)
+            return {'error': '连不上小麦网关，稍后再试'}
+        if not data.get('ok'):
+            return {'error': data.get('error') or '没录上'}
+        self.events.publish('voices', await self.voices_view())
+        return {'samples': data['samples']}
+
+    async def voice_remove(self, name):
+        data = await self._hub_http('/kiosk/voiceprint/remove', {'device': self.cfg['device_id'], 'name': name})
+        if not data.get('ok'):
+            raise ValueError(data.get('error') or '没删掉')
+        view = await self.voices_view()
+        self.events.publish('voices', view)
+        return view
 
     # ---- 定时任务: at a time, ask the model to do something (weather, lists, Mijia…) ----
 
@@ -1308,6 +1443,7 @@ class Client:
         asyncio.create_task(self._cook_loop())
         asyncio.create_task(self._lists_loop())
         asyncio.create_task(self._alert_loop())
+        asyncio.create_task(self._offline_clips_loop())
         await self.bt.start()
         asyncio.create_task(self._bluetooth_loop())
         await self.mijia.start()
@@ -1446,6 +1582,9 @@ class Client:
         return True
 
     async def voice_wake(self, label, audio):
+        if label in offline.WORDS and time.monotonic() < self.offline_until:
+            await self.offline_command(label)
+            return
         if self.cooking and label in cook.WORDS:
             await self.cook_word(label)   # 做菜模式: a command, not a wake (no second look: speed matters)
             return
@@ -1501,6 +1640,7 @@ class Client:
         if not chimed:
             self.chime(source)
         if not await self.ensure_connected():
+            await self.offline_start()
             return
         await self.start_listening('realtime')
         self.heard = False

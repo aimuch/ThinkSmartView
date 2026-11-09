@@ -579,6 +579,68 @@ $('wwReset').addEventListener('click', () => {
   postJson('/api/wake-words/reset').then(r => { if (r.ok) toast('已恢复默认的唤醒词'); });
 });
 
+/* ---- 家人声音 (设计画布第 13 块): name, then three sentences ---- */
+const vc = { holding: false, busy: false, step: null, name: '', child: false, n: 0, msg: '', armed: null };
+const vcPost = (act, body) => DEMO === null ? postJson('/api/voices/' + act, body || {}) : Promise.resolve({ ok: true });
+function renderVoices() {
+  const v = ui.voices || { people: [], sentences: [], available: true };
+  $('voicesCount').textContent = v.people.length ? `${v.people.length} 个人` : '';
+  $('voicesList').innerHTML = v.people.map(p => `<div class="al"><div class="al-text"><b>${esc(p.name)}${p.child ? '（孩子）' : ''}</b>` +
+    `<span>录了 ${p.samples} 段</span></div><button class="al-del ${vc.armed === p.name ? 'armed' : ''}" data-vdel="${esc(p.name)}">${vc.armed === p.name ? '确认删除' : '删除'}</button></div>`).join('');
+  const on = !!vc.step;
+  $('voicesPre').hidden = !on;
+  $('voicesDots').innerHTML = on && vc.step !== 'name' ? [0, 1, 2].map(i => `<i class="${i < vc.n ? 'on' : ''}"></i>`).join('') : '';
+  $('voicesChild').hidden = vc.step !== 'named';
+  for (const b of $('voicesChild').children) b.classList.toggle('on', (b.dataset.c === '1') === vc.child);
+  $('voicesNext').hidden = vc.step !== 'named';
+  $('voicesMsg').className = 'ww-msg' + (vc.msg.startsWith('⚠') ? ' warn' : '');
+  $('voicesMsg').textContent = vc.msg;
+  $('voicesSay').textContent = vc.step === 'sample' ? `「${v.sentences[vc.n] || ''}」` : vc.step === 'named' ? vc.name : '';
+  $('voicesHold').hidden = vc.step === 'named';
+  $('voicesHold').disabled = vc.busy || !v.available;
+  $('voicesHold').classList.toggle('on', vc.holding);
+  $('voicesHoldText').textContent = !v.available ? '网关上还没有声纹模型' : vc.holding ? '正在听，说完松手' : vc.busy ? '正在处理…'
+    : vc.step === 'sample' ? `按住念第 ${vc.n + 1} 句，念完松手` : '＋ 加一个人：按住说名字';
+}
+$('voicesHold').addEventListener('pointerdown', async e => {
+  e.preventDefault();
+  if (vc.holding || vc.busy) return;
+  vc.holding = true; if (!vc.step) { vc.step = 'name'; vc.msg = '说这个人的称呼，比如「妈妈」「宝宝」'; } renderVoices();
+  const r = await vcPost('start');
+  if (!r.ok) { vc.holding = false; vc.msg = '⚠ ' + (r.error || '没开始录'); renderVoices(); }
+});
+async function voicesHoldEnd() {
+  if (!vc.holding) return;
+  vc.holding = false; vc.busy = true; renderVoices();
+  if (vc.step === 'name') {
+    const r = await vcPost('name');
+    vc.busy = false;
+    if (r.ok && r.name) { vc.name = r.name; vc.step = 'named'; vc.msg = '听到的名字是：'; }
+    else vc.msg = '⚠ ' + ((r && (r.error)) || '没听清');
+  } else {
+    const r = await vcPost('sample', { name: vc.name, child: vc.child });
+    vc.busy = false;
+    if (r.ok && !r.error) { vc.n++; vc.msg = vc.n >= 3 ? '' : `第 ${vc.n} 句录好了`; if (vc.n >= 3) { toast(`录好了，以后能认出${vc.name}`); vc.step = null; vc.n = 0; } }
+    else vc.msg = '⚠ ' + ((r && r.error) || '没录上');
+  }
+  renderVoices();
+}
+$('voicesHold').addEventListener('pointerup', voicesHoldEnd);
+$('voicesHold').addEventListener('pointercancel', voicesHoldEnd);
+$('voicesHold').addEventListener('pointerleave', voicesHoldEnd);
+$('voicesChild').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (b) { vc.child = b.dataset.c === '1'; renderVoices(); } });
+$('voicesNext').addEventListener('click', () => { vc.step = 'sample'; vc.n = 0; vc.msg = `正常说话的距离，念下面这句：`; renderVoices(); });
+$('voicesCancel').addEventListener('click', () => { vc.step = null; vc.n = 0; vc.msg = ''; renderVoices(); });
+$('voicesList').addEventListener('click', e => {
+  const b = e.target.closest('[data-vdel]');
+  if (!b) return;
+  if (vc.armed !== b.dataset.vdel) { vc.armed = b.dataset.vdel; renderVoices(); setTimeout(() => { vc.armed = null; renderVoices(); }, 3000); return; }
+  vc.armed = null;
+  vcPost('remove', { name: b.dataset.vdel }).then(r => { if (r.ok) { ui.voices = r.voices; renderVoices(); } });
+});
+// the settings sheet asks the hub who is enrolled when it opens
+$('btnSettings').addEventListener('click', () => vcPost('list').then(r => { if (r.ok && r.voices) { ui.voices = r.voices; renderVoices(); } }));
+
 /* ---- 定时任务、主动告警、翻译模式 (设计画布第 12 块) ---- */
 const proPost = (kind, body) => DEMO === null ? postJson('/api/proactive/' + kind, body).then(r => { if (!r.ok && r.error) toast(r.error, 'error'); return r; }) : Promise.resolve({});
 const DAYS_TEXT = { daily: '每天', workdays: '工作日', weekend: '周末', once: '只一次' };
@@ -1948,6 +2010,9 @@ const handlers = {
   broadcast(b) {
     ui.broadcast = b; renderBroadcast();
   },
+  voices(v) {
+    ui.voices = v; renderVoices();
+  },
   tasks(t) {
     ui.tasks = t; renderTasks();
   },
@@ -1990,6 +2055,7 @@ const handlers = {
   level(l) {
     level.target = ui.status.state === 'speaking' ? Math.min(1, l.out * 6) : micLevel(l.mic);
     if (ww.holding) wakeMeter(micLevel(l.mic));
+    if (vc.holding) holdMeter($('voicesHold'), micLevel(l.mic));
     if (bc.holding) holdMeter($('bcHold'), micLevel(l.mic));
   },
 };

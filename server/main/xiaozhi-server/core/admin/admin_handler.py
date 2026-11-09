@@ -30,6 +30,7 @@ from core.admin.grokbot import GrokBotAdmin
 from core.admin.status import _claude_version, collect_status
 from core import billing
 from core.agent import chat_history, llm_router, photo_ask, reports
+from core.utils import local_voiceprint  # noqa: F401  导入时会初始化日志（asyncio.run），不能放到请求里再导入
 from core.agent.agent_session import ErrorKind
 from core.agent.grokbot_client import GrokBotError
 from core.utils.modules_initialize import initialize_modules
@@ -160,6 +161,9 @@ class AdminHandler:
                 web.post("/kiosk/home", self.handle_kiosk_home),
                 web.get("/kiosk/today", self.handle_kiosk_today),
                 web.post("/kiosk/prefs", self.handle_kiosk_prefs),
+                web.get("/kiosk/voiceprint", self.handle_kiosk_voiceprint),
+                web.post("/kiosk/voiceprint/enroll", self.handle_kiosk_voiceprint_enroll),
+                web.post("/kiosk/voiceprint/remove", self.handle_kiosk_voiceprint_remove),
                 web.get("/kiosk/lists", self.handle_kiosk_lists),
                 web.post("/kiosk/lists", self.handle_kiosk_lists_change),
                 web.get("/lists/{secret}", self.handle_lists_page),
@@ -967,6 +971,46 @@ class AdminHandler:
         except ValueError as e:
             return self._json({"ok": False, "error": str(e)})
         return self._json({"ok": True, "version": v["version"], "lists": v["lists"]})
+
+    # ---------- 家人声音（core/utils/local_voiceprint.py） ----------
+
+    async def handle_kiosk_voiceprint(self, request: web.Request):
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import local_voiceprint as lv
+
+        return self._json({"ok": True, "available": lv.available(),
+                           "people": await self._blocking(lv.people, request.query.get("device") or "")})
+
+    async def handle_kiosk_voiceprint_enroll(self, request: web.Request):
+        """?device=&name=&child=1，请求体是 16 kHz 16 位单声道 PCM（4～8 秒）：加一段这个人的声音。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import local_voiceprint as lv
+
+        if not lv.available():
+            return self._json({"ok": False, "error": "网关上还没有声纹模型（models/voiceprint/）"})
+        pcm = await request.read()
+        if len(pcm) > KIOSK_ASR_MAX_BYTES:
+            return self._error("音频太长", 413)
+        try:
+            r = await self._blocking(lv.enroll, request.query.get("device") or "", request.query.get("name") or "",
+                                     pcm, request.query.get("child") == "1")
+        except (ValueError, RuntimeError) as e:
+            return self._json({"ok": False, "error": str(e)})
+        return self._json({"ok": True, **r})
+
+    async def handle_kiosk_voiceprint_remove(self, request: web.Request):
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import local_voiceprint as lv
+
+        b = await self._read_json(request)
+        try:
+            await self._blocking(lv.remove, str(b.get("device") or ""), str(b.get("name") or ""))
+        except ValueError as e:
+            return self._json({"ok": False, "error": str(e)})
+        return self._json({"ok": True})
 
     async def handle_kiosk_prefs(self, request: web.Request):
         """{"device", "kids": {"enabled", "age", "voice"}}：设备在设置页改的、网关要知道的偏好（儿童模式）。

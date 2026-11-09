@@ -268,6 +268,19 @@
         <button class="switch" id="alertDoor" role="switch" aria-checked="false" aria-label="门窗打开告警"><i></i></button></div>
       <p class="opt-note">要先在「家居」里登录米家。每分钟查一次这些传感器。</p>
     </div>
+    <div class="alarms-card ww-card" id="voicesCard">
+      <div class="bright-head"><b>家人声音</b><span class="bright-num" id="voicesCount"></span></div>
+      <div class="alarm-list" id="voicesList"></div>
+      <div class="ww-pre" id="voicesPre" hidden>
+        <div class="cook-dots" id="voicesDots" style="margin-left:0"></div>
+        <p class="ww-msg" id="voicesMsg"></p>
+        <div class="voices-say" id="voicesSay"></div>
+        <div class="minutes bc-chips" id="voicesChild" style="grid-template-columns:repeat(2,1fr)" hidden><button data-c="0" class="on">大人</button><button data-c="1">孩子</button></div>
+        <div class="ww-btns"><button class="upd-btn" id="voicesCancel">取消</button><button class="upd-btn pri" id="voicesNext" hidden>下一步</button></div>
+      </div>
+      <button class="bt-add ww-hold" id="voicesHold"><span class="ww-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="voicesHoldText">＋ 加一个人：按住说名字</span></button>
+      <p class="opt-note">认出是谁以后，回答能叫得出名字、记得各自的事，「有我的留言吗」能找到给自己的；标成孩子的，跟他说话会像儿童模式那样。声纹只存在家里的网关上。</p>
+    </div>
     <div class="alarms-card ww-card" id="wwCard">
       <div class="bright-head"><b>唤醒词</b><span class="bright-num" id="wwCount"></span></div>
       <div class="alarm-list" id="wwList"></div>

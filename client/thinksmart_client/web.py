@@ -464,6 +464,23 @@ def make_app(client: Client):
             return {'translate': await client.set_translate(body.get('enabled'), body.get('a'), body.get('b'))}
         return await wake_call(change)
 
+    async def voices(request):
+        body = await request.json() if request.can_read_body else {}
+        act = request.match_info['act']
+
+        async def run():
+            if act == 'list':
+                return {'voices': await client.voices_view()}
+            if act == 'start':
+                return await client.voice_record_start()
+            if act == 'name':
+                return await client.voice_name_stop()
+            if act == 'sample':
+                return await client.voice_sample_stop(str(body.get('name') or ''), bool(body.get('child')))
+            return {'voices': await client.voice_remove(str(body.get('name') or ''))}
+        return await wake_call(run)
+
+    app.router.add_post('/api/voices/{act}', voices)
     app.router.add_post('/api/proactive/{kind}', proactive_set)
     app.router.add_post('/api/daily/{kind}', daily_set)
     app.router.add_post('/api/cook/start', cook_start)

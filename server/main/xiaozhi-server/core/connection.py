@@ -798,7 +798,14 @@ class ConnectionHandler:
         """为当前连接初始化声纹识别"""
         try:
             voiceprint_config = self.config.get("voiceprint", {})
-            if voiceprint_config:
+            # [xiaozhi-hub] 家人声音：这台设备在设置页录过，就用网关里的声纹识别（core/utils/local_voiceprint.py）
+            from core.utils import local_voiceprint
+
+            local = None if voiceprint_config.get("url") else local_voiceprint.for_device(self.device_id or "")
+            if local is not None:
+                self.voiceprint_provider = local
+                self.logger.bind(tag=TAG).info("家人声音识别已启用")
+            elif voiceprint_config:
                 voiceprint_provider = VoiceprintProvider(voiceprint_config)
                 if voiceprint_provider is not None and voiceprint_provider.enabled:
                     self.voiceprint_provider = voiceprint_provider

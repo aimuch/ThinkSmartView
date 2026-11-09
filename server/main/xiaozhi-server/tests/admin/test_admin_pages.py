@@ -1247,3 +1247,33 @@ async def test_kiosk_prefs_translate(kiosk, tmp_path, monkeypatch):
     assert "<translate_mode>" in out and "ONLY with its 英文 translation" in out
     await kiosk.post("/kiosk/prefs", json={"device": "dev-1", "translate": {"enabled": False}})
     assert device_prefs.translate("dev-1") is None
+
+
+async def test_voiceprint_enroll_and_identify(kiosk, tmp_path, monkeypatch):
+    import numpy as np
+
+    from core.utils import local_voiceprint as lv
+
+    monkeypatch.setattr(lv, "_path", lambda: str(tmp_path / "voiceprints.json"))
+    monkeypatch.setattr(lv, "available", lambda: True)
+    # 假的说话人向量：按音频的「音高」分成两个方向
+    def embed(x):
+        v = np.zeros(192, np.float32)
+        v[0 if float(np.mean(np.abs(x))) > 0.2 else 1] = 1
+        return v
+    monkeypatch.setattr(lv, "embed", embed)
+    loud = (np.ones(16000 * 3) * 0.3 * 32767).astype("<i2").tobytes()
+    soft = (np.ones(16000 * 3) * 0.05 * 32767).astype("<i2").tobytes()
+    r = await (await kiosk.post("/kiosk/voiceprint/enroll?device=dev-1&name=妈妈", data=loud)).json()
+    assert r == {"ok": True, "name": "妈妈", "samples": 1}
+    r = await (await kiosk.post("/kiosk/voiceprint/enroll?device=dev-1&name=宝宝&child=1", data=soft)).json()
+    assert r["ok"]
+    assert (await (await kiosk.post("/kiosk/voiceprint/enroll?device=dev-1&name=x", data=loud[:3000])).json())["ok"] is False
+    people = (await (await kiosk.get("/kiosk/voiceprint?device=dev-1")).json())["people"]
+    assert {p["name"]: p["child"] for p in people} == {"妈妈": False, "宝宝": True}
+    assert lv.identify("dev-1", lv.pcm16_to_float(loud))[0] == "妈妈"
+    assert lv.identify("dev-1", lv.pcm16_to_float(soft))[0] == "宝宝（孩子）"
+    assert lv.identify("dev-2", lv.pcm16_to_float(loud))[0] is None
+    assert lv.for_device("dev-1") is not None and lv.for_device("dev-9") is None
+    assert (await (await kiosk.post("/kiosk/voiceprint/remove", json={"device": "dev-1", "name": "妈妈"})).json())["ok"]
+    assert [p["name"] for p in lv.people("dev-1")] == ["宝宝"]
