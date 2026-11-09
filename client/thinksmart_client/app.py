@@ -49,7 +49,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import alarms, broadcast, bt, config, cook, daily, kids, looks, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, camera, config, cook, daily, kids, looks, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -269,6 +269,7 @@ class Client:
         self.tools_listed = asyncio.Event()   # the hub asked for our device tools on this connection
         self.connecting = asyncio.Lock()      # one connection: a second wake while connecting waits for it
         self.screen = Screen()
+        self.camera = camera.Camera(rotation.current)   # 机身摄像头（设计画布第 27 块）
         self.slides = photos.Slides(photos.spool_root())   # 照片轮播 (photos.py, upstream PR #3)
         self._slides_timer = None     # closes the open show after its minutes
         try:
@@ -466,7 +467,8 @@ class Client:
     def photo_view(self):
         p = self.photo
         return p and {k: p.get(k) for k in ('token', 'url', 'question', 'expires', 'state', 'error', 'image',
-                                            'purpose', 'styles', 'style', 'preview', 'avatar_ready', 'received')}
+                                            'purpose', 'styles', 'style', 'preview', 'avatar_ready', 'received',
+                                            'camera', 'shooting')}
 
     def publish_photo(self):
         self.events.publish('photo', self.photo_view() or {'state': 'closed'})
@@ -485,14 +487,50 @@ class Client:
         self.photo = {'token': data['token'], 'url': data['url'], 'question': data['question'],
                       'expires': data['expires'], 'state': 'waiting', 'error': None, 'image': None,
                       'purpose': purpose, 'styles': data.get('styles') or [], 'style': None, 'preview': None,
-                      'avatar_ready': data.get('avatar_ready', False)}
+                      'avatar_ready': data.get('avatar_ready', False),
+                      # 拍照问：有机身摄像头就用它（倒数后自动拍），没有才出二维码
+                      'camera': purpose == 'ask' and camera.available(), 'shooting': False}
         if self.photo_task and not self.photo_task.done():
             self.photo_task.cancel()
         self.photo_task = asyncio.create_task(self._photo_poller(self.photo))
         self.screen.poke()
         self.publish_photo()
-        log.info('photo question %r: waiting for the phone', data['question'])
-        return {'vision_ready': data.get('vision_ready', True), 'avatar_ready': data.get('avatar_ready', False)}
+        log.info('photo question %r: waiting for the %s', data['question'], 'camera' if self.photo['camera'] else 'phone')
+        return {'vision_ready': data.get('vision_ready', True), 'avatar_ready': data.get('avatar_ready', False),
+                'camera': self.photo['camera']}
+
+    async def camera_shoot(self):
+        """拍照问：用机身摄像头拍一张，像手机一样传给网关（/photo/<token>），后面照常（轮询拿答案）。"""
+        p = self.photo
+        if not p or not p.get('camera') or p['state'] != 'waiting' or p.get('shooting'):
+            raise ValueError('现在没在等拍照')
+        p['shooting'] = True
+        self.publish_photo()
+        try:
+            jpeg = await self.camera.shoot()
+            form = aiohttp.FormData()
+            form.add_field('question', p['question'])
+            form.add_field('photo', jpeg, filename='camera.jpg', content_type='image/jpeg')
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
+                async with s.post(f"{self.cfg['hub_http']}/photo/{p['token']}", data=form) as r:
+                    data = await r.json(content_type=None)
+            if not data.get('ok'):
+                raise ValueError(data.get('error') or '没传上去')
+            log.info('photo question: shot with the camera (%d bytes)', len(jpeg))
+            return {}
+        except Exception as e:
+            log.warning('camera shot failed: %s', e)
+            p['shooting'] = False
+            self.publish_photo()
+            raise ValueError(str(e) if isinstance(e, ValueError) else '没拍成，再试一次或者用手机拍')
+
+    async def camera_to_phone(self):
+        """不用摄像头了（拍不清楚）：换回二维码，用手机拍。"""
+        p = self.photo
+        if p and p.get('camera'):
+            p['camera'] = False
+            self.publish_photo()
+        return {}
 
     async def photo_cancel(self):
         p, self.photo = self.photo, None

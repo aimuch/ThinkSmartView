@@ -197,8 +197,8 @@ PHOTO_TOOLS = [
     {
         'name': 'self.photo.ask',
         'description': '用户想让你看一样东西时调用：「帮我看下这是什么」「这个字怎么读」「看看这道题」「这个能吃吗」。'
-                       '设备没有能用的摄像头：屏幕上会出现二维码，用户用手机扫码拍照，看完后答案会自动送回对话。'
-                       'question 写用户想问的（没说就写「这是什么」）。调用后只说一句「用手机扫一下屏幕上的二维码，拍张照片」，'
+                       '有机身摄像头时屏幕上出现摄像头画面，倒数后自动拍；没有时出现二维码，用手机扫码拍。看完后答案会自动送回对话。'
+                       'question 写用户想问的（没说就写「这是什么」）。调用后只说工具返回的那一句，'
                        '不要猜照片内容。返回 success=false 时把 reason 告诉用户。',
         'inputSchema': {'type': 'object', 'properties': {'question': {'type': 'string'}}},
     },
@@ -568,7 +568,8 @@ async def handle(payload, client=None):
             elif name == 'self.photo.ask' and client:
                 try:
                     started = await client.photo_start(str(args.get('question') or ''))
-                    say = '好，用手机扫一下屏幕上的二维码，拍张照片。'
+                    say = ('好，把东西对着屏幕上方的摄像头，我数三下就拍。' if started.get('camera')
+                           else '好，用手机扫一下屏幕上的二维码，拍张照片。')
                     if not started.get('vision_ready'):
                         say += '不过网关还没配置看图模型，需要先在网关后台的大模型页里填一下。'
                     text = _dumps({'action': 'RESPONSE', 'response': say})

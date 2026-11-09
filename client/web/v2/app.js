@@ -1001,9 +1001,40 @@ async function startAvatarPhoto() {
 
 /* ---- 拍照问答: QR code for the phone, then its photo while the vision model looks (设计画布第 7 块) ---- */
 let photoQrShown = null, photoTimer = null;
+// 机身摄像头：有摄像头的拍照问先显示实时画面，3 秒后倒数 3、2、1 自动拍（设计画布第 27 块）
+const cam = { on: false, timer: null, token: null };
+function camStop() {
+  clearTimeout(cam.timer); cam.timer = null; cam.on = false;
+  $('camOv').hidden = true; $('camCount').textContent = '';
+  $('camView').removeAttribute('src');   // 断开实时画面：没人看了客户端就关摄像头
+}
+function camCountdown(n) {
+  $('camCount').textContent = n || '';
+  if (n > 0) { cam.timer = setTimeout(() => camCountdown(n - 1), 1000); return; }
+  $('camFlash').classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => $('camFlash').classList.remove('on')));
+  postJson('/api/camera/shoot').then(r => { if (r && !r.ok && r.error) { toast(r.error, 'error'); camArm(); } });
+}
+function camArm() { clearTimeout(cam.timer); $('camCount').textContent = ''; cam.timer = setTimeout(() => camCountdown(3), 3000); }
+function renderCamera(p) {
+  const want = !!(p && p.camera && p.state === 'waiting' && p.purpose === 'ask');
+  if (!want) { if (cam.on) camStop(); return false; }
+  $('camOv').classList.toggle('shooting', !!p.shooting);
+  if (cam.on && cam.token === p.token) return true;
+  cam.on = true; cam.token = p.token;
+  $('camQ').textContent = `「${p.question}」`;
+  $('camOv').hidden = false;
+  $('camView').src = '/api/camera/preview?t=' + Date.now();
+  camArm();
+  return true;
+}
+$('camShoot').addEventListener('click', () => { clearTimeout(cam.timer); camCountdown(0); });
+$('camPhone').addEventListener('click', () => { camStop(); postJson('/api/camera/phone'); });
+$('camCancel').addEventListener('click', () => { camStop(); postJson('/api/photo/cancel'); });
+
 function renderPhoto() {
   const p = ui.photo;
-  $('photoOv').hidden = !p;
+  const onCamera = renderCamera(p);
+  $('photoOv').hidden = !p || onCamera;
   clearInterval(photoTimer);
   if (!p) return;
   const failed = ['error', 'expired', 'cancelled'].includes(p.state);

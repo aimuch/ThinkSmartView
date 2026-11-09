@@ -7,7 +7,7 @@ import time
 
 from aiohttp import web
 
-from . import __version__, kiosk_watch, looks, photos, update
+from . import __version__, camera, kiosk_watch, looks, photos, update
 from .app import ALBUM, PHOTOS, ROOT, Client, local_ip
 
 log = logging.getLogger(__name__)
@@ -473,6 +473,31 @@ def make_app(client: Client):
             raise web.HTTPNotFound()
         return web.FileResponse(path, headers={'Cache-Control': 'max-age=31536000'})
 
+    # ---- 机身摄像头（camera.py，设计画布第 27 块）----
+    async def camera_preview(request):
+        """实时画面：multipart/x-mixed-replace 的 JPEG（页面上 <img> 直接显示），摄像头只在有人看时开。"""
+        if not camera.available():
+            raise web.HTTPNotFound()
+        resp = web.StreamResponse(headers={'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+                                           'Cache-Control': 'no-store'})
+        await resp.prepare(request)
+        try:
+            async for jpeg in client.camera.frames():
+                await resp.write(b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: '
+                                 + str(len(jpeg)).encode() + b'\r\n\r\n' + jpeg + b'\r\n')
+        except (ConnectionResetError, asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+        return resp
+
+    async def camera_shoot(_request):
+        try:
+            return web.json_response({'ok': True, **await client.camera_shoot()})
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)}, status=400)
+
+    async def camera_phone(_request):
+        return web.json_response({'ok': True, **await client.camera_to_phone()})
+
     async def avatar_start(_request):
         return await wake_call(client.avatar_start)
 
@@ -592,6 +617,9 @@ def make_app(client: Client):
     app.router.add_post('/api/kids', kids_set)
     app.router.add_post('/api/looks', looks_set)
     app.router.add_get('/api/avatars/{name}', avatar_file)
+    app.router.add_get('/api/camera/preview', camera_preview)
+    app.router.add_post('/api/camera/shoot', camera_shoot)
+    app.router.add_post('/api/camera/phone', camera_phone)
     app.router.add_get('/api/avatars/poses/{name}', avatar_pose_file)
     app.router.add_post('/api/photo', photo_start)
     app.router.add_post('/api/photo/cancel', photo_cancel)

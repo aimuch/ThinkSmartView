@@ -553,6 +553,16 @@
 <div class="now-bar" id="nowBar" hidden><span id="nowIcon"></span><b id="nowName"></b><span class="now-sub" id="nowSub"></span>
   <button class="now-x" id="nowStop" aria-label="停止">✕</button></div>
 <!-- 一个二维码（清单「手机看」） -->
+<!-- 机身摄像头拍照问（camera.py，设计画布第 27 块）：实时画面、倒数、拍 -->
+<div class="cam-ov" id="camOv" hidden>
+  <img class="cam-view" id="camView" alt="">
+  <div class="cam-frame"></div>
+  <div class="cam-top"><b id="camQ"></b><span id="camHint">把东西对着屏幕上方的摄像头，放进框里</span></div>
+  <div class="cam-count" id="camCount"></div>
+  <div class="cam-flash" id="camFlash"></div>
+  <div class="cam-btns"><button class="ctl-big pri" id="camShoot">现在拍</button><button class="ctl-big" id="camPhone">用手机拍</button>
+    <button class="ctl-big" id="camCancel">取消</button></div>
+</div>
 <div class="photo-ov" id="qrOv" hidden><div class="photo-sheet">
   <div class="photo-left"><canvas id="qrCanvas" width="340" height="340"></canvas></div>
   <div class="photo-txt"><small id="qrKicker"></small><h2 id="qrTitle"></h2><p id="qrNote"></p>
