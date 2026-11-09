@@ -96,6 +96,16 @@ def make_client(tmp_path, monkeypatch):
 
 
 def test_kids_setting_and_refusing_wakes(tmp_path, monkeypatch):
+    import datetime as real_dt
+    import types
+
+    class Afternoon(real_dt.datetime):   # 固定在下午：晚上八点以后跑，会撞上「几点后不陪聊」
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 9, 15, 0)
+
+    fake = types.ModuleType('datetime'); fake.__dict__.update(real_dt.__dict__); fake.datetime = Afternoon
+    monkeypatch.setattr(kids, 'datetime', fake)
     c = make_client(tmp_path, monkeypatch)
 
     async def run():

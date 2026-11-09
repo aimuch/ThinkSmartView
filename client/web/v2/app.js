@@ -2083,10 +2083,24 @@ $('netBanner').addEventListener('click', () => { if (shellWifi) openWifi(); else
 setInterval(watchNetwork, 15000);
 setTimeout(watchNetwork, 3000);
 
+// The stream must survive the client restarting (updates, crashes). EventSource reconnects by itself after a
+// dropped connection, but the kiosk's WebKitGTK has given up for good after a restart (readyState CLOSED, no
+// connection to the client at all): the screen then sat on the empty start state – no clock, no model, no
+// replies – until the browser was restarted. So reconnect ourselves when it closes, and when nothing (not even
+// the client's 15 s ping) has arrived for 40 s.
+let events = null, eventsSeen = 0, eventsRetry = null;
 function connectEvents() {
-  const es = new EventSource('/events');
-  for (const [name, fn] of Object.entries(handlers)) es.addEventListener(name, e => fn(JSON.parse(e.data)));
+  clearTimeout(eventsRetry); eventsRetry = null;
+  if (events) events.close();
+  const es = events = new EventSource('/events');
+  eventsSeen = Date.now();
+  for (const [name, fn] of Object.entries(handlers)) es.addEventListener(name, e => { eventsSeen = Date.now(); fn(JSON.parse(e.data)); });
+  es.addEventListener('ping', () => { eventsSeen = Date.now(); });
+  es.onerror = () => {
+    if (es === events && es.readyState === EventSource.CLOSED && !eventsRetry) eventsRetry = setTimeout(connectEvents, 3000);
+  };
 }
+setInterval(() => { if (!DEMO && events && Date.now() - eventsSeen > 40000) connectEvents(); }, 10000);
 
 /* ---- buttons ---- */
 function post(path, body) {

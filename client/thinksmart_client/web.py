@@ -56,7 +56,7 @@ def make_app(client: Client):
                     event, data = await asyncio.wait_for(q.get(), timeout=15)
                     await resp.write(f'event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'.encode())
                 except asyncio.TimeoutError:
-                    await resp.write(b': keepalive\n\n')
+                    await resp.write(b'event: ping\ndata: {}\n\n')   # 页面看得到：40 秒什么都没收到就重连（app.js connectEvents）
         except (ConnectionResetError, asyncio.CancelledError):
             pass
         finally:
