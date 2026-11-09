@@ -240,6 +240,7 @@ function renderStatus() {
 const logoSrc = m => (m && m.logo ? `/static/logos/${m.logo}.svg` : '');
 
 function renderModels() {
+  if ($('agentModel')) renderAgentModel();   // 设置 → 智能体 → 当前模型
   const cur = ui.models.current;
   $('pillLogo').src = logoSrc(cur);
   $('pillLabel').textContent = cur ? cur.label : '选择模型';
@@ -1405,7 +1406,7 @@ function renderUpdate() {
     label = '检查更新';
   }
   $('gearDot').classList.toggle('on', avail && !busy && !starting);
-  $('setUpdDot').classList.toggle('on', avail && !busy && !starting);
+  setNavDot('system', avail && !busy && !starting);
   $('updTitle').textContent = title;
   $('updSub').textContent = text;
   $('updSub').classList.toggle('bad', !!bad);   // toggle(x, undefined) would flip it
@@ -2108,14 +2109,61 @@ async function loadPerf() {
 }
 $('perfBtn').addEventListener('click', () => openPerf(true));
 
-/* ---- 设置页分类（设计画布第 32 块）：记住上次看的分类；「系统」里的性能小结只在这一类显示时每 2 秒刷新 ---- */
+/* ---- 设置页的侧边栏（设计画布第 32 块）：分组 + 分类，按这份配置生成 ----
+   加一类：这里加一行 [key, 名字, 竖屏短名, 一句说明, 图标]，index.html 里加 <section class="set-pane" data-pane="key">。
+   没写进配置的 section 自动出现在「其他」组。旧版记住的分类按 SET_RENAMED 换成新的。 */
+const SET_ICONS = {
+  screen: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  looks: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.3-1.7-.4-1.2.4-2.3 1.7-2.3H17a4 4 0 0 0 4-4c0-5.5-4-10-9-10z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7" r="1"/><circle cx="15.5" cy="8" r="1"/>',
+  net: '<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.6 16a5 5 0 0 1 6.8 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor"/>',
+  system: '<rect x="4" y="4" width="16" height="16" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/>',
+  alarms: '<circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 1.5M5 4 2.5 6.5M19 4l2.5 2.5"/>',
+  home: '<path d="M3 11 12 4l9 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/>',
+  life: '<path d="M6 7h12l-1 13H7z"/><path d="M9 7a3 3 0 0 1 6 0"/>',
+  family: '<circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3 20a6 6 0 0 1 12 0M14.5 15.2A4.5 4.5 0 0 1 21 19"/>',
+  kids: '<path d="M4 6.5 12 3l8 3.5-8 3.5z"/><path d="M7 8.5v5c0 1.7 2.2 3 5 3s5-1.3 5-3v-5M20 6.5V12"/>',
+  voice: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
+  agent: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>',
+  other: '<circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/>',
+};
+const SET_GROUPS = [
+  ['设备', [['screen', '屏幕和声音', '屏幕声音', '亮度、音量、熄屏、方向'], ['looks', '外观', '外观', '主题、形象、首页、待机页'],
+            ['net', '网络', '网络', 'WiFi、蓝牙音箱、本机 IP'], ['system', '系统', '系统', '性能、更新、关机']]],
+  ['日常', [['alarms', '闹钟和作息', '闹钟作息', '闹钟提醒、睡眠时段、天气播报、定时任务'], ['home', '家居', '家居', '米家、场景口令、主动告警'],
+            ['life', '生活', '生活', '清单、电台和助眠声']]],
+  ['家人', [['family', '家人', '家人', '认出是谁，叫得出名字'], ['kids', '孩子和学习', '孩子学习', '儿童模式']]],
+  ['智能', [['voice', '语音', '语音', '唤醒词'], ['agent', '智能体', '智能体', '当前模型、聊天记录和记忆、大模型费用']]],
+];
+const SET_RENAMED = { sleep: 'alarms', cost: 'agent' };
+function setPanes() {
+  const known = new Set(SET_GROUPS.flatMap(g => g[1].map(i => i[0])));
+  const extra = [...document.querySelectorAll('.set-pane')].map(p => p.dataset.pane).filter(k => !known.has(k));
+  return extra.length ? [...SET_GROUPS, ['其他', extra.map(k => [k, k, k, ''])]] : SET_GROUPS;
+}
+function renderSetNav() {
+  const dots = new Set([...document.querySelectorAll('#setNav .set-dot.on')].map(d => d.parentElement.dataset.pane));
+  $('setNav').innerHTML = setPanes().map(([g, items]) => `<div class="set-grp"><span>${esc(g)}</span></div>` + items.map(([k, name, short]) =>
+    `<button data-pane="${k}"><span class="set-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${SET_ICONS[k] || SET_ICONS.other}</svg></span>`
+    + `<span class="set-name"><b class="long">${esc(name)}</b><b class="short">${esc(short)}</b></span><i class="set-dot${dots.has(k) ? ' on' : ''}"></i></button>`).join('')).join('');
+  for (const [, items] of setPanes()) for (const [k, name, , sub] of items) {
+    const pane = document.querySelector(`.set-pane[data-pane="${k}"]`);
+    if (pane && !pane.querySelector('.set-head')) pane.insertAdjacentHTML('afterbegin', `<div class="set-head"><h3>${esc(name)}</h3><span>${esc(sub)}</span></div>`);
+  }
+  $('setNav').querySelectorAll('button[data-pane]').forEach(b => b.addEventListener('click', () => setPane(b.dataset.pane)));
+}
+function setNavDot(key, on) {
+  const b = document.querySelector(`#setNav button[data-pane="${key}"] .set-dot`);
+  if (b) b.classList.toggle('on', !!on);
+}
 var perfMiniTimer = null;   // var：演示模式在脚本前面就会调 setPane
 function setPane(name) {
+  name = SET_RENAMED[name] || name;
   if (!document.querySelector(`.set-pane[data-pane="${name}"]`)) name = 'screen';
   document.querySelectorAll('.set-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === name));
   document.querySelectorAll('#setNav button[data-pane]').forEach(b => {
     const on = b.dataset.pane === name;
     b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false');
+    if (on) b.scrollIntoView({ block: 'nearest' });
   });
   $('setPanel').scrollTop = 0;
   try { localStorage.setItem('setPane', name); } catch (e) {}
@@ -2141,13 +2189,16 @@ async function loadPerfMini() {
   const top = s.top[0];
   $('pmTop').textContent = top ? `${top.name} ${Math.round(top.cpu)}%` : '—';
 }
-document.querySelectorAll('#setNav button[data-pane]').forEach(b => b.addEventListener('click', () => setPane(b.dataset.pane)));
-// 分类栏：底部「收起」只剩图标；横屏时按住中间的竖条左右拖调宽度，拖到 150px 以下收成只剩图标。记在这台设备上
+renderSetNav();
+// 智能体：当前模型，「切换」关掉设置、打开选模型
+function renderAgentModel() { $('agentModel').textContent = ui.models && ui.models.current ? `${modelName()}（新的提问交给它回答）` : '还没连上网关'; }
+$('agentModelBtn').addEventListener('click', () => { $('settings').classList.remove('on'); openSheet(true); });
+// 分类栏：标题左边的按钮收起成只剩图标；横屏时按住中间的竖条左右拖调宽度，拖到 150px 以下收成只剩图标。记在这台设备上
 const SET_MIN = 200, SET_MAX = 360, SET_SNAP = 150;
 const setNav = (() => { try { return JSON.parse(localStorage.getItem('setNav') || '{}'); } catch (e) { return {}; } })();
 function applySetNav(save) {
   const body = $('setNav').parentElement;
-  body.classList.toggle('mini', !!setNav.mini);
+  body.classList.toggle('mini', !!setNav.mini); $('settings').classList.toggle('settings-mini', !!setNav.mini);
   if (setNav.w && !setNav.mini) body.style.setProperty('--set-w', `${setNav.w}px`); else body.style.removeProperty('--set-w');
   $('setCol').setAttribute('aria-label', setNav.mini ? '展开分类' : '收起分类');
   if (save) try { localStorage.setItem('setNav', JSON.stringify(setNav)); } catch (e) {}

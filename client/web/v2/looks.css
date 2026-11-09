@@ -384,18 +384,26 @@ body.av-photo-on .zzz { z-index: 2; }
 .set-resize { touch-action: none; cursor: col-resize; display: flex; align-items: center; justify-content: center; }
 .set-resize::before { content: ""; width: 5px; height: 72px; border-radius: 3px; background: var(--line); transition: background .2s, height .2s; }
 .set-resize.drag::before { background: var(--accent2); height: 120px; }
-.set-col { margin-top: auto; opacity: .75; }
-.set-col svg { transition: transform .25s; }
-.set-body.mini .set-col svg { transform: rotate(180deg); }
+.set-title { display: flex; align-items: center; gap: 18px; }
+.set-col { flex: none; width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; background: var(--card); border: 1px solid var(--line); color: var(--ink2); }
+.set-col:active { transform: scale(.94); }
+.set-col svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform .25s; }
+.settings-mini .set-col svg { transform: scaleX(-1); }
+/* 分组标题；收起后变成细分隔线 */
+.set-grp { flex: none; padding: 10px 14px 2px; font-size: 14px; letter-spacing: 2px; color: var(--ink3); }
+.set-grp:first-child { padding-top: 0; }
+.set-body.mini .set-grp { padding: 8px 18px; } .set-body.mini .set-grp span { display: none; }
+.set-body.mini .set-grp::before { content: ""; display: block; height: 1px; background: var(--line); }
+.set-body.mini .set-grp:first-child { display: none; }
 .set-body.mini .set-name { display: none; }
 .set-body.mini .set-nav button { justify-content: center; padding: 10px 0; }
 .set-body.mini .set-dot { left: auto; right: 12px; top: 8px; }
-.set-nav { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; scrollbar-width: none; padding-bottom: 12px; }
-.set-nav button { position: relative; display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 7px 12px; border-radius: 18px;
+.set-nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; scrollbar-width: none; padding-bottom: 12px; }
+.set-nav button { position: relative; display: flex; align-items: center; flex: none; gap: 14px; min-height: 46px; padding: 4px 12px; border-radius: 16px;
                   background: none; border: 1.5px solid transparent; color: var(--ink2); font-size: 21px; text-align: left; transition: background .2s, color .2s; }
 .set-nav button.on { background: var(--card); border-color: var(--line); color: var(--ink); }
 .set-nav button:active { transform: scale(.97); }
-.set-ico { flex: none; width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: var(--card2); transition: background .2s, color .2s; }
+.set-ico { flex: none; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--card2); transition: background .2s, color .2s; }
 .set-nav button.on .set-ico { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
 .set-ico svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .set-name { min-width: 0; } .set-name b { font-weight: 600; white-space: nowrap; } .set-name .short { display: none; }
@@ -417,7 +425,8 @@ body.av-photo-on .zzz { z-index: 2; }
   .set-body { grid-template-columns: var(--set-wp, 150px) 0 minmax(0, 1fr); gap: 0 8px; }
   .set-body.mini { --set-wp: 84px; }
   .set-resize { visibility: hidden; pointer-events: none; }   /* 竖屏不拖：占着 0 宽的那一列 */
-  .set-nav button { flex-direction: column; justify-content: center; gap: 6px; min-height: 0; padding: 12px 4px; font-size: 16px; text-align: center; }
+  .set-nav button { flex-direction: column; justify-content: center; gap: 4px; min-height: 0; padding: 7px 4px; font-size: 15px; text-align: center; }
+  .set-grp { padding: 12px 0 2px; text-align: center; font-size: 13px; letter-spacing: 1px; }
   .set-name .long { display: none; } .set-name .short { display: inline; }
   .set-dot { left: auto; right: 38px; top: 8px; }
   .set-head { flex-direction: column; gap: 4px; }
@@ -427,3 +436,6 @@ body.av-photo-on .zzz { z-index: 2; }
   .set-panel .stepper b { font-size: 40px; }
   .set-panel .stepper button { width: 58px; height: 58px; font-size: 32px; }
 }
+#settings .sheet-bar { margin-bottom: 16px; }
+/* 横屏高度只有 800：设置标题下的小字不显示，给侧边栏的 4 组 11 类腾地方 */
+@media (orientation: landscape) { #settings .sheet-bar p { display: none; } #settings .set-nav { gap: 1px; } }
