@@ -277,7 +277,57 @@ flowchart TB
   bluez -- 手机音源 --> pw
 ```
 
+## 9. 设备自己发起的请求
+
+天气播报、定时任务、拍照问答都是设备自己发一句文字给网关（和设置页的文字提问同一条路），文字以【标签】开头，屏幕上显示成小标签，不显示成用户说的话。大模型照常调工具、回答，回答后 10 秒内可以接着问。
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant P as 手机
+  participant C as 设备客户端
+  participant H as 小麦网关
+  participant V as 看图模型
+  participant L as DeepSeek
+
+  Note over C: 到点（天气播报 / 定时任务）
+  C->>H: 文字「【天气播报 07:30】先调用查天气工具……」
+  H->>L: 对话（带工具）
+  L-->>H: 调 get_weather（住宅地址的坐标）
+  H-->>C: 回复和语音
+  Note over C: 拍照问答：说「帮我看下这是什么」
+  C->>H: POST /kiosk/photo/start
+  H-->>C: 一次性链接（5 分钟）
+  C->>C: 屏幕显示二维码
+  P->>H: 打开 /photo/令牌，拍照上传（压缩到 1600 宽）
+  H->>V: 照片 + 问题
+  V-->>H: 看到的内容
+  C->>H: 轮询 /kiosk/photo/令牌，取回答和照片
+  C->>H: 文字「【拍照问 09:41】看图模型看到的是……」
+  H->>L: 对话
+  L-->>H: 一两句回答
+  H-->>C: 回复和语音（照片和原话作为图文消息留在对话里）
+```
+
+## 10. 数据存在哪
+
+| 在哪 | 文件 | 内容 |
+| --- | --- | --- |
+| 设备 `~/.config/thinksmart-client/config.json` | 用户设置 | 唤醒词、天气播报、住宅地址、外观、儿童模式、待机页、场景、定时任务、告警、翻译模式（只存改过的） |
+| 设备 `~/.local/share/thinksmart-client/` | `alarms/`、`cards.json`、`notes.json`、`photos/`、`avatars/`、`album/`、`offline/`、`kids-usage.json` | 闹钟、图文消息、留言、拍照问答的照片、照片形象、家庭相册、断网时的回答录音、儿童模式今天用了多久 |
+| 网关 `data/` | `chat.db`、`usage.db` | 聊天记录和记忆、费用 |
+| 网关 `data/` | `device_homes.json`、`device_prefs.json`、`device_lists.json`、`voiceprints.json` | 每台设备的住宅地址、儿童/翻译模式、清单、家人声纹（192 维向量，不存录音） |
+| 网关 `data/photos/` | 拍照问答、形象、相册上传的照片 | 7 天后删，清除聊天记录时一起删 |
+| 网关 `models/voiceprint/` | `3dspeaker_campplus_zh-cn_16k.onnx` | 声纹模型（不在仓库里，手动下载到这里） |
+| 浏览器 localStorage | `xhub-ui`、`xhub-tables` | 网关后台的界面偏好、每个表格的列宽和顺序 |
+
+### 设备接口（/kiosk/*，只接受经隧道来的本机请求）
+
+`/kiosk/asr`、`/kiosk/tts`、`/kiosk/llm`、`/kiosk/chat/*`、`/kiosk/reports`、`/kiosk/billing`（原有），
+`/kiosk/geocode`、`/kiosk/home`、`/kiosk/today`、`/kiosk/prefs`、`/kiosk/lists`、`/kiosk/photo/*`、`/kiosk/voiceprint/*`（这一轮加的）。
+手机用的两个页面 `/photo/<令牌>`、`/lists/<令牌>` 在局域网里谁都能打开，令牌（128 位随机）就是凭证。
+
 ## 硬件限制
 
-- **摄像头用不了**：设备自带的摄像头传感器是三星 s5kc505a，是联想定制件，主线内核没有它的驱动，设备树里摄像头（camss、cci）也是关闭的。`/dev/video0`、`/dev/video1` 是视频编解码器，不是摄像头。社区移植者也认为在主线内核上点亮它希望很小。所以「拍照问这是什么」现在做不了，可行的替代办法见[功能规划](roadmap.md#看图问答)。
+- **摄像头用不了**：设备自带的摄像头传感器是三星 s5kc505a，是联想定制件，主线内核没有它的驱动，设备树里摄像头（camss、cci）也是关闭的。`/dev/video0`、`/dev/video1` 是视频编解码器，不是摄像头。社区移植者也认为在主线内核上点亮它希望很小。所以「拍照问这是什么」现在做不了，现在用手机拍照代替（见下面的「拍照问答」）。
 - **网关没有显卡**：8 核 i7-8700T 虚拟机、7 GB 内存，本地语音识别只能用小模型（现在是 X-ASR，每句约 0.1 秒）。

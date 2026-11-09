@@ -29,6 +29,14 @@
 | 天气 | `server/main/xiaozhi-server/core/utils/open_meteo.py` | Open-Meteo，不用 Key：当前天气、PM2.5、7 天预报和降水概率，国外城市也能查。设备所在地在后台「意图识别 → 查天气 → 设置」里改 |
 | 千问 TTS（方言音色） | `server/main/xiaozhi-server/core/providers/tts/qwen3_tts.py` | 后台「语音合成」切到千问 TTS、填百炼 Key，可选上海话、北京话、四川话、粤语等音色 |
 | 同音字理解 | `server/main/xiaozhi-server/hub-base-prompt.txt` | 识别错的同音字（「先辈怎么做」）由大模型按读音和上下文理解，直接按最可能的意思回答 |
+| 天气播报、住宅地址 | `client/thinksmart_client/broadcast.py` | 设置 →「天气播报」：定时播报（早上那次可顺便播提醒和新闻）；住宅地址按住说出来，没说地点的天气按它查 |
+| 拍照问答 | `server/…/core/agent/photo_ask.py` | 「帮我看下这是什么」，手机扫码拍照；后台「大模型 → 看图模型」填 Key |
+| 首页外观 | `client/thinksmart_client/looks.py`、`web/v2/looks.css` | 设置 →「外观」：主题、形象（可用照片生成卡通形象）、首页显示内容 |
+| 儿童模式、待机页、做菜模式 | `kids.py`、`cook.py` | 设置里各有一张卡片；做菜时直接说「下一步」 |
+| 场景、留言、清单、电台、助眠声 | `daily.py`、`media.py`、`server/…/core/utils/device_lists.py` | 都可以直接说；清单能在手机上看 |
+| 定时任务、主动告警、翻译模式 | `client/thinksmart_client/app.py` | 「每天早上七点告诉我要不要带伞」；米家漏水告警；「帮我们中英互译」 |
+| 家人声音、断网兜底 | `server/…/core/utils/local_voiceprint.py`、`client/thinksmart_client/offline.py` | 设置 →「家人声音」录名字和三句话；网关连不上时也能调音量、报时、开关灯 |
+| 网关后台界面 | `server/…/core/admin/static/index.html` | 侧栏「界面」：主题、宽度、侧栏、菜单顺序；表格可排序、拖列、调列宽、拖行 |
 | 语音识别调优 | 服务器的 `data/.config.yaml` | X-ASR 精度版、整句识别（不按停顿分段）；对比方法和结果见 [scripts/asr-eval/](scripts/asr-eval/README.md) |
 
 ## 第三方
