@@ -57,7 +57,12 @@ def normalize_blocks(blocks):
         if bid in BLOCKS and bid not in seen:
             out.append([bid, on])
             seen.add(bid)
-    out += [[b, True] for b in BLOCKS if b not in seen]
+    for b in BLOCKS:
+        if b in seen:
+            continue
+        # 后来加的「常用设备」放在天气后面（放最后会被挤出屏幕）；其余缺的加在最后
+        at = next((i + 1 for i, (x, _) in enumerate(out) if x == 'weather'), len(out)) if b == 'devices' else len(out)
+        out.insert(at, [b, True])
     return out
 
 

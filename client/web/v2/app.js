@@ -2070,7 +2070,11 @@ async function watchNetwork() {
   try { ip = (await (await fetch('/api/network')).json()).ip; } catch (e) { return; }   // 客户端自己没响应：不算断网
   net.misses = ip ? 0 : net.misses + 1;
   const show = net.misses >= 2;
-  if ($('netBanner').hidden === show) $('netBanner').hidden = !show;
+  if ($('netBanner').hidden === show) {
+    $('netBanner').hidden = !show;
+    document.body.classList.toggle('net-off', show);
+    if (typeof fitHome === 'function') fitHome();
+  }
 }
 $('netBanner').addEventListener('click', () => { if (shellWifi) openWifi(); else { $('settings').classList.add('on'); renderWifiCard(); } });
 setInterval(watchNetwork, 15000);

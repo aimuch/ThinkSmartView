@@ -126,7 +126,15 @@ function renderQuick() {
     <span class="h-ic k-${esc(c.kind)}">${icon(c.kind, 24)}</span><b>${esc(c.name)}</b><span>${esc(c.summary)}</span></button>`).join('');
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
   box.hidden = !favs.length;
+  fitHome();
 }
+// 首页放不下时先收起「试试这样问我」，别让时钟和常用设备被挤出屏幕
+function fitHome() {
+  const w = $('welcome');
+  document.body.classList.remove('home-tight');
+  if (w.scrollHeight > w.clientHeight + 2) document.body.classList.add('home-tight');
+}
+window.addEventListener('resize', fitHome);
 function quickHome(on) {   // 首页显示着才查常用设备的状态（30 秒一次）；待机页、熄屏时不查
   if (DEMO || quickHome.on === on) return;
   quickHome.on = on;
@@ -471,7 +479,7 @@ $('btnSettings').addEventListener('click', renderCost);
 const baseSnapshot = handlers.snapshot;
 handlers.snapshot = s => {
   baseSnapshot(s);
-  if (s.mijia) { mi.view = s.mijia; renderHome(); }
+  if (s.mijia) { mi.view = s.mijia; renderHome(); renderQuick(); }
   if (s.rotation) { rot = s.rotation; renderRotation(); }
 };
 handlers.mijia = v => { mi.view = v; renderHome(); renderQuick(); };
