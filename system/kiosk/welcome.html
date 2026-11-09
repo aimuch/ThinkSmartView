@@ -150,6 +150,19 @@
   .link { height: 56px; padding: 0 18px; border-radius: 12px; border: 1px solid #ff6b8155; background: #ff6b8110;
           color: var(--bad); font-size: 16px; }
   .net .meta.saved { color: var(--ink3); }
+  /* 竖屏（设备竖着放，800×1280）：上下排，不再挤成左右两栏（设计画布第 24 块 C） */
+  @media (orientation: portrait) {
+    .app { padding: 26px 30px 20px; }
+    main { grid-template-columns: 1fr; gap: 28px; align-content: center; overflow-y: auto; }
+    .orb { top: -90px; }
+    h1 { font-size: 48px; }
+    .lead, .status, .upd { max-width: none; }
+    .status { display: flex; }
+    footer { flex-wrap: wrap; gap: 10px 22px; }
+    footer .grow { flex-basis: 100%; text-align: left; }
+    .pane { padding: 24px 28px 22px; }
+    .nets { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
