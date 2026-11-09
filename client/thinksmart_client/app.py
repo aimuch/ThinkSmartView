@@ -46,6 +46,7 @@ import aiohttp
 import numpy as np
 
 from . import alarms, broadcast, bt, config, cook, daily, kids, looks, mcp, media, offline, rotation, sleep, update, wake_verify, wake_words
+from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
 from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off
@@ -2207,7 +2208,8 @@ class Client:
 
     async def poll_reports(self, play=False):
         try:
-            data = await self._hub_http('/kiosk/reports', {'device': self.cfg['device_id'],
+            # version: 网关后台按这个心跳显示设备 待机/对话中/离线 和客户端版本
+            data = await self._hub_http('/kiosk/reports', {'device': self.cfg['device_id'], 'version': __version__,
                                                            'quiet': self.sleeping, 'play': play})
         except Exception:
             return None

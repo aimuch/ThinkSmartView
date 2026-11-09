@@ -14,7 +14,7 @@ usermod -aG i2c $U
 sh bluetooth/setup-bluez.sh
 systemctl mask ModemManager.service avahi-daemon.service avahi-daemon.socket udisks2.service >/dev/null 2>&1 || true
 systemctl daemon-reload
-systemctl enable thinksmart-gpu-watchdog.service screen-wake.service thinksmart-zram.service \
+systemctl enable thinksmart-gpu-watchdog.service screen-wake.service thinksmart-zram.service thinksmart-usb-net.service \
     thinksmart-update-check.timer thinksmart-update-request.path thinksmart-update-boot.service
 # reenable: its WantedBy moved from multi-user.target to sysinit.target
 systemctl reenable thinksmart-ssh-hostkeys.service

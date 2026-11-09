@@ -1,0 +1,44 @@
+#!/bin/sh
+# USB network for the main system (upstream thinksmart-ubuntu-image issue #1): plug the device into a
+# computer with a USB-C cable and the computer gets 172.16.42.x on a new network card; then
+#   ssh ubuntu@172.16.42.1
+# The initramfs already builds an NCM gadget (g1) and the main system keeps it bound, with
+# 172.16.42.1 on usb0, but nothing hands out addresses, so the computer never got one. This script
+# (run by thinksmart-usb-net.service) makes sure a gadget is bound, puts the address on usb0 and runs
+# busybox udhcpd on usb0 only. No router or DNS is offered, so the computer keeps its own internet.
+# Based on the approach in github.com/jethac/lenovo-thinksmart-view (MIT), NCM only (works on macOS,
+# Linux and Windows 11 without drivers).
+set -eu
+G=/sys/kernel/config/usb_gadget
+UDC=$(ls /sys/class/udc 2>/dev/null | head -n 1)
+[ -n "$UDC" ] || { echo "no USB device controller"; exit 1; }
+
+bound() { for f in "$G"/*/UDC; do [ -s "$f" ] && [ "$(cat "$f")" = "$UDC" ] && return 0; done 2>/dev/null; return 1; }
+
+if ! bound; then
+    mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config
+    D="$G/tsv"
+    if [ ! -d "$D" ]; then
+        mkdir -p "$D"
+        echo 0x18d1 > "$D/idVendor"; echo 0xd00a > "$D/idProduct"
+        mkdir -p "$D/strings/0x409"
+        echo "Lenovo" > "$D/strings/0x409/manufacturer"
+        echo "ThinkSmart View" > "$D/strings/0x409/product"
+        cat /etc/machine-id 2>/dev/null | cut -c1-16 > "$D/strings/0x409/serialnumber" || true
+        mkdir -p "$D/functions/ncm.usb0" "$D/configs/c.1/strings/0x409"
+        echo "NCM" > "$D/configs/c.1/strings/0x409/configuration"
+        echo 250 > "$D/configs/c.1/MaxPower"
+        ln -s "$D/functions/ncm.usb0" "$D/configs/c.1/"
+    fi
+    echo "$UDC" > "$D/UDC"
+    echo "bound a new NCM gadget to $UDC"
+fi
+
+# the interface can take a moment to appear after binding
+i=0; while [ ! -e /sys/class/net/usb0 ] && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
+[ -e /sys/class/net/usb0 ] || { echo "usb0 did not appear"; exit 1; }
+ip addr show usb0 | grep -q "inet 172.16.42.1/" || ip addr add 172.16.42.1/24 dev usb0
+ip link set usb0 up
+mkdir -p /run/thinksmart
+touch /run/thinksmart/usb-udhcpd.leases
+exec busybox udhcpd -f /etc/thinksmart/usb-udhcpd.conf

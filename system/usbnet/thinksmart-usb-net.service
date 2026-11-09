@@ -1,0 +1,12 @@
+[Unit]
+Description=USB network: hand out 172.16.42.x on the USB cable (ssh ubuntu@172.16.42.1)
+After=usb-gadget.target network-pre.target
+Wants=usb-gadget.target
+
+[Service]
+ExecStart=/usr/local/sbin/thinksmart-usb-net
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -353,3 +353,55 @@ def test_presence_words_in_chinese():
     assert dv.summary(c) == '无人'
     c['values']['motion'] = 1
     assert dv.state(c)['motion'] == '有人'
+
+
+# ---- 常用设备（首页磁贴，设计画布第 16 块） ----
+
+def test_favorites_saved_ordered_and_capped(tmp_path):
+    from thinksmart_client.mijia import service as svc_mod
+
+    svc, _, events = make_service(tmp_path)
+    ids = list(svc.cards)
+    svc.set_favorite(ids[2], True)
+    svc.set_favorite(ids[0], True)
+    assert [c['id'] for c in svc.view()['favorites']] == [ids[2], ids[0]]
+    assert events[-1][0] == 'mijia' and len(events[-1][1]['favorites']) == 2
+    assert json.loads((tmp_path / 'settings.json').read_text())['favorites'] == [ids[2], ids[0]]
+    svc.set_favorite(ids[2], False)
+    assert [c['id'] for c in svc.view()['favorites']] == [ids[0]]
+    with pytest.raises(ValueError):
+        svc.set_favorite('no-such-device', True)
+    for i in ids[1:svc_mod.FAVORITES_MAX]:
+        svc.set_favorite(i, True)
+    with pytest.raises(ValueError):
+        svc.set_favorite(ids[svc_mod.FAVORITES_MAX], True)
+    # 设备从米家里删了：常用里跟着不显示
+    del svc.cards[ids[0]]
+    assert ids[0] not in [c['id'] for c in svc.view()['favorites']]
+
+
+def test_home_screen_polls_only_favorites(tmp_path):
+    from thinksmart_client.mijia import service as svc_mod
+
+    svc, _, _ = make_service(tmp_path)
+    ids = list(svc.cards)
+    svc.set_favorite(ids[1], True)
+    polled = []
+
+    async def fake_poll(cards=None):
+        polled.append([c['id'] for c in cards] if cards else 'all')
+
+    async def go():
+        svc.poll = fake_poll
+        svc_mod.POLL_HOME, svc_mod.POLL_VISIBLE = 0.05, 0.05
+        task = asyncio.create_task(svc._poll_loop())
+        await svc.set_visible(False, home=True)
+        await asyncio.sleep(0.2)
+        await svc.set_visible(True)
+        await asyncio.sleep(0.12)
+        task.cancel()
+    try:
+        run(go())
+    finally:
+        svc_mod.POLL_HOME, svc_mod.POLL_VISIBLE = 30, 6
+    assert polled[0] == [ids[1]] and 'all' in polled

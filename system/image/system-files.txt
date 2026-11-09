@@ -57,6 +57,9 @@ bluetooth/60-thinksmart-speaker.lua /etc/wireplumber/bluetooth.lua.d/60-thinksma
 -                                   /etc/bluetooth/main.conf                        -   root bluetooth
 
 # memory, time, network, crash dumps, SSH host keys
+usbnet/thinksmart-usb-net          /usr/local/sbin/thinksmart-usb-net              755 root system:thinksmart-usb-net.service
+usbnet/usb-udhcpd.conf              /etc/thinksmart/usb-udhcpd.conf                 644 root system:thinksmart-usb-net.service
+usbnet/thinksmart-usb-net.service   /etc/systemd/system/thinksmart-usb-net.service  644 root system:thinksmart-usb-net.service
 zram/thinksmart-zram.service        /etc/systemd/system/thinksmart-zram.service     644 root boot
 zram/99-zram.conf                   /etc/sysctl.d/99-zram.conf                      644 root boot
 kiosk/timesyncd-cn.conf             /etc/systemd/timesyncd.conf.d/thinksmart.conf   644 root system:systemd-timesyncd.service

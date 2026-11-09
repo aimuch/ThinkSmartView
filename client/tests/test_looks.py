@@ -34,7 +34,7 @@ def test_normalize():
     with pytest.raises(ValueError):
         looks.normalize_avatar('photo:nope')
     blocks = looks.normalize_blocks([['weather', False], ['nope', True], {'id': 'clock', 'on': True}, ['weather', True]])
-    assert blocks[:2] == [['weather', False], ['clock', True]] and [b for b, _ in blocks][2:] == ['date', 'alarms', 'suggest']
+    assert blocks[:2] == [['weather', False], ['clock', True]] and [b for b, _ in blocks][2:] == ['date', 'alarms', 'suggest', 'devices']
     assert looks.theme_now('auto', datetime.datetime(2026, 11, 9, 8)) == 'dawn'
     assert looks.theme_now('auto', datetime.datetime(2026, 11, 9, 20)) == 'night'
 

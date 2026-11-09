@@ -186,8 +186,16 @@ def make_app(client: Client):
 
     async def mijia_visible(request):
         body = await request.json()
-        await client.mijia.set_visible(bool(body.get('visible')))
+        await client.mijia.set_visible(bool(body.get('visible')), None if 'home' not in body else bool(body.get('home')))
         return web.json_response({'ok': True})
+
+    async def mijia_favorite(request):
+        body = await request.json()
+        try:
+            favs = client.mijia.set_favorite(str(body.get('id') or ''), bool(body.get('on')))
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)}, status=400)
+        return web.json_response({'ok': True, 'favorites': favs})
 
     async def mijia_refresh(_request):
         asyncio.create_task(client.mijia.reload())
@@ -301,6 +309,7 @@ def make_app(client: Client):
     app.router.add_post('/api/history/clear', clear_history)
     app.router.add_post('/api/bluetooth', bluetooth)
     app.router.add_get('/api/mijia', mijia_view)
+    app.router.add_post('/api/mijia/favorite', mijia_favorite)
     app.router.add_post('/api/mijia/login/start', mijia_login)
     app.router.add_post('/api/mijia/login/cancel', mijia_login_cancel)
     app.router.add_post('/api/mijia/logout', mijia_logout)

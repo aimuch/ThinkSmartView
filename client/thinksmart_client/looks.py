@@ -10,7 +10,7 @@ AUTO_DAY = (7, 19)          # 'auto': 晨光 from 7:00 to 19:00, 星夜 otherwis
 AVATARS = {'orb': '光球', 'cat': '小猫', 'dog': '小狗', 'bear': '小熊', 'rabbit': '兔子', 'panda': '熊猫',
            'wheat': '麦穗宝宝', 'robot': '机器人'}
 BLOCKS = {'clock': '问候和时钟', 'date': '日期和农历', 'weather': '天气', 'alarms': '下一个闹钟和倒计时',
-          'suggest': '试试这样问我'}
+          'suggest': '试试这样问我', 'devices': '常用设备（米家）'}
 PHOTO_DIR = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'avatars'
 PHOTO_MAX = 6
 PHOTO_NAME = re.compile(r'^[0-9A-Za-z_-]{1,40}$')

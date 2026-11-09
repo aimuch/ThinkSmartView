@@ -195,6 +195,8 @@ function renderStatus() {
   const { state, connected } = ui.status;
   const shown = shownState();
   document.body.dataset.state = shown;
+  // 叫醒时家居页、设备详情自动收起，屏幕让给对话（上游 client issue #1 网友的建议）
+  if (shown === 'listening' && window.miAutoClose) window.miAutoClose();
   const text = {
     idle: [`说<em>「${wakeName()}」</em>`, connected ? '对话还在，唤醒后可以接着聊' : '或者点麦克风；按住可以直接说'],
     connecting: ['正在连接…', '连上小麦网关后就开始听'],
@@ -909,7 +911,7 @@ const THEME_DOT = { night: 'linear-gradient(135deg,#18245a,#050813)', dawn: 'lin
   forest: 'linear-gradient(135deg,#1d4a3a,#06100c)', candy: 'linear-gradient(135deg,#ffd6ec,#c9ecff)', black: '#000',
   auto: 'linear-gradient(90deg,#ffe3c4 50%,#18245a 50%)' };
 const BLOCK_ELS = { clock: ['greet', 'bigTime'], date: ['bigDate'], weather: ['homeWeather'], alarms: ['nextAlarms', 'missedBox', 'homeNotes', 'homeList'],
-  suggest: ['tryLabel', 'chips'] };
+  suggest: ['tryLabel', 'chips'], devices: ['homeDevices'] };
 let looksArmed = null;
 function renderLooks() {
   const l = ui.looks;
@@ -2059,6 +2061,20 @@ const handlers = {
     if (bc.holding) holdMeter($('bcHold'), micLevel(l.mic));
   },
 };
+
+// 没连上网络：连续两次（约 30 秒）读不到地址，首页顶部出提示条，点一下打开选 Wi‑Fi（上游 image issue #5）
+const net = { misses: 0 };
+async function watchNetwork() {
+  if (DEMO !== null) return;
+  let ip = null;
+  try { ip = (await (await fetch('/api/network')).json()).ip; } catch (e) { return; }   // 客户端自己没响应：不算断网
+  net.misses = ip ? 0 : net.misses + 1;
+  const show = net.misses >= 2;
+  if ($('netBanner').hidden === show) $('netBanner').hidden = !show;
+}
+$('netBanner').addEventListener('click', () => { if (shellWifi) openWifi(); else { $('settings').classList.add('on'); renderWifiCard(); } });
+setInterval(watchNetwork, 15000);
+setTimeout(watchNetwork, 3000);
 
 function connectEvents() {
   const es = new EventSource('/events');

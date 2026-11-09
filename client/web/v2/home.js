@@ -117,12 +117,50 @@ function chips(cards) {
     `<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" stroke="none">${CHIP_ICON[k]}</svg>`}<span>${esc(t)}</span></div>`).join('');
 }
 
+const isOn = c => c.state.on === true || (c.kind === 'cover' && c.state.position > 0);
+// 首页「常用设备」磁贴：mi.view.favorites（米家服务按设备上存的顺序给出）
+function renderQuick() {
+  const box = $('homeDevices');
+  const favs = (mi.view && mi.view.account && mi.view.state !== 'expired' && mi.view.favorites) || [];
+  const html = favs.map(c => `<button class="hd-tile${isOn(c) ? ' on' : ''}${c.online ? '' : ' offline'}" data-q="${esc(c.id)}">
+    <span class="h-ic k-${esc(c.kind)}">${icon(c.kind, 24)}</span><b>${esc(c.name)}</b><span>${esc(c.summary)}</span></button>`).join('');
+  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+  box.hidden = !favs.length;
+}
+function quickHome(on) {   // 首页显示着才查常用设备的状态（30 秒一次）；待机页、熄屏时不查
+  if (DEMO || quickHome.on === on) return;
+  quickHome.on = on;
+  miFetch('/api/mijia/visible', { visible: mi.open, home: on });
+}
+const favIds = () => new Set(((mi.view && mi.view.favorites) || []).map(c => c.id));
+function askFavorite(c) {
+  const on = !favIds().has(c.id);
+  askConfirm(on ? `把「${c.name}」放到首页的常用设备？` : `把「${c.name}」从首页的常用设备拿掉？`, async () => {
+    const r = await miFetch('/api/mijia/favorite', { id: c.id, on });
+    if (r && r.ok === false && r.error) toast(r.error, 'error');
+    else toast(on ? '已放到首页' : '已从首页拿掉');
+  });
+}
+// 长按：家居页的磁贴是「放到首页 / 拿掉」，首页的磁贴是打开详情
+function longPress(el, selector, fn) {
+  let timer = null, fired = false;
+  el.addEventListener('pointerdown', e => {
+    const t = e.target.closest(selector);
+    if (!t || e.target.closest('[data-power]')) return;
+    fired = false;
+    timer = setTimeout(() => { fired = true; fn(t); }, 550);
+  });
+  const cancel = () => clearTimeout(timer);
+  el.addEventListener('pointerup', cancel); el.addEventListener('pointerleave', cancel); el.addEventListener('pointercancel', cancel);
+  el.addEventListener('click', e => { if (fired) { e.stopPropagation(); e.preventDefault(); fired = false; } }, true);
+}
+
 function tile(c) {
   const on = c.state.on === true || (c.kind === 'cover' && c.state.position > 0);
   const power = c.controls.power && c.online
     ? `<button class="h-power${on ? ' on' : ''}" data-power="${esc(c.id)}" aria-label="开关"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3.5v8M7 6.3a7.5 7.5 0 1 0 10 0"/></svg></button>` : '';
   return `<div class="h-tile${on ? ' on' : ''}${c.online ? '' : ' offline'}" data-id="${esc(c.id)}">
-    <div class="h-ic k-${esc(c.kind)}">${icon(c.kind)}</div>${power}
+    <div class="h-ic k-${esc(c.kind)}">${icon(c.kind)}</div>${power}${favIds().has(c.id) ? '<span class="fav">★ 常用</span>' : ''}
     <b>${esc(c.name)}</b><span>${esc(c.summary)}</span></div>`;
 }
 
@@ -436,6 +474,18 @@ handlers.snapshot = s => {
   if (s.mijia) { mi.view = s.mijia; renderHome(); }
   if (s.rotation) { rot = s.rotation; renderRotation(); }
 };
-handlers.mijia = v => { mi.view = v; renderHome(); };
+handlers.mijia = v => { mi.view = v; renderHome(); renderQuick(); };
+window.miAutoClose = () => { if (mi.open || mi.detail) { openHome(false); closeDetail(); } };
+$('homeDevices').addEventListener('click', e => {
+  const t = e.target.closest('[data-q]');
+  const c = t && findCard(t.dataset.q);
+  if (c && c.controls.power && c.online) control(c.id, c.kind === 'cover' ? (isOn(c) ? 'close' : 'open') : 'toggle');
+  else if (c) openDetail(c.id);
+});
+longPress($('homeDevices'), '[data-q]', t => openDetail(t.dataset.q));
+longPress($('hRooms'), '.h-tile', t => { const c = findCard(t.dataset.id); if (c) askFavorite(c); });
+// 首页在屏幕上（不在待机页、没熄屏、家居页没开）时才查常用设备
+setInterval(() => quickHome(!document.hidden && !mi.open && !(typeof sb !== 'undefined' && sb.shown)
+  && document.body.dataset.state !== 'sleep' && ((mi.view && mi.view.favorites) || []).length > 0), 5000);
 handlers.rotation = r => { rot = r; renderRotation(); };
 })();

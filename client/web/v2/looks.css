@@ -86,6 +86,28 @@ body[data-avatar="robot"] .deco .antenna::after { content: ""; position: absolut
 body.av-photo-on .core i, body.av-photo-on .face, body.av-photo-on .gloss, body.av-photo-on .deco { display: none; }
 body.av-photo-on .av-photo { display: block; }
 
+/* ---- 首页「常用设备」（设计画布第 16 块 A；上游 client issue #1 网友的建议）：轻点开关，长按看详情 ---- */
+.home-devices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 20px; max-width: 640px; }
+.home-devices[hidden] { display: none; }
+.hd-tile { display: flex; flex-direction: column; gap: 4px; min-height: 104px; padding: 14px 14px 12px; border-radius: 22px; text-align: left;
+  background: var(--card); border: 1.5px solid var(--line); color: var(--ink); transition: transform .12s, background .2s; font: inherit; }
+.hd-tile:active { transform: scale(.96); }
+.hd-tile.on { border-color: #ffd68a88; background: linear-gradient(150deg, #ffd68a26, #ffb54708); }
+.hd-tile.offline { opacity: .45; }
+.hd-tile .h-ic { width: 40px; height: 40px; border-radius: 13px; }
+.hd-tile.on .h-ic { color: #2a1800; background: linear-gradient(135deg, #ffe2a8, var(--warn)); }
+.hd-tile b { margin-top: auto; font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hd-tile span { font-size: 14px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hd-tile.on span { color: #ffd76a; }
+.h-tile .fav { position: absolute; left: 18px; top: 82px; font-size: 15px; color: #ffd76a; }
+/* 没连上网络（上游 image issue #5）：首页顶部一条，点一下打开选 Wi‑Fi */
+.net-banner { position: absolute; left: 0; right: 0; top: 0; z-index: 3; display: flex; align-items: center; gap: 14px; height: 78px; padding: 0 12px 0 22px;
+  border-radius: 24px; background: #f5a52424; border: 1.5px solid #f5a52488; color: #ffd38a; font: inherit; font-size: 20px; text-align: left; }
+.net-banner[hidden] { display: none; }
+.net-banner b { font-size: 22px; } .net-banner small { font-size: 17px; opacity: .85; }
+.net-banner i { font-style: normal; margin-left: auto; height: 56px; padding: 0 24px; border-radius: 18px; background: #f5a524; color: #1d1300;
+  font-weight: 700; display: grid; place-items: center; }
+
 /* ---- the home page's weather block and the appearance card ---- */
 .home-weather { display: flex; align-items: center; gap: 18px; margin-top: 22px; padding: 14px 22px; max-width: 560px; border-radius: 22px;
   background: var(--card); border: 1px solid var(--line); }

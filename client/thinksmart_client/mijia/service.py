@@ -24,6 +24,8 @@ from .store import DIR, read_json, remove, write_json
 log = logging.getLogger(__name__)
 
 POLL_VISIBLE = 6
+POLL_HOME = 30          # 首页「常用设备」显示着、家居页没开：只查常用的那几个，30 秒一次
+FAVORITES_MAX = 8
 RELOAD_EVERY = 20
 VOICE_TIMEOUT = 12
 ALL_WORDS = ('全部', '所有', '全屋', '整个家', '都')
@@ -51,6 +53,7 @@ class MijiaService:
         self.cards = {}                # id -> card, in display order
         self.login = {'state': 'idle'}
         self.visible = False
+        self.home_visible = False      # 首页（常用设备磁贴）在屏幕上
         self.updated_at = 0
         self._login_task = None
         self._wake = asyncio.Event()
@@ -89,7 +92,28 @@ class MijiaService:
                             'expires_at': s.get('expires_at')} if s else None,
                 'homes': [{'id': h['id'], 'name': h['name'], 'shared': h['shared']} for h in self.homes],
                 'home_id': self.settings.get('home_id'), 'updated_at': self.updated_at,
-                'rooms': [{'name': r or '未分配房间', 'cards': rooms[r]} for r in order]}
+                'rooms': [{'name': r or '未分配房间', 'cards': rooms[r]} for r in order],
+                'favorites': [self.card_view(self.cards[i]) for i in self.favorites() if i in self.cards]}
+
+    # ---- 常用设备（设计画布第 16 块；上游 client issue #1 网友建议的首页触控磁贴） ----
+
+    def favorites(self):
+        return [str(i) for i in (self.settings.get('favorites') or [])][:FAVORITES_MAX]
+
+    def set_favorite(self, card_id, on):
+        favs = [i for i in self.favorites() if i != card_id]
+        if on:
+            if card_id not in self.cards:
+                raise ValueError('没有这个设备')
+            if len(favs) >= FAVORITES_MAX:
+                raise ValueError(f'首页最多放 {FAVORITES_MAX} 个常用设备')
+            favs.append(card_id)
+        self.settings['favorites'] = favs
+        write_json(self.dir / 'settings.json', self.settings)
+        self._changed()
+        if on and self.home_visible:
+            self._wake.set()
+        return favs
 
     def card_view(self, c):
         f = c['feats']
@@ -246,9 +270,11 @@ class MijiaService:
         self.updated_at = time.time()
         self._changed()
 
-    async def set_visible(self, on):
+    async def set_visible(self, on, home=None):
         self.visible = bool(on)
-        if self.visible:
+        if home is not None:
+            self.home_visible = bool(home)
+        if self.visible or self.home_visible:
             self._wake.set()
 
     async def _poll_loop(self):
@@ -260,6 +286,14 @@ class MijiaService:
             except asyncio.TimeoutError:
                 pass
             self._wake.clear()
+            favs = [self.cards[i] for i in self.favorites() if i in self.cards]
+            if not self.visible and self.home_visible and favs and self.session and self.state == 'ready':
+                try:
+                    await self.poll(favs)      # 首页只显示常用的：只查它们
+                except Exception:
+                    log.exception('mijia poll favorites')
+                backoff = POLL_HOME
+                continue
             if not (self.visible and self.session and self.state in ('ready', 'error')):
                 backoff = POLL_VISIBLE
                 continue
