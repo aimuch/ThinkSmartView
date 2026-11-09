@@ -17,6 +17,9 @@ PrivateDevices=yes
 # ...except the volume keys and the mic switch (read only)
 BindReadOnlyPaths=/dev/input
 DeviceAllow=char-input r
+# 机身摄像头（system/camera 装好后才有；client/thinksmart_client/camera.py）：没有就跳过
+BindPaths=-/dev/video10
+DeviceAllow=char-video4linux rw
 ExecStartPre=/bin/sh -c 'until [ -S /run/user/1000/pulse/native ]; do sleep 2; done'
 # Root (+), failure ignored (-): devices from the 20261101 image get the updater that also installs the
 # system layer (deploy/bootstrap-updater; a no-op once they have it)
