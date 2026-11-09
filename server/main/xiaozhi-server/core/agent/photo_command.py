@@ -8,6 +8,7 @@ self.photo.ask（工具执行后的那句话被它学会了），屏幕上什么
 只认「这/这个/这是/它」指着眼前东西的说法，避免「看看天气」「帮我看下新闻」被拦下来。
 """
 
+import asyncio
 import json
 import re
 from typing import TYPE_CHECKING
@@ -45,8 +46,13 @@ async def handle(conn: "ConnectionHandler", text: str):
     """返回 None 表示已经处理（让设备拍照了）；否则返回原话，照常往下走。"""
     if not is_photo_ask(text):
         return text
-    client = getattr(conn, "mcp_client", None)
-    if not client or not client.has_tool(TOOL):
+    # 设备刚连上时工具清单还没到（叫醒后马上说的第一句）：最多等 3 秒
+    for _ in range(30):
+        client = getattr(conn, "mcp_client", None)
+        if client and client.has_tool(TOOL):
+            break
+        await asyncio.sleep(0.1)
+    else:
         return text
     from core.agent.call_names import _speak
     from core.providers.tools.device_mcp.mcp_handler import call_mcp_tool
