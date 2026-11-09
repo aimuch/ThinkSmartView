@@ -1405,6 +1405,7 @@ function renderUpdate() {
     label = '检查更新';
   }
   $('gearDot').classList.toggle('on', avail && !busy && !starting);
+  $('setUpdDot').classList.toggle('on', avail && !busy && !starting);
   $('updTitle').textContent = title;
   $('updSub').textContent = text;
   $('updSub').classList.toggle('bad', !!bad);   // toggle(x, undefined) would flip it
@@ -1462,7 +1463,7 @@ if (DEMO !== null) {
                 job: kind === 'busy' ? { state: 'downloading', version: '0.3.0', progress: .42, time: now, component: 'system' }
                    : kind === 'failed' ? { state: 'rolled_back', version: '0.3.0', time: now, component: 'system',
                                            message: '系统层 0.3.0 没装成功（屏幕界面没有启动起来），已退回 0.2.0' } : null };
-  if (kind) $('settings').classList.add('on');
+  if (kind) { setPane('system'); $('settings').classList.add('on'); }
 }
 
 /* ---- settings: chat history (kept on the hub; clearing also clears the hub's copy) ---- */
@@ -2106,6 +2107,43 @@ async function loadPerf() {
     || '<span>正在读取…</span><span></span><span></span>';
 }
 $('perfBtn').addEventListener('click', () => openPerf(true));
+
+/* ---- 设置页分类（设计画布第 32 块）：记住上次看的分类；「系统」里的性能小结只在这一类显示时每 2 秒刷新 ---- */
+var perfMiniTimer = null;   // var：演示模式在脚本前面就会调 setPane
+function setPane(name) {
+  if (!document.querySelector(`.set-pane[data-pane="${name}"]`)) name = 'screen';
+  document.querySelectorAll('.set-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === name));
+  document.querySelectorAll('#setNav button').forEach(b => {
+    const on = b.dataset.pane === name;
+    b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false');
+  });
+  $('setPanel').scrollTop = 0;
+  try { localStorage.setItem('setPane', name); } catch (e) {}
+  perfMini();
+}
+function perfMini() {
+  const pane = document.querySelector('.set-pane.on');
+  const on = $('settings').classList.contains('on') && pane && pane.dataset.pane === 'system';
+  if (on && !perfMiniTimer) { loadPerfMini(); perfMiniTimer = setInterval(loadPerfMini, 2000); }
+  if (!on && perfMiniTimer) { clearInterval(perfMiniTimer); perfMiniTimer = null; }
+}
+async function loadPerfMini() {
+  if (DEMO) return;
+  let s;
+  try { s = await (await fetch('/api/perf', { cache: 'no-store' })).json(); } catch (e) { $('perfSub').textContent = '读不到'; return; }
+  $('perfSub').textContent = '每 2 秒刷新';
+  $('pmCpu').textContent = `${Math.round(s.cpu.usage)}%`;
+  const hot = [s.temps.cpu, s.temps.gpu].filter(x => x != null);
+  const t = hot.length ? Math.max(...hot) : null;
+  $('pmTemp').textContent = t == null ? '—' : `${Math.round(t)}℃`;
+  $('pmTemp').className = pfLvl(t);
+  $('pmMem').textContent = s.mem.total ? `${Math.round(100 * s.mem.used / s.mem.total)}%` : '—';
+  const top = s.top[0];
+  $('pmTop').textContent = top ? `${top.name} ${Math.round(top.cpu)}%` : '—';
+}
+document.querySelectorAll('#setNav button').forEach(b => b.addEventListener('click', () => setPane(b.dataset.pane)));
+new MutationObserver(perfMini).observe($('settings'), { attributes: true, attributeFilter: ['class'] });
+setPane((() => { try { return localStorage.getItem('setPane'); } catch (e) { return null; } })() || 'screen');
 $('perfClose').addEventListener('click', () => openPerf(false));
 
 /* ---- events from the client ---- */
@@ -2253,7 +2291,7 @@ async function watchNetwork() {
     if (typeof fitHome === 'function') fitHome();
   }
 }
-$('netBanner').addEventListener('click', () => { if (shellWifi) openWifi(); else { $('settings').classList.add('on'); renderWifiCard(); } });
+$('netBanner').addEventListener('click', () => { if (shellWifi) openWifi(); else { setPane('net'); $('settings').classList.add('on'); renderWifiCard(); } });
 setInterval(watchNetwork, 15000);
 setTimeout(watchNetwork, 3000);
 

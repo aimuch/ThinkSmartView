@@ -377,3 +377,40 @@ body.av-photo-on .zzz { z-index: 2; }
   .pf-big { font-size: 38px; } .pf-t .pf-big { font-size: 34px; }
   .pf-core b { font-size: 19px; } .pf-core { font-size: 13px; padding: 8px 10px; }
 }
+
+/* ---- 设置页分类（设计画布第 32 块）：左边分类，右边只显示这一类的卡片 ---- */
+.set-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 28px; }
+.set-nav { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; scrollbar-width: none; padding-bottom: 12px; }
+.set-nav button { position: relative; display: flex; align-items: center; gap: 14px; min-height: 66px; padding: 10px 14px; border-radius: 20px;
+                  background: none; border: 1.5px solid transparent; color: var(--ink2); font-size: 21px; text-align: left; transition: background .2s, color .2s; }
+.set-nav button.on { background: var(--card); border-color: var(--line); color: var(--ink); }
+.set-nav button:active { transform: scale(.97); }
+.set-ico { flex: none; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--card2); transition: background .2s, color .2s; }
+.set-nav button.on .set-ico { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+.set-ico svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.set-name { min-width: 0; } .set-name b { font-weight: 600; white-space: nowrap; } .set-name .short { display: none; }
+.set-dot { position: absolute; top: 10px; left: 48px; width: 12px; height: 12px; border-radius: 50%; background: #ff5d6c; box-shadow: 0 0 0 3px var(--sheet2, #060a18); display: none; }
+.set-dot.on { display: block; }
+.set-pane { display: none; flex-direction: column; gap: 22px; padding-bottom: 24px; }
+.set-pane.on { display: flex; }
+.set-head { display: flex; align-items: baseline; gap: 16px; margin: 4px 6px 0; }
+.set-head h3 { margin: 0; font-size: 30px; font-weight: 700; }
+.set-head span { font-size: 17px; color: var(--ink3); }
+.pf-mini { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.pf-mini div { min-width: 0; padding: 14px 18px; border-radius: 18px; background: var(--card2); }
+.pf-mini small { display: block; font-size: 16px; color: var(--ink3); }
+.pf-mini b { display: block; margin-top: 4px; font-size: 32px; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pf-mini b.ok { color: #3ecf74; } .pf-mini b.warn { color: #f5a524; } .pf-mini b.hot { color: #ff6b81; }
+#pmTop { font-size: 20px; line-height: 38px; }
+@media (orientation: portrait) {
+  .set-body { grid-template-columns: 150px minmax(0, 1fr); gap: 16px; }
+  .set-nav button { flex-direction: column; justify-content: center; gap: 6px; min-height: 0; padding: 12px 4px; font-size: 16px; text-align: center; }
+  .set-name .long { display: none; } .set-name .short { display: inline; }
+  .set-dot { left: auto; right: 38px; top: 8px; }
+  .set-head { flex-direction: column; gap: 4px; }
+  .pf-mini { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .set-panel .times { gap: 14px; }
+  .set-panel .time { padding: 18px 16px; min-width: 0; }
+  .set-panel .stepper b { font-size: 40px; }
+  .set-panel .stepper button { width: 58px; height: 58px; font-size: 32px; }
+}
