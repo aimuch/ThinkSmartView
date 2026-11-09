@@ -30,7 +30,8 @@
 | 千问 TTS（方言音色） | `server/main/xiaozhi-server/core/providers/tts/qwen3_tts.py` | 后台「语音合成」切到千问 TTS、填百炼 Key，可选上海话、北京话、四川话、粤语等音色 |
 | 同音字理解 | `server/main/xiaozhi-server/hub-base-prompt.txt` | 识别错的同音字（「先辈怎么做」）由大模型按读音和上下文理解，直接按最可能的意思回答 |
 | 天气播报、住宅地址 | `client/thinksmart_client/broadcast.py` | 设置 →「天气播报」：定时播报（早上那次可顺便播提醒和新闻）；住宅地址按住说出来，没说地点的天气按它查 |
-| 拍照问答 | `server/…/core/agent/photo_ask.py` | 「帮我看下这是什么」，手机扫码拍照；后台「大模型 → 看图模型」填 Key |
+| 拍照问答 | `server/…/core/agent/photo_ask.py`、`photo_command.py`，`client/…/camera.py` | 「帮我看下这是什么」：机身摄像头实时画面、倒数自动拍（没有摄像头时手机扫码）；后台「大模型 → 看图模型」填 Key |
+| 前置摄像头 | `system/camera/`（上游 PR #7） | S5KC505A 驱动、设备树、libcamera 0.8，变成普通摄像头 `/dev/video10`；单独安装，见 system/camera/README.md |
 | 首页外观 | `client/thinksmart_client/looks.py`、`web/v2/looks.css` | 设置 →「外观」：主题、形象（可用照片生成卡通形象）、首页显示内容 |
 | 儿童模式、待机页、做菜模式 | `kids.py`、`cook.py` | 设置里各有一张卡片；做菜时直接说「下一步」 |
 | 场景、留言、清单、电台、助眠声 | `daily.py`、`media.py`、`server/…/core/utils/device_lists.py` | 都可以直接说；清单能在手机上看 |
