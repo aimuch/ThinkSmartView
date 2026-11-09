@@ -571,6 +571,7 @@
   .c-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
   .c-bar .seg { margin: 0; } .c-bar .seg button { padding: 4px 11px; font-size: 12px; }
   .c-bar select.in, .c-bar input.in { margin: 0; width: auto; padding: 5px 8px; font-size: 12px; }
+  .c-heat-bar > .seg, .c-heat-bar > input, .c-heat-bar > .cmp { display: none; }   /* 热力图固定看最近 4 周：只留筛选 */
   .c-bar .cmp { margin-left: auto; color: var(--muted); font-size: 12px; }
   .c-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
   .c-kpis .u-stat b { font-size: 22px; }
@@ -582,6 +583,8 @@
   .c-chart { width: 100%; height: 210px; display: block; }
   .c-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-top: 2px; }
   .c-two { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; }
+  .c-two .u-table th, .c-two .u-table td { padding: 9px 10px; } .c-two .u-table th:first-child, .c-two .u-table td:first-child { padding-left: 16px; }
+  .c-two .u-table .c-share { width: 56px; } .c-two > .card { overflow-x: auto; }
   .c-share { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; width: 90px; } .c-share i { display: block; height: 100%; background: var(--accent); }
   .c-split { display: flex; height: 22px; border-radius: 6px; overflow: hidden; margin: 6px 0 10px; background: var(--line); }
   .c-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
@@ -2476,7 +2479,7 @@ async function renderCost(root) {
       ${sel("model", o.models.map((m) => [m, m]), "全部模型")}
       ${sel("device", o.devices.map((x) => [x.id, x.name || x.id]), "全部设备")}
       ${sel("purpose", o.purposes.map((x) => [x, PURPOSE_LABEL[x] || x]), "全部用途")}
-      <span class="cmp">${esc(d.compare)}</span></div>`;
+      <span class="cmp">${esc(d.compare)}</span></div>`.replace('<div class="c-bar">', costTab === "heat" ? '<div class="c-bar c-heat-bar">' : '<div class="c-bar">');
   let body = "";
   if (costTab === "overview") {
     const failRate = t.requests ? (t.failures / t.requests * 100).toFixed(1) + "%" : "0%";
