@@ -320,6 +320,7 @@ sequenceDiagram
 | 网关 `data/photos/` | 拍照问答、形象、相册上传的照片 | 7 天后删，清除聊天记录时一起删 |
 | 网关 `models/voiceprint/` | `3dspeaker_campplus_zh-cn_16k.onnx` | 声纹模型（不在仓库里，手动下载到这里） |
 | 网关 `data/` | `admin_brand.json`、`.admin-sessions-kept.json` | 后台的名称、图标、仓库链接；勾了「保持登录」的会话（只存令牌的 SHA-256，0600） |
+| 网关 `data/` | `device_settings.json` | 每台设备的名字和单独设的默认模型、音色、人设、插件（连接建立时套到这个连接的配置上） |
 | 网关 `data/dsh/` | `voice.patch.yml`、`home/` | DSH 的模型、思考档位、人设覆盖；DSH 自己的会话记录（DSH_HOME） |
 | 网关 `~/.local/dsh`、`~/.local/node24` | DSH 和它要的 Node 24 | 用户目录里装，不动系统的 Node |
 | 设备 `~/.local/share/thinksmart-client/mijia/settings.json` | `favorites` | 首页常用设备（最多 8 个） |
