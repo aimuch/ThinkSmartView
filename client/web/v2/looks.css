@@ -114,3 +114,52 @@ body.av-photo-on .av-photo { display: block; }
 .looks-blocks .switch { margin-left: 8px; }
 /* the list rows' kind badge (.al i) must not restyle the switch knob */
 .looks-blocks .al .switch i { width: 40px; height: 40px; border-radius: 50%; background: #fff; display: block; color: transparent; }
+
+/* 儿童模式 card */
+.kids-card.off .kids-on { display: none; }
+.kids-on { display: flex; flex-direction: column; gap: 12px; }
+.kids-num { min-width: 96px; text-align: center; font-size: 26px; font-variant-numeric: tabular-nums; }
+.bc-step button:disabled { opacity: .3; }
+
+/* 待机页 */
+.standby { position: fixed; inset: 0; z-index: 55; background: var(--bg0); color: #f2f5ff; overflow: hidden; animation: photo-in .4s ease-out; }
+.standby[hidden] { display: none; }
+.sb-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 1.6s ease; }
+.sb-photo.on { opacity: 1; }
+.sb-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 35%, #000c); }
+.standby.plain .sb-shade { background: radial-gradient(760px 560px at 20% 46%, var(--glow1, #18245a) 0%, transparent 70%), linear-gradient(160deg, var(--bg1), var(--bg0) 70%); }
+.standby.plain { color: var(--ink); }
+.sb-time { position: absolute; left: 60px; bottom: 120px; font-size: 200px; font-weight: 200; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -4px; }
+.sb-date { position: absolute; left: 68px; bottom: 70px; font-size: 32px; opacity: .85; }
+.sb-wx { position: absolute; right: 60px; bottom: 76px; display: flex; align-items: center; gap: 16px; font-size: 28px; }
+.sb-wx b { font-size: 84px; font-weight: 200; }
+.sb-alarm { position: absolute; right: 56px; top: 46px; height: 58px; padding: 0 26px; border-radius: 999px; background: #ffffff26; display: flex; align-items: center; font-size: 24px; }
+.sb-alarm[hidden] { display: none; }
+.sb-card.off .sb-on { display: none; }
+.sb-on { display: flex; flex-direction: column; gap: 14px; }
+.sb-thumbs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.sb-thumbs:empty { display: none; }
+.sb-thumbs button { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; border: 2px solid transparent; }
+.sb-thumbs button img { width: 100%; height: 100%; object-fit: cover; }
+.sb-thumbs button.armed { border-color: var(--bad); }
+.sb-thumbs button.armed::after { content: "再点删除"; position: absolute; inset: 0; display: grid; place-items: center; background: #000a; color: #fff; font-size: 16px; }
+/* 做菜模式 */
+.cook-ov { position: fixed; inset: 0; z-index: 58; display: flex; flex-direction: column; gap: 26px; padding: 46px 56px 36px;
+  background: linear-gradient(160deg, var(--bg1), var(--bg0) 70%); color: var(--ink); animation: photo-in .2s ease-out; }
+.cook-ov[hidden] { display: none; }
+.cook-top { display: flex; align-items: center; gap: 20px; font-size: 26px; color: var(--ink2); }
+.cook-top b { font-size: 34px; color: var(--ink); }
+.cook-dots { display: flex; gap: 10px; margin-left: auto; }
+.cook-dots i { width: 40px; height: 10px; border-radius: 5px; background: var(--card2); }
+.cook-dots i.on { background: var(--accent2); }
+.cook-step { font-size: 28px; color: var(--accent2); letter-spacing: 3px; }
+.cook-text { flex: 1; font-size: 56px; line-height: 1.45; font-weight: 500; overflow-y: auto; }
+.cook-btns { display: flex; gap: 18px; }
+.ctl-big { height: 96px; padding: 0 36px; border-radius: 28px; font-size: 30px; background: var(--card2); border: 1px solid var(--line); color: var(--ink); }
+.ctl-big.pri { flex: 1; color: #081024; font-weight: 700; border: 0; background: linear-gradient(135deg, #8ff0ff, #8fa6ff); }
+.ctl-big.tmr { background: #ffb5471f; border-color: #ffb54766; color: var(--warn); }
+.ctl-big[hidden] { display: none; }
+.ctl-big:active { transform: scale(.97); }
+.cook-say { font-size: 22px; color: var(--ink3); }
+.card-cook { margin-top: 14px; height: 64px; padding: 0 28px; border-radius: 20px; font-size: 22px; font-weight: 700; color: #081024;
+  background: linear-gradient(135deg, #8ff0ff, #8fa6ff); }

@@ -1161,3 +1161,54 @@ async def test_avatar_generation(kiosk, tmp_path, monkeypatch):
         await asyncio.sleep(0.05)
     assert v["state"] == "generated" and v["has_avatar"]
     assert await (await kiosk.get(f"/kiosk/photo/{token}/avatar")).read() == b"\x89PNGcartoon\x07"
+
+
+async def test_kiosk_prefs_kids_mode(kiosk, tmp_path, monkeypatch):
+    from core.utils import device_prefs
+
+    monkeypatch.setattr(device_prefs, "_path", lambda: str(tmp_path / "device_prefs.json"))
+    assert device_prefs.kids("dev-1") is None
+    r = await kiosk.post("/kiosk/prefs", json={"device": "dev-1", "kids": {"enabled": True, "age": 4, "voice": "child"}})
+    assert r.status == 200 and device_prefs.kids("dev-1")["age"] == 4
+    assert (await kiosk.post("/kiosk/prefs", json={"device": "dev-1", "kids": {"enabled": True, "age": 40}})).status == 400
+
+    class EdgeLike:
+        voice = "zh-CN-XiaoxiaoNeural"
+    EdgeLike.__module__ = "core.providers.tts.edge"
+    tts = EdgeLike()
+    assert device_prefs.apply_voice(tts, "dev-1") and tts.voice == device_prefs.KIDS_VOICE_EDGE
+    other = type("Qwen", (), {"voice": "Cherry", "__module__": "core.providers.tts.qwen3_tts"})()
+    assert not device_prefs.apply_voice(other, "dev-1") and other.voice == "Cherry"
+    await kiosk.post("/kiosk/prefs", json={"device": "dev-1", "kids": {"enabled": False}})
+    assert device_prefs.kids("dev-1") is None
+
+
+def test_kids_prompt_section():
+    from jinja2 import Template
+
+    text = open("hub-base-prompt.txt", encoding="utf-8").read()
+    out = Template(text).render(kids_age=3, base_prompt="", language="中文", emojiList=[])
+    assert "<kids_mode>" in out and "3-year-old" in out
+    assert "<kids_mode>" not in Template(text).render(kids_age=0, base_prompt="", language="中文", emojiList=[])
+
+
+async def test_album_upload_takes_several(kiosk, tmp_path, monkeypatch):
+    from core.agent import photo_ask
+
+    monkeypatch.setattr(photo_ask, "_photos_dir", lambda device="": str(tmp_path / "photos" / device))
+    token = (await (await kiosk.post("/kiosk/photo/start", json={"device": "dev-1", "purpose": "album"})).json())["token"]
+    for i in range(3):
+        form = aiohttp.FormData()
+        form.add_field("photo", JPEG + bytes([i]), filename="p.jpg", content_type="image/jpeg")
+        assert (await (await kiosk.post(f"/photo/{token}", data=form)).json())["ok"]
+    v = await (await kiosk.get(f"/kiosk/photo/{token}")).json()
+    assert v["state"] == "waiting" and v["album_count"] == 3 and v["answer"] is None
+    assert await (await kiosk.get(f"/kiosk/photo/{token}/album/2")).read() == JPEG + b"\x02"
+    assert (await kiosk.get(f"/kiosk/photo/{token}/album/3")).status == 404
+
+
+async def test_memory_history(client):
+    r = await client.get("/admin/api/memory/history?device=dev-1")
+    assert r.status == 200 and (await r.json())["ok"]
+    await client.post("/admin/api/logout", json={})
+    assert (await client.get("/admin/api/memory/history?device=dev-1")).status == 401

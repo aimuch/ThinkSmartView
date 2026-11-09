@@ -45,7 +45,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import alarms, broadcast, bt, config, looks, mcp, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, config, cook, kids, looks, mcp, rotation, sleep, update, wake_verify, wake_words
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
 from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off
@@ -68,6 +68,9 @@ CARD_TITLE_MAX, CARD_TEXT_MAX, CARD_IMAGES_MAX, CARDS_MAX = 80, 12000, 6, 30
 CARDS = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'cards.json'
 PHOTOS = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'photos'   # 拍照问答 (photo_start)
 PHOTO_POLL = 1.5
+ALBUM = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'album'   # 待机页的家庭相册
+ALBUM_MAX = 60
+STANDBY_MINUTES = (1, 2, 5, 10)
 HALT_AFTER = 3           # seconds to read "正在关机 … 等 10 秒再拔" before the screen goes dark
 UPDATE_BUSY = ('preparing', 'downloading', 'installing', 'testing', 'rolling_back')
 # installing for a page request, or finishing an interrupted one at boot (self-test, rollback)
@@ -177,6 +180,10 @@ class Events:
 
 class Client:
     photo = photo_task = photo_card = None   # 拍照问答 (set in __init__ too; tests build bare clients)
+    kids = kids.DEFAULT                       # 儿童模式 (kids.py), likewise
+    cooking = None                            # 做菜模式 (cook.py)
+    kids_seconds = 0.0
+    kids_clips = {}
 
     wake_rec = None   # a new wake word being said on the settings page: mic blocks (wake_words.py)
 
@@ -257,6 +264,13 @@ class Client:
                 cfg[key] = config.DEFAULTS[key]
         cfg['home_blocks'] = looks.normalize_blocks(cfg.get('home_blocks'))
         self.today = None             # the home page's weather and lunar date (/kiosk/today)
+        try:
+            self.kids = kids.normalize(cfg.get('kids'))
+        except ValueError:
+            log.warning('invalid kids setting %r, using the default', cfg.get('kids'))
+            self.kids = kids.normalize(None)
+        self.kids_seconds = kids.load_usage(datetime.date.today().isoformat())
+        self.kids_clips = {}          # 'limit' / 'bedtime' -> the hub's synthesised words
         self.photo = None             # the photo question waiting for the phone (photo_start)
         self.photo_task = None
         self.photo_card = None        # its card, shown when the hub echoes the request   # 'YYYY-MM-DD HH:MM' done (played or given up) today
@@ -308,19 +322,21 @@ class Client:
                 'custom': lines != config.DEFAULTS['wake_words'], 'recording': self.wake_rec is not None,
                 'max': wake_words.MAX_WORDS}
 
+    def _build_kws(self, lines, extra=()):
+        cfg = self.cfg
+        kws = Kws(str(ROOT / 'models' / 'kws-zh'), list(lines) + list(extra),
+                  cfg['kws_score'], cfg['kws_threshold'], cfg['kws_paths'], cfg['kws_gain_db'])
+        return kws, wake_verify.make(cfg['wake_verify'], lines, cfg['hub_http'])
+
     async def set_wake_words(self, lines):
         """Use these keyword lines from now on: rebuild the wake word model and the second look off the
         event loop (loading the model takes ~1 s here), swap them in, store the list."""
         lines = wake_words.validate(list(lines))
         cfg = self.cfg
-
-        def build():
-            kws = Kws(str(ROOT / 'models' / 'kws-zh'), lines,
-                      cfg['kws_score'], cfg['kws_threshold'], cfg['kws_paths'], cfg['kws_gain_db'])
-            return kws, wake_verify.make(cfg['wake_verify'], lines, cfg['hub_http'])
+        extra = [wake_words.keyword(w) for w in cook.WORDS] if self.cooking else []
 
         async with self.wake_lock:
-            self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(None, build)
+            self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(None, self._build_kws, lines, extra)
             cfg['wake_words'] = lines
             if lines == config.DEFAULTS['wake_words']:
                 config.unset('wake_words')
@@ -399,7 +415,7 @@ class Client:
     def photo_view(self):
         p = self.photo
         return p and {k: p.get(k) for k in ('token', 'url', 'question', 'expires', 'state', 'error', 'image',
-                                            'purpose', 'styles', 'style', 'preview', 'avatar_ready')}
+                                            'purpose', 'styles', 'style', 'preview', 'avatar_ready', 'received')}
 
     def publish_photo(self):
         self.events.publish('photo', self.photo_view() or {'state': 'closed'})
@@ -451,6 +467,11 @@ class Client:
                 if state in ('received', 'done', 'generating', 'generated') and not p['image']:
                     p['image'] = await self._fetch_photo(p['token'])
                     p['question'] = v.get('question') or p['question']
+                if p.get('purpose') == 'album' and (v.get('album_count') or 0) > p.get('album_got', 0):
+                    await self._fetch_album(p, v['album_count'])
+                    p['error'] = None
+                    p['received'] = p.get('album_got', 0)
+                    self.publish_photo()
                 if state == 'generated' and not p['preview']:
                     p['preview'] = await self._fetch_photo(p['token'], avatar=True)
                 error = v.get('error') or (None if v.get('ok') else '二维码过期了')
@@ -462,6 +483,11 @@ class Client:
                     await self._photo_answered(p, v.get('answer') or '')
                     return
                 if state in ('error', 'expired', 'cancelled'):
+                    if p.get('purpose') == 'album' and p.get('album_got'):
+                        if self.photo is p:      # the album's code ran out after some photos: that's done
+                            self.photo = None
+                            self.publish_photo()
+                        return
                     self.play('miss')
                     await asyncio.sleep(6)       # long enough to read why
                     if self.photo is p:
@@ -525,6 +551,253 @@ class Client:
         hhmm = datetime.datetime.now().strftime('%H:%M')
         await self.say(f"【拍照问 {hhmm}】我用手机拍了张照片问：「{p['question']}」。看图模型看到的是：{answer}"
                        '\n请根据这些直接回答我，一两句话说清楚，不要提「看图模型」。')
+
+    # ---- 做菜模式 (cook.py): one step per screen, voice commands recognised here ----
+
+    def cook_view(self):
+        c = self.cooking
+        if not c:
+            return {'on': False}
+        step = c['steps'][c['i']]
+        return {'on': True, 'title': c['title'], 'steps': c['steps'], 'i': c['i'], 'minutes': cook.minutes(step)}
+
+    def publish_cook(self):
+        self.events.publish('cook', self.cook_view())
+
+    async def cook_start(self, card_id=None, read=True):
+        """Cook from this card (None: the newest card with numbered steps). read=False: the caller says
+        the first step (the voice tool puts it in the hub's reply, which would talk over ours)."""
+        if card_id is None:
+            card = next((m for m in reversed(self.cards) if cook.steps((m.get('card') or {}).get('markdown'))), None)
+        else:
+            card = next((m for m in self.cards if str(m.get('id')) == str(card_id)), None)
+        if not card:
+            raise ValueError('找不到这张菜谱')
+        found = cook.steps((card.get('card') or {}).get('markdown'))
+        if not found:
+            raise ValueError('这张卡片里没有编号的步骤')
+        first = self.cooking is None
+        self.cooking = {'title': card['text'], 'steps': found, 'i': 0, 'touched': time.monotonic()}
+        if first:
+            async with self.wake_lock:
+                self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(
+                    None, self._build_kws, self.cfg['wake_words'], [wake_words.keyword(w) for w in cook.WORDS])
+        log.info('cooking %r: %d steps', card['text'], len(found))
+        self.publish_cook()
+        if read:
+            await self._read_step()
+        return self.cook_view()
+
+    async def cook_stop(self):
+        if not self.cooking:
+            return {'on': False}
+        self.cooking = None
+        async with self.wake_lock:
+            self.kws, self.verifier = await asyncio.get_running_loop().run_in_executor(
+                None, self._build_kws, self.cfg['wake_words'])
+        log.info('cooking mode ended')
+        self.publish_cook()
+        return {'on': False}
+
+    async def cook_go(self, by=0, to=None):
+        c = self.cooking
+        if not c:
+            raise ValueError('没在做菜模式')
+        i = c['i'] + int(by) if to is None else int(to)
+        if not 0 <= i < len(c['steps']):
+            if i >= len(c['steps']):
+                await self._say_local('已经是最后一步了，做好啦。')
+            return self.cook_view()
+        c['i'], c['touched'] = i, time.monotonic()
+        self.publish_cook()
+        await self._read_step()
+        return self.cook_view()
+
+    async def cook_timer(self):
+        c = self.cooking
+        m = c and cook.minutes(c['steps'][c['i']])
+        if not m:
+            raise ValueError('这一步没有要计时的')
+        await self.create_alarm('timer', label=f"{c['title']} 第 {c['i'] + 1} 步", seconds=int(m * 60))
+        await self._say_local(f'好，{m:g} 分钟倒计时开始了。')
+        return self.cook_view()
+
+    async def cook_word(self, label):
+        self.screen.poke()
+        try:
+            if label == '下一步':
+                await self.cook_go(1)
+            elif label == '上一步':
+                await self.cook_go(-1)
+            elif label == '再说一遍':
+                await self._read_step()
+            elif label == '开始计时':
+                await self.cook_timer()
+            elif label == '退出做菜':
+                await self.cook_stop()
+                await self._say_local('好，退出做菜模式。')
+        except ValueError as e:
+            await self._say_local(str(e))
+
+    async def _read_step(self):
+        c = self.cooking
+        if c:
+            await self._say_local(f"第 {c['i'] + 1} 步，{c['steps'][c['i']]}")
+
+    async def _say_local(self, text):
+        """Say a short sentence without a conversation (the hub only synthesises it)."""
+        wav = await self._speech(text)
+        if wav:
+            self.audio.player.trim(0)
+            self.audio.player.push(load_wav(io.BytesIO(wav)))
+
+    async def _cook_loop(self):
+        while True:
+            await asyncio.sleep(30)
+            c = self.cooking
+            if c and time.monotonic() - c['touched'] > cook.IDLE_SECONDS:
+                log.info('cooking mode idle for %d minutes: ending it', cook.IDLE_SECONDS // 60)
+                await self.cook_stop()
+
+    # ---- 待机页 and the family album ----
+
+    def standby_view(self):
+        s = self.cfg['standby']
+        photos = sorted(ALBUM.glob('*.jpg'), key=lambda p: p.stat().st_mtime, reverse=True) if ALBUM.is_dir() else []
+        return {**s, 'choices': STANDBY_MINUTES, 'photos': [f'/api/album/{p.name}' for p in photos], 'max': ALBUM_MAX}
+
+    def publish_standby(self):
+        self.events.publish('standby', self.standby_view())
+
+    async def set_standby(self, enabled=None, minutes=None, album=None):
+        s = dict(self.cfg['standby'])
+        if enabled is not None:
+            s['enabled'] = bool(enabled)
+        if album is not None:
+            s['album'] = bool(album)
+        if minutes is not None:
+            if int(minutes) not in STANDBY_MINUTES:
+                raise ValueError(f"只能是 {'、'.join(map(str, STANDBY_MINUTES))} 分钟")
+            s['minutes'] = int(minutes)
+        self.cfg['standby'] = s
+        if s == config.DEFAULTS['standby']:
+            config.unset('standby')
+        else:
+            config.save(standby=s)
+        self.publish_standby()
+        return self.standby_view()
+
+    async def album_start(self):
+        r = await self.photo_start('家庭相册', purpose='album')
+        return r
+
+    async def album_delete(self, name):
+        if not re.fullmatch(r'[0-9A-Za-z_-]{1,60}\.jpg', name or ''):
+            raise ValueError('没有这张照片')
+        (ALBUM / name).unlink(missing_ok=True)
+        self.publish_standby()
+        return self.standby_view()
+
+    async def _fetch_album(self, p, count):
+        """Copy the album photos the phone sent so far (p['album_got'] of count) into ALBUM."""
+        got = p.setdefault('album_got', 0)
+        while got < count:
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
+                    async with s.get(f"{self.cfg['hub_http']}/kiosk/photo/{p['token']}/album/{got}") as r:
+                        if r.status != 200:
+                            break
+                        data = await r.read()
+            except Exception as e:
+                log.warning('cannot fetch an album photo: %s', e)
+                break
+            ALBUM.mkdir(parents=True, exist_ok=True)
+            (ALBUM / f"{int(time.time() * 1000)}-{got}.jpg").write_bytes(data)
+            got += 1
+        p['album_got'] = got
+        old = sorted(ALBUM.glob('*.jpg'), key=lambda x: x.stat().st_mtime, reverse=True)[ALBUM_MAX:] if ALBUM.is_dir() else []
+        for x in old:
+            x.unlink(missing_ok=True)
+        self.publish_standby()
+
+    # ---- 儿童模式 (kids.py): the hub makes the answers child-friendly, the limits are kept here ----
+
+    def kids_view(self):
+        return {**self.kids, 'used_minutes': int(self.kids_seconds // 60),
+                'blocked': kids.blocked(self.kids, self.kids_seconds)}
+
+    def publish_kids(self):
+        self.events.publish('kids', self.kids_view())
+
+    async def set_kids(self, **changes):
+        """Change the kids setting (page; by voice only enabled=True). bedtime_shift/minutes_step move
+        those by the page's ± buttons. ValueError for anything invalid."""
+        if changes.get('bedtime_shift'):
+            changes['bedtime'] = kids.shift_time(self.kids['bedtime'] or '20:30', int(changes.pop('bedtime_shift')))
+        changes.pop('bedtime_shift', None)
+        if changes.get('minutes_step'):
+            changes['daily_minutes'] = max(0, min(600, self.kids['daily_minutes'] + int(changes.pop('minutes_step'))))
+        changes.pop('minutes_step', None)
+        self.kids = kids.normalize(self.kids, changes)
+        if self.kids == kids.DEFAULT:
+            config.unset('kids')
+        else:
+            config.save(kids=self.kids)
+        log.info('kids mode: %s', self.kids)
+        self.publish_kids()
+        await self._sync_prefs()
+        return self.kids_view()
+
+    async def _sync_prefs(self):
+        """Tell the hub (data/device_prefs.json): next connection uses the kids prompt and voice."""
+        try:
+            await self._hub_http('/kiosk/prefs', {'device': self.cfg['device_id'], 'kids': self.kids})
+            if self.hub.connected and not self.in_turn():
+                await self.hub.close()   # the prompt and the voice are set per connection
+            return True
+        except Exception as e:
+            log.warning('could not tell the hub the kids setting: %s', e)
+            return False
+
+    async def kids_refuse(self):
+        """In kids mode past a limit: say why (no hub connection). True when the wake was refused."""
+        why = kids.blocked(self.kids, self.kids_seconds)
+        if not why:
+            return False
+        log.info('kids mode: wake refused (%s)', why)
+        clip = self.kids_clips.get(why)
+        if clip is None:
+            wav = await self._speech(kids.SAY_BEDTIME if why == 'bedtime' else kids.SAY_LIMIT)
+            if wav:
+                clip = self.kids_clips[why] = load_wav(io.BytesIO(wav))
+        self.screen.poke()
+        self.events.publish('toast', {'kind': 'info', 'text': kids.SAY_BEDTIME if why == 'bedtime' else kids.SAY_LIMIT})
+        if clip is not None:
+            self.audio.player.push(clip)
+        else:
+            self.play('miss')
+        return True
+
+    async def _kids_loop(self):
+        synced = False
+        while True:
+            await asyncio.sleep(5)
+            try:
+                if not synced:
+                    synced = await self._sync_prefs()
+                today = datetime.date.today().isoformat()
+                if getattr(self, '_kids_day', today) != today:
+                    self.kids_seconds = 0.0
+                    self.publish_kids()
+                self._kids_day = today
+                if self.kids['enabled'] and self.state in ('listening', 'thinking', 'speaking'):
+                    before = int(self.kids_seconds // 60)
+                    self.kids_seconds += 5
+                    kids.save_usage(today, self.kids_seconds)
+                    if int(self.kids_seconds // 60) != before:
+                        self.publish_kids()
+            except Exception:
+                log.exception('kids mode')
 
     # ---- 外观: theme, avatar, home blocks (looks.py) and the home page's weather ----
 
@@ -762,6 +1035,8 @@ class Client:
         asyncio.create_task(self._alarm_loop())
         asyncio.create_task(self._broadcast_loop())
         asyncio.create_task(self._today_loop())
+        asyncio.create_task(self._kids_loop())
+        asyncio.create_task(self._cook_loop())
         await self.bt.start()
         asyncio.create_task(self._bluetooth_loop())
         await self.mijia.start()
@@ -859,7 +1134,8 @@ class Client:
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
                 'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
                 'broadcast': self.broadcast_view(), 'photo': self.photo_view(),
-                'looks': self.looks_view(), 'today': self.today,
+                'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),
+                'standby': self.standby_view(), 'cook': self.cook_view(),
                 'thread': {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])}}
 
     def view_entry(self):
@@ -897,6 +1173,11 @@ class Client:
         return True
 
     async def voice_wake(self, label, audio):
+        if self.cooking and label in cook.WORDS:
+            await self.cook_word(label)   # 做菜模式: a command, not a wake (no second look: speed matters)
+            return
+        if self.ring is None and not self.in_turn() and await self.kids_refuse():
+            return
         """The wake word model fired. With a second look (wake_verify.py), which takes 1-2 s here,
         the chime still comes at once, but connecting and listening wait for its answer: what is
         said meanwhile is kept (backlog) and sent on, and a false wake ends quietly instead of
@@ -934,6 +1215,10 @@ class Client:
         self.screen.poke()
         if self.ring:
             await self.stop_alarm()   # the wake word stops a ring (no snooze: "再睡 10 分钟" is said next)
+            if source == 'voice' and kids.blocked(self.kids, self.kids_seconds):
+                return
+        elif not self.in_turn() and await self.kids_refuse():
+            return
         if self.preview:
             await self._stop_preview()   # a tone being tried: the answer must not queue behind it
         if self.mic_off_toast():
@@ -1030,6 +1315,8 @@ class Client:
 
     async def ptt_start(self):
         if self.mic_off_toast():
+            return
+        if not self.in_turn() and await self.kids_refuse():
             return
         self.ptt_held = True
         if self.in_turn():

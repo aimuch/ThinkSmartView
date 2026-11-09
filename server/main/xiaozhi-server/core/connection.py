@@ -670,11 +670,15 @@ class ConnectionHandler:
 
         # 更新上下文信息
         self.prompt_manager.update_context_info(self, self.client_ip)
+        from core.utils import device_prefs  # [xiaozhi-hub] 儿童模式
+
+        kids = device_prefs.kids(self.device_id or "")
         enhanced_prompt = self.prompt_manager.build_enhanced_prompt(
             self.config["prompt"],
             self.device_id,
             self.client_ip,
             emoji_enabled=(self.features or {}).get("emoji", True),
+            kids_age=kids["age"] if kids else 0,
         )
         if enhanced_prompt:
             self.change_system_prompt(enhanced_prompt)
@@ -760,7 +764,14 @@ class ConnectionHandler:
 
         if tts is None:
             tts = DefaultTTS(self.config, delete_audio_file=True)
+        # [xiaozhi-hub] 儿童模式：这台设备要童声时换成童声（core/utils/device_prefs.py）
+        try:
+            from core.utils import device_prefs
 
+            if device_prefs.apply_voice(tts, getattr(self, "device_id", None) or ""):
+                self.logger.bind(tag=TAG).info("儿童模式：语音换成童声")
+        except Exception as e:
+            self.logger.bind(tag=TAG).warning(f"儿童模式的童声没换成: {e}")
         return tts
 
     def _initialize_asr(self):

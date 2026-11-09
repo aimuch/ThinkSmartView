@@ -579,6 +579,133 @@ $('wwReset').addEventListener('click', () => {
   postJson('/api/wake-words/reset').then(r => { if (r.ok) toast('已恢复默认的唤醒词'); });
 });
 
+/* ---- 做菜模式 (cook.py) ---- */
+$('messages').addEventListener('click', e => {
+  const b = e.target.closest('[data-cook]');
+  if (!b || DEMO !== null) return;
+  postJson('/api/cook/start', { card: b.dataset.cook }).then(r => { if (!r.ok) toast(r.error || '没开始', 'error'); });
+});
+function renderCook() {
+  const c = ui.cook;
+  $('cookOv').hidden = !(c && c.on);
+  if (!c || !c.on) return;
+  $('cookTitle').textContent = c.title;
+  $('cookCount').textContent = `第 ${c.i + 1} / ${c.steps.length} 步`;
+  $('cookDots').innerHTML = c.steps.map((_, i) => `<i class="${i <= c.i ? 'on' : ''}"></i>`).join('');
+  $('cookStep').textContent = `第 ${c.i + 1} 步`;
+  $('cookText').textContent = c.steps[c.i];
+  $('cookPrev').disabled = c.i === 0;
+  $('cookNext').textContent = c.i === c.steps.length - 1 ? '做好了' : '下一步';
+  $('cookTimer').hidden = !c.minutes;
+  if (c.minutes) $('cookTimer').textContent = `⏱ 定 ${c.minutes} 分钟`;
+}
+const cookPost = (path, body) => DEMO === null && postJson(path, body || {}).then(r => { if (!r.ok && r.error) toast(r.error, 'error'); });
+$('cookPrev').addEventListener('click', () => cookPost('/api/cook/go', { by: -1 }));
+$('cookNext').addEventListener('click', () => ui.cook && ui.cook.i === ui.cook.steps.length - 1 ? cookPost('/api/cook/stop') : cookPost('/api/cook/go', { by: 1 }));
+$('cookExit').addEventListener('click', () => cookPost('/api/cook/stop'));
+$('cookTimer').addEventListener('click', () => cookPost('/api/cook/timer'));
+
+/* ---- 待机页 and the family album ---- */
+const sb = { last: Date.now(), shown: false, idx: 0, layer: 0, armed: null, timer: null };
+function renderStandbyCard() {
+  const st = ui.standby;
+  if (!st) return;
+  $('sbCard').classList.toggle('off', !st.enabled);
+  $('sbSwitch').setAttribute('aria-checked', String(!!st.enabled));
+  $('sbAlbum').setAttribute('aria-checked', String(!!st.album));
+  $('sbNow').textContent = st.enabled ? `没人说话 ${st.minutes} 分钟后` : '';
+  $('sbMinutes').innerHTML = st.choices.map(m => `<button data-m="${m}" class="${m === st.minutes ? 'on' : ''}">${m} 分钟</button>`).join('');
+  $('sbAlbumSub').textContent = st.photos.length ? `${st.photos.length} 张照片，每 15 秒换一张` : '还没有照片，用手机传几张';
+  $('sbThumbs').innerHTML = st.photos.map(u => `<button data-del="${esc(u.split('/').pop())}" class="${sb.armed === u.split('/').pop() ? 'armed' : ''}"><img src="${esc(u)}" alt="" loading="lazy"></button>`).join('');
+  $('sbAdd').hidden = st.photos.length >= st.max;
+}
+async function setStandby(body) {
+  if (DEMO !== null) return;
+  const r = await postJson('/api/standby', body);
+  if (r.ok) { ui.standby = r.standby; renderStandbyCard(); } else if (r.error) toast(r.error, 'error');
+}
+$('sbSwitch').addEventListener('click', () => setStandby({ enabled: !(ui.standby && ui.standby.enabled) }));
+$('sbAlbum').addEventListener('click', () => setStandby({ album: !(ui.standby && ui.standby.album) }));
+$('sbMinutes').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) setStandby({ minutes: Number(b.dataset.m) }); });
+$('sbThumbs').addEventListener('click', e => {
+  const b = e.target.closest('[data-del]');
+  if (!b) return;
+  if (sb.armed !== b.dataset.del) { sb.armed = b.dataset.del; renderStandbyCard(); setTimeout(() => { sb.armed = null; renderStandbyCard(); }, 3000); return; }
+  sb.armed = null; setStandby({ delete: b.dataset.del });
+});
+$('sbAdd').addEventListener('click', () => DEMO === null && postJson('/api/album/start').then(r => { if (!r.ok) toast(r.error || '没开成', 'error'); }));
+function standbyBusy() {
+  const st = ui.status || {};
+  return st.state !== 'idle' || document.querySelector('.sheet.on') || ui.photo || (ui.cook && ui.cook.on)
+    || (ui.alarms && ui.alarms.ringing) || ww.holding || bc.holding;
+}
+function showStandby(on) {
+  if (on === sb.shown) return;
+  sb.shown = on;
+  $('standby').hidden = !on;
+  clearInterval(sb.timer);
+  if (on) { renderStandby(); sb.timer = setInterval(renderStandby, 15000); }
+}
+function renderStandby() {
+  const now = new Date(), st = ui.standby || {}, photos = (st.album && !(ui.status.sleep || {}).active) ? st.photos || [] : [];
+  $('sbTime').textContent = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  $('sbDate').textContent = $('bigDate').textContent;
+  const w = ui.today && ui.today.weather, n = v => (v === null || v === undefined ? '?' : Math.round(v));
+  $('sbWx').innerHTML = w ? `<span style="font-size:64px">${esc(w.icon || '')}</span><b>${n(w.temp)}°</b><span>${esc(w.text)} · ${n((w.today || {}).min)}~${n((w.today || {}).max)}°</span>` : '';
+  const next = ui.alarms && ui.alarms.items.find(v => v.kind !== 'timer');
+  $('sbAlarm').hidden = !next;
+  if (next) $('sbAlarm').textContent = `⏰ ${dayText(next.at)} ${hhmm(next.at)} ${next.label || ''}`;
+  $('standby').classList.toggle('plain', !photos.length);
+  const imgs = [$('sbPhotoA'), $('sbPhotoB')];
+  if (photos.length) {
+    sb.idx = (sb.idx + 1) % photos.length;
+    const nextImg = imgs[sb.layer ^ 1];
+    nextImg.onload = () => { nextImg.classList.add('on'); imgs[sb.layer].classList.remove('on'); sb.layer ^= 1; };
+    nextImg.src = photos[sb.idx];
+  } else imgs.forEach(i => i.classList.remove('on'));
+}
+// any touch: back to the home page (the touch that ends the standby page does nothing else)
+document.addEventListener('pointerdown', e => {
+  sb.last = Date.now();
+  if (sb.shown) { e.preventDefault(); e.stopPropagation(); showStandby(false); sb.eatClick = Date.now(); }
+}, true);
+document.addEventListener('click', e => {
+  if (sb.eatClick && Date.now() - sb.eatClick < 800) { e.preventDefault(); e.stopPropagation(); sb.eatClick = 0; }
+}, true);
+setInterval(() => {
+  const st = ui.standby;
+  if (!st || !st.enabled || standbyBusy()) { sb.last = Math.max(sb.last, standbyBusy() ? Date.now() : 0); if (sb.shown) showStandby(false); return; }
+  if (!sb.shown && Date.now() - sb.last > st.minutes * 60000) showStandby(true);
+}, 5000);
+
+/* ---- 儿童模式 (kids.py, 设计画布第 10 块) ---- */
+function renderKids() {
+  const k = ui.kids;
+  if (!k) return;
+  $('kidsCard').classList.toggle('off', !k.enabled);
+  $('kidsSwitch').setAttribute('aria-checked', String(!!k.enabled));
+  $('kidsNow').textContent = k.enabled ? `${k.age} 岁 · 今天聊了 ${k.used_minutes} 分钟${k.blocked === 'limit' ? '（到上限了）' : k.blocked === 'bedtime' ? '（睡觉时间）' : ''}` : '';
+  $('kidsAge').textContent = `${k.age} 岁`;
+  $('kidsMin').textContent = k.daily_minutes ? `${k.daily_minutes} 分` : '不限';
+  $('kidsBed').textContent = k.bedtime || '不限';
+  for (const b of $('kidsVoice').children) b.classList.toggle('on', b.dataset.v === k.voice);
+}
+async function setKids(body) {
+  if (DEMO !== null) return;
+  const r = await postJson('/api/kids', body);
+  if (r.ok) { ui.kids = r.kids; renderKids(); } else if (r.error) toast(r.error, 'error');
+}
+$('kidsSwitch').addEventListener('click', () => setKids({ enabled: !(ui.kids && ui.kids.enabled) }));
+$('kidsVoice').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (b) setKids({ voice: b.dataset.v }); });
+$('kidsCard').addEventListener('click', e => {
+  const b = e.target.closest('.bc-step [data-k]');
+  if (!b || !ui.kids) return;
+  const d = Number(b.dataset.d);
+  if (b.dataset.k === 'age') setKids({ age: Math.max(1, Math.min(14, ui.kids.age + d)) });
+  else if (b.dataset.k === 'min') setKids({ minutes_step: d });
+  else setKids({ bedtime_shift: d });
+});
+
 /* ---- 外观: theme, avatar, home blocks (looks.py, 设计画布第 8 块) ---- */
 const AVATAR_DOT = {
   orb: 'radial-gradient(circle at 34% 28%,#f2f4ff,#b4bde8 20%,#5b65a8 58%,#191d45)',
@@ -691,6 +818,14 @@ function renderPhoto() {
   if (pick) $('photoStyles').innerHTML = (p.styles || []).map(st =>
     `<button data-style="${st.id}" class="${st.id === p.style ? 'on' : ''}">${esc(st.name)}</button>`).join('');
   $('photoUse').hidden = !(avatar && p.state === 'generated' && p.preview);
+  if (p.purpose === 'album') {
+    $('photoQ').hidden = true;
+    $('photoTitle').innerHTML = failed ? '没传成' : '用手机选几张<br>家里的照片';
+    $('photoNote').textContent = failed ? (p.error || '出错了') : p.received ? `已经收到 ${p.received} 张，传完点「完成」` : '可以多选，一次最多 30 张；手机和小麦连同一个 Wi‑Fi';
+    $('photoCancel').textContent = p.received ? '完成' : '取消';
+    $('photoQr').hidden = false; $('photoImg').hidden = true;
+    return;
+  }
   if (avatar) {
     $('photoTitle').innerHTML = failed ? '没成功' : p.state === 'waiting' ? '用手机拍一张<br>正脸照' : p.state === 'received' ? '选一个画风'
       : p.state === 'generating' ? '正在画…' : '画好了';
@@ -1500,8 +1635,11 @@ function fillMsg(el, m) {
   const tag = broadcastTag(m);
   if (tag) { el.innerHTML = `${tag.startsWith('早安') ? '☀' : tag.startsWith('拍照') ? '📷' : '⛅'} ${esc(tag)}`; return; }
   if (m.role === 'card') {   // self.screen.show_card: a recipe, a list, a table (markdown rendered by home.js)
+    const steps = ((m.card || {}).markdown || '').split('\n').filter(l => /^\s*(\d+[.、)）]|第[一二三四五六七八九十\d]+步)/.test(l)).length;
     el.querySelector('.body').innerHTML = `<h3 class="rich-title">${esc(m.text)}</h3>`
-      + (window.cardHtml ? window.cardHtml(m.card || {}) : esc((m.card || {}).markdown || '')) + `<span class="ts">${fmtTime(m.time)}</span>`;
+      + (window.cardHtml ? window.cardHtml(m.card || {}) : esc((m.card || {}).markdown || ''))
+      + (steps >= 2 ? `<button class="card-cook" data-cook="${esc(m.id)}">开始做菜 · 一步一步来</button>` : '')
+      + `<span class="ts">${fmtTime(m.time)}</span>`;
     return;
   }
   const html = esc(m.text) + (m.interrupted ? '<span class="cut">已打断</span>' : '') + `<span class="ts">${fmtTime(m.time)}</span>`;
@@ -1627,6 +1765,9 @@ const handlers = {
     if (s.wake_words) ui.wake = s.wake_words;
     if (s.broadcast) ui.broadcast = s.broadcast;
     if (s.looks) ui.looks = s.looks;
+    if (s.kids) { ui.kids = s.kids; renderKids(); }
+    if (s.standby) { ui.standby = s.standby; renderStandbyCard(); }
+    if (s.cook) { ui.cook = s.cook; renderCook(); }
     ui.today = s.today || ui.today; renderLooks(); renderToday();
     ui.photo = s.photo || null; renderPhoto();
     renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth(); renderWake(); renderBroadcast();
@@ -1673,6 +1814,15 @@ const handlers = {
   },
   broadcast(b) {
     ui.broadcast = b; renderBroadcast();
+  },
+  standby(st) {
+    ui.standby = st; renderStandbyCard();
+  },
+  cook(c) {
+    ui.cook = c; renderCook();
+  },
+  kids(k) {
+    ui.kids = k; renderKids();
   },
   looks(l) {
     ui.looks = l; renderLooks();

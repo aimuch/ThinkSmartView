@@ -1665,7 +1665,8 @@ async function renderMemory(root) {
       const models = x.models.map((o) => `${esc(o.label)} ${o.count} 条${o.agent ? "（不总结）" : ""}`).join("、") || "没有聊天记录";
       return `<div class="card panel" data-device="${esc(x.device)}">
         <div class="device-top"><span class="dot ${x.online ? "on" : ""}"></span><b class="mono">${esc(x.device)}</b>
-          ${m.updated ? `<span class="pill">${esc(SOURCE[m.source] || "")} · ${esc(fmt(m.updated))}</span>` : '<span class="pill">还没有记忆</span>'}</div>
+          ${m.updated ? `<span class="pill">${esc(SOURCE[m.source] || "")} · ${esc(fmt(m.updated))}</span>` : '<span class="pill">还没有记忆</span>'}
+          <button class="btn sm" data-history style="margin-left:auto">最近对话 ›</button></div>
         <p class="muted small" style="margin:8px 0 0">存着的记录：${models}</p>
         <label class="f" style="margin-top:14px">记忆全文<span class="hint">要点式，每条一行；自动总结时会在这份基础上合并新的内容（约 ${st.summary_chars} 字以内）</span>
           <textarea class="in" rows="8" data-edit maxlength="5000" placeholder="（空）">${esc(value)}</textarea></label>
@@ -1686,6 +1687,16 @@ async function renderMemory(root) {
         if (!res.ok || r.ok === false) return toast(r.error || "保存失败", true);
         x.memory = r.memory; delete edits[dev];
         toast(text ? "已保存，下一次提问就用新的记忆" : "记忆已清空"); draw();
+      });
+      card.querySelector("[data-history]").onclick = () => openDrawer(`最近对话 · ${dev}`, '<p class="muted">加载中…</p>', async (body) => {
+        try {
+          const h = await api("memory/history?device=" + encodeURIComponent(dev));
+          const ROLE = { user: "问", bot: "答" };
+          body.innerHTML = Object.entries(h.models).map(([entry, msgs]) => `<div><b>${esc(entry)}</b>${msgs.slice().reverse().map((m) =>
+            `<div style="border-top:1px solid var(--line);padding:8px 0;font-size:13px"><span class="pill ${m.role === "user" ? "" : "ok"}">${ROLE[m.role] || esc(m.role)}</span>
+              <span class="muted small">${esc(fmt(m.time))}</span><div style="margin-top:4px;white-space:pre-wrap">${esc(m.text)}</div></div>`).join("")}</div>`).join("")
+            || '<p class="muted">还没有对话。</p>';
+        } catch (err) { body.innerHTML = `<div class="banner err">${esc(err.message)}</div>`; }
       });
       card.querySelector("[data-save]").onclick = (e) => save(e.currentTarget, ta.value);
       card.querySelector("[data-clear]").onclick = (e) => { if (confirm(`清空 ${dev} 的记忆？聊天记录不受影响。`)) save(e.currentTarget, ""); };

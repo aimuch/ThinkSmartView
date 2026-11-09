@@ -208,6 +208,32 @@
       </div>
       <p class="opt-note">问「明天下雨吗」这种没说地方的话，就查住宅地址的天气。也可以直接说「<span class="ww-name">小麦小麦</span>，每天早上七点半播报天气」「住宅地址改成杭州西湖区」。<button class="link-btn" id="bcTest">现在播一次试试</button></p>
     </div>
+    <div class="alarms-card bt-card kids-card" id="kidsCard">
+      <div class="bright-head"><b>儿童模式</b><span class="bright-num" id="kidsNow"></span>
+        <button class="switch" id="kidsSwitch" role="switch" aria-checked="false" aria-label="儿童模式"><i></i></button></div>
+      <div class="kids-on">
+        <div class="al"><div class="al-text"><b>孩子几岁</b><span>说话方式按年龄调</span></div>
+          <div class="bc-step"><button data-k="age" data-d="-1" aria-label="小一岁">−</button><b class="kids-num" id="kidsAge"></b><button data-k="age" data-d="1" aria-label="大一岁">+</button></div></div>
+        <div class="al"><div class="al-text"><b>每天最多聊</b><span>到了就说「今天聊够啦」</span></div>
+          <div class="bc-step"><button data-k="min" data-d="-10" aria-label="少 10 分钟">−</button><b class="kids-num" id="kidsMin"></b><button data-k="min" data-d="10" aria-label="多 10 分钟">+</button></div></div>
+        <div class="al"><div class="al-text"><b>几点以后不陪聊</b><span>到点就说「该睡觉啦」，早上 6:30 恢复</span></div>
+          <div class="bc-step"><button data-k="bed" data-d="-30" aria-label="提前半小时">−</button><b class="kids-num" id="kidsBed"></b><button data-k="bed" data-d="30" aria-label="推后半小时">+</button></div></div>
+        <div class="minutes bc-chips" id="kidsVoice" style="grid-template-columns:repeat(2,1fr)"><button data-v="child">童声（云夏）</button><button data-v="adult">大人的声音</button></div>
+      </div>
+      <p class="opt-note">打开后：回答用短句和孩子懂的词，故事一次讲一小段，不讲吓人的内容；认东西时屏幕上出大图标卡片。闹钟、提醒和天气播报照常。家长在网关后台「记忆 → 最近对话」能看问了什么。说「关掉儿童模式」不管用，只能在这里关。</p>
+    </div>
+    <div class="alarms-card bt-card sb-card" id="sbCard">
+      <div class="bright-head"><b>待机页</b><span class="bright-num" id="sbNow"></span>
+        <button class="switch" id="sbSwitch" role="switch" aria-checked="true" aria-label="待机页"><i></i></button></div>
+      <div class="sb-on">
+        <div class="minutes" id="sbMinutes" style="grid-template-columns:repeat(4,1fr)"></div>
+        <div class="opt rot-auto"><div class="opt-text"><b>家庭相册</b><span id="sbAlbumSub"></span></div>
+          <button class="switch" id="sbAlbum" role="switch" aria-checked="true" aria-label="家庭相册轮播"><i></i></button></div>
+        <div class="sb-thumbs" id="sbThumbs"></div>
+        <button class="bt-add" id="sbAdd">＋ 用手机传照片</button>
+      </div>
+      <p class="opt-note">待机页显示大时钟、日期、天气和下一个闹钟，背景轮播家庭相册（没有照片时用主题的背景）。点一下屏幕或叫它就回到首页；到自动熄屏时间照常熄屏，睡眠时段里不轮播。点两下缩略图删除。</p>
+    </div>
     <div class="alarms-card ww-card" id="wwCard">
       <div class="bright-head"><b>唤醒词</b><span class="bright-num" id="wwCount"></span></div>
       <div class="alarm-list" id="wwList"></div>
@@ -431,6 +457,23 @@
       <div class="photo-btns"><button class="upd-btn" id="photoCancel">取消</button><button class="upd-btn pri" id="photoUse" hidden>用这个形象</button><span class="photo-time" id="photoTime"></span></div>
     </div>
   </div>
+</div>
+<!-- 待机页 (设计画布第 10 块): a big clock over the family album; a touch or the wake word ends it -->
+<div class="standby" id="standby" hidden>
+  <img class="sb-photo" id="sbPhotoA" alt=""><img class="sb-photo" id="sbPhotoB" alt="">
+  <div class="sb-shade"></div>
+  <div class="sb-alarm" id="sbAlarm" hidden></div>
+  <div class="sb-time" id="sbTime"></div><div class="sb-date" id="sbDate"></div>
+  <div class="sb-wx" id="sbWx"></div>
+</div>
+<!-- 做菜模式: one step per screen -->
+<div class="cook-ov" id="cookOv" hidden>
+  <div class="cook-top"><b id="cookTitle"></b><span id="cookCount"></span><div class="cook-dots" id="cookDots"></div></div>
+  <div class="cook-step" id="cookStep"></div>
+  <div class="cook-text" id="cookText"></div>
+  <div class="cook-btns"><button class="ctl-big" id="cookPrev">上一步</button><button class="ctl-big tmr" id="cookTimer" hidden></button>
+    <button class="ctl-big pri" id="cookNext">下一步</button><button class="ctl-big" id="cookExit">退出</button></div>
+  <div class="cook-say">不用叫醒，直接说「下一步」「上一步」「再说一遍」「开始计时」「退出做菜」</div>
 </div>
 <script src="/static/v2/vendor/qrcode.js"></script>
 <script src="/static/v2/app.js"></script>

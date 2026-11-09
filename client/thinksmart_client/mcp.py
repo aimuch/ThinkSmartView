@@ -213,7 +213,25 @@ LOOKS_TOOLS = [
                         'properties': {'theme': {'type': 'string'}, 'avatar': {'type': 'string'}}},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + home_tools.TOOLS
+KIDS_TOOLS = [
+    {
+        'name': 'self.kids_mode.get',
+        'description': '查看儿童模式：开没开、孩子几岁、每天最多聊多久、今天聊了多久、几点以后不陪聊。'
+                       '用户说「打开儿童模式」时带 enable=true 打开。关掉儿童模式只能在设置页（防止孩子自己关），'
+                       '有人说「关掉儿童模式」时告诉他去设置页关。',
+        'inputSchema': {'type': 'object', 'properties': {'enable': {'type': 'boolean'}}},
+    },
+]
+COOK_TOOLS = [
+    {
+        'name': 'self.cooking.start',
+        'description': '进入做菜模式：把屏幕上最新那张有编号步骤的菜谱卡片一步一屏显示、一步一步念。用户说「开始做菜」'
+                       '「一步一步教我做」时调用（先用 self.screen.show_card 给出带编号步骤的菜谱）。进入后用户直接说'
+                       '「下一步」「上一步」「再说一遍」「开始计时」「退出做菜」就行，不用叫醒；调用后只说一句「好，我们开始」。',
+        'inputSchema': {'type': 'object', 'properties': {}},
+    },
+]
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -379,6 +397,20 @@ async def handle(payload, client=None):
                     text = _dumps({'success': False, 'reason': str(e), 'text': client.broadcast_view()['text']})
             elif name == 'self.location.set_home' and client:
                 text = _dumps(await _set_home(client, str(args.get('place') or '').strip()))
+            elif name == 'self.cooking.start' and client:
+                try:
+                    v = await client.cook_start(read=False)
+                    text = _dumps({'action': 'RESPONSE', 'response': f"好，我们开始做{v['title']}，一共 {len(v['steps'])} 步。"
+                                                                     f"第 1 步，{v['steps'][0]}"})
+                except ValueError as e:
+                    text = _dumps({'success': False, 'reason': str(e), 'suggest': '先用 self.screen.show_card 给出带编号步骤的菜谱'})
+            elif name == 'self.kids_mode.get' and client:
+                if args.get('enable') is True and not client.kids['enabled']:
+                    await client.set_kids(enabled=True)
+                v = client.kids_view()
+                text = _dumps({'enabled': v['enabled'], 'age': v['age'], 'daily_minutes': v['daily_minutes'] or '不限',
+                               'used_minutes_today': v['used_minutes'], 'bedtime': v['bedtime'] or '不限',
+                               'note': '关掉儿童模式要在设置页里关' if v['enabled'] else ''})
             elif name == 'self.appearance.set' and client:
                 text = _dumps(await _appearance(client, args.get('theme'), args.get('avatar')))
             elif name == 'self.photo.ask' and client:

@@ -27,6 +27,7 @@ TAG = __name__
 logger = setup_logging()
 
 UPLOAD_SECONDS = 300      # 二维码有效期
+ALBUM_PER_SESSION = 30    # 家庭相册：一个码最多传几张
 KEEP_SECONDS = 1800       # 会话结果留多久（设备取答案、手机看答案）
 PHOTO_DAYS = 7
 MAX_BYTES = 8 * 1024 * 1024
@@ -179,8 +180,8 @@ def purge_old_photos(now: float = None):
 def start(device: str, question: str, purpose: str = "ask") -> dict:
     if not device:
         raise ValueError("缺少 device")
-    if purpose not in ("ask", "avatar"):
-        raise ValueError("purpose 只能是 ask 或 avatar")
+    if purpose not in ("ask", "avatar", "album"):
+        raise ValueError("purpose 只能是 ask、avatar 或 album")
     question = re.sub(r"\s+", " ", str(question or "")).strip()[:QUESTION_MAX] or "这是什么"
     now = time.time()
     token = secrets.token_urlsafe(16)
@@ -191,7 +192,8 @@ def start(device: str, question: str, purpose: str = "ask") -> dict:
             if s["device"] == device and s["state"] == "waiting":
                 s["state"], s["error"] = "cancelled", "已取消"
         _sessions[token] = {"device": device, "question": question, "created": now, "state": "waiting",
-                            "answer": None, "error": None, "photo": None, "purpose": purpose, "avatar": None}
+                            "answer": None, "error": None, "photo": None, "purpose": purpose, "avatar": None,
+                            "album": []}
     purge_old_photos(now)
     return {"token": token, "question": question, "expires": now + UPLOAD_SECONDS}
 
@@ -210,7 +212,7 @@ def view(token: str):
         return None
     return {"state": s["state"], "question": s["question"], "answer": s["answer"], "error": s["error"],
             "expires": s["created"] + UPLOAD_SECONDS, "has_photo": bool(s["photo"]), "purpose": s.get("purpose", "ask"),
-            "has_avatar": bool(s.get("avatar"))}
+            "has_avatar": bool(s.get("avatar")), "album_count": len(s.get("album") or [])}
 
 
 def cancel(token: str) -> bool:
@@ -239,16 +241,27 @@ def receive(token: str, jpeg: bytes, question: str = None) -> dict:
             raise LookupError("这个链接无效，在小麦上重新说一次")
         if s["state"] != "waiting" or time.time() - s["created"] > UPLOAD_SECONDS:
             raise LookupError("这个链接已经用过或过期了，在小麦上重新说一次")
+        if s.get("purpose") == "album" and len(s["album"]) >= ALBUM_PER_SESSION:
+            raise ValueError(f"一次最多传 {ALBUM_PER_SESSION} 张，在小麦上再扫一次码接着传")
         q = re.sub(r"\s+", " ", str(question or "")).strip()[:QUESTION_MAX]
         if q:
             s["question"] = q
         folder = _photos_dir(s["device"])
         os.makedirs(folder, exist_ok=True)
-        path = os.path.join(folder, f"{int(time.time())}-{token[:8]}.jpg")
+        path = os.path.join(folder, f"{int(time.time() * 1000)}-{token[:8]}.jpg")
         with open(path, "wb") as f:
             f.write(jpeg)
+        if s.get("purpose") == "album":   # 相册：一个码可以传好几张，一直收到过期
+            s["album"].append(path)
+            return dict(s)
         s["photo"], s["state"] = path, "received"
         return dict(s)
+
+
+def album_path(token: str, index: int):
+    s = get(token)
+    album = (s or {}).get("album") or []
+    return album[index] if 0 <= index < len(album) else None
 
 
 def answer(token: str, merged: dict):

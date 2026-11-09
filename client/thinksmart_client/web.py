@@ -8,7 +8,7 @@ import time
 from aiohttp import web
 
 from . import __version__, looks, update
-from .app import PHOTOS, ROOT, Client, local_ip
+from .app import ALBUM, PHOTOS, ROOT, Client, local_ip
 
 log = logging.getLogger(__name__)
 WEB = ROOT / 'web'
@@ -387,6 +387,56 @@ def make_app(client: Client):
     app.router.add_post('/api/avatar/start', avatar_start)
     app.router.add_post('/api/avatar/style', avatar_style)
     app.router.add_post('/api/avatar/use', avatar_use)
+    async def kids_set(request):
+        body = await request.json()
+
+        async def change():
+            keys = ('enabled', 'age', 'daily_minutes', 'bedtime', 'voice', 'bedtime_shift', 'minutes_step')
+            return {'kids': await client.set_kids(**{k: body[k] for k in keys if k in body})}
+        return await wake_call(change)
+
+    async def cook_start(request):
+        body = await request.json() if request.can_read_body else {}
+        return await wake_call(client.cook_start, body.get('card'))
+
+    async def cook_go(request):
+        body = await request.json()
+        return await wake_call(client.cook_go, body.get('by', 0), body.get('to'))
+
+    async def cook_stop(_request):
+        return await wake_call(client.cook_stop)
+
+    async def cook_timer(_request):
+        return await wake_call(client.cook_timer)
+
+    async def standby_set(request):
+        body = await request.json()
+
+        async def change():
+            if body.get('delete'):
+                return {'standby': await client.album_delete(str(body['delete']))}
+            keys = ('enabled', 'minutes', 'album')
+            return {'standby': await client.set_standby(**{k: body[k] for k in keys if k in body})}
+        return await wake_call(change)
+
+    async def album_start(_request):
+        return await wake_call(client.album_start)
+
+    async def album_file(request):
+        name = request.match_info['name']
+        path = ALBUM / name
+        if not re.fullmatch(r'[0-9A-Za-z_-]{1,60}\.jpg', name) or not path.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(path, headers={'Cache-Control': 'max-age=31536000'})
+
+    app.router.add_post('/api/cook/start', cook_start)
+    app.router.add_post('/api/cook/go', cook_go)
+    app.router.add_post('/api/cook/stop', cook_stop)
+    app.router.add_post('/api/cook/timer', cook_timer)
+    app.router.add_post('/api/standby', standby_set)
+    app.router.add_post('/api/album/start', album_start)
+    app.router.add_get('/api/album/{name}', album_file)
+    app.router.add_post('/api/kids', kids_set)
     app.router.add_post('/api/looks', looks_set)
     app.router.add_get('/api/avatars/{name}', avatar_file)
     app.router.add_post('/api/photo', photo_start)

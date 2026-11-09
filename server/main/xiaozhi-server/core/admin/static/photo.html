@@ -41,6 +41,7 @@
   <section id="pick">
     <div id="askBox"><label for="q">想问什么（可以改）</label>
     <input type="text" id="q" maxlength="100"></div>
+    <p class="box" id="albumTip" hidden>选几张家里的照片（一次最多 30 张），小麦待机的时候会轮播。照片只存在小麦上。</p>
     <p class="box" id="avatarTip" hidden>拍一张<b>正脸</b>照：脸要清楚、别太小，光线亮一点。拍好后在小麦上选画风，生成卡通形象。</p>
     <div style="height:14px"></div>
     <button class="big" id="shoot" style="width:100%"><span>📷</span>拍照</button>
@@ -71,20 +72,22 @@ fetch(`/photo/${token}/status`).then(r => r.json()).then(s => {
   $('q').value = s.question || '这是什么';
   purpose = s.purpose || 'ask';
   if (purpose === 'avatar') { show('askBox', false); show('avatarTip', true); document.title = '小麦 · 生成形象'; }
+  if (purpose === 'album') { show('askBox', false); show('albumTip', true); show('shoot', false); $('album').textContent = '选照片（可以多选）';
+    $('album').classList.add('big'); $('lib').multiple = true; document.title = '小麦 · 家庭相册'; }
   if (s.state !== 'waiting') fatal(s.error || '这个链接已经用过了，在小麦上重新说一次');
 }).catch(() => fatal('连不上小麦网关：手机要和小麦连同一个 Wi‑Fi'));
 
 $('shoot').onclick = () => $('cam').click();
 $('album').onclick = () => $('lib').click();
 $('cam').onchange = e => e.target.files[0] && send(e.target.files[0]);
-$('lib').onchange = e => e.target.files[0] && send(e.target.files[0]);
+$('lib').onchange = e => purpose === 'album' ? sendMany([...e.target.files]) : e.target.files[0] && send(e.target.files[0]);
 
 // shrink to at most 1600 px on the long side, JPEG: a phone photo is 3-8 MB, the model needs far less
-function shrink(file) {
+function shrink(file, max = 1600) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
       const c = document.createElement('canvas');
       c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
@@ -113,6 +116,25 @@ async function send(file) {
     $('status').classList.add('err');
     $('status').textContent = e.message || '没传上去，在小麦上重新说一次';
   }
+}
+
+// 相册：一张一张缩到 1280 宽再传（设备屏幕就这么宽）
+async function sendMany(files) {
+  show('pick', false); show('sent', true);
+  let ok = 0;
+  for (const [i, file] of files.slice(0, 30).entries()) {
+    $('status').textContent = `正在传第 ${i + 1} / ${Math.min(files.length, 30)} 张…`;
+    try {
+      const blob = await shrink(file, 1280);
+      if (i === 0) $('preview').src = URL.createObjectURL(blob);
+      const form = new FormData();
+      form.append('photo', blob, 'photo.jpg');
+      const r = await (await fetch(`/photo/${token}`, { method: 'POST', body: form })).json();
+      if (!r.ok) throw new Error(r.error || '没传上去');
+      ok++;
+    } catch (e) { $('status').classList.add('err'); $('status').textContent = e.message; return; }
+  }
+  $('status').textContent = `✓ 传好了 ${ok} 张，小麦待机的时候会轮播。`;
 }
 
 async function poll() {

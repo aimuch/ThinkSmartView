@@ -159,12 +159,15 @@ class AdminHandler:
                 web.get("/kiosk/geocode", self.handle_kiosk_geocode),
                 web.post("/kiosk/home", self.handle_kiosk_home),
                 web.get("/kiosk/today", self.handle_kiosk_today),
+                web.post("/kiosk/prefs", self.handle_kiosk_prefs),
+                web.get("/admin/api/memory/history", self.handle_memory_history),
                 web.post("/kiosk/photo/start", self.handle_kiosk_photo_start),
                 web.get("/kiosk/photo/{token}", self.handle_kiosk_photo),
                 web.get("/kiosk/photo/{token}/image", self.handle_kiosk_photo_image),
                 web.post("/kiosk/photo/{token}/cancel", self.handle_kiosk_photo_cancel),
                 web.post("/kiosk/photo/{token}/avatar", self.handle_kiosk_avatar_generate),
                 web.get("/kiosk/photo/{token}/avatar", self.handle_kiosk_avatar_image),
+                web.get("/kiosk/photo/{token}/album/{index}", self.handle_kiosk_album_image),
                 # 手机上的拍照页：局域网里谁都能打开，令牌（一次性、5 分钟）就是凭证
                 web.get("/photo/{token}", self.handle_photo_page),
                 web.get("/photo/{token}/status", self.handle_photo_status),
@@ -901,6 +904,28 @@ class AdminHandler:
         await self._blocking(device_homes.put, device, place)
         return self._json({"ok": True})
 
+    async def handle_kiosk_prefs(self, request: web.Request):
+        """{"device", "kids": {"enabled", "age", "voice"}}：设备在设置页改的、网关要知道的偏好（儿童模式）。
+        下一次连接生效（系统提示和童声在连接建立时定）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import device_prefs
+
+        body = await self._read_json(request)
+        try:
+            await self._blocking(device_prefs.put_kids, str(body.get("device") or ""), body.get("kids") or {})
+        except (ValueError, TypeError) as e:
+            return self._error(str(e), 400)
+        return self._json({"ok": True})
+
+    async def handle_memory_history(self, request: web.Request):
+        """?device=：这台设备最近的对话（家长在「记忆」页看孩子问了什么），每个模型最近 50 条。"""
+        self._require_login(request)
+        device = request.query.get("device") or ""
+        if not device:
+            return self._error("缺少 device", 400)
+        return self._json({"ok": True, "models": await self._blocking(chat_history.history, device, 50)})
+
     async def handle_kiosk_today(self, request: web.Request):
         """?device=：设备首页用的今天：农历（含节气、节日）和住宅地址的天气（20 分钟缓存）。
         没设住宅地址时用后台「查天气」里的设备所在地；天气查不到时 weather 为 null、带 weather_error。"""
@@ -999,6 +1024,18 @@ class AdminHandler:
         if not path or not os.path.isfile(path):
             return self._error("还没画好", 404)
         return web.FileResponse(path, headers={"Content-Type": "application/octet-stream", "Cache-Control": "no-store"})
+
+    async def handle_kiosk_album_image(self, request: web.Request):
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        try:
+            index = int(request.match_info["index"])
+        except ValueError:
+            return self._error("index 要是数字", 400)
+        path = photo_ask.album_path(request.match_info["token"], index)
+        if not path or not os.path.isfile(path):
+            return self._error("没有这张", 404)
+        return web.FileResponse(path, headers={"Content-Type": "image/jpeg", "Cache-Control": "no-store"})
 
     async def handle_photo_page(self, request: web.Request):
         html = (STATIC_DIR / "photo.html").read_text(encoding="utf-8")
