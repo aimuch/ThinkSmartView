@@ -24,6 +24,7 @@ def test_candidates_try_full_names_and_strip_province():
     assert qs[0] == ("上海青浦", "") and ("青浦区", "上海") in qs
     assert ("杭州市", "") in open_meteo.candidates("杭州")
     assert ("西湖区", "杭州") in open_meteo.candidates("浙江省杭州市西湖区")
+    assert ("广州", "") in open_meteo.candidates("广州市") and ("杭州", "") in open_meteo.candidates("杭州市")   # Open-Meteo 不认「广州市」
 
 
 def test_wind_and_air_levels():

@@ -49,6 +49,9 @@ def candidates(name: str) -> list:
     for tail in ("省", "自治区", "特别行政区"):
         name = name.replace(tail, "")
     out = [(name + s, "") for s in _SUFFIXES]
+    # Open-Meteo 的城市名多数不带「市」：「广州市」「杭州市」查不到，「广州」「杭州」能查到
+    if name.endswith(("市", "县")) and len(name) > 2:
+        out.append((name[:-1], ""))
     for p in _PROVINCES:
         if name.startswith(p) and len(name) > len(p):
             rest = name[len(p):].lstrip("市")
