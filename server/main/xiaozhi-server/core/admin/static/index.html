@@ -875,7 +875,48 @@ async function renderLLM(root) {
     renderApi();
   }));
   renderApi();
-  page.dirty = () => cliDirty() || apiDirty();
+  page.dirty = () => cliDirty() || apiDirty() || visionDirty();
+  const box = document.createElement("div");
+  root.appendChild(box);
+  renderVision(box);
+}
+
+// 看图模型（拍照问答，core/agent/photo_ask.py）：DeepSeek 看不了图，另选一个
+let visionPick = null;
+const visionDirty = () => !!($("vision-key") && $("vision-key").value.trim());
+async function renderVision(box) {
+  const d = await api("vision");
+  if (!visionPick || !d.providers.find((p) => p.id === visionPick)) visionPick = d.selected || "zhipu";
+  const p = d.providers.find((x) => x.id === visionPick);
+  box.innerHTML = `
+    <div class="card panel" style="margin-top:20px">
+      <h2 style="margin:0 0 6px">看图模型 ${d.ready ? '<span class="pill ok">可以用</span>' : '<span class="pill warn">还没配好</span>'}</h2>
+      <p class="muted small" style="margin:0 0 14px">设备上说“帮我看下这是什么”，用手机扫码拍照，照片交给这里选的看图模型（DeepSeek 看不了图）。填完 Key 点“试一下”用一张测试图验证。</p>
+      <div class="choices">${d.providers.map((x) => `
+        <button class="choice ${x.id === visionPick ? "on" : ""}" data-vision="${esc(x.id)}">
+          <div class="mark" style="background:${x.id === "zhipu" ? "#eef2ff;color:#4f46e5" : "#fff7ed;color:#c2410c"}">${x.id === "zhipu" ? "智" : "千"}</div>
+          <div><b>${esc(x.label)}</b> ${x.id === d.selected ? '<span class="pill ok">使用中</span>' : x.configured ? '<span class="pill">已配置</span>' : '<span class="pill">未配置</span>'}<small>${esc(x.note)} · ${esc(x.model)}</small></div></button>`).join("")}</div>
+      <div class="grid2" style="margin-top:14px"><label class="f">${esc(p.label)} 的 API Key
+        <input class="in mono" id="vision-key" type="password" autocomplete="off" placeholder="${p.configured ? "已设置，输入新值可替换" : "未设置，粘贴后保存"}"></label></div>
+      <p class="muted small" style="margin:8px 0 14px"><a href="${esc(p.key_url)}" target="_blank" rel="noopener">去这里创建 API Key</a>。Key 只保存在这台电脑的配置文件里。</p>
+      <div class="actions"><span class="result muted" id="vision-result"></span>
+        <button class="btn" id="vision-test">试一下</button>
+        <button class="btn primary" id="vision-save">${p.id === d.selected ? "保存" : "保存并使用"}</button></div>
+    </div>`;
+  box.querySelectorAll("[data-vision]").forEach((b) => (b.onclick = () => { visionPick = b.dataset.vision; renderVision(box); }));
+  $("vision-save").onclick = (ev) => busy(ev.target, async () => {
+    try { await api("vision", { provider: p.id, api_key: $("vision-key").value.trim() }); toast("看图模型已保存"); renderVision(box); }
+    catch (err) { toast(err.message, true); }
+  });
+  $("vision-test").onclick = (ev) => busy(ev.target, async () => {
+    const out = $("vision-result");
+    out.textContent = "正在问看图模型…";
+    try {
+      const r = await api("vision/test", {});
+      out.textContent = r.ok ? "✓ " + r.message : "✗ " + r.error;
+      out.className = "result " + (r.ok ? "" : "err");
+    } catch (err) { out.textContent = "✗ " + err.message; out.className = "result err"; }
+  });
 }
 
 // ---------- 语音识别 ----------

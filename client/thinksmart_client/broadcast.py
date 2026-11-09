@@ -123,9 +123,10 @@ def request_text(hhmm, setting, home_name, reminders_today=None):
 
 
 def tag_of(text):
-    """The label of a broadcast request ('早安播报 07:30'), or None for anything the user said."""
+    """The label of a request the device sent on its own ('早安播报 07:30', '拍照问 09:41'), or None for
+    anything the user said."""
     m = TAG.match(text or '')
-    return m.group(1) if m and '播报' in m.group(1) else None
+    return m.group(1) if m and ('播报' in m.group(1) or m.group(1).startswith('拍照问')) else None
 
 
 def describe(setting):

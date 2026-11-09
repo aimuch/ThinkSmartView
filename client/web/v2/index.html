@@ -43,6 +43,10 @@
       </div>
       <div class="link" id="link"><i></i><span>待机</span></div>
       <div class="clock" id="clock"><span id="time">--:--</span></div>
+      <button class="gear" id="btnPhoto" aria-label="拍照问">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      </button>
       <button class="gear" id="btnHome" aria-label="家居">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 11l8-6.5 8 6.5M6.5 9.5V19h11V9.5"/><path d="M10 19v-5h4v5"/></svg>
@@ -403,5 +407,18 @@
 <script src="/static/v2/vendor/qrcode.js"></script>
 <script src="/static/v2/app.js"></script>
 <script src="/static/v2/home.js"></script>
+<!-- 拍照问答 (设计画布第 7 块): the phone takes the picture -->
+<div class="photo-ov" id="photoOv" hidden>
+  <div class="photo-sheet">
+    <div class="photo-left"><canvas id="photoQr" width="340" height="340"></canvas><img id="photoImg" alt=""><i class="photo-scan" id="photoScan"></i></div>
+    <div class="photo-txt">
+      <small>拍照问</small>
+      <h2 id="photoTitle">用手机扫码，<br>拍一张照片</h2>
+      <div class="photo-q" id="photoQ"></div>
+      <p id="photoNote">手机和小麦连同一个 Wi‑Fi 才能打开</p>
+      <div class="photo-btns"><button class="upd-btn" id="photoCancel">取消</button><span class="photo-time" id="photoTime"></span></div>
+    </div>
+  </div>
+</div>
 </body>
 </html>

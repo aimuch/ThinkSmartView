@@ -220,3 +220,61 @@ def test_voice_tools(tmp_path, monkeypatch):
     assert r == {'success': True, 'home': '浙江省杭州市西湖区'}
     assert call(c, 'self.location.set_home', place='青埔')['reason'].startswith('没找到')
     assert call(c, 'self.location.set_home')['home'] == '浙江省杭州市西湖区'
+
+
+# ---- 拍照问答 (photo_start and its poller) ----
+
+def test_photo_question_flow(tmp_path, monkeypatch):
+    c = make_client(tmp_path, monkeypatch)
+    monkeypatch.setattr(app, 'PHOTOS', tmp_path / 'photos')
+    monkeypatch.setattr(app, 'PHOTO_POLL', 0)
+    c.photo = c.photo_task = c.photo_card = None
+    c.cards, c._card_seq = [], 0
+    c.threads, c.entry, c.models, c._seq = {}, None, {}, 0
+    c._save_cards = lambda: None
+    states = iter(['waiting', 'received', 'done'])
+    calls = []
+
+    async def hub_http(path, body=None):
+        calls.append(path)
+        if path == '/kiosk/photo/start':
+            assert body == {'device': 'dev1', 'question': '这个能吃吗'}
+            return {'ok': True, 'token': 'tok123', 'url': 'http://10.0.0.2:16688/photo/tok123', 'question': '这个能吃吗',
+                    'expires': 9e9, 'vision_ready': True}
+        state = next(states)
+        return {'ok': True, 'state': state, 'question': '这个能吃吗', 'answer': '这是鲜贝，可以吃' if state == 'done' else None}
+    c._hub_http = hub_http
+
+    async def fetch(token):
+        return '/api/photos/1-tok123.jpg'
+    c._fetch_photo = fetch
+
+    async def run():
+        r = await c.photo_start('这个能吃吗')
+        assert r == {'vision_ready': True} and c.photo_view()['state'] == 'waiting'
+        await c.photo_task
+    asyncio.run(run())
+    assert c.photo is None and len(c.said) == 1
+    assert c.said[0].startswith('【拍照问 ') and '「这个能吃吗」' in c.said[0] and '这是鲜贝，可以吃' in c.said[0]
+    assert bc.tag_of(c.said[0][1:]).startswith('拍照问')
+    assert c.photo_card == ('这个能吃吗', '这是鲜贝，可以吃', ['/api/photos/1-tok123.jpg'])
+    # the card goes in when the hub echoes the request; a local photo path is allowed, other paths aren't
+    m = c.show_card(*c.photo_card)
+    assert m['card']['images'] == ['/api/photos/1-tok123.jpg']
+    assert c.show_card('x', 'y', ['/etc/passwd', 'http://a/b.jpg', '/api/photos/../x.jpg'])['card']['images'] == []
+
+
+def test_photo_tools(tmp_path, monkeypatch):
+    c = make_client(tmp_path, monkeypatch)
+    started = []
+
+    async def photo_start(q):
+        started.append(q)
+        return {'vision_ready': False}
+
+    async def photo_cancel():
+        started.append('cancel')
+    c.photo_start, c.photo_cancel = photo_start, photo_cancel
+    r = call(c, 'self.photo.ask', question='这是什么')
+    assert r['action'] == 'RESPONSE' and '二维码' in r['response'] and '看图模型' in r['response']
+    assert call(c, 'self.photo.cancel')['action'] == 'RESPONSE' and started == ['这是什么', 'cancel']

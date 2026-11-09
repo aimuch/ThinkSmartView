@@ -35,6 +35,8 @@ import io
 import json
 import logging
 import os
+import re
+import shutil
 import socket
 import time
 import urllib.parse
@@ -64,6 +66,8 @@ SPEECH_RMS = 0.005
 HALT = ('sudo', '-n', 'systemctl', 'halt')
 CARD_TITLE_MAX, CARD_TEXT_MAX, CARD_IMAGES_MAX, CARDS_MAX = 80, 12000, 6, 30
 CARDS = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'cards.json'
+PHOTOS = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'photos'   # 拍照问答 (photo_start)
+PHOTO_POLL = 1.5
 HALT_AFTER = 3           # seconds to read "正在关机 … 等 10 秒再拔" before the screen goes dark
 UPDATE_BUSY = ('preparing', 'downloading', 'installing', 'testing', 'rolling_back')
 # installing for a page request, or finishing an interrupted one at boot (self-test, rollback)
@@ -172,6 +176,8 @@ class Events:
 
 
 class Client:
+    photo = photo_task = photo_card = None   # 拍照问答 (set in __init__ too; tests build bare clients)
+
     wake_rec = None   # a new wake word being said on the settings page: mic blocks (wake_words.py)
 
     def __init__(self, cfg):
@@ -242,7 +248,10 @@ class Client:
         except ValueError:
             log.warning('invalid broadcast setting %r, using the default', cfg.get('broadcast'))
             self.broadcast = broadcast.normalize(None)
-        self.broadcast_fired = set()   # 'YYYY-MM-DD HH:MM' done (played or given up) today
+        self.broadcast_fired = set()
+        self.photo = None             # the photo question waiting for the phone (photo_start)
+        self.photo_task = None
+        self.photo_card = None        # its card, shown when the hub echoes the request   # 'YYYY-MM-DD HH:MM' done (played or given up) today
         self.home = cfg.get('home') if isinstance(cfg.get('home'), dict) and cfg['home'].get('name') else None
         self.rec_seconds = wake_words.RECORD_SECONDS   # how long the current hold-to-say may record
         self.bright_in_sleep = False  # the user set a brightness in these sleep hours: don't dim
@@ -376,6 +385,100 @@ class Client:
     async def wake_record_stop(self):
         """Stop recording; recognise it with the hub's recogniser -> wake_words.analyse result."""
         return wake_words.analyse(await self._record_text('new wake word'), self.wake_labels())
+
+    # ---- 拍照问答: the phone takes the picture (设计画布第 7 块, the hub's core/agent/photo_ask.py) ----
+
+    def photo_view(self):
+        p = self.photo
+        return p and {k: p.get(k) for k in ('token', 'url', 'question', 'expires', 'state', 'error', 'image')}
+
+    def publish_photo(self):
+        self.events.publish('photo', self.photo_view() or {'state': 'closed'})
+
+    async def photo_start(self, question=''):
+        """Open a one-time upload on the hub and show its QR code. Returns what the model should say."""
+        try:
+            data = await self._hub_http('/kiosk/photo/start', {'device': self.cfg['device_id'], 'question': question})
+        except Exception as e:
+            log.warning('cannot start a photo question: %s', e)
+            raise ValueError('连不上小麦网关')
+        if not data.get('ok'):
+            raise ValueError(data.get('error') or '没开成')
+        self.photo = {'token': data['token'], 'url': data['url'], 'question': data['question'],
+                      'expires': data['expires'], 'state': 'waiting', 'error': None, 'image': None}
+        if self.photo_task and not self.photo_task.done():
+            self.photo_task.cancel()
+        self.photo_task = asyncio.create_task(self._photo_poller(self.photo))
+        self.screen.poke()
+        self.publish_photo()
+        log.info('photo question %r: waiting for the phone', data['question'])
+        return {'vision_ready': data.get('vision_ready', True)}
+
+    async def photo_cancel(self):
+        p, self.photo = self.photo, None
+        if p:
+            try:
+                await self._hub_http(f"/kiosk/photo/{p['token']}/cancel", {})
+            except Exception:
+                pass
+        if self.photo_task and not self.photo_task.done():
+            self.photo_task.cancel()
+        self.publish_photo()
+
+    async def _photo_poller(self, p):
+        try:
+            while self.photo is p:
+                await asyncio.sleep(PHOTO_POLL)
+                try:
+                    v = await self._hub_http(f"/kiosk/photo/{p['token']}")
+                except Exception as e:
+                    log.warning('photo question: %s', e)
+                    continue
+                state = v.get('state') if v.get('ok') else 'expired'
+                if state in ('received', 'done') and not p['image']:
+                    p['image'] = await self._fetch_photo(p['token'])
+                    p['question'] = v.get('question') or p['question']
+                if state != p['state']:
+                    p['state'], p['error'] = state, v.get('error') or (None if v.get('ok') else '二维码过期了')
+                    self.screen.poke()
+                    self.publish_photo()
+                if state == 'done':
+                    await self._photo_answered(p, v.get('answer') or '')
+                    return
+                if state in ('error', 'expired', 'cancelled'):
+                    self.play('miss')
+                    await asyncio.sleep(6)       # long enough to read why
+                    if self.photo is p:
+                        self.photo = None
+                        self.publish_photo()
+                    return
+        except asyncio.CancelledError:
+            pass
+
+    async def _fetch_photo(self, token):
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
+                async with s.get(f"{self.cfg['hub_http']}/kiosk/photo/{token}/image") as r:
+                    if r.status != 200:
+                        return None
+                    data = await r.read()
+            PHOTOS.mkdir(parents=True, exist_ok=True)
+            name = f"{int(time.time())}-{re.sub(r'[^0-9A-Za-z_-]', '', token)[:10]}.jpg"
+            (PHOTOS / name).write_bytes(data)
+            return f'/api/photos/{name}'
+        except Exception as e:
+            log.warning('cannot fetch the photo: %s', e)
+            return None
+
+    async def _photo_answered(self, p, answer):
+        """Put the photo and the vision model's words in the conversation (as a card, shown when the
+        hub echoes the request), then ask the chat model to answer from them (spoken; follow-ups work)."""
+        self.photo = None
+        self.publish_photo()
+        self.photo_card = (p['question'], answer, [p['image']] if p['image'] else [])
+        hhmm = datetime.datetime.now().strftime('%H:%M')
+        await self.say(f"【拍照问 {hhmm}】我用手机拍了张照片问：「{p['question']}」。看图模型看到的是：{answer}"
+                       '\n请根据这些直接回答我，一两句话说清楚，不要提「看图模型」。')
 
     # ---- home address and weather broadcasts (broadcast.py) ----
 
@@ -626,7 +729,7 @@ class Client:
     def snapshot(self):
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
                 'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
-                'broadcast': self.broadcast_view(),
+                'broadcast': self.broadcast_view(), 'photo': self.photo_view(),
                 'thread': {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])}}
 
     def view_entry(self):
@@ -877,6 +980,10 @@ class Client:
                     self.listen_after_reply = True
                 # on the page right away: asking the hub for its models first took 0.7-2 s
                 m = self.question = self.add_message('user', text)
+                if self.photo_card and (broadcast.tag_of(text) or '').startswith('拍照问'):
+                    title, answer, images = self.photo_card
+                    self.photo_card = None
+                    self.show_card(title, answer, images)
                 self.set_state('thinking')
                 asyncio.create_task(self._refresh_after_question(m))
         elif kind == 'vad':
@@ -1152,7 +1259,8 @@ class Client:
         imgs = []
         for u in images or []:
             u = str(u).strip()
-            if u.startswith('https://') and len(u) <= 2000 and len(imgs) < CARD_IMAGES_MAX:
+            local = u.startswith('/api/photos/') and re.fullmatch(r'/api/photos/[0-9A-Za-z_-]+\.jpg', u)
+            if (u.startswith('https://') or local) and len(u) <= 2000 and len(imgs) < CARD_IMAGES_MAX:
                 imgs.append(u)
         card = {'title': title, 'markdown': str(markdown or '')[:CARD_TEXT_MAX], 'images': imgs}
         self._card_seq += 1
@@ -1200,6 +1308,7 @@ class Client:
         if result.get('ok') and not memory_only:
             self.threads = {}
             self.cards = []
+            shutil.rmtree(PHOTOS, ignore_errors=True)   # the hub deletes its copies too
             self._save_cards()
             self.bot_msg = self.question = None
             self.events.publish('thread', {'entry': self.view_entry(), 'messages': [], 'reset': True})

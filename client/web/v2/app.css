@@ -641,3 +641,24 @@ body[data-state="listening"] .mic-ring { opacity: .75; }
 .msg.tag { align-self: center; display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-radius: 999px;
   font-size: 17px; color: var(--ink2); background: var(--card); border: 1px solid var(--line); }
 .msg.tag .ts { position: static; margin-left: 4px; }
+
+/* 拍照问答 (设计画布第 7 块) */
+.photo-ov { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: #050813e6; animation: photo-in .2s ease-out; }
+@keyframes photo-in { from { opacity: 0; } to { opacity: 1; } }
+.photo-ov[hidden] { display: none; }
+.photo-sheet { width: min(980px, 92vw); display: flex; gap: 56px; align-items: center; padding: 48px 52px; border-radius: 36px; background: #0b1128; border: 1.5px solid var(--line); }
+.photo-left { flex: none; position: relative; width: 340px; height: 340px; border-radius: 28px; overflow: hidden; background: #fff; }
+.photo-left canvas, .photo-left img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.photo-left img[hidden], .photo-left canvas[hidden] { display: none; }
+.photo-scan { position: absolute; left: 0; right: 0; top: 0; height: 6px; background: linear-gradient(90deg, #0000, var(--accent2), #0000);
+  box-shadow: 0 0 24px var(--accent2); display: none; animation: scan 1.8s ease-in-out infinite alternate; }
+.photo-ov.looking .photo-scan { display: block; }
+@keyframes scan { from { transform: translateY(10px); } to { transform: translateY(324px); } }
+.photo-txt { flex: 1; display: flex; flex-direction: column; gap: 18px; }
+.photo-txt small { font-size: 20px; color: var(--ink3); letter-spacing: 2px; }
+.photo-txt h2 { margin: 0; font-size: 44px; line-height: 1.25; }
+.photo-q { font-size: 26px; padding: 14px 22px; border-radius: 18px; background: #ffffff0f; border: 1px solid var(--line); }
+.photo-txt p { margin: 0; font-size: 22px; line-height: 1.6; color: var(--ink2); }
+.photo-ov.failed .photo-txt p { color: #ffb547; }
+.photo-btns { display: flex; gap: 16px; align-items: center; }
+.photo-time { font-size: 20px; color: var(--ink3); font-variant-numeric: tabular-nums; }

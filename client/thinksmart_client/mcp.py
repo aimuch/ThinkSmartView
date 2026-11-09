@@ -187,7 +187,22 @@ BROADCAST_TOOLS = [
                         'properties': {'place': {'type': 'string', 'description': '地名，国内写省市区，如 杭州市西湖区；国外写英文名'}}},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + home_tools.TOOLS
+PHOTO_TOOLS = [
+    {
+        'name': 'self.photo.ask',
+        'description': '用户想让你看一样东西时调用：「帮我看下这是什么」「这个字怎么读」「看看这道题」「这个能吃吗」。'
+                       '设备没有能用的摄像头：屏幕上会出现二维码，用户用手机扫码拍照，看完后答案会自动送回对话。'
+                       'question 写用户想问的（没说就写「这是什么」）。调用后只说一句「用手机扫一下屏幕上的二维码，拍张照片」，'
+                       '不要猜照片内容。返回 success=false 时把 reason 告诉用户。',
+        'inputSchema': {'type': 'object', 'properties': {'question': {'type': 'string'}}},
+    },
+    {
+        'name': 'self.photo.cancel',
+        'description': '用户说「不拍了」「算了」时，关掉屏幕上等手机拍照的二维码。',
+        'inputSchema': {'type': 'object', 'properties': {}},
+    },
+]
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -339,6 +354,18 @@ async def handle(payload, client=None):
                     text = _dumps({'success': False, 'reason': str(e), 'text': client.broadcast_view()['text']})
             elif name == 'self.location.set_home' and client:
                 text = _dumps(await _set_home(client, str(args.get('place') or '').strip()))
+            elif name == 'self.photo.ask' and client:
+                try:
+                    started = await client.photo_start(str(args.get('question') or ''))
+                    say = '好，用手机扫一下屏幕上的二维码，拍张照片。'
+                    if not started.get('vision_ready'):
+                        say += '不过网关还没配置看图模型，需要先在网关后台的大模型页里填一下。'
+                    text = _dumps({'action': 'RESPONSE', 'response': say})
+                except ValueError as e:
+                    text = _dumps({'success': False, 'reason': str(e)})
+            elif name == 'self.photo.cancel' and client:
+                await client.photo_cancel()
+                text = _dumps({'action': 'RESPONSE', 'response': '好，不拍了。'})
             elif name == 'self.screen.show_card' and client:
                 client.show_card(args.get('title'), args.get('markdown'), args.get('images'))
                 text = _dumps({'success': True, 'note': '已经显示在屏幕的对话里了，回答只用一句话，不要念内容'})

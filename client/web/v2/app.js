@@ -577,6 +577,42 @@ $('wwReset').addEventListener('click', () => {
   postJson('/api/wake-words/reset').then(r => { if (r.ok) toast('已恢复默认的唤醒词'); });
 });
 
+/* ---- 拍照问答: QR code for the phone, then its photo while the vision model looks (设计画布第 7 块) ---- */
+let photoQrShown = null, photoTimer = null;
+function renderPhoto() {
+  const p = ui.photo;
+  $('photoOv').hidden = !p;
+  clearInterval(photoTimer);
+  if (!p) return;
+  const failed = ['error', 'expired', 'cancelled'].includes(p.state);
+  $('photoOv').classList.toggle('looking', p.state === 'received');
+  $('photoOv').classList.toggle('failed', failed);
+  if (photoQrShown !== p.url && window.drawQr) { window.drawQr($('photoQr'), p.url); photoQrShown = p.url; }
+  $('photoQr').hidden = !!p.image;
+  $('photoImg').hidden = !p.image;
+  if (p.image) $('photoImg').src = p.image;
+  $('photoQ').textContent = `「${p.question}」`;
+  $('photoTitle').innerHTML = failed ? '没看成' : p.state === 'waiting' ? '用手机扫码，<br>拍一张照片' : '收到了，<br>正在看…';
+  $('photoNote').textContent = failed ? (p.error || '出错了') : p.state === 'waiting' ? '手机和小麦连同一个 Wi‑Fi 才能打开' : '一般 3～8 秒';
+  $('photoCancel').textContent = failed ? '关闭' : '取消';
+  const tick = () => {
+    const s = Math.max(0, Math.round(p.expires - Date.now() / 1000));
+    $('photoTime').textContent = p.state === 'waiting' ? `${Math.floor(s / 60)}:${pad(s % 60)} 后失效` : '';
+  };
+  tick();
+  if (p.state === 'waiting') photoTimer = setInterval(tick, 1000);
+}
+$('photoCancel').addEventListener('click', () => { ui.photo = null; renderPhoto(); if (DEMO === null) postJson('/api/photo/cancel'); });
+$('btnPhoto').addEventListener('click', async () => {
+  if (DEMO !== null) {
+    ui.photo = { token: 'demo', url: 'http://10.10.10.224:16688/photo/demo', question: '这是什么', expires: Date.now() / 1000 + 300, state: 'waiting' };
+    return renderPhoto();
+  }
+  const r = await postJson('/api/photo', { question: '这是什么' });
+  if (!r.ok) toast(r.error || '没开成', 'error');
+  else if (!r.vision_ready) toast('网关还没配置看图模型：在网关后台「大模型 → 看图模型」填 Key', 'error');
+});
+
 /* ---- weather broadcasts and the home address (broadcast.py, 设计画布第 6 块) ---- */
 const bc = { holding: false, busy: false, found: null, armed: null };
 function holdMeter(btn, v) {
@@ -1341,11 +1377,11 @@ function fmtTime(t) {
 const BROADCAST_TAG = /^【?([^【】]{1,20})】/;
 const broadcastTag = m => {
   const tag = m.role === 'user' && (BROADCAST_TAG.exec(m.text || '') || [])[1];
-  return tag && tag.includes('播报') ? tag : null;
+  return tag && (tag.includes('播报') || tag.startsWith('拍照问')) ? tag : null;
 };
 function fillMsg(el, m) {
   const tag = broadcastTag(m);
-  if (tag) { el.innerHTML = `${tag.startsWith('早安') ? '☀' : '⛅'} ${esc(tag)}`; return; }
+  if (tag) { el.innerHTML = `${tag.startsWith('早安') ? '☀' : tag.startsWith('拍照') ? '📷' : '⛅'} ${esc(tag)}`; return; }
   if (m.role === 'card') {   // self.screen.show_card: a recipe, a list, a table (markdown rendered by home.js)
     el.querySelector('.body').innerHTML = `<h3 class="rich-title">${esc(m.text)}</h3>`
       + (window.cardHtml ? window.cardHtml(m.card || {}) : esc((m.card || {}).markdown || '')) + `<span class="ts">${fmtTime(m.time)}</span>`;
@@ -1473,6 +1509,7 @@ const handlers = {
     if (s.bluetooth) ui.bluetooth = s.bluetooth;
     if (s.wake_words) ui.wake = s.wake_words;
     if (s.broadcast) ui.broadcast = s.broadcast;
+    ui.photo = s.photo || null; renderPhoto();
     renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth(); renderWake(); renderBroadcast();
     updateFinished((s.update || {}).job);
   },
@@ -1517,6 +1554,9 @@ const handlers = {
   },
   broadcast(b) {
     ui.broadcast = b; renderBroadcast();
+  },
+  photo(p) {
+    ui.photo = p.state === 'closed' ? null : p; renderPhoto();
   },
   level(l) {
     level.target = ui.status.state === 'speaking' ? Math.min(1, l.out * 6) : micLevel(l.mic);

@@ -2,12 +2,13 @@
 import asyncio
 import json
 import logging
+import re
 import time
 
 from aiohttp import web
 
 from . import __version__, update
-from .app import ROOT, Client, local_ip
+from .app import PHOTOS, ROOT, Client, local_ip
 
 log = logging.getLogger(__name__)
 WEB = ROOT / 'web'
@@ -325,6 +326,24 @@ def make_app(client: Client):
             return {'broadcast': await client.set_home(None if body.get('clear') else body.get('place'))}
         return await wake_call(change)
 
+    async def photo_start(request):
+        body = await request.json() if request.can_read_body else {}
+        return await wake_call(client.photo_start, str(body.get('question') or ''))
+
+    async def photo_cancel(_request):
+        await client.photo_cancel()
+        return web.json_response({'ok': True})
+
+    async def photo_file(request):
+        name = request.match_info['name']
+        path = PHOTOS / name
+        if not re.fullmatch(r'[0-9A-Za-z_-]+\.jpg', name) or not path.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(path, headers={'Cache-Control': 'max-age=86400'})
+
+    app.router.add_post('/api/photo', photo_start)
+    app.router.add_post('/api/photo/cancel', photo_cancel)
+    app.router.add_get('/api/photos/{name}', photo_file)
     app.router.add_post('/api/broadcast', broadcast_set)
     app.router.add_post('/api/home/record/start', home_record_start)
     app.router.add_post('/api/home/record/stop', home_record_stop)

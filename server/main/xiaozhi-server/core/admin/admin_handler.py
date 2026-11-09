@@ -16,6 +16,7 @@ import copy
 import functools
 import io
 import json
+import os
 import time
 import wave
 from concurrent.futures import ThreadPoolExecutor
@@ -28,7 +29,7 @@ from core.admin import auth, catalog, config_store, connections, pages, pipeline
 from core.admin.grokbot import GrokBotAdmin
 from core.admin.status import _claude_version, collect_status
 from core import billing
-from core.agent import chat_history, llm_router, reports
+from core.agent import chat_history, llm_router, photo_ask, reports
 from core.agent.agent_session import ErrorKind
 from core.agent.grokbot_client import GrokBotError
 from core.utils.modules_initialize import initialize_modules
@@ -156,6 +157,17 @@ class AdminHandler:
                 web.post("/kiosk/chat/clear", self.handle_kiosk_chat_clear),
                 web.get("/kiosk/geocode", self.handle_kiosk_geocode),
                 web.post("/kiosk/home", self.handle_kiosk_home),
+                web.post("/kiosk/photo/start", self.handle_kiosk_photo_start),
+                web.get("/kiosk/photo/{token}", self.handle_kiosk_photo),
+                web.get("/kiosk/photo/{token}/image", self.handle_kiosk_photo_image),
+                web.post("/kiosk/photo/{token}/cancel", self.handle_kiosk_photo_cancel),
+                # 手机上的拍照页：局域网里谁都能打开，令牌（一次性、5 分钟）就是凭证
+                web.get("/photo/{token}", self.handle_photo_page),
+                web.get("/photo/{token}/status", self.handle_photo_status),
+                web.post("/photo/{token}", self.handle_photo_upload),
+                web.get("/admin/api/vision", self.handle_vision),
+                web.post("/admin/api/vision", self.handle_vision_save),
+                web.post("/admin/api/vision/test", self.handle_vision_test),
             ]
         )
 
@@ -885,6 +897,129 @@ class AdminHandler:
         await self._blocking(device_homes.put, device, place)
         return self._json({"ok": True})
 
+    # ---------- 拍照问答（core/agent/photo_ask.py） ----------
+
+    def _photo_url(self, token: str) -> str:
+        """手机要打开的地址：网关的局域网 IP + HTTP 端口（可用 server.photo_base_url 改）。"""
+        from core.utils.util import get_local_ip
+
+        server = self.config.get("server") or {}
+        base = str(server.get("photo_base_url") or "").rstrip("/")
+        if not base:
+            base = f"http://{get_local_ip()}:{int(server.get('http_port') or 8003)}"
+        return f"{base}/photo/{token}"
+
+    async def handle_kiosk_photo_start(self, request: web.Request):
+        """{"device", "question"}：开一个拍照问答，返回一次性上传地址（给屏幕上的二维码）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        body = await self._read_json(request)
+        try:
+            s = await self._blocking(photo_ask.start, str(body.get("device") or ""), body.get("question"))
+        except ValueError as e:
+            return self._error(str(e), 400)
+        merged = await self._blocking(self._merged)
+        vision = photo_ask.vision_settings(merged)
+        return self._json({"ok": True, **s, "url": self._photo_url(s["token"]), "vision_ready": vision["ready"]})
+
+    async def handle_kiosk_photo(self, request: web.Request):
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        v = photo_ask.view(request.match_info["token"])
+        return self._json({"ok": True, **v}) if v else self._error("没有这个拍照问答", 404)
+
+    async def handle_kiosk_photo_image(self, request: web.Request):
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        path = photo_ask.photo_path(request.match_info["token"])
+        if not path or not os.path.isfile(path):
+            return self._error("还没有照片", 404)
+        return web.FileResponse(path, headers={"Content-Type": "image/jpeg", "Cache-Control": "no-store"})
+
+    async def handle_kiosk_photo_cancel(self, request: web.Request):
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        return self._json({"ok": True, "cancelled": photo_ask.cancel(request.match_info["token"])})
+
+    async def handle_photo_page(self, request: web.Request):
+        html = (STATIC_DIR / "photo.html").read_text(encoding="utf-8")
+        return web.Response(text=html, content_type="text/html",
+                            headers={**SECURITY_HEADERS, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+    async def handle_photo_status(self, request: web.Request):
+        v = photo_ask.view(request.match_info["token"])
+        if not v:
+            return self._json({"ok": False, "error": "这个链接无效或过期了，在小麦上重新说一次"})
+        return self._json({"ok": True, "state": v["state"], "question": v["question"], "answer": v["answer"],
+                           "error": v["error"]})
+
+    async def handle_photo_upload(self, request: web.Request):
+        """手机传照片（multipart：question、photo）。存下来后在后台问看图模型，马上返回。"""
+        token = request.match_info["token"]
+        if not photo_ask.get(token):
+            return self._json({"ok": False, "error": "这个链接无效或过期了，在小麦上重新说一次"})
+        question, data = None, b""
+        try:
+            reader = await request.multipart()
+            while True:
+                part = await reader.next()
+                if part is None:
+                    break
+                if part.name == "question":
+                    question = (await part.text())[:200]
+                elif part.name == "photo":
+                    while True:
+                        chunk = await part.read_chunk(65536)
+                        if not chunk:
+                            break
+                        data += chunk
+                        if len(data) > photo_ask.MAX_BYTES:
+                            return self._json({"ok": False, "error": "照片太大了"})
+        except Exception:
+            return self._json({"ok": False, "error": "上传的格式不对"})
+        try:
+            await self._blocking(photo_ask.receive, token, data, question)
+        except (ValueError, LookupError) as e:
+            return self._json({"ok": False, "error": str(e)})
+        merged = await self._blocking(self._merged)
+        asyncio.get_running_loop().run_in_executor(None, photo_ask.answer, token, merged)
+        return self._json({"ok": True})
+
+    async def handle_vision(self, request: web.Request):
+        self._require_login(request)
+        return self._json({"ok": True, **photo_ask.vision_settings(await self._blocking(self._merged))})
+
+    async def handle_vision_save(self, request: web.Request):
+        """{"provider": "zhipu" | "qwen", "api_key"?}：选用看图模型（Key 留空表示不改）。"""
+        self._require_login(request)
+        body = await self._read_json(request)
+        try:
+            changed = await self._blocking(photo_ask.save_vision, str(body.get("provider") or ""),
+                                           body.get("api_key"), self.config_path)
+        except KeyError:
+            return self._error("没有这个看图模型", 404)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        self.logger.bind(tag=TAG).info(f"管理后台更新了看图模型 {body.get('provider')}: {', '.join(changed) or '无变化'}")
+        return self._json({"ok": True, "changed": changed, **photo_ask.vision_settings(await self._blocking(self._merged))})
+
+    async def handle_vision_test(self, request: web.Request):
+        """用一张程序画的测试图问一次，确认 Key 能用（不记费用）。"""
+        self._require_login(request)
+        from core import billing
+        merged = await self._blocking(self._merged)
+
+        def run():
+            with billing.unbilled():
+                return photo_ask.ask_vision(merged, "图里是什么颜色、什么形状", _test_image())
+        try:
+            text = await self._blocking(run)
+        except photo_ask.PhotoError as e:
+            return self._json({"ok": False, "error": str(e)})
+        except Exception as e:
+            return self._json({"ok": False, "error": f"连不上看图模型：{e}"})
+        return self._json({"ok": True, "message": text})
+
     async def handle_kiosk_chat_clear(self, request: web.Request):
         """{"device", "memory_only"?}：清除这台设备的聊天记录（所有模型），和语音"清除聊天记录"同一套。
 
@@ -900,6 +1035,8 @@ class AdminHandler:
                               if i["device_id"] == device) if c is not None]
         merged = await self._blocking(self._merged)
         result = await self._blocking(chat_history.clear, device, merged, bool(body.get("memory_only")), online)
+        if not body.get("memory_only"):  # 拍照问答的照片和聊天记录一起删
+                await self._blocking(photo_ask.clear, device)
         return self._json({"ok": True, **result})
 
     # ---------- 工作原理 ----------
@@ -1516,3 +1653,23 @@ def _billing_update(body: dict) -> dict:
         if "count_claude_code" in st:
             out["count_claude_code"] = bool(st["count_claude_code"])
     return out
+
+
+def _test_image() -> bytes:
+    """看图模型的测试图：白底上一个红色圆（PNG，用 zlib 现画，不依赖图像库）。"""
+    import struct
+    import zlib
+
+    w = h = 96
+    rows = []
+    for y in range(h):
+        row = bytearray([0])
+        for x in range(w):
+            inside = (x - 48) ** 2 + (y - 48) ** 2 < 30 ** 2
+            row += bytes((220, 40, 40) if inside else (255, 255, 255))
+        rows.append(bytes(row))
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"".join(rows))) + chunk(b"IEND", b""))

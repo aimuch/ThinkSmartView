@@ -1,6 +1,8 @@
 """管理后台页面接口：大模型、语音合成、意图识别的读写，切换失败回滚，表情单发。全部使用临时配置文件。"""
 
 import asyncio
+
+import aiohttp
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1018,3 +1020,87 @@ async def test_kiosk_home_and_geocode(kiosk, tmp_path, monkeypatch):
         assert (await kiosk.post("/kiosk/home", json=bad)).status == 400
     assert (await kiosk.post("/kiosk/home", json={"device": "dev-1", "place": None})).status == 200
     assert device_homes.get("dev-1") is None
+
+
+# ---------- 拍照问答（core/agent/photo_ask.py） ----------
+
+JPEG = b"\xff\xd8\xff\xe0" + b"0" * 2000
+
+
+async def test_photo_question_round_trip(kiosk, tmp_path, monkeypatch):
+    from core.agent import photo_ask
+
+    monkeypatch.setattr(photo_ask, "_photos_dir", lambda device="": str(tmp_path / "photos" / device))
+    seen = {}
+
+    def ask_vision(merged, question, jpeg, device=None):
+        seen.update(question=question, size=len(jpeg), device=device)
+        return "这是鲜贝，可以吃"
+    monkeypatch.setattr(photo_ask, "ask_vision", ask_vision)
+    r = await (await kiosk.post("/kiosk/photo/start", json={"device": "dev-1", "question": "这个能吃吗"})).json()
+    assert r["ok"] and r["question"] == "这个能吃吗" and r["url"].endswith("/photo/" + r["token"]) and r["vision_ready"] is False
+    token = r["token"]
+    page = await kiosk.get(f"/photo/{token}")
+    assert page.status == 200 and "拍照问" in await page.text()
+    assert (await (await kiosk.get(f"/photo/{token}/status")).json())["state"] == "waiting"
+    assert (await (await kiosk.get("/photo/nope/status")).json())["ok"] is False
+
+    form = aiohttp.FormData()
+    form.add_field("question", "这个宝宝能吃吗")
+    form.add_field("photo", JPEG, filename="p.jpg", content_type="image/jpeg")
+    r = await (await kiosk.post(f"/photo/{token}", data=form)).json()
+    assert r == {"ok": True}
+    for _ in range(50):
+        v = await (await kiosk.get(f"/kiosk/photo/{token}")).json()
+        if v["state"] == "done":
+            break
+        await asyncio.sleep(0.05)
+    assert v["answer"] == "这是鲜贝，可以吃" and v["question"] == "这个宝宝能吃吗"
+    assert seen == {"question": "这个宝宝能吃吗", "size": len(JPEG), "device": "dev-1"}
+    img = await kiosk.get(f"/kiosk/photo/{token}/image")
+    assert img.status == 200 and await img.read() == JPEG
+    # 一次性：再传就不收
+    form = aiohttp.FormData()
+    form.add_field("photo", JPEG, filename="p.jpg", content_type="image/jpeg")
+    assert "用过" in (await (await kiosk.post(f"/photo/{token}", data=form)).json())["error"]
+    # 清除聊天记录时照片一起删
+    assert (tmp_path / "photos" / "dev-1").is_dir()
+    await kiosk.post("/kiosk/chat/clear", json={"device": "dev-1"})
+    assert not (tmp_path / "photos" / "dev-1").exists()
+
+
+async def test_photo_rejects_bad_files_and_cancel(kiosk, tmp_path, monkeypatch):
+    from core.agent import photo_ask
+
+    monkeypatch.setattr(photo_ask, "_photos_dir", lambda device="": str(tmp_path / "photos" / device))
+    token = (await (await kiosk.post("/kiosk/photo/start", json={"device": "dev-1"})).json())["token"]
+    form = aiohttp.FormData()
+    form.add_field("photo", b"GIF89a....", filename="p.gif", content_type="image/gif")
+    assert "JPEG" in (await (await kiosk.post(f"/photo/{token}", data=form)).json())["error"]
+    assert (await (await kiosk.post(f"/kiosk/photo/{token}/cancel", json={})).json())["cancelled"] is True
+    assert (await (await kiosk.get(f"/kiosk/photo/{token}")).json())["state"] == "cancelled"
+    # 过期
+    token = (await (await kiosk.post("/kiosk/photo/start", json={"device": "dev-1"})).json())["token"]
+    photo_ask._sessions[token]["created"] -= photo_ask.UPLOAD_SECONDS + 1
+    assert (await (await kiosk.get(f"/photo/{token}/status")).json())["state"] == "expired"
+
+
+async def test_vision_settings(client, cfg_path):
+    d = await (await client.get("/admin/api/vision")).json()
+    assert d["ok"] and d["ready"] is False and [p["id"] for p in d["providers"]] == ["zhipu", "qwen"]
+    r = await client.post("/admin/api/vision", json={"provider": "zhipu"})
+    assert r.status == 400 and "API Key" in (await r.json())["error"]
+    r = await client.post("/admin/api/vision", json={"provider": "zhipu", "api_key": "abc.def123"})
+    d = await r.json()
+    assert d["ok"] and d["selected"] == "zhipu" and d["ready"] and "api_key" in d["changed"]
+    m = merged(cfg_path)
+    assert m["selected_module"]["VLLM"] == "ChatGLMVLLM" and m["VLLM"]["ChatGLMVLLM"]["api_key"] == "abc.def123"
+    assert (await client.post("/admin/api/vision", json={"provider": "nope", "api_key": "x"})).status == 404
+    # 不登录不能看、不能改
+    await client.post("/admin/api/logout", json={})
+    assert (await client.get("/admin/api/vision")).status == 401
+
+
+def test_vision_test_image_is_a_png():
+    png = ah._test_image()
+    assert png[:8] == b"\x89PNG\r\n\x1a\n" and len(png) > 100

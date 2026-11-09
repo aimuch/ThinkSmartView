@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>小麦 · 拍照问</title>
+<style>
+  :root { --bg: #f4f6fb; --ink: #141a2e; --ink2: #5b6480; --ink3: #7c86a3; --line: #d7dcea; --card: #fff; --accent: #5b7cff; --bad: #d64545; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #070b18; --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #7883ab; --line: #ffffff26; --card: #ffffff12; --accent: #8fa6ff; --bad: #ff6b81; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 17px/1.6 -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+  main { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  header { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 19px; }
+  header svg { width: 34px; height: 34px; border-radius: 10px; flex: none; }
+  label { font-size: 15px; color: var(--ink2); }
+  input[type=text] { width: 100%; height: 52px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); font-size: 18px; }
+  .big { height: 200px; border-radius: 22px; border: 2px dashed var(--accent); background: var(--card); color: var(--ink); font-size: 22px; font-weight: 700;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+  .big span { font-size: 54px; line-height: 1; }
+  .sec { height: 56px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 17px; }
+  button:active { transform: scale(.98); }
+  .note { font-size: 14px; color: var(--ink3); margin: 0; }
+  img { width: 100%; max-height: 50vh; object-fit: contain; border-radius: 18px; background: var(--card); }
+  .box { padding: 16px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
+  .err { color: var(--bad); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6c8cff"/><stop offset="1" stop-color="#5ee0ff"/></linearGradient></defs>
+      <rect width="24" height="24" rx="6.7" fill="url(#g)"/><g transform="translate(4.2 3.6) scale(.65)" fill="#fff"><path d="M12 22V8.6" stroke="#fff" stroke-width="1.5"/><path d="M12 1.9 Q14.05 5 12 8.1 Q9.95 5 12 1.9Z"/>
+      <path transform="translate(9.85 9.4) rotate(-30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.15 9.4) rotate(30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/>
+      <path transform="translate(9.75 13.3) rotate(-32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.25 13.3) rotate(32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/>
+      <path transform="translate(9.7 17.2) rotate(-34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.3 17.2) rotate(34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/></g></svg>
+    小麦 · 拍照问
+  </header>
+
+  <section id="pick">
+    <label for="q">想问什么（可以改）</label>
+    <input type="text" id="q" maxlength="100">
+    <div style="height:14px"></div>
+    <button class="big" id="shoot" style="width:100%"><span>📷</span>拍照</button>
+    <div style="height:12px"></div>
+    <button class="sec" id="album" style="width:100%">从相册选</button>
+    <input type="file" id="cam" accept="image/*" capture="environment" hidden>
+    <input type="file" id="lib" accept="image/*" hidden>
+    <p class="note" style="margin-top:14px">照片只发给你家的小麦网关，7 天后自动删除。</p>
+  </section>
+
+  <section id="sent" hidden>
+    <img id="preview" alt="">
+    <div style="height:14px"></div>
+    <div class="box" id="status">正在上传…</div>
+  </section>
+
+  <p class="box err" id="fatal" hidden></p>
+</main>
+<script>
+const token = location.pathname.split('/').filter(Boolean).pop();
+const $ = id => document.getElementById(id);
+const show = (id, on) => { $(id).hidden = !on; };
+function fatal(text) { show('pick', false); show('fatal', true); $('fatal').textContent = text; }
+
+fetch(`/photo/${token}/status`).then(r => r.json()).then(s => {
+  if (!s.ok) return fatal(s.error || '这个链接无效，在小麦上重新说一次');
+  $('q').value = s.question || '这是什么';
+  if (s.state !== 'waiting') fatal(s.error || '这个链接已经用过了，在小麦上重新说一次');
+}).catch(() => fatal('连不上小麦网关：手机要和小麦连同一个 Wi‑Fi'));
+
+$('shoot').onclick = () => $('cam').click();
+$('album').onclick = () => $('lib').click();
+$('cam').onchange = e => e.target.files[0] && send(e.target.files[0]);
+$('lib').onchange = e => e.target.files[0] && send(e.target.files[0]);
+
+// shrink to at most 1600 px on the long side, JPEG: a phone photo is 3-8 MB, the model needs far less
+function shrink(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(b => b ? resolve(b) : reject(new Error('压缩失败')), 'image/jpeg', 0.85);
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => reject(new Error('这张照片打不开，换一张试试'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function send(file) {
+  show('pick', false); show('sent', true);
+  try {
+    const blob = await shrink(file);
+    $('preview').src = URL.createObjectURL(blob);
+    const form = new FormData();
+    form.append('question', $('q').value.trim());
+    form.append('photo', blob, 'photo.jpg');
+    const r = await (await fetch(`/photo/${token}`, { method: 'POST', body: form })).json();
+    if (!r.ok) throw new Error(r.error || '没传上去');
+    $('status').textContent = '✓ 已发给小麦，正在看…（答案会在小麦上念出来）';
+    poll();
+  } catch (e) {
+    $('status').classList.add('err');
+    $('status').textContent = e.message || '没传上去，在小麦上重新说一次';
+  }
+}
+
+async function poll() {
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 1500));
+    const s = await (await fetch(`/photo/${token}/status`)).json().catch(() => ({}));
+    if (s.state === 'done') { $('status').textContent = '✓ 已发给小麦，答案在小麦上念出来：\n\n' + s.answer; $('status').style.whiteSpace = 'pre-wrap'; return; }
+    if (s.state === 'error' || s.state === 'cancelled') { $('status').classList.add('err'); $('status').textContent = s.error || '没看成'; return; }
+  }
+}
+</script>
+</body>
+</html>
