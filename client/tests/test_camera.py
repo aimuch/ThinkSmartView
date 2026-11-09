@@ -12,12 +12,10 @@ def test_split_jpegs_keeps_the_partial_tail():
 
 def test_rotation_filters():
     graph = lambda r: camera.ffmpeg_args(r)[camera.ffmpeg_args(r).index('-filter_complex') + 1]
-    assert graph('90').startswith('[0:v]fps=8,split=2')                   # 横屏放在支架上：本来就是正的
-    assert graph('normal').startswith('[0:v]fps=8,transpose=1,split=2')   # 竖屏：顺时针转 90°
-    assert graph('180').startswith('[0:v]fps=8,transpose=2,')
-    assert graph('270').startswith('[0:v]fps=8,hflip,vflip,')
-    assert 'hflip[pv]' in graph('normal') and '[st]' in graph('normal')   # 预览镜像，整图不镜像
-    assert 'scale=-2:640' in graph('normal') and 'scale=-2:360' in graph('90')
+    assert graph('90') == '[0:v]fps=8,split=2[p][s];[p]scale=640:360,hflip[pv];[s]fps=2[st]'   # 横屏：本来就是正的
+    assert graph('normal') == '[0:v]fps=8,split=2[p][s];[p]scale=640:360,transpose=1,hflip[pv];[s]fps=2,transpose=1[st]'
+    assert ',transpose=2,' in graph('180') and ',hflip,vflip,hflip[pv]' in graph('270')
+    assert '-use_wallclock_as_timestamps' in camera.ffmpeg_args('normal')   # 不然 fps 滤镜补帧补到占满 4 个核
 
 
 def test_preview_waits_for_the_first_frame(monkeypatch):

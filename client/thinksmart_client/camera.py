@@ -33,13 +33,14 @@ def available():
 
 def ffmpeg_args(rotation, still=STILL):
     rot = ROTATE.get(rotation, ROTATE['normal'])
-    pre = f'{rot},' if rot else ''
-    portrait = rotation in ('normal', '180')
-    scale = 'scale=-2:640' if portrait else 'scale=-2:360'
-    # 先降到每秒 8 帧再旋转、编码：按 30 帧处理 720p 要 3 个多核（2026-11-10 实测 338%）
-    graph = f'[0:v]fps=8,{pre}split=2[p][s];[p]{scale},hflip[pv];[s]fps=2[st]'
-    return ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-f', 'v4l2', '-input_format', 'yuyv422',
-            '-video_size', '1280x720', '-i', str(DEVICE), '-filter_complex', graph,
+    # 预览先缩到 640×360 再转向、镜像（转小图便宜）；整图每秒只转 2 张。
+    # -use_wallclock_as_timestamps：虚拟摄像头的时间戳不连续，fps 滤镜会补出成千上万的重复帧去编码，
+    # ffmpeg 占 4 个核（2026-11-10 实测 400% → 用读取时的时间后不到 1 个核）
+    graph = (f'[0:v]fps=8,split=2[p][s];[p]scale=640:360,{rot + "," if rot else ""}hflip[pv];'
+             f'[s]fps=2{"," + rot if rot else ""}[st]')
+    return ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-use_wallclock_as_timestamps', '1',
+            '-f', 'v4l2', '-input_format', 'yuyv422', '-video_size', '1280x720', '-i', str(DEVICE),
+            '-filter_complex', graph,
             '-map', '[pv]', '-f', 'mjpeg', '-q:v', '7', 'pipe:1',
             '-map', '[st]', '-f', 'image2', '-update', '1', '-atomic_writing', '1', '-q:v', '3', '-y', str(still)]
 
