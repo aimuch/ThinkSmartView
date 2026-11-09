@@ -1945,6 +1945,15 @@ function showVolume(v) {
 
 /* ---- events from the client ---- */
 const handlers = {
+  // The client is stopping (update, restart): drop the stream ourselves and reload once it answers again,
+  // instead of keeping a connection the kiosk's WebKitGTK never recovers from
+  bye() {
+    if (events) events.close();
+    events = null; clearTimeout(eventsRetry);
+    const tryBack = () => fetch('/api/health', { cache: 'no-store' }).then(r => r.ok ? location.reload() : Promise.reject())
+      .catch(() => { eventsRetry = setTimeout(tryBack, 2000); });
+    eventsRetry = setTimeout(tryBack, 2000);
+  },
   snapshot(s) {
     if (ui.build && s.build && s.build !== ui.build) return location.reload();   // client restarted (deployed)
     ui.build = s.build;
