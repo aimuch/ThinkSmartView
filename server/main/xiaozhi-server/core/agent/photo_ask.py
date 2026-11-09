@@ -340,7 +340,8 @@ def receive(token: str, jpeg: bytes, question: str = None) -> dict:
         folder = _photos_dir(s["device"])
         os.makedirs(folder, exist_ok=True)
         ext = "png" if jpeg[:8] == b"\x89PNG\r\n\x1a\n" else "jpg"   # 去掉白底的公仔图是带透明的 PNG
-        path = os.path.join(folder, f"{int(time.time() * 1000)}-{token[:8]}.{ext}")
+        seq = len(s.get("poses") or []) + len(s.get("album") or [])   # 同一毫秒收到好几张也不会互相覆盖
+        path = os.path.join(folder, f"{int(time.time() * 1000)}-{token[:8]}-{seq}.{ext}")
         with open(path, "wb") as f:
             f.write(jpeg)
         if s.get("purpose") == "album":   # 相册：一个码可以传好几张，一直收到过期
