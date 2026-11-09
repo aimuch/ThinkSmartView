@@ -8,7 +8,7 @@ import re
 
 TIME = re.compile(r'^([01]\d|2[0-3]):[0-5]\d$')
 BRIGHTNESS = 10   # the screen's 0-100 in the sleep hours
-VOLUME = 30       # the speaker's 0-100 in the sleep hours
+VOLUME = 15       # the speaker's 0-100 in the sleep hours (30 was louder than many daytime levels: 2026-11-10)
 
 
 def normalize(setting, changes=None):

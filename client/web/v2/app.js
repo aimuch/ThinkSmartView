@@ -305,7 +305,7 @@ function renderSettings() {
   $('sleepStart').textContent = s.start;
   $('sleepEnd').textContent = s.end;
   $('sleepSliders').classList.toggle('off', !s.enabled);
-  for (const [id, k, d] of [['sleepBright', 'brightness', 10], ['sleepVol', 'volume', 30]]) {
+  for (const [id, k, d] of [['sleepBright', 'brightness', 10], ['sleepVol', 'volume', 15]]) {
     const v = s[k] === undefined ? d : s[k];
     if (document.activeElement !== $(id)) $(id).value = v;
     $(id + 'V').textContent = v;
