@@ -67,17 +67,17 @@ async def test_report_tries_variants(monkeypatch):
 async def test_get_weather_failure_not_cached(monkeypatch):
     from core.utils.cache.manager import cache_manager, CacheType
 
-    async def boom(location):
+    async def boom(place=None, location=None):
         raise open_meteo.WeatherError("天气服务连不上（ConnectTimeout）")
-    monkeypatch.setattr(open_meteo, "report", boom)
+    monkeypatch.setattr(open_meteo, "report_at", boom)
     conn = SimpleNamespace(config={"plugins": {"get_weather": {"home_location": "测试区"}}}, client_ip=None)
     r = await get_weather.get_weather(conn)
     assert r.response == "failed" and "连不上" in r.result and "不要编造" in r.result
     assert cache_manager.get(CacheType.WEATHER, "full_weather_测试区_zh_CN") is None
 
-    async def ok(location):
+    async def ok(place=None, location=None):
         return f"您查询的位置是：{location}"
-    monkeypatch.setattr(open_meteo, "report", ok)
+    monkeypatch.setattr(open_meteo, "report_at", ok)
     r = await get_weather.get_weather(conn)
     assert r.response is None and r.result == "您查询的位置是：测试区"
     # 用户说了别的城市就查那个
@@ -92,3 +92,51 @@ def test_location_priority():
     assert get_weather.resolve_location(conn) == "广州"
     # 上游的共用 Key（api_key）不算自己的和风 Key
     assert get_weather.weather_settings({"plugins": {"get_weather": {"api_key": "x", "api_host": "y"}}})["qweather_key"] == ""
+
+
+def test_device_home_store(tmp_path, monkeypatch):
+    from core.utils import device_homes
+
+    monkeypatch.setattr(device_homes, "_path", lambda: str(tmp_path / "device_homes.json"))
+    assert device_homes.get("dev-1") is None
+    device_homes.put("dev-1", {"name": "浙江省杭州市西湖区", "latitude": 30.26, "longitude": 120.13})
+    assert device_homes.get("dev-1")["name"] == "浙江省杭州市西湖区" and device_homes.get("dev-2") is None
+    device_homes.put("dev-1", None)
+    assert device_homes.get("dev-1") is None
+    with pytest.raises(ValueError):
+        device_homes.put("", {"name": "x", "latitude": 0, "longitude": 0})
+
+
+async def test_weather_uses_the_device_home(tmp_path, monkeypatch):
+    """没说地点：用这台设备在设置页设的住宅地址（坐标直接查，不再查地名）；后台的设备所在地只是默认值。"""
+    from core.utils import device_homes
+    from core.utils.cache.manager import cache_manager, CacheType
+
+    monkeypatch.setattr(device_homes, "_path", lambda: str(tmp_path / "device_homes.json"))
+    home = {"name": "浙江省杭州市西湖区", "latitude": 30.26, "longitude": 120.13}
+    device_homes.put("dev-1", home)
+    seen = []
+
+    async def report_at(place=None, location=None):
+        seen.append((place and place["name"], location))
+        return f"您查询的位置是：{(place or {}).get('name') or location}"
+    monkeypatch.setattr(open_meteo, "report_at", report_at)
+    conn = SimpleNamespace(config={"plugins": {"get_weather": {"home_location": "青浦区"}}}, client_ip=None, device_id="dev-1")
+    assert get_weather.resolve_location(conn) == "浙江省杭州市西湖区"
+    for key in ("full_weather_浙江省杭州市西湖区_zh_CN", "full_weather_东京_zh_CN", "full_weather_青浦区_zh_CN"):
+        cache_manager.delete(CacheType.WEATHER, key)
+    assert (await get_weather.get_weather(conn)).result == "您查询的位置是：浙江省杭州市西湖区"
+    assert seen[-1] == ("浙江省杭州市西湖区", "浙江省杭州市西湖区")
+    await get_weather.get_weather(conn, location="东京")
+    assert seen[-1] == (None, "东京")
+    conn.device_id = "dev-2"   # 没设过住宅地址的设备
+    assert get_weather.resolve_location(conn) == "青浦区"
+
+
+async def test_lookup(monkeypatch):
+    open_meteo._geo_cache.clear()
+    from httpx._client import AsyncClient
+    monkeypatch.setattr(open_meteo, "_client", lambda: AsyncClient(transport=_transport({"青浦区": [QINGPU]})))
+    assert (await open_meteo.lookup("青浦"))["name"] == "上海市青浦区"
+    with pytest.raises(open_meteo.WeatherError, match="没找到"):
+        await open_meteo.lookup("不存在的地方")

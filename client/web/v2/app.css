@@ -613,3 +613,31 @@ body[data-state="listening"] .mic-ring { opacity: .75; }
 .ww-msg.warn { text-align: left; padding: 12px 16px; border-radius: 16px; font-size: 18px; color: var(--warn); background: #ffb5471a; }
 .ww-btns { display: flex; gap: 14px; justify-content: flex-end; }
 .upd-btn.pri { color: #081024; border: 0; background: linear-gradient(135deg, #8ff0ff, #8fa6ff); }
+
+/* weather broadcast (设计画布第 6 块) */
+.bc-card.off .bc-on { display: none; }
+.bc-on { display: flex; flex-direction: column; gap: 16px; }
+.bc-chips { grid-template-columns: repeat(3, 1fr); }
+.bc-chips button.lock { color: var(--ink); background: #ffffff1f; border-color: transparent; opacity: 1; }
+.bc-card .al-text b { font-size: 34px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+.bc-step { display: flex; gap: 8px; flex: none; }
+.bc-step button { width: 56px; height: 56px; border-radius: 16px; font-size: 28px; line-height: 1; color: var(--ink2); background: var(--card); border: 1px solid var(--line); }
+.bc-step button:active { transform: scale(.93); }
+.bc-home { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 18px; padding: 18px 22px; border-radius: 20px;
+  background: linear-gradient(150deg, #6c8cff26, #5ee0ff0d); border: 1.5px solid #7fa0ff70; }
+.bc-home.warn { border-color: #ffb547aa; background: linear-gradient(150deg, #ffb5471f, #ffb54705); }
+.bc-home-text { flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 4px; }
+.bc-home-text small { font-size: 16px; color: var(--ink3); }
+.bc-home-text b { font-size: 28px; font-weight: 700; }
+.bc-home-text span { font-size: 15px; color: var(--ink3); font-family: "Noto Sans Mono", "SF Mono", monospace; }
+.bc-home.warn .bc-home-text span { color: #ffb547; font-family: inherit; font-size: 17px; }
+#bcHold { display: flex; align-items: center; gap: 12px; }
+#bcHold.on { color: var(--accent2); border-color: #5ee0ff66; background: #5ee0ff10; }
+#bcHold.on .ww-meter { display: flex; }
+#bcHold .ww-meter { height: 28px; }
+#bcHold .ww-meter i { height: 28px; }
+.bc-home .ww-btns { width: 100%; justify-content: flex-end; }
+.bc-home .ww-btns[hidden], #bcHold[hidden] { display: none; }
+.msg.tag { align-self: center; display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-radius: 999px;
+  font-size: 17px; color: var(--ink2); background: var(--card); border: 1px solid var(--line); }
+.msg.tag .ts { position: static; margin-left: 4px; }

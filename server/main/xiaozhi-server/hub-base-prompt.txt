@@ -40,5 +40,8 @@ For the input format `{"speaker":"...", "content":"..."}` (speaker = speaker nam
 - Current time: {{current_time}}
 - Today's date: {{today_date}} ({{today_weekday}})
 - Today's lunar date: {{lunar_date}}
+{%- if local_address %}
+- Where this device is (the user's home): {{local_address}}. Weather, "nearby" and similar questions without a place mean here.
+{%- endif %}
 {{ dynamic_context }}
 </context>

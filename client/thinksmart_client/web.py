@@ -298,6 +298,37 @@ def make_app(client: Client):
     app.router.add_post('/api/wake-words/add', wake_add)
     app.router.add_post('/api/wake-words/remove', wake_remove)
     app.router.add_post('/api/wake-words/reset', wake_reset)
+
+    async def broadcast_set(request):
+        body = await request.json()
+        if body.get('test'):
+            asyncio.create_task(client.play_broadcast())
+            return web.json_response({'ok': True})
+
+        async def change():
+            keys = ('enabled', 'days', 'reminders', 'news', 'add_time', 'remove_time', 'shift')
+            return {'broadcast': await client.set_broadcast(**{k: body[k] for k in keys if k in body})}
+        return await wake_call(change)
+
+    async def home_record_start(_request):
+        return await wake_call(client.home_record_start)
+
+    async def home_record_stop(_request):
+        return await wake_call(client.home_record_stop)
+
+    async def home_set(request):
+        body = await request.json()
+
+        async def change():
+            if body.get('text'):   # typed or picked: look it up first
+                return await client.find_place(str(body['text']))
+            return {'broadcast': await client.set_home(None if body.get('clear') else body.get('place'))}
+        return await wake_call(change)
+
+    app.router.add_post('/api/broadcast', broadcast_set)
+    app.router.add_post('/api/home/record/start', home_record_start)
+    app.router.add_post('/api/home/record/stop', home_record_stop)
+    app.router.add_post('/api/home', home_set)
     app.router.add_get('/api/health', health)
     app.router.add_get('/api/network', network)
     app.router.add_post('/api/power-off', power_off)

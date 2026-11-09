@@ -172,6 +172,24 @@
       </div>
       <p class="opt-note">设备音量是平时说话的音量，和音量键、语音调的是同一个。闹钟音量只管倒计时、闹钟和提醒：响铃时自动切过去，响完改回来；响铃时按音量键只调这一次。</p>
     </div>
+    <div class="alarms-card bt-card bc-card" id="bcCard">
+      <div class="bright-head"><b>天气播报</b><span class="bright-num" id="bcCount"></span>
+        <button class="switch" id="bcSwitch" role="switch" aria-checked="false" aria-label="天气播报"><i></i></button></div>
+      <div class="bc-on">
+        <div class="alarm-list" id="bcTimes"></div>
+        <button class="bt-add" id="bcAdd">＋ 加一个时间</button>
+        <div class="bright-head"><b class="sub">哪几天</b></div>
+        <div class="minutes bc-chips" id="bcDays"><button data-d="daily">每天</button><button data-d="workdays">工作日</button><button data-d="weekend">周末</button></div>
+        <div class="bright-head"><b class="sub">早上那次顺便播</b></div>
+        <div class="minutes bc-chips" id="bcExtras"><button class="lock" disabled>天气（总会播）</button><button data-x="reminders">今天的闹钟和提醒</button><button data-x="news">新闻三条</button></div>
+      </div>
+      <div class="bc-home" id="bcHome">
+        <div class="bc-home-text"><small id="bcHomeLabel">住宅地址（音箱所在地）</small><b id="bcHomeName"></b><span id="bcHomeSub"></span></div>
+        <button class="upd-btn" id="bcHold"><span class="ww-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="bcHoldText">按住说新地址</span></button>
+        <div class="ww-btns" id="bcConfirm" hidden><button class="upd-btn" id="bcRetry">重说</button><button class="upd-btn pri" id="bcUse">用这个地址</button></div>
+      </div>
+      <p class="opt-note">问「明天下雨吗」这种没说地方的话，就查住宅地址的天气。也可以直接说「<span class="ww-name">小麦小麦</span>，每天早上七点半播报天气」「住宅地址改成杭州西湖区」。<button class="link-btn" id="bcTest">现在播一次试试</button></p>
+    </div>
     <div class="alarms-card ww-card" id="wwCard">
       <div class="bright-head"><b>唤醒词</b><span class="bright-num" id="wwCount"></span></div>
       <div class="alarm-list" id="wwList"></div>

@@ -185,11 +185,27 @@ def build_report(place: dict, fc: dict, air: dict = None) -> str:
     return "\n".join(lines)
 
 
-async def report(location: str) -> str:
-    """地名 → 当前天气、空气质量和 7 天预报的中文文本。查不到或连不上时抛 WeatherError。"""
+async def lookup(name: str) -> dict:
+    """地名 → {"name", "latitude", "longitude"}（设备设住宅地址时确认用）。查不到或连不上时抛 WeatherError。"""
     try:
         async with _client() as client:
-            place = await geocode(client, location)
+            return await geocode(client, name)
+    except httpx.HTTPError as e:
+        raise WeatherError(f"地名查询服务连不上（{type(e).__name__}）")
+
+
+async def report(location: str) -> str:
+    """地名 → 当前天气、空气质量和 7 天预报的中文文本。查不到或连不上时抛 WeatherError。"""
+    return await report_at(None, location)
+
+
+async def report_at(place: dict = None, location: str = None) -> str:
+    """已知坐标的地方（设备的住宅地址，{"name", "latitude", "longitude"}）直接查，不再查地名；
+    place 为 None 时按 location 查地名。"""
+    try:
+        async with _client() as client:
+            if place is None:
+                place = await geocode(client, location)
             loc = {"latitude": place["latitude"], "longitude": place["longitude"], "timezone": "auto"}
             forecast_req = client.get(FORECAST_URL, params={
                 **loc, "forecast_days": 7,

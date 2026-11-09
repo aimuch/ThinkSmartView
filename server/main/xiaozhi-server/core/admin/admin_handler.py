@@ -154,6 +154,8 @@ class AdminHandler:
                 web.post("/kiosk/tts", self.handle_kiosk_tts),
                 web.get("/kiosk/chat/history", self.handle_kiosk_chat_history),
                 web.post("/kiosk/chat/clear", self.handle_kiosk_chat_clear),
+                web.get("/kiosk/geocode", self.handle_kiosk_geocode),
+                web.post("/kiosk/home", self.handle_kiosk_home),
             ]
         )
 
@@ -844,6 +846,44 @@ class AdminHandler:
             return self._error("limit 要是数字", 400)
         models = await self._blocking(chat_history.history, device, limit)
         return self._json({"ok": True, "models": models})
+
+    async def handle_kiosk_geocode(self, request: web.Request):
+        """?q=地名：查到的地方 {"name", "latitude", "longitude"}（设备设住宅地址时先确认）。查不到返回 ok:false 和原因。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import open_meteo
+
+        q = (request.query.get("q") or "").strip()
+        if not q or len(q) > 40:
+            return self._error("q 要 1 到 40 个字", 400)
+        try:
+            place = await open_meteo.lookup(q)
+        except open_meteo.WeatherError as e:
+            return self._json({"ok": False, "error": str(e)})
+        return self._json({"ok": True, "place": place})
+
+    async def handle_kiosk_home(self, request: web.Request):
+        """{"device", "place": {"name", "latitude", "longitude"} | null}：这台设备的住宅地址（core/utils/device_homes.py）。
+        问天气没说地点、系统提示里的设备所在地都用它；place 为 null 时删掉，改用后台的设备所在地。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import device_homes
+
+        body = await self._read_json(request)
+        device = str(body.get("device") or "").strip()
+        place = body.get("place")
+        if not device:
+            return self._error("缺少 device", 400)
+        if place is not None:
+            try:
+                place = {"name": str(place["name"]).strip(), "latitude": float(place["latitude"]),
+                         "longitude": float(place["longitude"])}
+            except (KeyError, TypeError, ValueError):
+                return self._error("place 要有 name、latitude、longitude", 400)
+            if not place["name"] or not (-90 <= place["latitude"] <= 90 and -180 <= place["longitude"] <= 180):
+                return self._error("place 不对", 400)
+        await self._blocking(device_homes.put, device, place)
+        return self._json({"ok": True})
 
     async def handle_kiosk_chat_clear(self, request: web.Request):
         """{"device", "memory_only"?}：清除这台设备的聊天记录（所有模型），和语音"清除聊天记录"同一套。

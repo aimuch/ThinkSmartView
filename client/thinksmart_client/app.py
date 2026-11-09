@@ -30,6 +30,7 @@ States shown to the page: idle, connecting, listening, thinking, speaking.
   end of the reply, muted while an alarm rings (the phone is asked to pause then and is not resumed).
 """
 import asyncio
+import datetime
 import io
 import json
 import logging
@@ -42,7 +43,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import alarms, bt, config, mcp, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, config, mcp, rotation, sleep, update, wake_verify, wake_words
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
 from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off
@@ -236,6 +237,14 @@ class Client:
             log.warning('invalid sleep setting %r, using the default', cfg.get('sleep'))
             self.sleep = sleep.normalize(None)
         self.sleeping = False
+        try:
+            self.broadcast = broadcast.normalize(cfg.get('broadcast'))
+        except ValueError:
+            log.warning('invalid broadcast setting %r, using the default', cfg.get('broadcast'))
+            self.broadcast = broadcast.normalize(None)
+        self.broadcast_fired = set()   # 'YYYY-MM-DD HH:MM' done (played or given up) today
+        self.home = cfg.get('home') if isinstance(cfg.get('home'), dict) and cfg['home'].get('name') else None
+        self.rec_seconds = wake_words.RECORD_SECONDS   # how long the current hold-to-say may record
         self.bright_in_sleep = False  # the user set a brightness in these sleep hours: don't dim
         level = cfg.get('brightness')
         if isinstance(level, bool) or not isinstance(level, (int, float)):
@@ -330,7 +339,9 @@ class Client:
     async def reset_wake_words(self):
         return await self.set_wake_words(config.DEFAULTS['wake_words'])
 
-    async def wake_record_start(self):
+    async def wake_record_start(self, seconds=wake_words.RECORD_SECONDS):
+        if self.wake_rec is not None:
+            raise ValueError('正在录另一段，先松手')
         if not self.keys.mic_on:
             raise ValueError('麦克风关着，拨开机身侧面的开关再说')
         if self.uploading or self.in_turn() or self.state != 'idle':
@@ -338,11 +349,13 @@ class Client:
         self.screen.poke()
         self.play('report')   # a few notes, no voice (the wake chime's 在 would be recognised too)
         self.wake_rec_t = time.monotonic()
+        self.rec_seconds = seconds
         self.wake_rec = []
         self.events.publish('wake_words', self.wake_view())
 
-    async def wake_record_stop(self):
-        """Stop recording; recognise it with the hub's recogniser -> wake_words.analyse result."""
+    async def _record_text(self, what):
+        """Stop the hold-to-say recording and recognise it with the hub's recogniser: the text, or ''
+        for nothing (or nothing loud enough) said. ValueError when the hub can't be asked."""
         rec, self.wake_rec = self.wake_rec, None
         self.events.publish('wake_words', self.wake_view())
         if rec is None:
@@ -350,15 +363,157 @@ class Client:
         audio = np.concatenate(rec) if rec else np.zeros(0, np.float32)
         audio = audio[int(0.3 * 16000):]   # the start notes
         if len(audio) < 0.3 * 16000 or float(np.sqrt(np.mean(audio ** 2))) < 10 ** (-55 / 20):
-            return wake_words.analyse('', self.wake_labels())
+            return ''
         checker = wake_verify.HubChecker(self.cfg['hub_http'])
         try:
             text = await asyncio.get_running_loop().run_in_executor(None, checker.text, wake_verify.prepare(audio))
         except Exception as e:
-            log.warning('recognising a new wake word failed: %s', e)
+            log.warning('recognising %s failed: %s', what, e)
             raise ValueError('连不上小麦网关，没法识别，稍后再试')
-        log.info('new wake word heard as %r', text)
-        return wake_words.analyse(text, self.wake_labels())
+        log.info('%s heard as %r', what, text)
+        return text
+
+    async def wake_record_stop(self):
+        """Stop recording; recognise it with the hub's recogniser -> wake_words.analyse result."""
+        return wake_words.analyse(await self._record_text('new wake word'), self.wake_labels())
+
+    # ---- home address and weather broadcasts (broadcast.py) ----
+
+    def broadcast_view(self):
+        return {**self.broadcast, 'home': self.home, 'text': broadcast.describe(self.broadcast),
+                'max_times': broadcast.MAX_TIMES, 'step': broadcast.STEP_MINUTES,
+                'about': {t: broadcast.about(t) for t in self.broadcast['times']}}
+
+    def publish_broadcast(self):
+        self.events.publish('broadcast', self.broadcast_view())
+
+    async def set_broadcast(self, **changes):
+        """Change the broadcast setting (page or voice); shift={'time', 'minutes'} moves one time.
+        ValueError for anything invalid."""
+        move = changes.pop('shift', None)
+        if move:
+            old = broadcast._time(move.get('time'))
+            if old not in self.broadcast['times']:
+                raise ValueError(f'没有 {old} 这个播报时间')
+            new = broadcast.shift(old, int(move.get('minutes') or 0))
+            if new in self.broadcast['times']:
+                raise ValueError(f'已经有 {new} 了')
+            changes.update(remove_time=old, add_time=new)
+        self.broadcast = broadcast.normalize(self.broadcast, changes)
+        config.save(broadcast=self.broadcast)
+        log.info('weather broadcast: %s', broadcast.describe(self.broadcast))
+        self.publish_broadcast()
+        return self.broadcast_view()
+
+    async def home_record_start(self):
+        await self.wake_record_start(seconds=6.0)
+
+    async def home_record_stop(self):
+        """Recognise the address said and look it up -> {'heard', 'place'} or {'heard', 'error'}."""
+        text = (await self._record_text('home address')).strip().rstrip('。.！!？?，,')
+        if not text:
+            return {'heard': '', 'error': '没听清，按住再说一次'}
+        return await self.find_place(text)
+
+    async def find_place(self, text):
+        try:
+            data = await self._hub_http('/kiosk/geocode?' + urllib.parse.urlencode({'q': text}))
+        except Exception as e:
+            log.warning('looking up %r failed: %s', text, e)
+            raise ValueError('连不上小麦网关，查不了地名，稍后再试')
+        if not data or not data.get('ok'):
+            return {'heard': text, 'error': (data or {}).get('error') or f'没找到「{text}」这个地方'}
+        return {'heard': text, 'place': data['place']}
+
+    async def set_home(self, place):
+        """Use this place ({'name', 'latitude', 'longitude'}, None: forget it) as the home address,
+        here and on the hub (weather without a place, the model's idea of where the device is)."""
+        if place is not None:
+            place = {'name': str(place['name']).strip()[:60], 'latitude': round(float(place['latitude']), 4),
+                     'longitude': round(float(place['longitude']), 4)}
+            if not place['name']:
+                raise ValueError('地址不能是空的')
+        self.home = place
+        if place:
+            config.save(home=place)
+        else:
+            config.unset('home')
+        log.info('home address: %s', place and place['name'])
+        self.publish_broadcast()
+        await self._sync_home()
+        return self.broadcast_view()
+
+    async def _sync_home(self):
+        """Tell the hub this device's home (it keeps a copy: data/device_homes.json). Quietly retried
+        at the next start when the hub can't be reached."""
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
+                async with s.post(self.cfg['hub_http'] + '/kiosk/home',
+                                  json={'device': self.cfg['device_id'], 'place': self.home}) as r:
+                    if r.status != 200:
+                        log.warning('the hub did not take the home address: %s %s', r.status, await r.text())
+                        return False
+            return True
+        except Exception as e:
+            log.warning('could not tell the hub the home address: %s', e)
+            return False
+
+    def _busy_for_broadcast(self):
+        return (self.state != 'idle' or self.uploading or self.ring is not None or self.preview is not None
+                or self.wake_rec is not None)
+
+    def _reminders_today(self, now):
+        out = []
+        for v in (self.alarms.view(i) for i in self.alarms.active()):
+            if v['kind'] == 'timer' or not v['at']:
+                continue
+            at = datetime.datetime.fromtimestamp(v['at'])
+            if at.date() == now.date() and at >= now:
+                out.append(f"{at:%H:%M} {v['label'] or v['type']}")
+        return out
+
+    async def _broadcast_loop(self):
+        synced_once = False
+        while True:
+            await asyncio.sleep(5)
+            try:
+                if not synced_once and self.home:
+                    synced_once = await self._sync_home()
+                elif not self.home:
+                    synced_once = True
+                if not alarms.clock_synced():
+                    continue
+                now = datetime.datetime.now()
+                today = now.date().isoformat()
+                self.broadcast_fired = {k for k in self.broadcast_fired if k.startswith(today)}
+                for hhmm, key, at in broadcast.due(self.broadcast, now, self.broadcast_fired):
+                    if self._busy_for_broadcast():
+                        if (now - at).total_seconds() >= broadcast.WAIT_MAX - 10:   # the last tick of the wait
+                            self.broadcast_fired.add(key)
+                            self._note_missed_broadcast(hhmm, at)
+                        break
+                    self.broadcast_fired.add(key)
+                    await self.play_broadcast(hhmm)
+                    break
+            except Exception:
+                log.exception('weather broadcast')
+
+    def _note_missed_broadcast(self, hhmm, at):
+        log.info('weather broadcast %s skipped: busy for %d minutes', hhmm, broadcast.WAIT_MAX // 60)
+        self.alarms.missed.append({'kind': 'broadcast', 'label': '天气', 'at': at.timestamp(),
+                                   'why': 'busy', 'noted': time.time()})
+        self.alarms.save()
+        self.publish_alarms()
+
+    async def play_broadcast(self, hhmm=None):
+        """Ask the model to read the weather now (at a broadcast time, or 'test' from the page)."""
+        hhmm = hhmm or datetime.datetime.now().strftime('%H:%M')
+        text = broadcast.request_text(hhmm, self.broadcast, self.home and self.home['name'],
+                                      self._reminders_today(datetime.datetime.now()))
+        log.info('weather broadcast %s', hhmm)
+        self.screen.poke()
+        self.play('report')
+        await self.say(text)
 
     # ---- startup ----
 
@@ -374,6 +529,7 @@ class Client:
         asyncio.create_task(self._model_poller())
         asyncio.create_task(self._report_poller())
         asyncio.create_task(self._alarm_loop())
+        asyncio.create_task(self._broadcast_loop())
         await self.bt.start()
         asyncio.create_task(self._bluetooth_loop())
         await self.mijia.start()
@@ -386,9 +542,9 @@ class Client:
         if rec is not None:
             # saying a new wake word: it must not wake (it may well be the current one), and nothing
             # is streaming (wake_record_start checks). A page that never lets go stops it here
-            if time.monotonic() - self.wake_rec_t > wake_words.RECORD_SECONDS + 3:
+            if time.monotonic() - self.wake_rec_t > self.rec_seconds + 3:
                 self.wake_rec = None
-            elif sum(len(b) for b in rec) < wake_words.RECORD_SECONDS * 16000:
+            elif sum(len(b) for b in rec) < self.rec_seconds * 16000:
                 rec.append(block.copy())
             return
         # While streaming to the hub the wake word isn't needed (speech already reaches it), and
@@ -470,6 +626,7 @@ class Client:
     def snapshot(self):
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
                 'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
+                'broadcast': self.broadcast_view(),
                 'thread': {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])}}
 
     def view_entry(self):
@@ -711,7 +868,8 @@ class Client:
                 self.deadline = None
                 self.recognised += 1
                 self.reply_samples = 0    # an abort before this turn's audio has heard nothing of it
-                if late:
+                if late or broadcast.tag_of(text):
+                    # a broadcast: "那明天呢" right after it needs no wake word
                     self.listen_after_reply = True
                 if self.uploading:
                     # nothing said during the reply counts; the wake word is listened for instead

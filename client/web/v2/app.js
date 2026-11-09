@@ -577,8 +577,125 @@ $('wwReset').addEventListener('click', () => {
   postJson('/api/wake-words/reset').then(r => { if (r.ok) toast('已恢复默认的唤醒词'); });
 });
 
+/* ---- weather broadcasts and the home address (broadcast.py, 设计画布第 6 块) ---- */
+const bc = { holding: false, busy: false, found: null, armed: null };
+function holdMeter(btn, v) {
+  btn.querySelectorAll('.ww-meter i').forEach((b, i) => {
+    const shape = [.45, .75, 1, .6, .9, .5, .3][i];
+    b.style.transform = `scaleY(${Math.max(.15, Math.min(1, v * shape * (0.8 + Math.random() * 0.4)))})`;
+  });
+}
+function renderBroadcast() {
+  const b = ui.broadcast;
+  if (!b) return;
+  $('bcCard').classList.toggle('off', !b.enabled);
+  $('bcSwitch').setAttribute('aria-checked', String(!!b.enabled));
+  $('bcCount').textContent = b.enabled ? (b.times.length ? `${{ daily: '每天', workdays: '工作日', weekend: '周末' }[b.days]} ${b.times.length} 次` : '还没有时间') : '';
+  $('bcTimes').innerHTML = b.times.map(t => {
+    const armed = bc.armed === t;
+    return `<div class="al"><div class="al-text"><b>${t}</b><span>${b.about[t] === 'tomorrow' ? '明天的天气' : '今天的天气'}</span></div>` +
+      `<div class="bc-step"><button data-t="${t}" data-m="-${b.step}" aria-label="提前">−</button><button data-t="${t}" data-m="${b.step}" aria-label="推后">+</button></div>` +
+      `<button class="al-del${armed ? ' armed' : ''}" data-del="${t}">${armed ? '确认删除' : '删除'}</button></div>`;
+  }).join('');
+  $('bcAdd').hidden = b.times.length >= b.max_times;
+  for (const el of $('bcDays').children) el.classList.toggle('on', el.dataset.d === b.days);
+  for (const el of $('bcExtras').querySelectorAll('[data-x]')) el.classList.toggle('on', !!b[el.dataset.x]);
+  const f = bc.found;
+  $('bcHome').classList.toggle('warn', !!(f && f.error));
+  $('bcConfirm').hidden = !(f && f.place);
+  $('bcHold').hidden = !!(f && f.place);
+  if (f && f.place) {
+    $('bcHomeLabel').textContent = `听到「${f.heard}」，找到的是`;
+    $('bcHomeName').textContent = f.place.name;
+    $('bcHomeSub').textContent = coords(f.place);
+  } else {
+    $('bcHomeLabel').textContent = '住宅地址（音箱所在地）';
+    $('bcHomeName').textContent = b.home ? b.home.name : '还没设';
+    $('bcHomeSub').textContent = f && f.error ? '⚠ ' + f.error : b.home ? coords(b.home) : '没设时按网关后台「查天气」里的设备所在地';
+  }
+  $('bcHold').disabled = bc.busy;
+  $('bcHold').classList.toggle('on', bc.holding);
+  $('bcHoldText').textContent = bc.holding ? '正在听，说完松手' : bc.busy ? '正在查找…' : f && f.error ? '按住重说' : '按住说新地址';
+}
+function coords(p) {
+  const lat = Number(p.latitude), lon = Number(p.longitude);
+  return `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'} ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'}`;
+}
+async function setBroadcast(body) {
+  if (DEMO !== null) return;
+  const r = await postJson('/api/broadcast', body);
+  if (r.ok) { ui.broadcast = r.broadcast; renderBroadcast(); } else if (r.error) toast(r.error, 'error');
+}
+$('bcSwitch').addEventListener('click', () => setBroadcast({ enabled: !(ui.broadcast && ui.broadcast.enabled) }));
+$('bcDays').addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) setBroadcast({ days: b.dataset.d }); });
+$('bcExtras').addEventListener('click', e => {
+  const b = e.target.closest('[data-x]');
+  if (b) setBroadcast({ [b.dataset.x]: !ui.broadcast[b.dataset.x] });
+});
+$('bcAdd').addEventListener('click', () => {
+  // the next free time an hour after the last one (07:30 first)
+  const times = ui.broadcast.times;
+  let t = times.length ? times[times.length - 1] : '06:30';
+  for (let i = 0; i < 24 && (i === 0 || times.includes(t)); i++) {
+    const [h, m] = t.split(':').map(Number);
+    t = pad((h + 1) % 24) + ':' + pad(m);
+  }
+  setBroadcast({ add_time: t });
+});
+$('bcTimes').addEventListener('click', e => {
+  const step = e.target.closest('[data-m]');
+  if (step) return setBroadcast({ shift: { time: step.dataset.t, minutes: Number(step.dataset.m) } });
+  const del = e.target.closest('[data-del]');
+  if (!del) return;
+  if (bc.armed !== del.dataset.del) {
+    bc.armed = del.dataset.del; renderBroadcast();
+    setTimeout(() => { if (bc.armed === del.dataset.del) { bc.armed = null; renderBroadcast(); } }, 3000);
+    return;
+  }
+  bc.armed = null;
+  setBroadcast({ remove_time: del.dataset.del });
+});
+async function homeHoldStart(e) {
+  e.preventDefault();
+  if (bc.holding || bc.busy) return;
+  bc.holding = true; bc.found = null; renderBroadcast();
+  if (DEMO !== null) return;
+  const r = await postJson('/api/home/record/start');
+  if (!r.ok) { bc.holding = false; renderBroadcast(); if (r.error) toast(r.error, 'error'); }
+}
+async function homeHoldEnd() {
+  if (!bc.holding) return;
+  bc.holding = false; bc.busy = true; renderBroadcast();
+  if (DEMO !== null) {
+    bc.busy = false; bc.found = { heard: '杭州西湖区', place: { name: '浙江省杭州市西湖区', latitude: 30.26, longitude: 120.13 } };
+    return renderBroadcast();
+  }
+  const r = await postJson('/api/home/record/stop');
+  bc.busy = false;
+  bc.found = r.ok ? r : { heard: '', error: r.error };
+  renderBroadcast();
+}
+$('bcHold').addEventListener('pointerdown', homeHoldStart);
+$('bcHold').addEventListener('pointerup', homeHoldEnd);
+$('bcHold').addEventListener('pointercancel', homeHoldEnd);
+$('bcHold').addEventListener('pointerleave', homeHoldEnd);
+$('bcRetry').addEventListener('click', () => { bc.found = null; renderBroadcast(); });
+$('bcUse').addEventListener('click', async () => {
+  const f = bc.found;
+  if (!f || !f.place) return;
+  if (DEMO !== null) { ui.broadcast.home = f.place; bc.found = null; return renderBroadcast(); }
+  const r = await postJson('/api/home', { place: f.place });
+  if (r.ok) { bc.found = null; ui.broadcast = r.broadcast; renderBroadcast(); toast(`住宅地址改成了${f.place.name}`); }
+  else toast(r.error || '没改成', 'error');
+});
+$('bcTest').addEventListener('click', () => {
+  if (DEMO !== null) return;
+  postJson('/api/broadcast', { test: true });
+  toast('马上播一次');
+});
+
 /* ---- countdowns, alarms and reminders (alarms.py: the client keeps and rings them) ---- */
-const KIND_ICON = { timer: '计时', alarm: '闹钟', reminder: '提醒' };
+const KIND_ICON = { timer: '计时', alarm: '闹钟', reminder: '提醒', broadcast: '播报' };
 const now_s = () => Date.now() / 1000;
 function hhmm(t) {
   const d = new Date(t * 1000);
@@ -631,7 +748,7 @@ function renderAlarms() {
   $('missedBox').hidden = !a.missed.length;
   $('missedList').innerHTML = a.missed.slice(0, 3).map(m =>
     `<div class="mh"><b>${dayText(m.at)} ${hhmm(m.at)}</b>${KIND_ICON[m.kind] || ''}${m.label ? ' · ' + esc(m.label) : ''}` +
-    `<small>${m.why === 'off' ? '设备关着' : m.kind === 'reminder' ? '提醒了 3 分钟没人停' : '响了 10 分钟没人停'}</small></div>`).join('') +
+    `<small>${m.why === 'off' ? '设备关着' : m.why === 'busy' ? '当时一直在忙，没有播' : m.kind === 'reminder' ? '提醒了 3 分钟没人停' : '响了 10 分钟没人停'}</small></div>`).join('') +
     (a.missed.length > 3 ? `<div class="mh more">还有 ${a.missed.length - 3} 条</div>` : '');
   renderAlarmVol();
   renderRing();
@@ -1219,7 +1336,12 @@ function fmtTime(t) {
 }
 
 // A reply grows sentence by sentence; the text just shows as it is (no per-sentence highlight)
+// a weather broadcast's request (broadcast.py): shown as a small label, not as something the user said
+const broadcastTag = m => m.role === 'user' && ((/^【([^】]{1,20})】/.exec(m.text || '') || [])[1] || '').includes('播报')
+  ? /^【([^】]{1,20})】/.exec(m.text)[1] : null;
 function fillMsg(el, m) {
+  const tag = broadcastTag(m);
+  if (tag) { el.innerHTML = `${tag.startsWith('早安') ? '☀' : '⛅'} ${esc(tag)}`; return; }
   if (m.role === 'card') {   // self.screen.show_card: a recipe, a list, a table (markdown rendered by home.js)
     el.querySelector('.body').innerHTML = `<h3 class="rich-title">${esc(m.text)}</h3>`
       + (window.cardHtml ? window.cardHtml(m.card || {}) : esc((m.card || {}).markdown || '')) + `<span class="ts">${fmtTime(m.time)}</span>`;
@@ -1232,7 +1354,7 @@ function fillMsg(el, m) {
 
 function msgEl(m) {
   const el = document.createElement('div');
-  el.className = 'msg ' + (m.role === 'card' ? 'bot rich' : m.role);
+  el.className = 'msg ' + (m.role === 'card' ? 'bot rich' : broadcastTag(m) ? 'tag' : m.role);
   el.dataset.id = m.id;
   if (m.role === 'bot' || m.role === 'card') {
     el.innerHTML = `<img class="tile" src="${esc(logoSrc(entryModel(m.entry)))}" alt=""><div class="body"></div>`;
@@ -1346,7 +1468,8 @@ const handlers = {
     if (s.alarms) ui.alarms = s.alarms;
     if (s.bluetooth) ui.bluetooth = s.bluetooth;
     if (s.wake_words) ui.wake = s.wake_words;
-    renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth(); renderWake();
+    if (s.broadcast) ui.broadcast = s.broadcast;
+    renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth(); renderWake(); renderBroadcast();
     updateFinished((s.update || {}).job);
   },
   power(p) {
@@ -1388,9 +1511,13 @@ const handlers = {
   wake_words(w) {
     ui.wake = w; renderWake(); renderStatus(); renderBright();
   },
+  broadcast(b) {
+    ui.broadcast = b; renderBroadcast();
+  },
   level(l) {
     level.target = ui.status.state === 'speaking' ? Math.min(1, l.out * 6) : micLevel(l.mic);
     if (ww.holding) wakeMeter(micLevel(l.mic));
+    if (bc.holding) holdMeter($('bcHold'), micLevel(l.mic));
   },
 };
 

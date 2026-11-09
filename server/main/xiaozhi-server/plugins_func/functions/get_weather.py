@@ -18,7 +18,7 @@ GET_WEATHER_FUNCTION_DESC = {
         "description": (
             "获取某个地点的天气，用户应提供一个位置，比如用户说杭州天气，参数为：杭州。"
             "如果用户说的是省份，默认用省会城市。如果用户说的不是省份或城市而是一个地名，默认用该地所在省份的省会城市。"
-            "问本地天气时不传 location。如果系统提示里已经列出了本地未来7天天气，问本地天气就直接回答、不要调用；"
+            "问本地天气（没说地点，比如「明天下雨吗」）时不传 location，会用这台设备的住宅地址。如果系统提示里已经列出了本地未来7天天气，问本地天气就直接回答、不要调用；"
             "系统提示里没有本地天气（或写着没查到）时必须调用，不要根据之前的对话说查不到——天气服务可能已经恢复。"
         ),
         "parameters": {
@@ -172,12 +172,22 @@ def weather_settings(config: dict) -> dict:
             "qweather_host": text("qweather_host"), "default_location": text("default_location") or "上海"}
 
 
+def device_home(conn):
+    """[xiaozhi-hub] 这台设备在设置页设的住宅地址（core/utils/device_homes.py），没设过返回 None。"""
+    from core.utils import device_homes
+
+    return device_homes.get(getattr(conn, "device_id", None) or "")
+
+
 def resolve_location(conn, location: str = None) -> str:
-    """用户说的地点 > 后台设置的所在地 > 按网关的公网 IP 推断 > 默认城市。"""
+    """用户说的地点 > 这台设备的住宅地址 > 后台设置的所在地 > 按网关的公网 IP 推断 > 默认城市。"""
     from core.utils.cache.manager import cache_manager, CacheType
 
     if location:
         return location
+    home = device_home(conn)
+    if home:
+        return home["name"]
     settings = weather_settings(conn.config)
     if settings["home_location"]:
         return settings["home_location"]
@@ -219,6 +229,9 @@ async def get_weather(conn: "ConnectionHandler", location: str = None, lang: str
 
     location = resolve_location(conn, location)
     settings = weather_settings(conn.config)
+    # 没说地点（或说的就是住宅地址的名字）：用设备存的坐标，不再查一遍地名
+    home = device_home(conn)
+    place = home if home and location == home["name"] else None
     weather_cache_key = f"full_weather_{location}_{lang}"
     cached_weather_report = cache_manager.get(CacheType.WEATHER, weather_cache_key)
     if cached_weather_report:
@@ -227,7 +240,7 @@ async def get_weather(conn: "ConnectionHandler", location: str = None, lang: str
         if settings["qweather_key"] and settings["qweather_host"]:
             weather_report = await qweather_report(location, settings["qweather_key"], settings["qweather_host"])
         else:
-            weather_report = await open_meteo.report(location)
+            weather_report = await open_meteo.report_at(place, location)
     except Exception as e:
         logger.bind(tag=TAG).warning(f"查天气失败（{location}）: {e}")
         return ActionResponse(

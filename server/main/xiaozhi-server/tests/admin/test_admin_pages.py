@@ -565,7 +565,8 @@ async def test_kiosk_only_from_this_machine(kiosk, monkeypatch):
     calls = [("get", "/kiosk/llm", None), ("post", "/kiosk/llm/use", {"kind": "cli"}),
              ("post", "/kiosk/reports", {"device": "dev-1"}), ("post", "/kiosk/asr", None),
              ("post", "/kiosk/tts", {"text": "该晾衣服了"}),
-             ("get", "/kiosk/chat/history?device=dev-1", None), ("post", "/kiosk/chat/clear", {"device": "dev-1"})]
+             ("get", "/kiosk/chat/history?device=dev-1", None), ("post", "/kiosk/chat/clear", {"device": "dev-1"}),
+             ("get", "/kiosk/geocode?q=青浦", None), ("post", "/kiosk/home", {"device": "dev-1", "place": None})]
     for method, path, body in calls:  # 本机反向代理转发来的不算本机
         r = await getattr(kiosk, method)(path, json=body, headers={"X-Forwarded-For": "203.0.113.5"})
         assert r.status == 403
@@ -992,3 +993,28 @@ async def test_kiosk_tts(kiosk, monkeypatch):
     assert (await kiosk.post("/kiosk/tts", json={"text": "该晾衣服了"})).status == 502
     FakeTTS.interface_type = InterfaceType.DUAL_STREAM   # 流式合成
     assert (await kiosk.post("/kiosk/tts", json={"text": "该晾衣服了"})).status == 501
+
+
+async def test_kiosk_home_and_geocode(kiosk, tmp_path, monkeypatch):
+    from core.utils import device_homes, open_meteo
+
+    monkeypatch.setattr(device_homes, "_path", lambda: str(tmp_path / "device_homes.json"))
+    place = {"name": "浙江省杭州市西湖区", "latitude": 30.26, "longitude": 120.13}
+
+    async def lookup(name):
+        if name == "青埔":
+            raise open_meteo.WeatherError("没找到「青埔」这个地方")
+        return place
+    monkeypatch.setattr(open_meteo, "lookup", lookup)
+    data = await (await kiosk.get("/kiosk/geocode?q=杭州西湖区")).json()
+    assert data == {"ok": True, "place": place}
+    data = await (await kiosk.get("/kiosk/geocode?q=青埔")).json()
+    assert not data["ok"] and "没找到" in data["error"]
+    assert (await kiosk.get("/kiosk/geocode?q=")).status == 400
+    assert (await kiosk.post("/kiosk/home", json={"device": "dev-1", "place": place})).status == 200
+    assert device_homes.get("dev-1")["name"] == "浙江省杭州市西湖区"
+    for bad in ({"place": place}, {"device": "dev-1", "place": {"name": "x"}},
+                {"device": "dev-1", "place": {"name": "x", "latitude": 99, "longitude": 0}}):
+        assert (await kiosk.post("/kiosk/home", json=bad)).status == 400
+    assert (await kiosk.post("/kiosk/home", json={"device": "dev-1", "place": None})).status == 200
+    assert device_homes.get("dev-1") is None

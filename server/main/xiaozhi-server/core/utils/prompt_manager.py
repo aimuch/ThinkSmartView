@@ -221,10 +221,8 @@ class PromptManager:
             if (
                 client_ip
                 and self.base_prompt_template
-                and (
-                    "local_address" in self.base_prompt_template
-                    or "weather_info" in self.base_prompt_template
-                )
+                # [xiaozhi-hub] 只有模板要天气时才按 IP 查位置（local_address 见 build_enhanced_prompt）
+                and "weather_info" in self.base_prompt_template
             ):
                 # 获取位置信息（使用全局缓存）
                 local_address = self._get_location_info(client_ip)
@@ -267,7 +265,16 @@ class PromptManager:
             local_address = ""
             weather_info = ""
 
-            if client_ip:
+            # [xiaozhi-hub] 设备设了住宅地址就用它
+            from core.utils import device_homes
+
+            # 只放确定的地址（设备的住宅地址、后台填的设备所在地）；按 IP 猜的是代理出口的城市，不放进提示
+            home = device_homes.get(device_id or "")
+            if home:
+                local_address = home["name"]
+            elif str(((self.config.get("plugins") or {}).get("get_weather") or {}).get("home_location") or "").strip():
+                local_address = str(self.config["plugins"]["get_weather"]["home_location"]).strip()
+            elif client_ip and "weather_info" in self.base_prompt_template:
                 # 获取位置信息（从全局缓存）
                 local_address = (
                     self.cache_manager.get(self.CacheType.LOCATION, client_ip) or ""

@@ -162,7 +162,32 @@ CARD_TOOLS = [
                         'required': ['title', 'markdown']},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + home_tools.TOOLS
+BROADCAST_TOOLS = [
+    {
+        'name': 'self.weather_broadcast.update',
+        'description': '查看或修改天气定时播报（到点设备自己念住宅地址的天气）。'
+                       '「每天早上七点半播报天气」enabled=true, add_time="07:30"；「晚上九点也播一下」add_time="21:00"；'
+                       '「不要九点那次了」remove_time="21:00"；「工作日才播」days="workdays"；「关掉天气播报」enabled=false；'
+                       '「早上顺便说一下新闻」news=true；「顺便说今天的提醒」reminders=true。只查看就什么参数都不传。'
+                       '14 点以后的播报讲明天的天气。改完用一句话复述 text。',
+        'inputSchema': {'type': 'object',
+                        'properties': {'enabled': {'type': 'boolean'},
+                                       'add_time': {'type': 'string', 'description': '加一个播报时间，24 小时制 HH:MM'},
+                                       'remove_time': {'type': 'string', 'description': '删掉一个播报时间 HH:MM'},
+                                       'days': {'type': 'string', 'enum': ['daily', 'workdays', 'weekend']},
+                                       'reminders': {'type': 'boolean', 'description': '中午前的播报顺便说今天的闹钟和提醒'},
+                                       'news': {'type': 'boolean', 'description': '中午前的播报顺便说三条新闻'}}},
+    },
+    {
+        'name': 'self.location.set_home',
+        'description': '设置住宅地址（设备所在地）：问天气没说地点时就查这里，天气播报也播这里。'
+                       '用户说「住宅地址改成杭州西湖区」「我家在浦东新区」「我搬到苏州了」时调用，place 写用户说的地名。'
+                       '只查看现在的地址时不传 place。返回 success=false 时把 reason 告诉用户。',
+        'inputSchema': {'type': 'object',
+                        'properties': {'place': {'type': 'string', 'description': '地名，国内写省市区，如 杭州市西湖区；国外写英文名'}}},
+    },
+]
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -173,6 +198,21 @@ def _alarm_args(args):
     repeat = rule and {'type': rule, 'days': args.get('weekdays'), 'day': args.get('month_day')}
     return {'kind': args.get('kind'), 'label': args.get('label') or '', 'say': args.get('say') or '',
             'repeat': repeat, **{k: args[k] for k in ALARM_WHEN if args.get(k) is not None}}
+
+
+async def _set_home(client, place):
+    if not place:
+        home = client.home
+        return {'home': home['name'] if home else None,
+                **({} if home else {'note': '还没设住宅地址，可以说「住宅地址设成……」，或在设置页「天气播报」里按住说'})}
+    try:
+        found = await client.find_place(place)
+    except ValueError as e:
+        return {'success': False, 'reason': str(e)}
+    if found.get('error'):
+        return {'success': False, 'reason': found['error']}
+    view = await client.set_home(found['place'])
+    return {'success': True, 'home': view['home']['name']}
 
 
 async def _wake_word(client, action, word):
@@ -289,6 +329,16 @@ async def handle(payload, client=None):
                 text = json.dumps({'volume': client.alarm_volume})
             elif name == 'self.wake_word.update' and client:
                 text = _dumps(await _wake_word(client, args.get('action'), str(args.get('word') or '').strip()))
+            elif name == 'self.weather_broadcast.update' and client:
+                keys = ('enabled', 'add_time', 'remove_time', 'days', 'reminders', 'news')
+                try:
+                    view = await client.set_broadcast(**{k: args[k] for k in keys if args.get(k) is not None})
+                    text = _dumps({'success': True, 'text': view['text'],
+                                   'home': view['home'] and view['home']['name']})
+                except ValueError as e:
+                    text = _dumps({'success': False, 'reason': str(e), 'text': client.broadcast_view()['text']})
+            elif name == 'self.location.set_home' and client:
+                text = _dumps(await _set_home(client, str(args.get('place') or '').strip()))
             elif name == 'self.screen.show_card' and client:
                 client.show_card(args.get('title'), args.get('markdown'), args.get('images'))
                 text = _dumps({'success': True, 'note': '已经显示在屏幕的对话里了，回答只用一句话，不要念内容'})
