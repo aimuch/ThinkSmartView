@@ -31,7 +31,9 @@ function tick() {
   const hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
   $('time').textContent = hm;
   $('bigTime').textContent = hm;
-  $('bigDate').textContent = `${now.getMonth() + 1}月${now.getDate()}日  星期${WEEK[now.getDay()]}`;
+  const lunar = ui.today && ui.today.lunar;
+  $('bigDate').textContent = `${now.getMonth() + 1}月${now.getDate()}日  星期${WEEK[now.getDay()]}` +
+    (lunar && lunar.text ? `  ·  农历${lunar.text}${lunar.term ? ' ' + lunar.term : ''}${lunar.festival ? ' ' + lunar.festival : ''}` : '');
   const h = now.getHours();
   $('greet').textContent = h < 5 ? '夜深了' : h < 9 ? '早上好' : h < 12 ? '上午好' : h < 14 ? '中午好' : h < 18 ? '下午好' : h < 23 ? '晚上好' : '夜深了';
   $('ringTime').textContent = hm;
@@ -577,6 +579,94 @@ $('wwReset').addEventListener('click', () => {
   postJson('/api/wake-words/reset').then(r => { if (r.ok) toast('已恢复默认的唤醒词'); });
 });
 
+/* ---- 外观: theme, avatar, home blocks (looks.py, 设计画布第 8 块) ---- */
+const AVATAR_DOT = {
+  orb: 'radial-gradient(circle at 34% 28%,#f2f4ff,#b4bde8 20%,#5b65a8 58%,#191d45)',
+  cat: 'radial-gradient(circle at 34% 28%,#fff1df,#f6b16b 28%,#e0782f 72%,#8a3d10)',
+  dog: 'radial-gradient(circle at 34% 28%,#fff4e6,#e9c79c 30%,#c48f5a 74%,#6b4224)',
+  bear: 'radial-gradient(circle at 34% 28%,#ecd2b6,#c08a5e 30%,#8a5a37 72%,#4a2c18)',
+  rabbit: 'radial-gradient(circle at 34% 28%,#fff,#fff0f5 34%,#f2c6d6 78%,#b97f97)',
+  panda: 'radial-gradient(circle at 34% 28%,#fff,#f4f4f7 40%,#cfd0d8 82%,#8c8e9c)',
+  wheat: 'radial-gradient(circle at 34% 28%,#fffbe6,#f5d37a 30%,#d9a22e 72%,#7d5410)',
+  robot: 'linear-gradient(160deg,#f2f5fb,#c5cde0 45%,#7d88a6)',
+};
+const THEME_DOT = { night: 'linear-gradient(135deg,#18245a,#050813)', dawn: 'linear-gradient(135deg,#ffe3c4,#f3ecff)',
+  forest: 'linear-gradient(135deg,#1d4a3a,#06100c)', candy: 'linear-gradient(135deg,#ffd6ec,#c9ecff)', black: '#000',
+  auto: 'linear-gradient(90deg,#ffe3c4 50%,#18245a 50%)' };
+const BLOCK_ELS = { clock: ['greet', 'bigTime'], date: ['bigDate'], weather: ['homeWeather'], alarms: ['nextAlarms', 'missedBox'],
+  suggest: ['tryLabel', 'chips'] };
+let looksArmed = null;
+function renderLooks() {
+  const l = ui.looks;
+  if (!l) return;
+  document.body.dataset.theme = l.theme_now;
+  const photo = l.avatar.startsWith('photo:') && l.photos.find(p => p.id === l.avatar);
+  document.body.dataset.avatar = photo ? 'photo' : l.avatar;
+  document.body.classList.toggle('av-photo-on', !!photo);
+  if (photo && $('avPhoto').getAttribute('src') !== photo.url) $('avPhoto').src = photo.url;
+  // home blocks: CSS order inside the welcome column; missed alarms always show with the alarms
+  l.blocks.forEach((b, i) => (BLOCK_ELS[b.id] || []).forEach((id, k) => {
+    const el = $(id);
+    if (!el) return;
+    el.style.order = String(i * 10 + k);
+    el.classList.toggle('hidden-block', !b.on && id !== 'missedBox');
+  }));
+  $('looksNow').textContent = `${l.themes[l.theme]} · ${(l.avatars.concat(l.photos).find(a => a.id === l.avatar) || {}).name || ''}`;
+  $('looksThemes').innerHTML = Object.entries(l.themes).map(([k, name]) =>
+    `<button data-theme="${k}" class="card2 ${k === l.theme ? 'on' : ''}" style="background:var(--card2)"><i style="background:${THEME_DOT[k]}"></i>${esc(name)}</button>`).join('');
+  $('looksAvatars').innerHTML = l.avatars.map(a =>
+    `<button data-avatar="${a.id}" class="${a.id === l.avatar ? 'on' : ''}"><span class="dot" style="background:${AVATAR_DOT[a.id]}"></span>${esc(a.name)}</button>`).join('') +
+    l.photos.map(p => `<button data-avatar="${p.id}" class="${p.id === l.avatar ? 'on' : ''}"><img src="${esc(p.url)}" alt="">` +
+      `${looksArmed === p.id ? '确定删除？' : '照片形象'}<span class="x" data-del="${p.id}">×</span></button>`).join('') +
+    `<button class="add" id="looksAdd"><span style="font-size:34px">＋</span>用照片生成</button>`;
+  $('looksBlocks').innerHTML = l.blocks.map((b, i) =>
+    `<div class="al ${b.on ? '' : 'off'}"><div class="al-text"><b>${esc(b.name)}</b></div>` +
+    `<div class="bc-step"><button data-move="${b.id}" data-by="-1" ${i ? '' : 'disabled'} aria-label="上移">↑</button>` +
+    `<button data-move="${b.id}" data-by="1" ${i < l.blocks.length - 1 ? '' : 'disabled'} aria-label="下移">↓</button></div>` +
+    `<button class="switch" data-toggle="${b.id}" role="switch" aria-checked="${b.on}" aria-label="${esc(b.name)}"><i></i></button></div>`).join('');
+}
+async function setLooks(body) {
+  if (DEMO !== null) return;
+  const r = await postJson('/api/looks', body);
+  if (r.ok) { ui.looks = r.looks; renderLooks(); } else if (r.error) toast(r.error, 'error');
+}
+$('looksThemes').addEventListener('click', e => { const b = e.target.closest('[data-theme]'); if (b) setLooks({ theme: b.dataset.theme }); });
+$('looksAvatars').addEventListener('click', e => {
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    e.stopPropagation();
+    if (looksArmed !== del.dataset.del) { looksArmed = del.dataset.del; renderLooks(); setTimeout(() => { looksArmed = null; renderLooks(); }, 3000); return; }
+    looksArmed = null;
+    return setLooks({ delete: del.dataset.del });
+  }
+  if (e.target.closest('#looksAdd')) return startAvatarPhoto();
+  const b = e.target.closest('[data-avatar]');
+  if (b) setLooks({ avatar: b.dataset.avatar });
+});
+$('looksBlocks').addEventListener('click', e => {
+  const m = e.target.closest('[data-move]');
+  if (m) return setLooks({ move: { id: m.dataset.move, by: Number(m.dataset.by) } });
+  const t = e.target.closest('[data-toggle]');
+  if (t) setLooks({ toggle: t.dataset.toggle });
+});
+function renderToday() {
+  const w = ui.today && ui.today.weather;
+  $('homeWeather').hidden = !w;
+  if (w) {
+    const n = v => (v === null || v === undefined ? '?' : Math.round(v));
+    const t = w.today || {};
+    $('homeWeather').innerHTML = `<span class="hw-icon">${esc(w.icon || '')}</span><span class="hw-temp">${n(w.temp)}°</span>` +
+      `<div class="hw-text"><b>${esc(w.text)}${w.feels !== null && w.feels !== undefined ? ` · 体感 ${n(w.feels)}°` : ''}</b>` +
+      `今天 ${n(t.min)}~${n(t.max)}°${t.rain !== null && t.rain !== undefined ? ` · 降水 ${n(t.rain)}%` : ''}${w.air ? ` · 空气${esc(w.air)}` : ''}</div>`;
+  }
+  tick();
+}
+async function startAvatarPhoto() {
+  if (DEMO !== null) return;
+  const r = await postJson('/api/avatar/start');
+  if (!r.ok) toast(r.error || '没开成', 'error');
+}
+
 /* ---- 拍照问答: QR code for the phone, then its photo while the vision model looks (设计画布第 7 块) ---- */
 let photoQrShown = null, photoTimer = null;
 function renderPhoto() {
@@ -585,15 +675,31 @@ function renderPhoto() {
   clearInterval(photoTimer);
   if (!p) return;
   const failed = ['error', 'expired', 'cancelled'].includes(p.state);
-  $('photoOv').classList.toggle('looking', p.state === 'received');
-  $('photoOv').classList.toggle('failed', failed);
+  const avatar = p.purpose === 'avatar';
+  $('photoOv').classList.toggle('avatar', avatar);
+  $('photoOv').classList.toggle('looking', p.state === 'received' && !avatar || p.state === 'generating');
+  $('photoOv').classList.toggle('failed', failed || !!(avatar && p.error));
   if (photoQrShown !== p.url && window.drawQr) { window.drawQr($('photoQr'), p.url); photoQrShown = p.url; }
-  $('photoQr').hidden = !!p.image;
-  $('photoImg').hidden = !p.image;
-  if (p.image) $('photoImg').src = p.image;
+  const shown = avatar && p.state === 'generated' && p.preview ? p.preview : p.image;
+  $('photoQr').hidden = !!shown;
+  $('photoImg').hidden = !shown;
+  if (shown && $('photoImg').getAttribute('src') !== shown) $('photoImg').src = shown;
+  $('photoQ').hidden = avatar;
   $('photoQ').textContent = `「${p.question}」`;
-  $('photoTitle').innerHTML = failed ? '没看成' : p.state === 'waiting' ? '用手机扫码，<br>拍一张照片' : '收到了，<br>正在看…';
-  $('photoNote').textContent = failed ? (p.error || '出错了') : p.state === 'waiting' ? '手机和小麦连同一个 Wi‑Fi 才能打开' : '一般 3～8 秒';
+  const pick = avatar && ['received', 'generated'].includes(p.state);
+  $('photoStyles').hidden = !pick;
+  if (pick) $('photoStyles').innerHTML = (p.styles || []).map(st =>
+    `<button data-style="${st.id}" class="${st.id === p.style ? 'on' : ''}">${esc(st.name)}</button>`).join('');
+  $('photoUse').hidden = !(avatar && p.state === 'generated' && p.preview);
+  if (avatar) {
+    $('photoTitle').innerHTML = failed ? '没成功' : p.state === 'waiting' ? '用手机拍一张<br>正脸照' : p.state === 'received' ? '选一个画风'
+      : p.state === 'generating' ? '正在画…' : '画好了';
+    $('photoNote').textContent = failed || p.error ? (p.error || '出错了') : p.state === 'waiting' ? '脸要清楚、光线亮一点；手机和小麦连同一个 Wi‑Fi'
+      : p.state === 'generating' ? '大约 15 秒' : p.state === 'generated' ? '满意就用它，不满意换个画风' : '通义万相会把照片画成卡通形象';
+  } else {
+    $('photoTitle').innerHTML = failed ? '没看成' : p.state === 'waiting' ? '用手机扫码，<br>拍一张照片' : '收到了，<br>正在看…';
+    $('photoNote').textContent = failed ? (p.error || '出错了') : p.state === 'waiting' ? '手机和小麦连同一个 Wi‑Fi 才能打开' : '一般 3～8 秒';
+  }
   $('photoCancel').textContent = failed ? '关闭' : '取消';
   const tick = () => {
     const s = Math.max(0, Math.round(p.expires - Date.now() / 1000));
@@ -603,6 +709,17 @@ function renderPhoto() {
   if (p.state === 'waiting') photoTimer = setInterval(tick, 1000);
 }
 $('photoCancel').addEventListener('click', () => { ui.photo = null; renderPhoto(); if (DEMO === null) postJson('/api/photo/cancel'); });
+$('photoStyles').addEventListener('click', async e => {
+  const b = e.target.closest('[data-style]');
+  if (!b || DEMO !== null) return;
+  const r = await postJson('/api/avatar/style', { style: Number(b.dataset.style) });
+  if (!r.ok) toast(r.error || '没开始画', 'error');
+});
+$('photoUse').addEventListener('click', async () => {
+  if (DEMO !== null) return;
+  const r = await postJson('/api/avatar/use');
+  if (r.ok) toast('换上新形象了'); else toast(r.error || '没换成', 'error');
+});
 $('btnPhoto').addEventListener('click', async () => {
   if (DEMO !== null) {
     ui.photo = { token: 'demo', url: 'http://10.10.10.224:16688/photo/demo', question: '这是什么', expires: Date.now() / 1000 + 300, state: 'waiting' };
@@ -1509,6 +1626,8 @@ const handlers = {
     if (s.bluetooth) ui.bluetooth = s.bluetooth;
     if (s.wake_words) ui.wake = s.wake_words;
     if (s.broadcast) ui.broadcast = s.broadcast;
+    if (s.looks) ui.looks = s.looks;
+    ui.today = s.today || ui.today; renderLooks(); renderToday();
     ui.photo = s.photo || null; renderPhoto();
     renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth(); renderWake(); renderBroadcast();
     updateFinished((s.update || {}).job);
@@ -1554,6 +1673,12 @@ const handlers = {
   },
   broadcast(b) {
     ui.broadcast = b; renderBroadcast();
+  },
+  looks(l) {
+    ui.looks = l; renderLooks();
+  },
+  today(t) {
+    ui.today = t; renderToday();
   },
   photo(p) {
     ui.photo = p.state === 'closed' ? null : p; renderPhoto();

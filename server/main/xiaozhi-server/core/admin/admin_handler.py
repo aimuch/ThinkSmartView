@@ -88,6 +88,7 @@ class AdminHandler:
         self.updater = gateway_updater or updater.Updater()
         self._emotion_runs = {}  # session_id -> {"task", "index", "total", "emotion"}
         self._voice_samples = {}  # 音色 -> mp3 字节（试听缓存）
+        self._today_cache = {}    # 设备首页的天气（/kiosk/today）：地点 -> (时间, 数据)
         self.logger = logger
         self.grokbot = GrokBotAdmin(grokbot_credentials, logger=logger.bind(tag=TAG))
 
@@ -157,10 +158,13 @@ class AdminHandler:
                 web.post("/kiosk/chat/clear", self.handle_kiosk_chat_clear),
                 web.get("/kiosk/geocode", self.handle_kiosk_geocode),
                 web.post("/kiosk/home", self.handle_kiosk_home),
+                web.get("/kiosk/today", self.handle_kiosk_today),
                 web.post("/kiosk/photo/start", self.handle_kiosk_photo_start),
                 web.get("/kiosk/photo/{token}", self.handle_kiosk_photo),
                 web.get("/kiosk/photo/{token}/image", self.handle_kiosk_photo_image),
                 web.post("/kiosk/photo/{token}/cancel", self.handle_kiosk_photo_cancel),
+                web.post("/kiosk/photo/{token}/avatar", self.handle_kiosk_avatar_generate),
+                web.get("/kiosk/photo/{token}/avatar", self.handle_kiosk_avatar_image),
                 # 手机上的拍照页：局域网里谁都能打开，令牌（一次性、5 分钟）就是凭证
                 web.get("/photo/{token}", self.handle_photo_page),
                 web.get("/photo/{token}/status", self.handle_photo_status),
@@ -897,6 +901,34 @@ class AdminHandler:
         await self._blocking(device_homes.put, device, place)
         return self._json({"ok": True})
 
+    async def handle_kiosk_today(self, request: web.Request):
+        """?device=：设备首页用的今天：农历（含节气、节日）和住宅地址的天气（20 分钟缓存）。
+        没设住宅地址时用后台「查天气」里的设备所在地；天气查不到时 weather 为 null、带 weather_error。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import device_homes, open_meteo
+
+        device = request.query.get("device") or ""
+        out = {"ok": True, "lunar": await self._blocking(_lunar_today), "weather": None}
+        home = device_homes.get(device)
+        if not home:
+            merged = await self._blocking(self._merged)
+            name = str(((merged.get("plugins") or {}).get("get_weather") or {}).get("home_location") or "").strip()
+            if not name:
+                out["weather_error"] = "还没设住宅地址"
+                return self._json(out)
+        key = (home and (home["latitude"], home["longitude"])) or name
+        hit = self._today_cache.get(key)
+        if hit and time.time() - hit[0] < 1200:
+            out["weather"] = hit[1]
+            return self._json(out)
+        try:
+            out["weather"] = open_meteo.brief(*await open_meteo.fetch(home, None if home else name))
+            self._today_cache[key] = (time.time(), out["weather"])
+        except open_meteo.WeatherError as e:
+            out["weather_error"] = str(e)
+        return self._json(out)
+
     # ---------- 拍照问答（core/agent/photo_ask.py） ----------
 
     def _photo_url(self, token: str) -> str:
@@ -915,12 +947,15 @@ class AdminHandler:
             return self._error("仅限本机", 403)
         body = await self._read_json(request)
         try:
-            s = await self._blocking(photo_ask.start, str(body.get("device") or ""), body.get("question"))
+            s = await self._blocking(photo_ask.start, str(body.get("device") or ""), body.get("question"),
+                                     str(body.get("purpose") or "ask"))
         except ValueError as e:
             return self._error(str(e), 400)
         merged = await self._blocking(self._merged)
         vision = photo_ask.vision_settings(merged)
-        return self._json({"ok": True, **s, "url": self._photo_url(s["token"]), "vision_ready": vision["ready"]})
+        return self._json({"ok": True, **s, "url": self._photo_url(s["token"]), "vision_ready": vision["ready"],
+                           "avatar_ready": bool(photo_ask.dashscope_key(merged)),
+                           "styles": [{"id": k, "name": v} for k, v in photo_ask.AVATAR_STYLES.items()]})
 
     async def handle_kiosk_photo(self, request: web.Request):
         if not self._from_this_machine(request):
@@ -941,6 +976,30 @@ class AdminHandler:
             return self._error("仅限本机", 403)
         return self._json({"ok": True, "cancelled": photo_ask.cancel(request.match_info["token"])})
 
+    async def handle_kiosk_avatar_generate(self, request: web.Request):
+        """{"style"}：把收到的照片画成这个画风的卡通形象（后台跑，设备轮询 /kiosk/photo/<令牌>）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        body = await self._read_json(request)
+        token = request.match_info["token"]
+        try:
+            photo_ask.begin_avatar(token, int(body.get("style") or 0))
+        except (ValueError, TypeError) as e:
+            return self._json({"ok": False, "error": str(e)})
+        except LookupError as e:
+            return self._error(str(e), 404)
+        merged = await self._blocking(self._merged)
+        asyncio.get_running_loop().run_in_executor(None, photo_ask.generate_avatar, token, int(body["style"]), merged)
+        return self._json({"ok": True})
+
+    async def handle_kiosk_avatar_image(self, request: web.Request):
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        path = photo_ask.avatar_path(request.match_info["token"])
+        if not path or not os.path.isfile(path):
+            return self._error("还没画好", 404)
+        return web.FileResponse(path, headers={"Content-Type": "application/octet-stream", "Cache-Control": "no-store"})
+
     async def handle_photo_page(self, request: web.Request):
         html = (STATIC_DIR / "photo.html").read_text(encoding="utf-8")
         return web.Response(text=html, content_type="text/html",
@@ -951,7 +1010,7 @@ class AdminHandler:
         if not v:
             return self._json({"ok": False, "error": "这个链接无效或过期了，在小麦上重新说一次"})
         return self._json({"ok": True, "state": v["state"], "question": v["question"], "answer": v["answer"],
-                           "error": v["error"]})
+                           "error": v["error"], "purpose": v["purpose"]})
 
     async def handle_photo_upload(self, request: web.Request):
         """手机传照片（multipart：question、photo）。存下来后在后台问看图模型，马上返回。"""
@@ -982,7 +1041,7 @@ class AdminHandler:
         except (ValueError, LookupError) as e:
             return self._json({"ok": False, "error": str(e)})
         merged = await self._blocking(self._merged)
-        asyncio.get_running_loop().run_in_executor(None, photo_ask.answer, token, merged)
+        asyncio.get_running_loop().run_in_executor(None, photo_ask.answer, token, merged)  # 生成形象的不问
         return self._json({"ok": True})
 
     async def handle_vision(self, request: web.Request):
@@ -1673,3 +1732,18 @@ def _test_image() -> bytes:
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
     return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(b"".join(rows))) + chunk(b"IEND", b""))
+
+
+def _lunar_today() -> dict:
+    """农历月日（九月十九）、节气、节日。cnlunar 算不出来时返回空的。"""
+    import datetime
+
+    try:
+        import cnlunar
+
+        lu = cnlunar.Lunar(datetime.datetime.now(), godType="8char")
+        festivals = [f for f in (lu.get_legalHolidays(), lu.get_otherHolidays(), lu.get_otherLunarHolidays()) if f]
+        return {"text": f"{lu.lunarMonthCn[:-1]}{lu.lunarDayCn}", "term": lu.todaySolarTerms if lu.todaySolarTerms != "无" else "",
+                "festival": "、".join(festivals)}
+    except Exception:
+        return {"text": "", "term": "", "festival": ""}

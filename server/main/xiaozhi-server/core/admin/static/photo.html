@@ -39,8 +39,9 @@
   </header>
 
   <section id="pick">
-    <label for="q">想问什么（可以改）</label>
-    <input type="text" id="q" maxlength="100">
+    <div id="askBox"><label for="q">想问什么（可以改）</label>
+    <input type="text" id="q" maxlength="100"></div>
+    <p class="box" id="avatarTip" hidden>拍一张<b>正脸</b>照：脸要清楚、别太小，光线亮一点。拍好后在小麦上选画风，生成卡通形象。</p>
     <div style="height:14px"></div>
     <button class="big" id="shoot" style="width:100%"><span>📷</span>拍照</button>
     <div style="height:12px"></div>
@@ -60,6 +61,7 @@
 </main>
 <script>
 const token = location.pathname.split('/').filter(Boolean).pop();
+let purpose = 'ask';
 const $ = id => document.getElementById(id);
 const show = (id, on) => { $(id).hidden = !on; };
 function fatal(text) { show('pick', false); show('fatal', true); $('fatal').textContent = text; }
@@ -67,6 +69,8 @@ function fatal(text) { show('pick', false); show('fatal', true); $('fatal').text
 fetch(`/photo/${token}/status`).then(r => r.json()).then(s => {
   if (!s.ok) return fatal(s.error || '这个链接无效，在小麦上重新说一次');
   $('q').value = s.question || '这是什么';
+  purpose = s.purpose || 'ask';
+  if (purpose === 'avatar') { show('askBox', false); show('avatarTip', true); document.title = '小麦 · 生成形象'; }
   if (s.state !== 'waiting') fatal(s.error || '这个链接已经用过了，在小麦上重新说一次');
 }).catch(() => fatal('连不上小麦网关：手机要和小麦连同一个 Wi‑Fi'));
 
@@ -102,6 +106,7 @@ async function send(file) {
     form.append('photo', blob, 'photo.jpg');
     const r = await (await fetch(`/photo/${token}`, { method: 'POST', body: form })).json();
     if (!r.ok) throw new Error(r.error || '没传上去');
+    if (purpose === 'avatar') { $('status').textContent = '✓ 已发给小麦。到小麦的屏幕上选一个画风，就开始画了。'; return; }
     $('status').textContent = '✓ 已发给小麦，正在看…（答案会在小麦上念出来）';
     poll();
   } catch (e) {

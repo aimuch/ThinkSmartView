@@ -8,6 +8,9 @@
 
 会话只放内存（服务重启就丢，最多也就 5 分钟的事）；照片存在 data/photos/<设备>/，7 天后删，
 清除聊天记录时一起删。
+
+purpose="avatar"（设计画布第 8 块）：同一套上传，照片不问看图模型，而是交给通义万相「人像风格重绘」
+（wanx-style-repaint-v1，要百炼 Key）画成卡通形象，设备取回后存成自己的对话形象。
 """
 import base64
 import os
@@ -170,9 +173,11 @@ def purge_old_photos(now: float = None):
                 pass
 
 
-def start(device: str, question: str) -> dict:
+def start(device: str, question: str, purpose: str = "ask") -> dict:
     if not device:
         raise ValueError("缺少 device")
+    if purpose not in ("ask", "avatar"):
+        raise ValueError("purpose 只能是 ask 或 avatar")
     question = re.sub(r"\s+", " ", str(question or "")).strip()[:QUESTION_MAX] or "这是什么"
     now = time.time()
     token = secrets.token_urlsafe(16)
@@ -183,7 +188,7 @@ def start(device: str, question: str) -> dict:
             if s["device"] == device and s["state"] == "waiting":
                 s["state"], s["error"] = "cancelled", "已取消"
         _sessions[token] = {"device": device, "question": question, "created": now, "state": "waiting",
-                            "answer": None, "error": None, "photo": None}
+                            "answer": None, "error": None, "photo": None, "purpose": purpose, "avatar": None}
     purge_old_photos(now)
     return {"token": token, "question": question, "expires": now + UPLOAD_SECONDS}
 
@@ -201,13 +206,14 @@ def view(token: str):
     if not s:
         return None
     return {"state": s["state"], "question": s["question"], "answer": s["answer"], "error": s["error"],
-            "expires": s["created"] + UPLOAD_SECONDS, "has_photo": bool(s["photo"])}
+            "expires": s["created"] + UPLOAD_SECONDS, "has_photo": bool(s["photo"]), "purpose": s.get("purpose", "ask"),
+            "has_avatar": bool(s.get("avatar"))}
 
 
 def cancel(token: str) -> bool:
     with _lock:
         s = _sessions.get(token or "")
-        if s and s["state"] in ("waiting", "received"):
+        if s and s["state"] in ("waiting", "received", "generated"):
             s["state"], s["error"] = "cancelled", "已取消"
             return True
     return False
@@ -245,7 +251,7 @@ def receive(token: str, jpeg: bytes, question: str = None) -> dict:
 def answer(token: str, merged: dict):
     """同步（在线程池里跑）：问看图模型，把结果写回会话。"""
     s = get(token)
-    if not s or s["state"] != "received":
+    if not s or s["state"] != "received" or s.get("purpose") == "avatar":
         return
     try:
         with open(s["photo"], "rb") as f:
@@ -269,3 +275,105 @@ def clear(device: str):
         for t in [t for t, s in _sessions.items() if s["device"] == device]:
             _sessions.pop(t, None)
     shutil.rmtree(_photos_dir(device), ignore_errors=True)
+
+
+# ---------- 卡通形象（purpose="avatar"） ----------
+
+WANX_MODEL = "wanx-style-repaint-v1"
+WANX_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image-generation/generation"
+WANX_TASK_URL = "https://dashscope.aliyuncs.com/api/v1/tasks/{}"
+AVATAR_STYLES = {1: "3D童话", 2: "二次元", 7: "炫彩卡通", 3: "小清新", 30: "童话世界", 31: "黏土世界"}
+AVATAR_SECONDS = 90
+
+
+def dashscope_key(merged: dict):
+    """百炼 Key：千问 VL（看图模型）或千问 TTS 里填过的那个。"""
+    for section, name in (("VLLM", "QwenVLVLLM"), ("TTS", "Qwen3TTS")):
+        key = ((merged.get(section) or {}).get(name) or {}).get("api_key")
+        if not _placeholder(key):
+            return str(key).strip()
+    return None
+
+
+def avatar_path(token: str):
+    s = get(token)
+    return s and s.get("avatar")
+
+
+def _wanx(key: str, jpeg: bytes, style: int) -> bytes:
+    """同步：提交人像风格重绘，轮询到完成，下载结果图。失败抛 PhotoError。"""
+    import requests
+
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json", "X-DashScope-Async": "enable"}
+    image = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()
+    try:
+        r = requests.post(WANX_URL, headers=headers, timeout=30,
+                          json={"model": WANX_MODEL, "input": {"image_url": image, "style_index": style}})
+        data = r.json()
+        if r.status_code == 401:
+            raise PhotoError("百炼 Key 不对，到网关后台重新填")
+        task = (data.get("output") or {}).get("task_id")
+        if not task:
+            raise PhotoError(f"通义万相没接这个任务：{data.get('message') or data.get('code') or r.status_code}")
+        deadline = time.time() + AVATAR_SECONDS
+        while time.time() < deadline:
+            time.sleep(3)
+            out = requests.get(WANX_TASK_URL.format(task), headers={"Authorization": f"Bearer {key}"}, timeout=20).json()
+            out = out.get("output") or {}
+            status = out.get("task_status")
+            if status == "SUCCEEDED":
+                url = next((x.get("url") for x in out.get("results") or [] if x.get("url")), None)
+                if not url:
+                    raise PhotoError("通义万相没画出来，换一张正脸清楚的照片试试")
+                img = requests.get(url, timeout=30)
+                img.raise_for_status()
+                return img.content
+            if status in ("FAILED", "CANCELED", "UNKNOWN"):
+                msg = out.get("message") or next((x.get("message") for x in out.get("results") or [] if x.get("message")), "")
+                raise PhotoError(f"没画成：{msg or status}（照片里要有清楚的正脸）")
+        raise PhotoError("通义万相太久没画完，稍后再试")
+    except requests.RequestException as e:
+        raise PhotoError(f"连不上通义万相：{type(e).__name__}")
+
+
+def generate_avatar(token: str, style: int, merged: dict):
+    """同步（在线程池里跑）：把收到的照片画成卡通形象，存成 PNG/JPEG 文件，状态改成 generated。"""
+    s = get(token)
+    if not s or s.get("purpose") != "avatar" or not s.get("photo"):
+        return
+    try:
+        key = dashscope_key(merged)
+        if not key:
+            raise PhotoError("要百炼 Key 才能生成形象：在网关后台「语音合成 → 千问 TTS」或「大模型 → 看图模型 → 千问 VL」里填")
+        with open(s["photo"], "rb") as f:
+            img = _wanx(key, f.read(), style)
+        path = s["photo"].rsplit(".", 1)[0] + f"-avatar{style}.img"
+        with open(path, "wb") as f:
+            f.write(img)
+        state, err = "generated", None
+    except PhotoError as e:
+        path, state, err = None, "error", str(e)
+    except Exception as e:
+        logger.bind(tag=TAG).warning(f"生成形象失败: {e}")
+        path, state, err = None, "error", "生成形象失败，稍后再试"
+    with _lock:
+        cur = _sessions.get(token)
+        if cur and cur["state"] == "generating":
+            cur["avatar"], cur["state"], cur["error"] = path, state, err
+            if state == "error":
+                cur["state"] = "received"   # 还能换个画风再试
+                cur["error"] = err
+    logger.bind(tag=TAG).info(f"生成形象（画风 {style}）: {state} {err or ''}")
+
+
+def begin_avatar(token: str, style: int):
+    """设备选好画风：状态改成 generating（调用方接着在线程池里跑 generate_avatar）。"""
+    if style not in AVATAR_STYLES:
+        raise ValueError("没有这个画风")
+    with _lock:
+        s = _sessions.get(token or "")
+        if not s or s.get("purpose") != "avatar":
+            raise LookupError("没有这个形象任务")
+        if s["state"] not in ("received", "generated"):
+            raise ValueError("还没收到照片" if s["state"] == "waiting" else "正在画，等一下")
+        s["state"], s["error"], s["avatar"] = "generating", None, None

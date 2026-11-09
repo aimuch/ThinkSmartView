@@ -45,7 +45,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import alarms, broadcast, bt, config, mcp, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, config, looks, mcp, rotation, sleep, update, wake_verify, wake_words
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
 from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off
@@ -249,6 +249,14 @@ class Client:
             log.warning('invalid broadcast setting %r, using the default', cfg.get('broadcast'))
             self.broadcast = broadcast.normalize(None)
         self.broadcast_fired = set()
+        for key, fix in (('theme', looks.normalize_theme), ('avatar', looks.normalize_avatar)):
+            try:
+                cfg[key] = fix(cfg.get(key))
+            except ValueError:
+                log.warning('invalid %s %r, using the default', key, cfg.get(key))
+                cfg[key] = config.DEFAULTS[key]
+        cfg['home_blocks'] = looks.normalize_blocks(cfg.get('home_blocks'))
+        self.today = None             # the home page's weather and lunar date (/kiosk/today)
         self.photo = None             # the photo question waiting for the phone (photo_start)
         self.photo_task = None
         self.photo_card = None        # its card, shown when the hub echoes the request   # 'YYYY-MM-DD HH:MM' done (played or given up) today
@@ -390,29 +398,34 @@ class Client:
 
     def photo_view(self):
         p = self.photo
-        return p and {k: p.get(k) for k in ('token', 'url', 'question', 'expires', 'state', 'error', 'image')}
+        return p and {k: p.get(k) for k in ('token', 'url', 'question', 'expires', 'state', 'error', 'image',
+                                            'purpose', 'styles', 'style', 'preview', 'avatar_ready')}
 
     def publish_photo(self):
         self.events.publish('photo', self.photo_view() or {'state': 'closed'})
 
-    async def photo_start(self, question=''):
-        """Open a one-time upload on the hub and show its QR code. Returns what the model should say."""
+    async def photo_start(self, question='', purpose='ask'):
+        """Open a one-time upload on the hub and show its QR code. Returns what the model should say.
+        purpose 'avatar': the photo becomes a cartoon avatar (avatar_style, avatar_use) instead."""
         try:
-            data = await self._hub_http('/kiosk/photo/start', {'device': self.cfg['device_id'], 'question': question})
+            data = await self._hub_http('/kiosk/photo/start', {'device': self.cfg['device_id'], 'question': question,
+                                                               'purpose': purpose})
         except Exception as e:
             log.warning('cannot start a photo question: %s', e)
             raise ValueError('连不上小麦网关')
         if not data.get('ok'):
             raise ValueError(data.get('error') or '没开成')
         self.photo = {'token': data['token'], 'url': data['url'], 'question': data['question'],
-                      'expires': data['expires'], 'state': 'waiting', 'error': None, 'image': None}
+                      'expires': data['expires'], 'state': 'waiting', 'error': None, 'image': None,
+                      'purpose': purpose, 'styles': data.get('styles') or [], 'style': None, 'preview': None,
+                      'avatar_ready': data.get('avatar_ready', False)}
         if self.photo_task and not self.photo_task.done():
             self.photo_task.cancel()
         self.photo_task = asyncio.create_task(self._photo_poller(self.photo))
         self.screen.poke()
         self.publish_photo()
         log.info('photo question %r: waiting for the phone', data['question'])
-        return {'vision_ready': data.get('vision_ready', True)}
+        return {'vision_ready': data.get('vision_ready', True), 'avatar_ready': data.get('avatar_ready', False)}
 
     async def photo_cancel(self):
         p, self.photo = self.photo, None
@@ -435,14 +448,17 @@ class Client:
                     log.warning('photo question: %s', e)
                     continue
                 state = v.get('state') if v.get('ok') else 'expired'
-                if state in ('received', 'done') and not p['image']:
+                if state in ('received', 'done', 'generating', 'generated') and not p['image']:
                     p['image'] = await self._fetch_photo(p['token'])
                     p['question'] = v.get('question') or p['question']
-                if state != p['state']:
-                    p['state'], p['error'] = state, v.get('error') or (None if v.get('ok') else '二维码过期了')
+                if state == 'generated' and not p['preview']:
+                    p['preview'] = await self._fetch_photo(p['token'], avatar=True)
+                error = v.get('error') or (None if v.get('ok') else '二维码过期了')
+                if state != p['state'] or error != p['error']:
+                    p['state'], p['error'] = state, error
                     self.screen.poke()
                     self.publish_photo()
-                if state == 'done':
+                if state == 'done' and p['purpose'] == 'ask':
                     await self._photo_answered(p, v.get('answer') or '')
                     return
                 if state in ('error', 'expired', 'cancelled'):
@@ -455,20 +471,50 @@ class Client:
         except asyncio.CancelledError:
             pass
 
-    async def _fetch_photo(self, token):
+    async def _fetch_photo(self, token, avatar=False):
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
-                async with s.get(f"{self.cfg['hub_http']}/kiosk/photo/{token}/image") as r:
+                async with s.get(f"{self.cfg['hub_http']}/kiosk/photo/{token}/{'avatar' if avatar else 'image'}") as r:
                     if r.status != 200:
                         return None
                     data = await r.read()
             PHOTOS.mkdir(parents=True, exist_ok=True)
-            name = f"{int(time.time())}-{re.sub(r'[^0-9A-Za-z_-]', '', token)[:10]}.jpg"
+            name = f"{int(time.time())}-{re.sub(r'[^0-9A-Za-z_-]', '', token)[:10]}{'-av' if avatar else ''}.jpg"
             (PHOTOS / name).write_bytes(data)
             return f'/api/photos/{name}'
         except Exception as e:
             log.warning('cannot fetch the photo: %s', e)
             return None
+
+    async def avatar_start(self):
+        r = await self.photo_start('卡通形象', purpose='avatar')
+        if not r['avatar_ready']:
+            await self.photo_cancel()
+            raise ValueError('要百炼 Key 才能生成形象：在网关后台「语音合成 → 千问 TTS」或「看图模型 → 千问 VL」里填')
+        return r
+
+    async def avatar_style(self, style):
+        """Draw the received photo in this style (the hub's wanx-style-repaint; ~15 s)."""
+        p = self.photo
+        if not p or p.get('purpose') != 'avatar':
+            raise ValueError('没有在生成形象')
+        data = await self._hub_http(f"/kiosk/photo/{p['token']}/avatar", {'style': int(style)})
+        if not data.get('ok'):
+            raise ValueError(data.get('error') or '没开始画')
+        p.update(state='generating', style=int(style), preview=None, error=None)
+        self.publish_photo()
+        return {}
+
+    async def avatar_use(self):
+        """Keep the generated picture as an avatar and switch to it."""
+        p = self.photo
+        if not p or not p.get('preview'):
+            raise ValueError('还没画好')
+        png = (PHOTOS / p['preview'].rsplit('/', 1)[1]).read_bytes()
+        avatar = await self.make_avatar(png)
+        self.photo = None
+        self.publish_photo()
+        return {'looks': await self.set_looks(avatar=avatar)}
 
     async def _photo_answered(self, p, answer):
         """Put the photo and the vision model's words in the conversation (as a card, shown when the
@@ -479,6 +525,87 @@ class Client:
         hhmm = datetime.datetime.now().strftime('%H:%M')
         await self.say(f"【拍照问 {hhmm}】我用手机拍了张照片问：「{p['question']}」。看图模型看到的是：{answer}"
                        '\n请根据这些直接回答我，一两句话说清楚，不要提「看图模型」。')
+
+    # ---- 外观: theme, avatar, home blocks (looks.py) and the home page's weather ----
+
+    def looks_view(self):
+        return looks.view(self.cfg)
+
+    async def set_looks(self, theme=None, avatar=None, blocks=None, move=None, toggle=None):
+        """Change the looks (page or voice). move={'id', 'by': -1|1} reorders a block; toggle=id flips it.
+        ValueError for anything invalid."""
+        changes = {}
+        if theme is not None:
+            changes['theme'] = looks.normalize_theme(theme)
+        if avatar is not None:
+            changes['avatar'] = looks.normalize_avatar(avatar)
+        order = looks.normalize_blocks(blocks if blocks is not None else self.cfg['home_blocks'])
+        if move:
+            ids = [b for b, _ in order]
+            if move.get('id') not in ids:
+                raise ValueError('没有这个首页内容')
+            i = ids.index(move['id'])
+            j = max(0, min(len(order) - 1, i + int(move.get('by') or 0)))
+            order.insert(j, order.pop(i))
+        if toggle:
+            hit = [b for b in order if b[0] == toggle]
+            if not hit:
+                raise ValueError('没有这个首页内容')
+            hit[0][1] = not hit[0][1]
+        if blocks is not None or move or toggle:
+            changes['home_blocks'] = order
+        self.cfg.update(changes)
+        for key, value in changes.items():
+            if value == config.DEFAULTS[key]:
+                config.unset(key)
+            else:
+                config.save(**{key: value})
+        if changes:
+            log.info('looks: %s', changes)
+        view = self.looks_view()
+        self.events.publish('looks', view)
+        return view
+
+    async def refresh_today(self):
+        try:
+            data = await self._hub_http('/kiosk/today?' + urllib.parse.urlencode({'device': self.cfg['device_id']}))
+        except Exception as e:
+            log.info('no weather for the home page: %s', e)
+            return
+        if data and data.get('ok'):
+            self.today = {k: data.get(k) for k in ('lunar', 'weather', 'weather_error')}
+            self.events.publish('today', self.today)
+
+    async def _today_loop(self):
+        last_theme = None
+        while True:
+            await self.refresh_today()
+            for _ in range(40):              # 20 minutes; the 'auto' theme is checked every 30 s
+                await asyncio.sleep(30)
+                theme = looks.theme_now(self.cfg['theme'])
+                if theme != last_theme:
+                    last_theme = theme
+                    self.events.publish('looks', self.looks_view())
+
+    async def make_avatar(self, png):
+        """Keep a generated avatar (PNG bytes) -> its id. At most looks.PHOTO_MAX: the oldest goes."""
+        looks.PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+        name = f'a{int(time.time())}'
+        (looks.PHOTO_DIR / f'{name}.png').write_bytes(png)
+        for old in looks.photo_avatars()[looks.PHOTO_MAX:]:
+            (looks.PHOTO_DIR / old['url'].rsplit('/', 1)[1]).unlink(missing_ok=True)
+        self.events.publish('looks', self.looks_view())
+        return f'photo:{name}'
+
+    async def delete_avatar(self, avatar_id):
+        if not avatar_id.startswith('photo:') or not looks.PHOTO_NAME.match(avatar_id[6:]):
+            raise ValueError('只能删用照片生成的形象')
+        (looks.PHOTO_DIR / f'{avatar_id[6:]}.png').unlink(missing_ok=True)
+        if self.cfg['avatar'] == avatar_id:
+            return await self.set_looks(avatar='orb')
+        view = self.looks_view()
+        self.events.publish('looks', view)
+        return view
 
     # ---- home address and weather broadcasts (broadcast.py) ----
 
@@ -544,6 +671,7 @@ class Client:
         log.info('home address: %s', place and place['name'])
         self.publish_broadcast()
         await self._sync_home()
+        asyncio.create_task(self.refresh_today())
         return self.broadcast_view()
 
     async def _sync_home(self):
@@ -633,6 +761,7 @@ class Client:
         asyncio.create_task(self._report_poller())
         asyncio.create_task(self._alarm_loop())
         asyncio.create_task(self._broadcast_loop())
+        asyncio.create_task(self._today_loop())
         await self.bt.start()
         asyncio.create_task(self._bluetooth_loop())
         await self.mijia.start()
@@ -730,6 +859,7 @@ class Client:
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
                 'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
                 'broadcast': self.broadcast_view(), 'photo': self.photo_view(),
+                'looks': self.looks_view(), 'today': self.today,
                 'thread': {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])}}
 
     def view_entry(self):

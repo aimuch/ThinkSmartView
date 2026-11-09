@@ -202,7 +202,18 @@ PHOTO_TOOLS = [
         'inputSchema': {'type': 'object', 'properties': {}},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + home_tools.TOOLS
+LOOKS_TOOLS = [
+    {
+        'name': 'self.appearance.set',
+        'description': '换设备首页的主题或对话形象。主题：星夜（默认深蓝）、晨光（浅色）、森林（深绿）、童趣（粉蓝）、'
+                       '纯黑（最暗）、跟着时间（白天晨光、晚上星夜）。形象：光球、小猫、小狗、小熊、兔子、熊猫、麦穗宝宝、机器人；'
+                       '「换成宝宝的形象」这类用照片生成的，传 avatar="photo"（用最新生成的那个）。'
+                       '「换成小猫」avatar="小猫"；「换个亮一点的主题」theme="晨光"。只查看就什么都不传。',
+        'inputSchema': {'type': 'object',
+                        'properties': {'theme': {'type': 'string'}, 'avatar': {'type': 'string'}}},
+    },
+]
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -213,6 +224,20 @@ def _alarm_args(args):
     repeat = rule and {'type': rule, 'days': args.get('weekdays'), 'day': args.get('month_day')}
     return {'kind': args.get('kind'), 'label': args.get('label') or '', 'say': args.get('say') or '',
             'repeat': repeat, **{k: args[k] for k in ALARM_WHEN if args.get(k) is not None}}
+
+
+async def _appearance(client, theme, avatar):
+    if avatar == 'photo':
+        photos = client.looks_view()['photos']
+        if not photos:
+            return {'success': False, 'reason': '还没有用照片生成的形象：在设置页「外观」里点「用照片生成」'}
+        avatar = photos[0]['id']
+    try:
+        view = await client.set_looks(theme=theme or None, avatar=avatar or None)
+    except ValueError as e:
+        return {'success': False, 'reason': str(e)}
+    names = {a['id']: a['name'] for a in view['avatars'] + view['photos']}
+    return {'success': True, 'theme': view['themes'][view['theme']], 'avatar': names.get(view['avatar'], view['avatar'])}
 
 
 async def _set_home(client, place):
@@ -354,6 +379,8 @@ async def handle(payload, client=None):
                     text = _dumps({'success': False, 'reason': str(e), 'text': client.broadcast_view()['text']})
             elif name == 'self.location.set_home' and client:
                 text = _dumps(await _set_home(client, str(args.get('place') or '').strip()))
+            elif name == 'self.appearance.set' and client:
+                text = _dumps(await _appearance(client, args.get('theme'), args.get('avatar')))
             elif name == 'self.photo.ask' and client:
                 try:
                     started = await client.photo_start(str(args.get('question') or ''))

@@ -238,7 +238,7 @@ def test_photo_question_flow(tmp_path, monkeypatch):
     async def hub_http(path, body=None):
         calls.append(path)
         if path == '/kiosk/photo/start':
-            assert body == {'device': 'dev1', 'question': '这个能吃吗'}
+            assert body == {'device': 'dev1', 'question': '这个能吃吗', 'purpose': 'ask'}
             return {'ok': True, 'token': 'tok123', 'url': 'http://10.0.0.2:16688/photo/tok123', 'question': '这个能吃吗',
                     'expires': 9e9, 'vision_ready': True}
         state = next(states)
@@ -251,7 +251,7 @@ def test_photo_question_flow(tmp_path, monkeypatch):
 
     async def run():
         r = await c.photo_start('这个能吃吗')
-        assert r == {'vision_ready': True} and c.photo_view()['state'] == 'waiting'
+        assert r['vision_ready'] is True and c.photo_view()['state'] == 'waiting'
         await c.photo_task
     asyncio.run(run())
     assert c.photo is None and len(c.said) == 1

@@ -1104,3 +1104,60 @@ async def test_vision_settings(client, cfg_path):
 def test_vision_test_image_is_a_png():
     png = ah._test_image()
     assert png[:8] == b"\x89PNG\r\n\x1a\n" and len(png) > 100
+
+
+async def test_kiosk_today(kiosk, tmp_path, monkeypatch):
+    from core.utils import device_homes, open_meteo
+
+    monkeypatch.setattr(device_homes, "_path", lambda: str(tmp_path / "device_homes.json"))
+    data = await (await kiosk.get("/kiosk/today?device=dev-1")).json()
+    assert data["ok"] and data["weather"] is None and data["weather_error"] == "还没设住宅地址"
+    assert "text" in data["lunar"]
+    device_homes.put("dev-1", {"name": "上海市青浦区", "latitude": 31.15, "longitude": 121.12})
+    calls = []
+
+    async def fetch(place=None, location=None):
+        calls.append(place["name"])
+        return place, {"current": {"temperature_2m": 10.7, "apparent_temperature": 5.8, "weather_code": 51},
+                       "daily": {"weather_code": [51, 3], "temperature_2m_min": [8, 6], "temperature_2m_max": [15, 16],
+                                 "precipitation_probability_max": [53, 0]}}, {"current": {"pm2_5": 12}}
+    monkeypatch.setattr(open_meteo, "fetch", fetch)
+    w = (await (await kiosk.get("/kiosk/today?device=dev-1")).json())["weather"]
+    assert w["temp"] == 10.7 and w["text"] == "小毛毛雨" and w["icon"] and w["air"] == "优"
+    assert w["today"] == {"text": "小毛毛雨", "icon": "🌦", "min": 8, "max": 15, "rain": 53} and w["tomorrow"]["max"] == 16
+    await kiosk.get("/kiosk/today?device=dev-1")
+    assert calls == ["上海市青浦区"]   # cached
+
+
+async def test_avatar_generation(kiosk, tmp_path, monkeypatch):
+    from core.agent import photo_ask
+
+    monkeypatch.setattr(photo_ask, "_photos_dir", lambda device="": str(tmp_path / "photos" / device))
+    r = await (await kiosk.post("/kiosk/photo/start", json={"device": "dev-1", "purpose": "avatar"})).json()
+    assert r["avatar_ready"] is False and {"id": 1, "name": "3D童话"} in r["styles"]
+    token = r["token"]
+    form = aiohttp.FormData()
+    form.add_field("photo", JPEG, filename="p.jpg", content_type="image/jpeg")
+    assert (await (await kiosk.post(f"/photo/{token}", data=form)).json())["ok"]
+    await asyncio.sleep(0.1)
+    v = await (await kiosk.get(f"/kiosk/photo/{token}")).json()
+    assert v["state"] == "received" and v["purpose"] == "avatar" and v["answer"] is None   # not sent to the vision model
+    # 没有百炼 Key：退回 received，带原因，可以换个画风再试
+    assert (await (await kiosk.post(f"/kiosk/photo/{token}/avatar", json={"style": 1})).json())["ok"]
+    for _ in range(50):
+        v = await (await kiosk.get(f"/kiosk/photo/{token}")).json()
+        if v["state"] != "generating":
+            break
+        await asyncio.sleep(0.05)
+    assert v["state"] == "received" and "百炼 Key" in v["error"]
+    monkeypatch.setattr(photo_ask, "dashscope_key", lambda merged: "sk-test")
+    monkeypatch.setattr(photo_ask, "_wanx", lambda key, jpeg, style: b"\x89PNGcartoon" + bytes([style]))
+    assert not (await (await kiosk.post(f"/kiosk/photo/{token}/avatar", json={"style": 99})).json())["ok"]
+    assert (await (await kiosk.post(f"/kiosk/photo/{token}/avatar", json={"style": 7})).json())["ok"]
+    for _ in range(50):
+        v = await (await kiosk.get(f"/kiosk/photo/{token}")).json()
+        if v["state"] == "generated":
+            break
+        await asyncio.sleep(0.05)
+    assert v["state"] == "generated" and v["has_avatar"]
+    assert await (await kiosk.get(f"/kiosk/photo/{token}/avatar")).read() == b"\x89PNGcartoon\x07"

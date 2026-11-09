@@ -199,9 +199,8 @@ async def report(location: str) -> str:
     return await report_at(None, location)
 
 
-async def report_at(place: dict = None, location: str = None) -> str:
-    """已知坐标的地方（设备的住宅地址，{"name", "latitude", "longitude"}）直接查，不再查地名；
-    place 为 None 时按 location 查地名。"""
+async def fetch(place: dict = None, location: str = None):
+    """(地方, 预报, 空气质量)；place 已知坐标时不查地名。查不到或连不上时抛 WeatherError。"""
     try:
         async with _client() as client:
             if place is None:
@@ -223,4 +222,32 @@ async def report_at(place: dict = None, location: str = None) -> str:
             air = air_resp.json() if not isinstance(air_resp, Exception) and air_resp.status_code == 200 else None
     except httpx.HTTPError as e:
         raise WeatherError(f"天气服务连不上（{type(e).__name__}）")
-    return build_report(place, forecast, air)
+    return place, forecast, air
+
+
+async def report_at(place: dict = None, location: str = None) -> str:
+    """已知坐标的地方（设备的住宅地址，{"name", "latitude", "longitude"}）直接查，不再查地名；
+    place 为 None 时按 location 查地名。"""
+    return build_report(*await fetch(place, location))
+
+
+ICONS = {0: "☀️", 1: "🌤", 2: "⛅", 3: "☁️", 45: "🌫", 48: "🌫", 51: "🌦", 53: "🌦", 55: "🌧", 56: "🌧", 57: "🌧",
+         61: "🌧", 63: "🌧", 65: "🌧", 66: "🌧", 67: "🌧", 71: "🌨", 73: "🌨", 75: "❄️", 77: "🌨",
+         80: "🌦", 81: "🌧", 82: "⛈", 85: "🌨", 86: "❄️", 95: "⛈", 96: "⛈", 99: "⛈"}
+
+
+def brief(place: dict, fc: dict, air: dict = None) -> dict:
+    """首页天气块用的几项数字（设备首页「天气」）。"""
+    cur = fc.get("current") or {}
+    daily = fc.get("daily") or {}
+
+    def day(i):
+        at = lambda k: ((daily.get(k) or [None] * (i + 1)) + [None] * (i + 1))[i]
+        code = at("weather_code")
+        return {"text": WMO.get(code, ""), "icon": ICONS.get(code, ""), "min": at("temperature_2m_min"),
+                "max": at("temperature_2m_max"), "rain": at("precipitation_probability_max")}
+    code = cur.get("weather_code")
+    pm = ((air or {}).get("current") or {}).get("pm2_5")
+    return {"place": place["name"], "temp": cur.get("temperature_2m"), "feels": cur.get("apparent_temperature"),
+            "text": WMO.get(code, ""), "icon": ICONS.get(code, ""), "humidity": cur.get("relative_humidity_2m"),
+            "pm25": pm, "air": pm25_level(pm) if pm is not None else None, "today": day(0), "tomorrow": day(1)}

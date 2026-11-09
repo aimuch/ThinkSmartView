@@ -7,7 +7,7 @@ import time
 
 from aiohttp import web
 
-from . import __version__, update
+from . import __version__, looks, update
 from .app import PHOTOS, ROOT, Client, local_ip
 
 log = logging.getLogger(__name__)
@@ -357,6 +357,38 @@ def make_app(client: Client):
             raise web.HTTPNotFound()
         return web.FileResponse(path, headers={'Cache-Control': 'max-age=86400'})
 
+    async def looks_set(request):
+        body = await request.json()
+
+        async def change():
+            if body.get('delete'):
+                return {'looks': await client.delete_avatar(str(body['delete']))}
+            keys = ('theme', 'avatar', 'blocks', 'move', 'toggle')
+            return {'looks': await client.set_looks(**{k: body[k] for k in keys if k in body})}
+        return await wake_call(change)
+
+    async def avatar_file(request):
+        name = request.match_info['name']
+        path = looks.PHOTO_DIR / name
+        if not re.fullmatch(r'[0-9A-Za-z_-]{1,40}\.png', name) or not path.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(path, headers={'Cache-Control': 'max-age=31536000'})
+
+    async def avatar_start(_request):
+        return await wake_call(client.avatar_start)
+
+    async def avatar_style(request):
+        body = await request.json()
+        return await wake_call(client.avatar_style, body.get('style'))
+
+    async def avatar_use(_request):
+        return await wake_call(client.avatar_use)
+
+    app.router.add_post('/api/avatar/start', avatar_start)
+    app.router.add_post('/api/avatar/style', avatar_style)
+    app.router.add_post('/api/avatar/use', avatar_use)
+    app.router.add_post('/api/looks', looks_set)
+    app.router.add_get('/api/avatars/{name}', avatar_file)
     app.router.add_post('/api/photo', photo_start)
     app.router.add_post('/api/photo/cancel', photo_cancel)
     app.router.add_get('/api/photos/{name}', photo_file)

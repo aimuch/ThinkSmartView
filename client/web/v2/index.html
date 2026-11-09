@@ -6,6 +6,7 @@
 <title>小麦</title>
 <link rel="stylesheet" href="/static/v2/tokens.css">
 <link rel="stylesheet" href="/static/v2/app.css">
+<link rel="stylesheet" href="/static/v2/looks.css">
 </head>
 <body data-state="idle" class="fresh">
 <div class="app">
@@ -67,6 +68,7 @@
         </div>
         <div class="corona" id="corona"></div>
         <div class="core" id="core">
+          <div class="deco" aria-hidden="true"><span class="ear ear-l"></span><span class="ear ear-r"></span><span class="sprout"></span><span class="antenna"></span></div>
           <i class="c-idle"></i><i class="c-connecting"></i><i class="c-listening"></i><i class="c-thinking"></i><i class="c-speaking"></i>
           <!-- the orb's face: eyes, cheeks and mouth; expressions follow body[data-state] -->
           <div class="face" id="face" aria-hidden="true">
@@ -75,6 +77,7 @@
             <span class="mouth" id="mouth"></span>
           </div>
           <b class="gloss"></b>
+          <img class="av-photo" id="avPhoto" alt="">
         </div>
       </div>
       <h1 class="title" id="title">说<em>「<span class="ww-name">小麦小麦</span>」</em></h1>
@@ -99,12 +102,13 @@
         <div class="greet" id="greet">你好</div>
         <div class="big-time" id="bigTime">--:--</div>
         <div class="big-date" id="bigDate"></div>
+        <div class="home-weather" id="homeWeather" hidden></div>
         <div class="next-alarms" id="nextAlarms"></div>
         <div class="missed-home" id="missedBox">
           <div class="mh-head"><b>错过的闹钟和提醒</b><button class="mh-ok" id="missedClear">知道了</button></div>
           <div class="mh-list" id="missedList"></div>
         </div>
-        <div class="try">试试这样问我</div>
+        <div class="try" id="tryLabel">试试这样问我</div>
         <div class="chips" id="chips"></div>
       </div>
 
@@ -175,6 +179,16 @@
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.5 1.5M4 5.5 6.5 3M20 5.5 17.5 3"/></svg>
       </div>
       <p class="opt-note">设备音量是平时说话的音量，和音量键、语音调的是同一个。闹钟音量只管倒计时、闹钟和提醒：响铃时自动切过去，响完改回来；响铃时按音量键只调这一次。</p>
+    </div>
+    <div class="alarms-card" id="looksCard">
+      <div class="bright-head"><b>外观</b><span class="bright-num" id="looksNow"></span></div>
+      <div class="bright-head"><b class="sub">主题</b></div>
+      <div class="looks-themes" id="looksThemes"></div>
+      <div class="bright-head"><b class="sub">对话形象</b></div>
+      <div class="looks-avatars" id="looksAvatars"></div>
+      <div class="bright-head"><b class="sub">首页显示</b><span class="bright-num">用 ↑ ↓ 排顺序</span></div>
+      <div class="alarm-list looks-blocks" id="looksBlocks"></div>
+      <p class="opt-note">也可以直接说「<span class="ww-name">小麦小麦</span>，换成小猫」「换个亮一点的主题」。错过的闹钟提醒总会显示。</p>
     </div>
     <div class="alarms-card bt-card bc-card" id="bcCard">
       <div class="bright-head"><b>天气播报</b><span class="bright-num" id="bcCount"></span>
@@ -413,7 +427,8 @@
       <h2 id="photoTitle">用手机扫码，<br>拍一张照片</h2>
       <div class="photo-q" id="photoQ"></div>
       <p id="photoNote">手机和小麦连同一个 Wi‑Fi 才能打开</p>
-      <div class="photo-btns"><button class="upd-btn" id="photoCancel">取消</button><span class="photo-time" id="photoTime"></span></div>
+      <div class="photo-styles" id="photoStyles" hidden></div>
+      <div class="photo-btns"><button class="upd-btn" id="photoCancel">取消</button><button class="upd-btn pri" id="photoUse" hidden>用这个形象</button><span class="photo-time" id="photoTime"></span></div>
     </div>
   </div>
 </div>
