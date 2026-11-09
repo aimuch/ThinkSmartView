@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>小麦 · 清单</title>
+<style>
+  :root { --bg: #f4f6fb; --ink: #141a2e; --ink2: #5b6480; --ink3: #7c86a3; --line: #d7dcea; --card: #fff; --accent: #5b7cff; --bad: #d64545; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #070b18; --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #7883ab; --line: #ffffff26; --card: #ffffff12; --accent: #8fa6ff; --bad: #ff6b81; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 17px/1.5 -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    padding: max(18px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+  main { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .tabs { display: flex; gap: 8px; overflow-x: auto; }
+  .tabs button { flex: none; height: 40px; padding: 0 16px; border-radius: 20px; border: 1px solid var(--line); background: var(--card); color: var(--ink2); font-size: 15px; }
+  .tabs button.on { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; }
+  .it { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+  .it input { width: 24px; height: 24px; accent-color: var(--accent); }
+  .it span { flex: 1; font-size: 19px; }
+  .it.done span { color: var(--ink3); text-decoration: line-through; }
+  .it button { border: 0; background: none; color: var(--ink3); font-size: 18px; }
+  form { display: flex; gap: 8px; }
+  form input { flex: 1; height: 48px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); font-size: 17px; }
+  form button, .clear { height: 48px; padding: 0 18px; border-radius: 14px; border: 0; background: var(--accent); color: #fff; font-size: 16px; }
+  .clear { background: var(--card); color: var(--ink2); border: 1px solid var(--line); }
+  .note { font-size: 13px; color: var(--ink3); margin: 0; }
+  .err { color: var(--bad); }
+  .empty { color: var(--ink3); text-align: center; padding: 20px 0; }
+</style>
+</head>
+<body>
+<main>
+  <div class="tabs" id="tabs"></div>
+  <div id="items"></div>
+  <form id="add"><input id="text" placeholder="加一项，比如：酱油" maxlength="60" autocomplete="off"><button>加</button></form>
+  <button class="clear" id="clear">清掉已划掉的</button>
+  <p class="note" id="note">在小麦上说「把酱油加到购物清单」也行。这个页面只在家里的 Wi‑Fi 下能打开。</p>
+</main>
+<script>
+const secret = location.pathname.split('/').filter(Boolean).pop();
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let data = null, current = localStorage.getItem('xm-list') || '购物清单';
+function render() {
+  if (!data) return;
+  const names = Object.keys(data.lists);
+  if (!names.includes(current)) current = names[0];
+  document.title = '小麦 · ' + current;
+  $('tabs').innerHTML = names.map(n => `<button class="${n === current ? 'on' : ''}" data-n="${esc(n)}">${esc(n)} ${data.lists[n].filter(x => !x.done).length || ''}</button>`).join('');
+  const items = data.lists[current] || [];
+  $('items').innerHTML = items.length ? items.map(x => `<label class="it ${x.done ? 'done' : ''}"><input type="checkbox" ${x.done ? 'checked' : ''} data-t="${esc(x.text)}">` +
+    `<span>${esc(x.text)}</span><button type="button" data-del="${esc(x.text)}" aria-label="删除">✕</button></label>`).join('') : '<div class="empty">清单是空的</div>';
+}
+async function call(method, body) {
+  try {
+    const r = await (await fetch(`/lists/${secret}/data`, method === 'GET' ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+    if (!r.ok) { $('note').className = 'note err'; $('note').textContent = r.error; return; }
+    data = r; render();
+  } catch (e) { $('note').className = 'note err'; $('note').textContent = '连不上小麦网关：手机要连家里的 Wi‑Fi'; }
+}
+$('tabs').onclick = e => { const b = e.target.closest('[data-n]'); if (b) { current = b.dataset.n; try { localStorage.setItem('xm-list', current); } catch (_) {} render(); } };
+$('items').onchange = e => { const c = e.target.closest('[data-t]'); if (c) call('POST', { op: 'check', name: current, items: [c.dataset.t], done: c.checked }); };
+$('items').onclick = e => { const b = e.target.closest('[data-del]'); if (b) { e.preventDefault(); call('POST', { op: 'remove', name: current, items: [b.dataset.del] }); } };
+$('add').onsubmit = e => { e.preventDefault(); const t = $('text').value.trim(); if (t) { $('text').value = ''; call('POST', { op: 'add', name: current, items: [t] }); } };
+$('clear').onclick = () => call('POST', { op: 'clear_done', name: current });
+call('GET');
+setInterval(() => document.visibilityState === 'visible' && call('GET'), 10000);
+</script>
+</body>
+</html>

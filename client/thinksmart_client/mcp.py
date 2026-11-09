@@ -231,7 +231,53 @@ COOK_TOOLS = [
         'inputSchema': {'type': 'object', 'properties': {}},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + home_tools.TOOLS
+DAILY_TOOLS = [
+    {
+        'name': 'self.scene.save',
+        'description': '保存一个场景口令：用户说「以后我说『我出门了』，就把灯和空调都关了，再说一下天气」时调用，'
+                       'name="我出门了"，steps 用一句话写清楚要做的事（「关掉所有灯和空调，播报今天的天气」）。同名的会覆盖。',
+        'inputSchema': {'type': 'object', 'properties': {'name': {'type': 'string'}, 'steps': {'type': 'string'}},
+                        'required': ['name', 'steps']},
+    },
+    {
+        'name': 'self.scene.run',
+        'description': '用户说的话正好是一个已保存的场景口令（如「我出门了」「我睡了」）时先调用它，拿到这个场景的步骤后，'
+                       '用你已有的工具一步一步做完（米家 self.home.control、助眠声 self.media.play、天气 get_weather 等），'
+                       '最后用一句话说做了什么。name 传用户说的口令。也可以 action="list" 查看所有场景、action="delete" 删除。',
+        'inputSchema': {'type': 'object', 'properties': {'name': {'type': 'string'},
+                                                        'action': {'type': 'string', 'enum': ['run', 'list', 'delete']}}},
+    },
+    {
+        'name': 'self.message.leave',
+        'description': '给家里人留言：「给爸爸留言：晚上不回来吃饭」to="爸爸"，text="晚上不回来吃饭"，知道是谁留的就写 sender。'
+                       '留言显示在首页的便签上，点一下会念出来。「有我的留言吗」「有什么留言」时用 action="list" 查看（可带 to 过滤），'
+                       '念给用户听；用户说「知道了」后用 action="done" 和 id 划掉。',
+        'inputSchema': {'type': 'object', 'properties': {'action': {'type': 'string', 'enum': ['leave', 'list', 'done']},
+                                                        'to': {'type': 'string'}, 'text': {'type': 'string'},
+                                                        'sender': {'type': 'string'}, 'id': {'type': 'string'}}},
+    },
+    {
+        'name': 'self.list.update',
+        'description': '购物清单、待办等清单：「把酱油和鸡蛋加到购物清单」op="add", name="购物清单", items=["酱油","鸡蛋"]；'
+                       '「酱油买了」op="check"；「把鸡蛋删了」op="remove"；「购物清单里有什么」op="show"（念出没划掉的）；'
+                       '「清掉买过的」op="clear_done"。待办用 name="待办"。也能在手机上看（设置页「清单 → 手机看」）。',
+        'inputSchema': {'type': 'object', 'properties': {'op': {'type': 'string', 'enum': ['add', 'remove', 'check', 'show', 'clear_done']},
+                                                        'name': {'type': 'string'},
+                                                        'items': {'type': 'array', 'items': {'type': 'string'}}},
+                        'required': ['op']},
+    },
+    {
+        'name': 'self.media.play',
+        'description': '在设备上放网络电台或助眠声（说话时自动变小，闹钟响时静音）。电台：中国之声、经济之声、东方广播（上海）、'
+                       '第一财经广播、江苏交通广播、北京新闻广播，kind="radio", name=电台名。助眠声：雨声、海浪、风扇、白噪音，'
+                       'kind="sound", name=声音名, minutes=多久后停（默认 30，0 表示一直放）。「停」「别放了」用 action="stop"。'
+                       '调用后只说一句「好，开始放…」。没有的电台如实说有哪些。',
+        'inputSchema': {'type': 'object', 'properties': {'action': {'type': 'string', 'enum': ['play', 'stop']},
+                                                        'kind': {'type': 'string', 'enum': ['radio', 'sound']},
+                                                        'name': {'type': 'string'}, 'minutes': {'type': 'number'}}},
+    },
+]
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -242,6 +288,57 @@ def _alarm_args(args):
     repeat = rule and {'type': rule, 'days': args.get('weekdays'), 'day': args.get('month_day')}
     return {'kind': args.get('kind'), 'label': args.get('label') or '', 'say': args.get('say') or '',
             'repeat': repeat, **{k: args[k] for k in ALARM_WHEN if args.get(k) is not None}}
+
+
+async def _daily(client, name, args):
+    if name == 'self.scene.save':
+        await client.save_scene(args.get('name'), args.get('steps'))
+        return {'success': True, 'note': f"以后说「{args.get('name')}」就会{args.get('steps')}"}
+    if name == 'self.scene.run':
+        action = args.get('action') or 'run'
+        scenes = client.scenes_view()['scenes']
+        if action == 'list':
+            return {'scenes': scenes} if scenes else {'scenes': [], 'note': '还没有场景，可以说「以后我说『我出门了』，就……」'}
+        if action == 'delete':
+            await client.delete_scene(args.get('name'))
+            return {'success': True}
+        from .daily import find_scene
+        scene = find_scene(scenes, args.get('name'))
+        if not scene:
+            return {'success': False, 'reason': f"没有「{args.get('name')}」这个场景", 'scenes': [x['name'] for x in scenes]}
+        return {'scene': scene['name'], 'steps': scene['steps'],
+                'instruction': '用你已有的工具把这些步骤一步一步做完，做完用一句话告诉用户做了什么；做不了的如实说'}
+    if name == 'self.message.leave':
+        action = args.get('action') or 'leave'
+        if action == 'list':
+            to = str(args.get('to') or '').strip()
+            notes = [n for n in client.notes_view()['notes'] if not to or to in n['to'] or n['to'] in to]
+            return {'notes': [{'id': n['id'], 'to': n['to'], 'from': n['from'], 'text': n['text']} for n in notes]}
+        if action == 'done':
+            await client.note_done(str(args.get('id') or ''))
+            return {'success': True}
+        note = await client.leave_note(args.get('to'), args.get('text'), args.get('sender'))
+        return {'success': True, 'note': f"已经给{note['to']}留言，显示在首页的便签上"}
+    if name == 'self.list.update':
+        op, list_name = args.get('op'), args.get('name') or '购物清单'
+        if op == 'show':
+            data = await client.refresh_lists()
+            items = ((data or {}).get('lists') or {}).get(list_name)
+            if items is None:
+                return {'success': False, 'reason': f'没有「{list_name}」这个清单'}
+            return {'name': list_name, 'todo': [x['text'] for x in items if not x['done']],
+                    'done': [x['text'] for x in items if x['done']]}
+        data = await client.list_change(op, list_name, args.get('items') or [])
+        items = data['lists'].get(list_name) or []
+        return {'success': True, 'name': list_name, 'todo': [x['text'] for x in items if not x['done']]}
+    # self.media.play
+    if (args.get('action') or 'play') == 'stop':
+        await client.media_stop()
+        return {'action': 'RESPONSE', 'response': '好，停了。'}
+    now = await client.media_play(args.get('kind') or 'radio', args.get('name'), args.get('minutes'))
+    tail = f"，{int(args['minutes'])} 分钟后停" if now['kind'] == 'sound' and args.get('minutes') else (
+        '，30 分钟后停' if now['kind'] == 'sound' and args.get('minutes') is None else '')
+    return {'action': 'RESPONSE', 'response': f"好，开始放{now['name']}{tail}。"}
 
 
 async def _appearance(client, theme, avatar):
@@ -397,6 +494,11 @@ async def handle(payload, client=None):
                     text = _dumps({'success': False, 'reason': str(e), 'text': client.broadcast_view()['text']})
             elif name == 'self.location.set_home' and client:
                 text = _dumps(await _set_home(client, str(args.get('place') or '').strip()))
+            elif name in ('self.scene.save', 'self.scene.run', 'self.message.leave', 'self.list.update', 'self.media.play') and client:
+                try:
+                    text = _dumps(await _daily(client, name, args))
+                except ValueError as e:
+                    text = _dumps({'success': False, 'reason': str(e)})
             elif name == 'self.cooking.start' and client:
                 try:
                     v = await client.cook_start(read=False)

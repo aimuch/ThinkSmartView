@@ -429,6 +429,28 @@ def make_app(client: Client):
             raise web.HTTPNotFound()
         return web.FileResponse(path, headers={'Cache-Control': 'max-age=31536000'})
 
+    async def daily_set(request):
+        body = await request.json()
+        kind = request.match_info['kind']
+
+        async def change():
+            if kind == 'scenes':
+                return {'scenes': await client.delete_scene(str(body.get('delete') or ''))}
+            if kind == 'notes':
+                if body.get('read'):
+                    return await client.note_read(str(body['read']))
+                return {'notes': await client.note_done(str(body.get('done') or ''))}
+            if kind == 'lists':
+                if body.get('op') == 'refresh':
+                    return {'lists': await client.refresh_lists()}
+                return {'lists': await client.list_change(body.get('op'), body.get('name'), body.get('items') or [], body.get('done'))}
+            if body.get('stop'):
+                return {'media': await client.media_stop()}
+            await client.media_play(body.get('kind'), body.get('name'), body.get('minutes'))
+            return {'media': client.media_view()}
+        return await wake_call(change)
+
+    app.router.add_post('/api/daily/{kind}', daily_set)
     app.router.add_post('/api/cook/start', cook_start)
     app.router.add_post('/api/cook/go', cook_go)
     app.router.add_post('/api/cook/stop', cook_stop)

@@ -579,6 +579,92 @@ $('wwReset').addEventListener('click', () => {
   postJson('/api/wake-words/reset').then(r => { if (r.ok) toast('已恢复默认的唤醒词'); });
 });
 
+/* ---- 电台和助眠声、场景、留言、清单 (media.py, daily.py; 设计画布第 11 块) ---- */
+let mediaMinutes = 30, nowTimer = null;
+const dailyPost = (kind, body) => DEMO === null ? postJson('/api/daily/' + kind, body).then(r => { if (!r.ok && r.error) toast(r.error, 'error'); return r; }) : Promise.resolve({});
+function renderMedia() {
+  const m = ui.media, now = m && m.playing;
+  $('nowBar').hidden = !now;
+  clearInterval(nowTimer);
+  if (now) {
+    $('nowIcon').textContent = now.kind === 'radio' ? '📻' : '🌙';
+    $('nowName').textContent = now.name;
+    const tick = () => {
+      const left = now.ends ? Math.max(0, Math.round((now.ends - Date.now() / 1000) / 60)) : null;
+      $('nowSub').textContent = now.kind === 'radio' ? '正在播放' : left !== null ? `还剩 ${left} 分钟` : '一直放';
+    };
+    tick(); nowTimer = setInterval(tick, 30000);
+  }
+  if (!m) return;
+  $('mediaNow').textContent = now ? `正在放：${now.name}` : '';
+  $('mediaSounds').innerHTML = m.sounds.map(x => `<button data-sound="${x.id}" class="${now && now.id === x.id ? 'on' : ''}">${esc(x.name)}</button>`).join('');
+  $('mediaStations').innerHTML = m.stations.map(x => `<button data-station="${x.id}" class="${now && now.id === x.id ? 'on' : ''}">${esc(x.name)}</button>`).join('');
+  for (const b of $('mediaMinutes').children) b.classList.toggle('on', Number(b.dataset.min) === mediaMinutes);
+}
+$('nowStop').addEventListener('click', () => dailyPost('media', { stop: true }));
+$('mediaMinutes').addEventListener('click', e => { const b = e.target.closest('[data-min]'); if (b) { mediaMinutes = Number(b.dataset.min); renderMedia(); } });
+$('mediaSounds').addEventListener('click', e => {
+  const b = e.target.closest('[data-sound]');
+  if (!b) return;
+  const now = ui.media && ui.media.playing;
+  dailyPost('media', now && now.id === b.dataset.sound ? { stop: true } : { kind: 'sound', name: b.dataset.sound, minutes: mediaMinutes });
+});
+$('mediaStations').addEventListener('click', e => {
+  const b = e.target.closest('[data-station]');
+  if (!b) return;
+  const now = ui.media && ui.media.playing;
+  dailyPost('media', now && now.id === b.dataset.station ? { stop: true } : { kind: 'radio', name: b.dataset.station });
+});
+let sceneArmed = null;
+function renderScenes() {
+  const x = ui.scenes;
+  if (!x) return;
+  $('scenesCount').textContent = x.scenes.length ? `${x.scenes.length} 个` : '';
+  $('scenesList').innerHTML = x.scenes.length ? x.scenes.map(sc => `<div class="al"><div class="al-text"><b>${esc(sc.name)}</b><span>${esc(sc.steps)}</span></div>` +
+    `<button class="al-del ${sceneArmed === sc.name ? 'armed' : ''}" data-scene="${esc(sc.name)}">${sceneArmed === sc.name ? '确认删除' : '删除'}</button></div>`).join('')
+    : '<div class="alarm-empty">还没有场景</div>';
+}
+$('scenesList').addEventListener('click', e => {
+  const b = e.target.closest('[data-scene]');
+  if (!b) return;
+  if (sceneArmed !== b.dataset.scene) { sceneArmed = b.dataset.scene; renderScenes(); setTimeout(() => { sceneArmed = null; renderScenes(); }, 3000); return; }
+  sceneArmed = null;
+  dailyPost('scenes', { delete: b.dataset.scene });
+});
+function renderNotes() {
+  const notes = (ui.notes && ui.notes.notes) || [];
+  $('homeNotes').innerHTML = notes.slice(0, 2).map(n => `<div class="sticky" data-read="${esc(n.id)}" role="button"><div class="st-text">` +
+    `<b>📝 给${esc(n.to)}的留言</b><p>${esc(n.text)}</p><small>${n.from ? esc(n.from) + ' · ' : ''}${dayText(n.time)} ${hhmm(n.time)} · 点一下念出来</small></div>` +
+    `<button class="st-ok" data-done="${esc(n.id)}">知道了</button></div>`).join('');
+}
+$('homeNotes').addEventListener('click', e => {
+  const d = e.target.closest('[data-done]');
+  if (d) { e.stopPropagation(); return dailyPost('notes', { done: d.dataset.done }); }
+  const r = e.target.closest('[data-read]');
+  if (r) dailyPost('notes', { read: r.dataset.read });
+});
+function renderLists() {
+  const l = ui.lists;
+  if (!l) { $('homeList').hidden = true; return; }
+  const names = Object.keys(l.lists);
+  const todo = n => l.lists[n].filter(x => !x.done);
+  const shop = names.find(n => n === '购物清单') || names[0];
+  const items = shop ? todo(shop) : [];
+  $('homeList').hidden = !items.length;
+  if (items.length) $('homeList').innerHTML = `🛒 ${esc(shop)} <span>${esc(items.slice(0, 4).map(x => x.text).join('、'))}${items.length > 4 ? '…' : ''} · ${items.length} 项</span>`;
+  $('listsCount').textContent = `${names.length} 个清单`;
+  $('listsList').innerHTML = names.map(n => `<div class="al"><div class="al-text"><b>${n === '购物清单' ? '🛒' : '✅'} ${esc(n)}</b>` +
+    `<span>${esc(todo(n).map(x => x.text).join('、') || '空的')}</span></div></div>`).join('');
+}
+function showQr(kicker, title, note, url) {
+  $('qrKicker').textContent = kicker; $('qrTitle').innerHTML = title; $('qrNote').textContent = note;
+  if (window.drawQr) window.drawQr($('qrCanvas'), url);
+  $('qrOv').hidden = false;
+}
+$('qrClose').addEventListener('click', () => { $('qrOv').hidden = true; });
+$('listsPhone').addEventListener('click', () => { if (ui.lists && ui.lists.url) showQr('清单', '用手机扫码<br>看清单', '在超市边买边划掉，小麦这边也会同步。手机要连家里的 Wi‑Fi。', ui.lists.url); });
+$('homeList').addEventListener('click', () => { if (ui.lists && ui.lists.url) showQr('清单', '用手机扫码<br>看清单', '在超市边买边划掉，小麦这边也会同步。手机要连家里的 Wi‑Fi。', ui.lists.url); });
+
 /* ---- 做菜模式 (cook.py) ---- */
 $('messages').addEventListener('click', e => {
   const b = e.target.closest('[data-cook]');
@@ -636,7 +722,7 @@ $('sbThumbs').addEventListener('click', e => {
 $('sbAdd').addEventListener('click', () => DEMO === null && postJson('/api/album/start').then(r => { if (!r.ok) toast(r.error || '没开成', 'error'); }));
 function standbyBusy() {
   const st = ui.status || {};
-  return st.state !== 'idle' || document.querySelector('.sheet.on') || ui.photo || (ui.cook && ui.cook.on)
+  return st.state !== 'idle' || document.querySelector('.sheet.on') || ui.photo || (ui.cook && ui.cook.on) || !$('qrOv').hidden
     || (ui.alarms && ui.alarms.ringing) || ww.holding || bc.holding;
 }
 function showStandby(on) {
@@ -720,7 +806,7 @@ const AVATAR_DOT = {
 const THEME_DOT = { night: 'linear-gradient(135deg,#18245a,#050813)', dawn: 'linear-gradient(135deg,#ffe3c4,#f3ecff)',
   forest: 'linear-gradient(135deg,#1d4a3a,#06100c)', candy: 'linear-gradient(135deg,#ffd6ec,#c9ecff)', black: '#000',
   auto: 'linear-gradient(90deg,#ffe3c4 50%,#18245a 50%)' };
-const BLOCK_ELS = { clock: ['greet', 'bigTime'], date: ['bigDate'], weather: ['homeWeather'], alarms: ['nextAlarms', 'missedBox'],
+const BLOCK_ELS = { clock: ['greet', 'bigTime'], date: ['bigDate'], weather: ['homeWeather'], alarms: ['nextAlarms', 'missedBox', 'homeNotes', 'homeList'],
   suggest: ['tryLabel', 'chips'] };
 let looksArmed = null;
 function renderLooks() {
@@ -736,7 +822,7 @@ function renderLooks() {
     const el = $(id);
     if (!el) return;
     el.style.order = String(i * 10 + k);
-    el.classList.toggle('hidden-block', !b.on && id !== 'missedBox');
+    el.classList.toggle('hidden-block', !b.on && id !== 'missedBox' && id !== 'homeNotes');   // missed alarms and notes always show
   }));
   $('looksNow').textContent = `${l.themes[l.theme]} · ${(l.avatars.concat(l.photos).find(a => a.id === l.avatar) || {}).name || ''}`;
   $('looksThemes').innerHTML = Object.entries(l.themes).map(([k, name]) =>
@@ -1768,6 +1854,10 @@ const handlers = {
     if (s.kids) { ui.kids = s.kids; renderKids(); }
     if (s.standby) { ui.standby = s.standby; renderStandbyCard(); }
     if (s.cook) { ui.cook = s.cook; renderCook(); }
+    if (s.media) { ui.media = s.media; renderMedia(); }
+    if (s.scenes) { ui.scenes = s.scenes; renderScenes(); }
+    if (s.notes) { ui.notes = s.notes; renderNotes(); }
+    ui.lists = s.lists || ui.lists; renderLists();
     ui.today = s.today || ui.today; renderLooks(); renderToday();
     ui.photo = s.photo || null; renderPhoto();
     renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth(); renderWake(); renderBroadcast();
@@ -1814,6 +1904,18 @@ const handlers = {
   },
   broadcast(b) {
     ui.broadcast = b; renderBroadcast();
+  },
+  media(m) {
+    ui.media = m; renderMedia();
+  },
+  scenes(x) {
+    ui.scenes = x; renderScenes();
+  },
+  notes(n) {
+    ui.notes = n; renderNotes();
+  },
+  lists(l) {
+    ui.lists = l; renderLists();
   },
   standby(st) {
     ui.standby = st; renderStandbyCard();

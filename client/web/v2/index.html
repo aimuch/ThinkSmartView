@@ -108,6 +108,8 @@
           <div class="mh-head"><b>错过的闹钟和提醒</b><button class="mh-ok" id="missedClear">知道了</button></div>
           <div class="mh-list" id="missedList"></div>
         </div>
+        <div class="home-notes" id="homeNotes"></div>
+        <button class="home-list" id="homeList" hidden></button>
         <div class="try" id="tryLabel">试试这样问我</div>
         <div class="chips" id="chips"></div>
       </div>
@@ -233,6 +235,25 @@
         <button class="bt-add" id="sbAdd">＋ 用手机传照片</button>
       </div>
       <p class="opt-note">待机页显示大时钟、日期、天气和下一个闹钟，背景轮播家庭相册（没有照片时用主题的背景）。点一下屏幕或叫它就回到首页；到自动熄屏时间照常熄屏，睡眠时段里不轮播。点两下缩略图删除。</p>
+    </div>
+    <div class="alarms-card" id="mediaCard">
+      <div class="bright-head"><b>电台和助眠声</b><span class="bright-num" id="mediaNow"></span></div>
+      <div class="bright-head"><b class="sub">助眠声</b></div>
+      <div class="minutes" id="mediaSounds" style="grid-template-columns:repeat(4,1fr)"></div>
+      <div class="minutes" id="mediaMinutes" style="grid-template-columns:repeat(4,1fr)"><button data-min="15">15 分钟</button><button data-min="30" class="on">30 分钟</button><button data-min="60">60 分钟</button><button data-min="0">一直放</button></div>
+      <div class="bright-head"><b class="sub">电台</b></div>
+      <div class="minutes" id="mediaStations" style="grid-template-columns:repeat(3,1fr)"></div>
+      <p class="opt-note">也可以直接说「放东方广播」「放雨声，半小时后关」「别放了」。说话时自动变小，闹钟响时静音。电台用的是公开的直播流，偶尔会连不上。</p>
+    </div>
+    <div class="alarms-card" id="listsCard">
+      <div class="bright-head"><b>清单</b><span class="bright-num" id="listsCount"></span><button class="upd-btn" id="listsPhone" style="margin-left:auto">手机看</button></div>
+      <div class="alarm-list" id="listsList"></div>
+      <p class="opt-note">直接说「把酱油加到购物清单」「购物清单里有什么」「酱油买了」。点「手机看」用手机扫码，在超市边买边划掉。</p>
+    </div>
+    <div class="alarms-card" id="scenesCard">
+      <div class="bright-head"><b>场景口令</b><span class="bright-num" id="scenesCount"></span></div>
+      <div class="alarm-list" id="scenesList"></div>
+      <p class="opt-note">直接说：「以后我说『我出门了』，就把灯和空调都关了，再说一下天气」。叫醒后说口令，小麦就照着做；要改就重说一遍。</p>
     </div>
     <div class="alarms-card ww-card" id="wwCard">
       <div class="bright-head"><b>唤醒词</b><span class="bright-num" id="wwCount"></span></div>
@@ -475,6 +496,14 @@
     <button class="ctl-big pri" id="cookNext">下一步</button><button class="ctl-big" id="cookExit">退出</button></div>
   <div class="cook-say">不用叫醒，直接说「下一步」「上一步」「再说一遍」「开始计时」「退出做菜」</div>
 </div>
+<!-- 电台、助眠声的播放条 -->
+<div class="now-bar" id="nowBar" hidden><span id="nowIcon"></span><b id="nowName"></b><span class="now-sub" id="nowSub"></span>
+  <button class="now-x" id="nowStop" aria-label="停止">✕</button></div>
+<!-- 一个二维码（清单「手机看」） -->
+<div class="photo-ov" id="qrOv" hidden><div class="photo-sheet">
+  <div class="photo-left"><canvas id="qrCanvas" width="340" height="340"></canvas></div>
+  <div class="photo-txt"><small id="qrKicker"></small><h2 id="qrTitle"></h2><p id="qrNote"></p>
+    <div class="photo-btns"><button class="upd-btn" id="qrClose">关闭</button></div></div></div></div>
 <script src="/static/v2/vendor/qrcode.js"></script>
 <script src="/static/v2/app.js"></script>
 <script src="/static/v2/home.js"></script>

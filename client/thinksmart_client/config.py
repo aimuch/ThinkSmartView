@@ -56,6 +56,7 @@ DEFAULTS = {
     'kids': {'enabled': False, 'age': 3, 'daily_minutes': 30, 'bedtime': '20:30', 'voice': 'child'},   # kids.py
     # 待机页 (设计画布第 10 块): after this long idle, a big clock, the weather and the family album
     'standby': {'enabled': True, 'minutes': 2, 'album': True},
+    'scenes': [],         # 场景口令 (daily.py): [{'name': '我出门了', 'steps': '…'}]
 }
 
 

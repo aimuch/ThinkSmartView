@@ -160,6 +160,11 @@ class AdminHandler:
                 web.post("/kiosk/home", self.handle_kiosk_home),
                 web.get("/kiosk/today", self.handle_kiosk_today),
                 web.post("/kiosk/prefs", self.handle_kiosk_prefs),
+                web.get("/kiosk/lists", self.handle_kiosk_lists),
+                web.post("/kiosk/lists", self.handle_kiosk_lists_change),
+                web.get("/lists/{secret}", self.handle_lists_page),
+                web.get("/lists/{secret}/data", self.handle_lists_data),
+                web.post("/lists/{secret}/data", self.handle_lists_data_change),
                 web.get("/admin/api/memory/history", self.handle_memory_history),
                 web.post("/kiosk/photo/start", self.handle_kiosk_photo_start),
                 web.get("/kiosk/photo/{token}", self.handle_kiosk_photo),
@@ -903,6 +908,65 @@ class AdminHandler:
                 return self._error("place 不对", 400)
         await self._blocking(device_homes.put, device, place)
         return self._json({"ok": True})
+
+    # ---------- 清单（core/utils/device_lists.py） ----------
+
+    def _lists_url(self, secret: str) -> str:
+        return self._photo_url("x").rsplit("/photo/", 1)[0] + f"/lists/{secret}"
+
+    async def handle_kiosk_lists(self, request: web.Request):
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import device_lists
+
+        try:
+            v = await self._blocking(device_lists.view, request.query.get("device") or "")
+        except ValueError as e:
+            return self._error(str(e), 400)
+        return self._json({"ok": True, **v, "url": self._lists_url(v["secret"])})
+
+    async def handle_kiosk_lists_change(self, request: web.Request):
+        """{"device", "op": add|remove|check|clear_done|delete_list, "name", "items", "done"}"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import device_lists
+
+        b = await self._read_json(request)
+        try:
+            v = await self._blocking(device_lists.change, str(b.get("device") or ""), str(b.get("op") or ""),
+                                     b.get("name"), b.get("items") or [], b.get("done"))
+        except ValueError as e:
+            return self._json({"ok": False, "error": str(e)})
+        return self._json({"ok": True, **v, "url": self._lists_url(v["secret"])})
+
+    async def handle_lists_page(self, request: web.Request):
+        html = (STATIC_DIR / "lists.html").read_text(encoding="utf-8")
+        return web.Response(text=html, content_type="text/html",
+                            headers={**SECURITY_HEADERS, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+    async def handle_lists_data(self, request: web.Request):
+        from core.utils import device_lists
+
+        device = await self._blocking(device_lists.by_secret, request.match_info["secret"])
+        if not device:
+            return self._json({"ok": False, "error": "这个链接无效，在小麦的设置页重新扫码"})
+        v = await self._blocking(device_lists.view, device)
+        return self._json({"ok": True, "version": v["version"], "lists": v["lists"]})
+
+    async def handle_lists_data_change(self, request: web.Request):
+        from core.utils import device_lists
+
+        device = await self._blocking(device_lists.by_secret, request.match_info["secret"])
+        if not device:
+            return self._json({"ok": False, "error": "这个链接无效，在小麦的设置页重新扫码"})
+        b = await self._read_json(request)
+        if b.get("op") not in ("add", "remove", "check", "clear_done"):
+            return self._json({"ok": False, "error": "不支持的操作"})
+        try:
+            v = await self._blocking(device_lists.change, device, b["op"], b.get("name"), b.get("items") or [], b.get("done"))
+        except ValueError as e:
+            return self._json({"ok": False, "error": str(e)})
+        return self._json({"ok": True, "version": v["version"], "lists": v["lists"]})
 
     async def handle_kiosk_prefs(self, request: web.Request):
         """{"device", "kids": {"enabled", "age", "voice"}}：设备在设置页改的、网关要知道的偏好（儿童模式）。

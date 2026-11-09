@@ -45,7 +45,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import alarms, broadcast, bt, config, cook, kids, looks, mcp, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, config, cook, daily, kids, looks, mcp, media, rotation, sleep, update, wake_verify, wake_words
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
 from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off
@@ -182,6 +182,9 @@ class Client:
     photo = photo_task = photo_card = None   # 拍照问答 (set in __init__ too; tests build bare clients)
     kids = kids.DEFAULT                       # 儿童模式 (kids.py), likewise
     cooking = None                            # 做菜模式 (cook.py)
+    media = None                              # 电台、助眠声 (media.py)
+    notes = []                                # 留言 (daily.py)
+    lists = None                              # 清单 (the hub keeps them: /kiosk/lists)
     kids_seconds = 0.0
     kids_clips = {}
 
@@ -271,6 +274,8 @@ class Client:
             self.kids = kids.normalize(None)
         self.kids_seconds = kids.load_usage(datetime.date.today().isoformat())
         self.kids_clips = {}          # 'limit' / 'bedtime' -> the hub's synthesised words
+        self.notes = daily.load_notes()
+        self.lists = None
         self.photo = None             # the photo question waiting for the phone (photo_start)
         self.photo_task = None
         self.photo_card = None        # its card, shown when the hub echoes the request   # 'YYYY-MM-DD HH:MM' done (played or given up) today
@@ -551,6 +556,111 @@ class Client:
         hhmm = datetime.datetime.now().strftime('%H:%M')
         await self.say(f"【拍照问 {hhmm}】我用手机拍了张照片问：「{p['question']}」。看图模型看到的是：{answer}"
                        '\n请根据这些直接回答我，一两句话说清楚，不要提「看图模型」。')
+
+    # ---- 电台和助眠声 (media.py) ----
+
+    def media_view(self):
+        return self.media.view() if self.media else {'playing': None, 'stations': [], 'sounds': []}
+
+    def _media_player(self):
+        if self.media is None:
+            self.media = media.Player(self.audio.background, on_change=lambda v: self.events.publish('media', v),
+                                      on_error=lambda t: self.events.publish('toast', {'kind': 'error', 'text': t}))
+        return self.media
+
+    async def media_play(self, kind, name, minutes=None):
+        p = self._media_player()
+        if kind == 'radio':
+            key = media.find_station(name)
+            if not key:
+                raise ValueError(f"没有「{name}」这个电台，能放的有：{'、'.join(v[0] for v in media.STATIONS.values())}")
+            return await p.play_radio(key)
+        key = media.find_sound(name)
+        if not key:
+            raise ValueError(f"助眠声只有：{'、'.join(media.SOUNDS.values())}")
+        return await p.play_sound(key, 30 if minutes is None else minutes)
+
+    async def media_stop(self):
+        if self.media:
+            await self.media.stop()
+        return self.media_view()
+
+    # ---- 场景口令和留言 (daily.py) ----
+
+    def scenes_view(self):
+        return {'scenes': self.cfg.get('scenes') or [], 'max': daily.MAX_SCENES}
+
+    async def save_scene(self, name, steps):
+        self.cfg['scenes'] = daily.save_scene(self.cfg.get('scenes') or [], name, steps)
+        config.save(scenes=self.cfg['scenes'])
+        self.events.publish('scenes', self.scenes_view())
+        return self.scenes_view()
+
+    async def delete_scene(self, name):
+        scene = daily.find_scene(self.cfg.get('scenes') or [], name)
+        if not scene:
+            raise ValueError(f'没有「{name}」这个场景')
+        self.cfg['scenes'] = [s for s in self.cfg['scenes'] if s is not scene]
+        if self.cfg['scenes']:
+            config.save(scenes=self.cfg['scenes'])
+        else:
+            config.unset('scenes')
+        self.events.publish('scenes', self.scenes_view())
+        return self.scenes_view()
+
+    def notes_view(self):
+        return {'notes': self.notes[::-1]}
+
+    async def leave_note(self, to, text, sender=''):
+        self.notes, note = daily.new_note(self.notes, to, text, sender)
+        daily.save_notes(self.notes)
+        self.screen.poke()
+        self.events.publish('notes', self.notes_view())
+        return note
+
+    async def note_done(self, note_id):
+        before = len(self.notes)
+        self.notes = [n for n in self.notes if n['id'] != note_id]
+        if len(self.notes) == before:
+            raise ValueError('没有这条留言')
+        daily.save_notes(self.notes)
+        self.events.publish('notes', self.notes_view())
+        return self.notes_view()
+
+    async def note_read(self, note_id):
+        n = next((x for x in self.notes if x['id'] == note_id), None)
+        if not n:
+            raise ValueError('没有这条留言')
+        await self._say_local(f"{n['from'] + '给' if n['from'] else '这是给'}{n['to']}的留言：{n['text']}")
+        return {}
+
+    # ---- 清单 (the hub keeps them, so a phone can tick them off: core/utils/device_lists.py) ----
+
+    async def refresh_lists(self):
+        try:
+            data = await self._hub_http('/kiosk/lists?' + urllib.parse.urlencode({'device': self.cfg['device_id']}))
+        except Exception as e:
+            log.info('no lists from the hub: %s', e)
+            return self.lists
+        if data and data.get('ok'):
+            if not self.lists or data['version'] != self.lists.get('version'):
+                self.lists = {k: data[k] for k in ('version', 'lists', 'url')}
+                self.events.publish('lists', self.lists)
+        return self.lists
+
+    async def list_change(self, op, name, items=(), done=None):
+        data = await self._hub_http('/kiosk/lists', {'device': self.cfg['device_id'], 'op': op, 'name': name,
+                                                     'items': list(items or []), 'done': done})
+        if not data.get('ok'):
+            raise ValueError(data.get('error') or '没改成')
+        self.lists = {k: data[k] for k in ('version', 'lists', 'url')}
+        self.events.publish('lists', self.lists)
+        return self.lists
+
+    async def _lists_loop(self):
+        while True:
+            await self.refresh_lists()
+            await asyncio.sleep(20)
 
     # ---- 做菜模式 (cook.py): one step per screen, voice commands recognised here ----
 
@@ -1037,6 +1147,7 @@ class Client:
         asyncio.create_task(self._today_loop())
         asyncio.create_task(self._kids_loop())
         asyncio.create_task(self._cook_loop())
+        asyncio.create_task(self._lists_loop())
         await self.bt.start()
         asyncio.create_task(self._bluetooth_loop())
         await self.mijia.start()
@@ -1135,7 +1246,8 @@ class Client:
                 'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
                 'broadcast': self.broadcast_view(), 'photo': self.photo_view(),
                 'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),
-                'standby': self.standby_view(), 'cook': self.cook_view(),
+                'standby': self.standby_view(), 'cook': self.cook_view(), 'media': self.media_view(),
+                'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'thread': {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])}}
 
     def view_entry(self):

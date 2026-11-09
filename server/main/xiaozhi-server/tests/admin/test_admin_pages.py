@@ -1212,3 +1212,22 @@ async def test_memory_history(client):
     assert r.status == 200 and (await r.json())["ok"]
     await client.post("/admin/api/logout", json={})
     assert (await client.get("/admin/api/memory/history?device=dev-1")).status == 401
+
+
+async def test_lists_device_and_phone(kiosk, tmp_path, monkeypatch):
+    from core.utils import device_lists
+
+    monkeypatch.setattr(device_lists, "_path", lambda: str(tmp_path / "device_lists.json"))
+    v = await (await kiosk.get("/kiosk/lists?device=dev-1")).json()
+    assert v["ok"] and set(v["lists"]) == {"购物清单", "待办"} and v["url"].endswith("/lists/" + v["secret"])
+    v = await (await kiosk.post("/kiosk/lists", json={"device": "dev-1", "op": "add", "name": "购物清单", "items": ["酱油", "鸡蛋", "酱油"]})).json()
+    assert [x["text"] for x in v["lists"]["购物清单"]] == ["酱油", "鸡蛋"]
+    secret = v["secret"]
+    page = await kiosk.get(f"/lists/{secret}")
+    assert page.status == 200 and "清单" in await page.text()
+    r = await (await kiosk.post(f"/lists/{secret}/data", json={"op": "check", "name": "购物清单", "items": ["鸡蛋"], "done": True})).json()
+    assert r["ok"] and r["lists"]["购物清单"][1]["done"] is True
+    assert (await (await kiosk.post(f"/lists/{secret}/data", json={"op": "delete_list", "name": "待办"})).json())["ok"] is False
+    assert (await (await kiosk.get("/lists/wrong/data")).json())["ok"] is False
+    v = await (await kiosk.get("/kiosk/lists?device=dev-1")).json()
+    assert v["version"] == 2 and v["lists"]["购物清单"][1]["done"]
