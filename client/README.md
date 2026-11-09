@@ -22,11 +22,12 @@
 | `thinksmart_client/device.py` | 屏幕和按键：给系统熄屏程序写提示（对话中不熄屏、用户设的自动熄屏（1/3/5/10/30 分钟或不熄，默认 5 分钟，触摸和对话结束都按它）、唤醒词亮屏、睡眠时段调暗、用户设的亮度 0-100），读音量键和麦克风开关 |
 | `thinksmart_client/mijia/` | 米家直连（本仓库加的，参考 MenuBarMijia 改写）：`cloud.py` 扫码登录和签名请求（RC4、nonce、签名，用 MenuBarMijia 的已知结果做单测），`spec.py` 从 miot-spec.org 取规格并缓存，`devices.py` 按规格合成设备卡片（灯、开关插座、空调暖气、风扇、净化加湿、窗帘、传感器、门锁只读…，有分键的面板显示各个键，双轨窗帘拆成布帘和纱帘），`policy.py` 哪些操作要先确认，`service.py` 登录状态、家庭、轮询（家居页打开时每 6 秒）和控制，`tools.py` 语音工具 `self.home.list_devices` / `get_state` / `control`。会话存在 `~/.local/share/thinksmart-client/mijia/session.json`（0600，不含密码和 passToken） |
 | `thinksmart_client/rotation.py` | 屏幕方向：调系统的 `kiosk-mode rotation` + `restart`（sudo -n，和关机一样）；「跟随摆放方向」读 bma253 加速度计，放稳 3 秒才转 |
-| `thinksmart_client/sleep.py` | 睡眠时段（可跨午夜）：回复音量减半、屏幕调暗、补报不主动念；设置存在用户配置里（`config.save`），页面设置页和语音工具都能改 |
+| `thinksmart_client/sleep.py` | 睡眠时段（可跨午夜）：到点把屏幕亮度和音量调到设好的值（默认 10、15），结束恢复原来的；形象去睡觉；补报不主动念；设置存在用户配置里（`config.save`），页面设置页和语音工具都能改 |
 | `thinksmart_client/bt.py`、`bt_helper.py` | 蓝牙音箱：手机配对后把歌放到设备上。`bt_helper.py` 用系统自带的 python3（dbus、GLib）管 BlueZ：配对代理（免密码，只在设置页点了「添加手机」后的 3 分钟内接受，配过的手机设为信任、以后点一下就重连）、开关、忘记手机、闹钟响时让手机暂停；`bt.py` 在手机推流时用 `pw-record` 录它的音源，混进 `audio.Background`（和回复相加后送喇叭，回声消除知道它，放歌时照样能唤醒）；对话时压到 20%、闹钟响或试听铃声时静音。需要系统层的 `bluetooth/` 配置（手机的声音变成音源而不是直接送喇叭）；没有时手机照样能放，但声音绕过客户端，放歌时很难唤醒，设置页会提示 |
 | `thinksmart_client/opus.py` | 系统 libopus 的 ctypes 封装 |
 | `thinksmart_client/web.py` | 页面、事件流（SSE）、按钮接口 |
-| `web/` | 界面（设置页里的 WiFi 由展示屏外壳执行：页面通过 WebKit 的 `thinksmart` 消息通道请外壳扫描、连接、忘记网络，和系统镜像欢迎页同一套代码；输入框用外壳注入的系统键盘；外壳太旧时卡片只提示）：正式版是 `v2/`（带表情的光球，首页 `/` 和 `/v2`），第一版 `index.html`、`app.css`、`app.js` 留在 `/v1`；`test/` 是 GPU 排查用的测试页；另有提示音、厂商图标 |
+| `thinksmart_client/perf.py` | 性能页的数据：/proc/stat 每核占用（两次读之间的差）、cpufreq、thermal 各温度、GPU devfreq、内存、存储、wlan0 网速、负载、最占资源的进程（同名合并，内核线程合成「系统内核」）。只在页面打开时读；语音工具 `self.device.performance` 念一句小结并打开性能页 |
+| `web/` | 界面（设置页里的 WiFi 由展示屏外壳执行：页面通过 WebKit 的 `thinksmart` 消息通道请外壳扫描、连接、忘记网络，和系统镜像欢迎页同一套代码；输入框用外壳注入的系统键盘；外壳太旧时卡片只提示）：正式版是 `v2/`（带表情的光球，首页 `/` 和 `/v2`），第一版 `index.html`、`app.css`、`app.js` 留在 `/v1`；`test/` 是 GPU 排查用的测试页；另有提示音、厂商图标。设置页（设计画布第 32 块）：左边侧边栏按 `v2/app.js` 的 `SET_GROUPS` 生成（分组、分类、短名、说明、图标），右边 `<section class="set-pane" data-pane="…">` 是每一类的卡片；没写进配置的 section 归到「其他」；收起和宽度存在 localStorage 的 `setNav`，上次看的分类存在 `setPane` |
 | `models/kws-zh/` | 唤醒词模型 |
 | `deploy/thinksmart-client.service` | 系统服务 |
 | `deploy/bootstrap-updater` | 服务启动前以 root 运行：20261101 镜像的设备上更新服务只认客户端，发布包里带了新的（`deploy/updater/`，发布时由系统镜像仓库的 `make-release.py --system` 放进去），比设备上的新就换上；已经是新的就什么都不做 |
@@ -44,6 +45,7 @@
 - `POST /api/alarm-volume {"volume": 0-100}`：闹钟音量（存用户配置，默认 70）；`POST /api/alarm-tone {"tone": "coffee|morning|bright|hop|marimba", "preview": false}`：选铃声，`preview` 为 true 时用闹钟音量试听一段（前 8 秒），`{"stop": true}` 停止试听（关设置页时页面会发）
 - `POST /api/alarms/delete {"id": n}`、`/api/alarms/stop`、`/api/alarms/snooze`（正在响或 15 分钟内响过的那条 10 分钟后再响）、`/api/alarms/missed/clear`
 - `POST /api/bluetooth`：`{"enabled": bool}` 蓝牙音箱开关（存用户配置 `bluetooth`，关掉就让蓝牙断电），`{"window": bool}` 打开或关掉 3 分钟的「添加手机」，`{"remove": "地址"}` 忘记一台手机，`{"disconnect": "地址"}` 断开。状态在事件 `bluetooth`（快照里也有）：`available`、`enabled`、`powered`、`window`（剩余秒数）、`name`（手机上看到的名字）、`direct`（手机的声音绕过了客户端：系统层太旧）、`devices`（`address`、`name`、`paired`、`connected`、`streaming`、`title`、`artist`）
+- `GET /api/perf`：性能快照（`cpu`、`gpu`、`temps`、`mem`、`disk`、`net`、`load`、`uptime`、`top`）；占用和网速是和上一次读的差，第一次为 0
 - `POST /api/power-off`：关机（`systemctl halt`，插着电也不会自己重新开机，屏幕变黑后等 10 秒再拔电源；正在更新时不执行）。页面先收到 `power {"state": "off"}` 显示「正在关机」
 - `POST /api/history/clear {}` 或 `{"memory_only": true}`：清除聊天记录（转给服务端的 `/kiosk/chat/clear`，只清服务端本机存的所有模型的记录和总结记忆，Claude Code、Grok Bot 自己的会话不动；`memory_only` 只清记忆）。聊天页的记录来自服务端存的 `GET /kiosk/chat/history`（每个模型最近 50 条），没连着时载入，断开、重启后还在；说「清除聊天记录」确认后服务端发 `{"type": "chat_history", "state": "cleared"}`，页面清空
 

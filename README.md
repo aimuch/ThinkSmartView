@@ -24,7 +24,7 @@
 | 屏幕旋转 | `client/thinksmart_client/rotation.py` | 设置 →「屏幕方向」：横屏、竖屏和它们的倒置，或「跟随摆放方向」 |
 | 唤醒二次确认 | `client/thinksmart_client/wake_verify.py` | 唤醒词命中后经网关识别核对一次（约 0.3 秒），减少误唤醒；网关问不到时照常唤醒 |
 | 更多供应商 | `server/main/xiaozhi-server/core/admin/catalog.py` | 后台「大模型」21 家；「语音识别」分本地（X-ASR 快速版/精度版、Qwen3-ASR、SenseVoice，后台可下载模型）和云端（豆包、阿里百炼、腾讯、讯飞、百度、OpenAI、Groq） |
-| 大模型费用 | `server/main/xiaozhi-server/core/billing/` | 后台「费用」页分四页：总览（时间范围、按小时/按天、和上一段比、趋势、token 构成）、排行（模型/设备/用途/条目）、热力图（星期几 × 几点）、单价和额度（分时单价、节假日、额度，可从 models.dev、LiteLLM、OpenRouter 同步单价）。每次请求还记首字耗时、总耗时和失败。设备设置页也能看。 |
+| 大模型费用 | `server/main/xiaozhi-server/core/billing/` | 后台「费用」页分四页：总览（时间范围、按小时/按天、和上一段比、趋势、token 构成）、排行（模型/设备/用途/条目）、热力图（星期几 × 几点）、单价和额度（分时单价、节假日、额度，可从 models.dev、LiteLLM、OpenRouter 同步单价）。每次请求还记首字耗时、总耗时和失败。设备设置 →「智能体」也能看。 |
 | 自定义唤醒词 | `client/thinksmart_client/wake_words.py` | 设置 →「唤醒词」：按住说出新词（网关识别成文字、换算成拼音），马上生效；也可以说「唤醒词加一个……」。默认小麦小麦、哈喽小麦、小麦同学 |
 | 天气 | `server/main/xiaozhi-server/core/utils/open_meteo.py` | Open-Meteo，不用 Key：当前天气、PM2.5、7 天预报和降水概率，国外城市也能查。设备所在地在后台「意图识别 → 查天气 → 设置」里改 |
 | 千问 TTS（方言音色） | `server/main/xiaozhi-server/core/providers/tts/qwen3_tts.py` | 后台「语音合成」切到千问 TTS、填百炼 Key，可选上海话、北京话、四川话、粤语等音色 |
@@ -33,11 +33,13 @@
 | 拍照问答 | `server/…/core/agent/photo_ask.py`、`photo_command.py`，`client/…/camera.py` | 「帮我看下这是什么」：机身摄像头实时画面、倒数自动拍（没有摄像头时手机扫码）；后台「大模型 → 看图模型」填 Key |
 | 前置摄像头 | `system/camera/`（上游 PR #7） | S5KC505A 驱动、设备树、libcamera 0.8，变成普通摄像头 `/dev/video10`；单独安装，见 system/camera/README.md |
 | 首页外观 | `client/thinksmart_client/looks.py`、`web/v2/looks.css` | 设置 →「外观」：主题、形象（可用照片生成卡通形象）、首页显示内容 |
-| 儿童模式、待机页、做菜模式 | `kids.py`、`cook.py` | 设置里各有一张卡片；做菜时直接说「下一步」 |
+| 儿童模式、待机页、做菜模式 | `kids.py`、`cook.py` | 设置 →「孩子和学习」「外观」里各有一张卡片；做菜时直接说「下一步」 |
 | 场景、留言、清单、电台、助眠声 | `daily.py`、`media.py`、`server/…/core/utils/device_lists.py` | 都可以直接说；清单能在手机上看 |
 | 定时任务、主动告警、翻译模式 | `client/thinksmart_client/app.py` | 「每天早上七点告诉我要不要带伞」；米家漏水告警；「帮我们中英互译」 |
 | 家人声音、断网兜底 | `server/…/core/utils/local_voiceprint.py`、`client/thinksmart_client/offline.py` | 设置 →「家人声音」录名字和三句话；网关连不上时也能调音量、报时、开关灯 |
-| 网关后台界面 | `server/…/core/admin/static/index.html` | 侧栏底部账号菜单 →「界面」：主题、宽度、侧栏、菜单顺序；表格可排序、拖列、调列宽、拖行 |
+| 网关后台界面 | `server/…/core/admin/static/index.html` | 侧栏底部一张卡片：设备状态图标（颜色就是状态，连不上换成警告圈）+ 退出登录、心跳时间、账号菜单、三段主题切换；账号菜单 →「界面」：主题、宽度、侧栏、菜单顺序；表格可排序、拖列、调列宽、拖行 |
+| 设备设置页 | `client/web/v2/`（`app.js` 的 `SET_GROUPS`） | 左边侧边栏 4 组 11 类：设备（屏幕和声音、外观、网络、系统）、日常（闹钟和作息、家居、生活）、家人（家人、孩子和学习）、智能（语音、智能体）；右边只显示这一类的卡片。侧边栏能收起成只剩图标，横屏能拖动调宽。加一类只改配置、加一页卡片 |
+| 设备性能页 | `client/thinksmart_client/perf.py` | 设置 →「系统」第一张卡片是小结，点「详细」或说「设备温度多少」：每核占用/频率/温度、GPU、内存、存储、网速、最占资源的进程（进程名翻译成「屏幕浏览器」「摄像头画面」等）；只在打开时每 2 秒读一次 /proc 和 /sys |
 | 后台登录、状态、工作原理 | `server/…/core/admin/`（`brand.py`、`presence.py`） | 登录页可保持登录 30 天；账号菜单里改密码、退出登录、改名称和图标（麦穗、表情或上传图片，浏览器标签图标跟着换）、填自己的仓库链接；状态页按设备心跳显示待机/对话中/离线，有 24 小时对话量、今天的费用、拓扑；工作原理画成六步路径 |
 | DSH（DeepSeek Harness） | `server/…/core/agent/dsh_session.py`、`core/providers/llm/dsh_cli/` | 后台「大模型 → 本地 CLI 与智能体」选 DSH：用 DeepSeek 的 Key，在网关上读文件、做事；说「嗨 DSH」叫它。网关上要装 `@deepseek-ai/dsh` 和 Node 24 |
 | 智能体页 | `server/…/core/agent/api_agent_session.py`、`core/providers/llm/agent_api/` | 后台侧栏「智能体」：本机（DSH、Claude Code）、云端（Grok Bot）、自己加的（OpenAI 兼容的 Hermes Agent 等、Dify 工作流、Coze）。叫名字派活，慢了转后台，做完汇报 |
