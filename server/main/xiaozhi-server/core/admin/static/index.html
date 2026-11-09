@@ -279,6 +279,24 @@
 
   /* 侧栏底部（第 14 块 B）：在线状态 + 账号菜单 */
   .side-status { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 0 4px 8px; }
+  /* 侧栏底部的设备心跳（设计画布第 22 块）：每收到一次新心跳跳一下，颜色就是状态 */
+  .hb { --hb: var(--muted); margin: 0 0 8px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--hb) 28%, transparent); border-radius: 10px; color: var(--hb); }
+  .hb-line { width: 56px; height: 18px; flex: none; overflow: visible; }
+  .hb-line polyline { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+  .hb-base { opacity: .35; }
+  .hb-beat { stroke-dasharray: 100; stroke-dashoffset: 100; opacity: 0; }
+  .hb.beat .hb-beat { animation: hbBeat 1.4s ease-out; }
+  .hb[data-st="talk"] .hb-beat { animation: hbBeat 1.1s linear infinite; }
+  @keyframes hbBeat { 0% { stroke-dashoffset: 100; opacity: 1; } 70% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+  .hb-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+  .hb-txt b { font-size: 12.5px; font-weight: 600; }
+  .hb-txt small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .hb[data-st="talk"] { --hb: var(--accent); } .hb[data-st="idle"] { --hb: var(--ok); } .hb[data-st="slow"] { --hb: var(--warn); }
+  .hb[data-st="off"] { --hb: var(--err); background: var(--err-soft); border-color: color-mix(in srgb, var(--err) 35%, transparent); }
+  .hb[data-st="expired"] { --hb: var(--warn); background: var(--warn-soft); }
+  .hb[data-st="off"] .hb-base, .hb[data-st="expired"] .hb-base { stroke-dasharray: 3 3; opacity: .8; }
+  .hb[data-st="none"] .hb-txt b { color: var(--text); }
+  @media (prefers-reduced-motion: reduce) { .hb .hb-beat { animation: none !important; } }
   .dot.idle { background: #f5a524; box-shadow: 0 0 0 3px rgba(245, 165, 36, .18); }
   .side-foot .acct { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px; border-radius: 9px; border: 0; cursor: pointer;
           background: var(--side-hover); color: inherit; text-align: left; text-decoration: none !important; }
@@ -322,9 +340,8 @@
     .nav .ico { display: none; }
     .side-foot { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; white-space: nowrap; flex: none; }
     .side-foot .row { margin: 0; }
-    .side-foot #logout, #online-text { display: none; }
+    .side-foot #logout, .hb-txt { display: none; }
     #online-short { display: inline; }
-    .side-foot .dot { margin-right: 4px; }
     .side-status { padding: 0; } .side-foot .acct { width: auto; padding: 4px; background: none; }
     .side-foot .acct > span:not(.av) { display: none; }
     main { padding: 20px 16px 56px; }
@@ -374,14 +391,14 @@
   @media (min-width: 901px) {
     :root[data-side="rail"] .app { grid-template-columns: 64px minmax(0, 1fr); }
     :root[data-side="rail"] aside { padding: 16px 8px; }
-    :root[data-side="rail"] .brand span, :root[data-side="rail"] #online-text, :root[data-side="rail"] .side-foot a,
+    :root[data-side="rail"] .brand span, :root[data-side="rail"] .hb-txt, :root[data-side="rail"] .side-foot a,
     :root[data-side="rail"] #logout { display: none; }
     :root[data-side="rail"] .brand { padding: 0 9px 18px; }
     :root[data-side="rail"] .nav button { font-size: 0; justify-content: center; padding: 10px 0; }
     :root[data-side="rail"] .nav .ico { font-size: 16px; width: auto; }
     :root[data-side="rail"] .side-foot { padding: 10px 0 0; text-align: center; }
     :root[data-side="rail"] .side-foot .row { justify-content: center; }
-    :root[data-side="rail"] .side-status { justify-content: center; padding: 0 0 8px; }
+    :root[data-side="rail"] .side-status { justify-content: center; padding: 6px 0; } :root[data-side="rail"] .hb-line { width: 40px; }
     :root[data-side="rail"] .side-foot .acct { justify-content: center; background: none; }
     :root[data-side="rail"] .side-foot .acct > span:not(.av) { display: none; }
     :root[data-side="drawer"] .app { grid-template-columns: minmax(0, 1fr); }
@@ -641,7 +658,9 @@
       <button data-page="intent"><span class="ico">⚙</span>意图识别</button>
       <button data-page="update"><span class="ico">⟳</span>更新网关</button>
     </nav>
-    <div class="side-foot"><div class="side-status"><span class="dot" id="online-dot"></span><span id="online-text">没有设备在线</span><span id="online-short">无设备</span></div>
+    <div class="side-foot"><div class="side-status hb" id="hb" data-st="none">
+        <svg class="hb-line" viewBox="0 0 56 18" aria-hidden="true"><polyline class="hb-base" points="1,11 55,11"/><polyline class="hb-beat" pathLength="100" points="1,11 20,11 24,11 27,2 31,16 34,7 37,11 55,11"/></svg>
+        <span class="hb-txt"><b id="online-text">没有设备在线</b><small id="hb-sub"></small></span><span id="online-short">无设备</span></div>
       <button class="acct" id="acct-btn" aria-haspopup="menu"><span class="av">管</span><span><b>管理员</b><small id="acct-sub">已登录</small></span><span class="more">⋯</span></button>
       <button id="logout" class="hidden">退出登录</button><button id="ui-btn" class="hidden">界面</button></div>
   </aside>
@@ -898,25 +917,56 @@ window.addEventListener("beforeunload", (e) => { if (page.dirty && page.dirty())
 // [xiaozhi-hub] dev 是 /devices 的结果（带 seen：心跳算出的 对话中/待机/离线），或只有在连接的设备数组（呼名页）。
 // 设备只在对话时连着网关，所以「在线」按心跳算：对话中是绿点，待机是琥珀点（设计画布第 14 块 B）
 let lastSeen = [];
+// [xiaozhi-hub] 侧栏底部的心跳（设计画布第 22 块）。dev 是 /devices 的结果（seen 带 last_seen，now 是网关的时间），
+// 或只有在连接的设备数组（呼名页）；null 是连不上服务或登录过期。
+const hb = { latest: 0, skew: 0, okAt: 0, st: "none", name: "", lastOff: null };
+function hbName(d) { return (d && (d.name || d.device_id)) || ""; }
+function hbTick() {
+  const sub = $("hb-sub"); if (!sub) return;
+  const now = Date.now() / 1000 + hb.skew, age = Math.max(0, Math.round(now - hb.latest));
+  const hm = (t, sec) => new Date(t * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", ...(sec ? { second: "2-digit" } : {}), hour12: false });
+  if (hb.st === "idle" || hb.st === "slow") {
+    const st = age > 30 ? "slow" : "idle";
+    if (st !== $("hb").dataset.st) $("hb").dataset.st = st;
+    sub.textContent = `待机 · 心跳 ${age < 2 ? "刚刚" : age + " 秒前"}`;
+  } else if (hb.st === "talk") sub.textContent = `${hb.name ? hb.name + " · " : ""}对话中`;
+  else if (hb.st === "none") sub.textContent = hb.lastOff ? `最近：${hb.lastOff.name} · ${hm(hb.lastOff.t)}` : "设备待机时每 10 秒心跳";
+  else sub.textContent = hb.okAt ? `上次 ${hm(hb.okAt / 1000, true)}` : "";
+}
+setInterval(hbTick, 1000);
+function hbBeat() {
+  const el = $("hb"); el.classList.remove("beat"); void el.getBoundingClientRect(); el.classList.add("beat");
+}
 function setOnline(dev, reason = OFFLINE) {
-  let talking = 0, idle = 0;
+  let talking = 0, idle = 0, seen = [];
   if (dev) {
+    hb.okAt = Date.now();
     if (Array.isArray(dev)) {
       const ids = new Set(dev.map((d) => d.device_id));
-      talking = dev.length; idle = lastSeen.filter((d) => d.state === "idle" && !ids.has(d.device_id)).length;
+      talking = dev.length; seen = lastSeen; idle = lastSeen.filter((d) => d.state === "idle" && !ids.has(d.device_id)).length;
+      hb.name = hbName(dev[0]);
     } else {
-      lastSeen = dev.seen || (dev.devices || []).map((d) => ({ device_id: d.device_id, state: "talking" }));
-      talking = lastSeen.filter((d) => d.state === "talking").length; idle = lastSeen.filter((d) => d.state === "idle").length;
+      lastSeen = seen = dev.seen || (dev.devices || []).map((d) => ({ device_id: d.device_id, state: "talking" }));
+      talking = seen.filter((d) => d.state === "talking").length; idle = seen.filter((d) => d.state === "idle").length;
+      if (dev.now) hb.skew = dev.now - Date.now() / 1000;
+      hb.name = hbName(seen.find((d) => d.state === "talking"));
     }
+    const live = seen.filter((d) => d.state !== "offline" && d.last_seen);
+    const latest = live.length ? Math.max(...live.map((d) => d.last_seen)) : 0;
+    if (latest > hb.latest && hb.latest) hbBeat();          // 来了一次新心跳：跳一下
+    if (!hb.latest && latest) hbBeat();
+    hb.latest = latest || hb.latest;
+    const off = seen.filter((d) => d.state === "offline").sort((a, b) => b.last_seen - a.last_seen)[0];
+    hb.lastOff = off ? { name: hbName(off), t: off.last_seen } : null;
   }
-  $("online-dot").classList.toggle("on", talking > 0);
-  $("online-dot").classList.toggle("idle", !talking && idle > 0);
-  $("online-dot").classList.toggle("off", !dev);
+  hb.st = !dev ? (reason === EXPIRED ? "expired" : "off") : talking ? "talk" : idle ? "idle" : "none";
+  $("hb").dataset.st = hb.st;
   $("online-text").textContent = !dev ? reason : talking ? `${talking} 台在对话${idle ? ` · ${idle} 台待机` : ""}`
-    : idle ? `${idle} 台在线 · 待机中` : "没有设备在线";
+    : idle ? `${idle} 台在线` : "没有设备在线";
   $("online-short").textContent = !dev ? (reason === OFFLINE ? "已断开" : "需登录") : talking + idle ? `${talking + idle} 台` : "无设备";  // 窄屏用
-  $("online-dot").parentElement.title = !dev ? reason : talking + idle ? $("online-text").textContent
+  $("hb").title = !dev ? reason : seen.length ? seen.map((d) => `${hbName(d)}：${{ talking: "对话中", idle: "待机", offline: "离线" }[d.state]}${d.version ? " · " + d.version : ""}`).join("\n")
     : "设备只在对话时连着网关；待机时每 10 秒有一次心跳（客户端 0.1.625 起）。1 分钟没有心跳算离线";
+  hbTick();
 }
 const OFFLINE = "连不上服务";  // api() 连不上服务时抛出的错误以这几个字开头
 const EXPIRED = "登录已过期";
