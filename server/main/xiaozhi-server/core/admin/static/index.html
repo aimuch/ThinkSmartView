@@ -527,6 +527,30 @@
   @media (prefers-reduced-motion: reduce) {
     .u-act i, .u-stat, .hstage, .acct-menu { animation: none; } .tlink .p { animation: none; display: none; }
   }
+
+  /* ---------- [xiaozhi-hub] 智能体页（设计画布第 18 块） ---------- */
+  .ag-grp { font-size: 12px; font-weight: 600; color: var(--muted); margin: 18px 0 8px; display: flex; gap: 8px; align-items: baseline; }
+  .ag-grp span { font-weight: 400; }
+  .ag-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .ag-card { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+             text-align: left; color: inherit; font: inherit; cursor: pointer; transition: border-color var(--d-fast) var(--ease-standard); }
+  .ag-card:hover { border-color: var(--accent-line); }
+  .ag-card.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .ag-card.off { opacity: .55; cursor: default; }
+  .ag-top { display: flex; gap: 10px; align-items: center; }
+  .ag-m { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; flex: none; }
+  .ag-top b { font-size: 13px; display: block; } .ag-top small { display: block; font-size: 11px; color: var(--muted); }
+  .ag-st { margin-left: auto; font-size: 11px; display: flex; gap: 5px; align-items: center; white-space: nowrap; color: var(--muted); }
+  .ag-st i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  .ag-st.w i { background: var(--warn); } .ag-st.x i { background: var(--muted); }
+  .ag-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .ag-tags span { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
+  .ag-tags span.b { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .ag-add { border: 1px dashed var(--line); border-radius: 12px; display: grid; place-items: center; color: var(--muted); min-height: 92px;
+            background: none; font: inherit; cursor: pointer; }
+  .ag-add:hover { border-color: var(--accent); color: var(--accent); }
+  .ag-form { margin-top: 12px !important; }
+  @media (max-width: 900px) { .ag-cards { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -558,7 +582,7 @@
       <button data-page="how"><span class="ico">⇄</span>工作原理</button>
       <button data-page="llm"><span class="ico">✦</span>大模型</button>
       <button data-page="calls"><span class="ico">☎</span>呼名</button>
-      <button data-page="grokbot"><span class="ico">☁</span>Grok Bot</button>
+      <button data-page="agents"><span class="ico">◈</span>智能体</button>
       <button data-page="memory"><span class="ico">✎</span>记忆</button>
       <button data-page="cost"><span class="ico">¥</span>费用</button>
       <button data-page="asr"><span class="ico">◐</span>语音识别</button>
@@ -656,7 +680,7 @@ function applyBrand(b) {
   document.title = brandInfo.name + (title ? " · " + title : " · 管理后台");
   $("favicon").href = "/admin/favicon?v=" + encodeURIComponent(brandInfo.icon.kind + (brandInfo.icon.value || "").length + brandInfo.icon.value.slice(-12));
 }
-const PAGE_TITLES = { status: "状态", how: "工作原理", llm: "大模型", calls: "呼名", grokbot: "Grok Bot", memory: "记忆", cost: "费用",
+const PAGE_TITLES = { status: "状态", how: "工作原理", llm: "大模型", calls: "呼名", grokbot: "Grok Bot", agents: "智能体", memory: "记忆", cost: "费用",
   asr: "语音识别", tts: "语音合成", intent: "意图识别", update: "更新网关" };
 
 let authMode = "login";
@@ -794,7 +818,7 @@ function renderPasswordDrawer(body) {
 
 $("logout").onclick = async () => { if (!confirmLeave()) return; page.dirty = null; await api("logout", {}); await route(); };
 
-const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, update: renderUpdate };
+const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, update: renderUpdate };
 const page = { name: "", dirty: null, timer: null };
 function currentPage() { const p = location.hash.slice(1); return PAGES[p] ? p : "status"; }
 function confirmLeave() { return !(page.dirty && page.dirty()) || confirm("当前页面有修改还没保存，确定离开吗？"); }
@@ -806,7 +830,8 @@ async function openPage(name, force) {
   applyBrand();   // 浏览器标签上的标题跟着页面变
   if (audio) { audio.pause(); audio = null; }
   if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
-  document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.page === name));
+  const navName = name === "grokbot" ? "agents" : name;   // Grok Bot 页从「智能体」进去
+  document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.page === navName));
   applyUi();  // 隐藏了的菜单项，正在看的那一页照样显示
   const root = $("page");
   if (!force) root.innerHTML = '<p class="muted">加载中…</p>';
@@ -2028,6 +2053,116 @@ async function openPluginSettings(id, label, onSaved) {
   });
 }
 
+
+// ---------- [xiaozhi-hub] 智能体（设计画布第 18 块）：叫名字派活，做完回来汇报 ----------
+
+let agentEdit = null;   // 正在编辑的自己加的智能体：条目名，"new:<类型>" 是新建
+async function renderAgents(root) {
+  const d = await api("agents");
+  const ST = { ready: ["", "就绪"], setup: ["w", "没设置"], missing: ["x", "没装"] };
+  const pill = (state) => { const [c, t] = ST[state] || ["x", state]; return `<span class="ag-st ${c}"><i></i>${t}</span>`; };
+  const aliases = (a) => (a && a.length ? "称呼 " + a.slice(0, 2).join("、") : "还没配称呼");
+  const isDefault = (entry) => (entry === d.default ? '<span class="pill ok" style="margin-left:6px">默认</span>' : "");
+  const MARK = { dsh: ["D", "#1f3a8a", "#cfe0ff"], claude: ["C", "#fef3c7", "#b45309"] };
+  const KIND_MARK = { openai: ["#2a1f3d", "#d7b8ff"], dify: ["#1d3a2c", "#9be8c1"], coze: ["#1e2b4a", "#9fc0ff"] };
+  const grok = d.cloud;
+  root.innerHTML = `
+    <div class="page-head"><div><h1>智能体</h1><p class="sub">叫名字把事交给它：回答慢的转到后台接着做，做完在设备上汇报。「大模型」页管平时聊天用哪个模型，这一页管能派活的。</p></div></div>
+    <div class="ag-grp">本机<span>跑在网关这台电脑上</span></div>
+    <div class="ag-cards">
+      ${d.local.map((a) => `<button class="ag-card" data-go-llm="${a.id}"><div class="ag-top"><div class="ag-m" style="background:${MARK[a.id][1]};color:${MARK[a.id][2]}">${MARK[a.id][0]}</div>
+        <div><b>${esc(a.name)}${isDefault(a.entry)}</b><small>${esc(a.sub)} · ${esc(aliases(a.aliases))}</small></div>${pill(a.state)}</div>
+        <div class="ag-tags">${a.id === "dsh" ? '<span class="b">读写工作目录</span><span>联网搜索</span><span>用 DeepSeek 的 Key</span>' : '<span class="b">读写工作目录</span><span>要 Claude 账号</span>'}${a.version ? `<span>${esc(a.version)}</span>` : ""}</div></button>`).join("")}
+      <div class="ag-card off"><div class="ag-top"><div class="ag-m" style="background:var(--soft);color:var(--muted)">X</div><div><b>Codex CLI</b><small>即将支持</small></div></div></div>
+    </div>
+    <div class="ag-grp">云端同事</div>
+    <div class="ag-cards">
+      <button class="ag-card" id="ag-grok"><div class="ag-top"><div class="ag-m" style="background:#e0f2fe;color:#0369a1">G</div>
+        <div><b>Grok Bot</b><small>xAI · ${grok.bots.length ? `${grok.bots.length} 个 Bot：${esc(grok.bots.slice(0, 2).map((b) => b.bot_name).join("、"))}` : "叫 Bot 的名字派活"}</small></div>
+        ${pill(grok.logged_in ? (grok.bots.length ? "ready" : "setup") : "setup").replace("没设置", grok.logged_in ? "没勾选 Bot" : "没登录")}</div>
+        <div class="ag-tags"><span class="b">云端电脑</span><span>网关关机也在做</span><span>有浏览器</span></div></button>
+    </div>
+    <div class="ag-grp">自己加的<span>OpenAI 兼容接口（Hermes Agent 等）、Dify、Coze</span></div>
+    <div class="ag-cards">
+      ${d.custom.map((a) => { const m = KIND_MARK[a.kind]; const k = d.kinds.find((x) => x.id === a.kind); return `<button class="ag-card ${agentEdit === a.entry ? "on" : ""}" data-agent-edit="${esc(a.entry)}">
+        <div class="ag-top"><div class="ag-m" style="background:${m[0]};color:${m[1]}">${esc(a.name.slice(0, 1).toUpperCase())}</div>
+        <div><b>${esc(a.name)}${isDefault(a.entry)}</b><small>${esc(k ? k.label : a.kind)} · ${esc(aliases(a.aliases))}</small></div>${pill(a.ready ? "ready" : "setup")}</div>
+        <div class="ag-tags">${a.kind === "dify" ? `<span class="b">${a.mode === "workflows/run" ? "流水线（工作流）" : "Dify 应用"}</span>` : a.kind === "coze" ? '<span class="b">Coze</span>' : `<span class="b">${a.background ? "慢了转后台" : "一直等着"}</span>`}
+          ${a.base_url ? `<span class="mono">${esc(a.base_url.replace(/^https?:\/\//, "").slice(0, 28))}</span>` : ""}</div></button>`; }).join("")}
+      <button class="ag-add" data-agent-edit="new">＋ 加一个智能体</button>
+    </div>
+    <div class="card panel ag-form ${agentEdit ? "" : "hidden"}" id="ag-form"></div>
+    <div class="section-title">智能体和流水线</div>
+    <div class="card panel small muted" style="line-height:1.8">
+      <b style="color:var(--text)">智能体</b>（DSH、Hermes、Grok Bot、Claude Code）：给它目标，它自己决定用哪些工具、做几步。<b style="color:var(--text)">流水线</b>（Dify 工作流）：步骤是你在 Dify 里事先连好的。两种都是「叫名字派活、等结果」，所以放在一起；称呼在<a href="#calls">呼名</a>页也能改。
+    </div>`;
+  root.querySelectorAll("[data-go-llm]").forEach((b) => (b.onclick = () => { agentView = b.dataset.goLlm; openPage("llm"); }));
+  $("ag-grok").onclick = () => openPage("grokbot");
+  root.querySelectorAll("[data-agent-edit]").forEach((b) => (b.onclick = () => {
+    agentEdit = b.dataset.agentEdit === "new" ? "new:openai" : b.dataset.agentEdit; renderAgents(root);
+  }));
+  if (agentEdit) renderAgentForm($("ag-form"), d, root);
+}
+
+function renderAgentForm(box, d, root) {
+  const isNew = agentEdit.startsWith("new:");
+  const a = isNew ? { kind: agentEdit.slice(4), name: "", base_url: "", model: "", mode: "chat-messages", bot_id: "", background: true, aliases: [], key_set: false }
+    : d.custom.find((x) => x.entry === agentEdit);
+  if (!a) { agentEdit = null; box.classList.add("hidden"); return; }
+  const kind = d.kinds.find((k) => k.id === a.kind);
+  const seg = (items, cur, attr) => `<div class="seg">${items.map((x) => `<button type="button" data-${attr}="${esc(x.value)}" class="${x.value === cur ? "on" : ""}">${esc(x.label)}</button>`).join("")}</div>`;
+  box.innerHTML = `
+    <h2 style="margin:0 0 4px;font-size:15px">${isNew ? "加一个智能体" : esc(a.name)}</h2>
+    ${isNew ? `<div class="cli-row"><div class="cli-k">类型</div><div>${seg(d.kinds.map((k) => ({ value: k.id, label: k.label })), a.kind, "kind")}
+      <div class="small muted" style="margin-top:6px">${esc(kind.hint)}</div></div></div>` : ""}
+    <div class="grid2" style="margin-top:8px">
+      <label class="f">名字<span class="hint">播报和设备上显示</span><input class="in" id="ag-name" maxlength="20" value="${esc(a.name)}" placeholder="${a.kind === "openai" ? "Hermes" : a.kind === "dify" ? "菜谱助手" : "我的扣子"}"></label>
+      <label class="f">称呼<span class="hint">逗号分隔，说「嗨 + 称呼」叫它；留空用名字</span><input class="in" id="ag-aliases" value="${esc((a.aliases || []).join("，"))}" placeholder="hermes，赫尔墨斯"></label>
+      ${a.kind !== "coze" ? `<label class="f full">接口地址<span class="hint">${a.kind === "openai" ? "Hermes：在它的 ~/.hermes/.env 里开 API_SERVER_ENABLED=true，默认 http://127.0.0.1:8642/v1；在别的电脑上要把 API_SERVER_HOST 设成 0.0.0.0" : "自己部署的 Dify 填它的 /v1 地址"}</span>
+        <input class="in mono" id="ag-url" value="${esc(a.base_url || kind.base_url)}"></label>` : ""}
+      ${a.kind === "openai" ? `<label class="f">模型<span class="hint">Hermes 不看这个，留空就行</span><input class="in mono" id="ag-model" value="${esc(a.model)}"></label>` : ""}
+      ${a.kind === "coze" ? `<label class="f">bot_id<span class="hint">智能体网址里 /bot/ 后面那串数字</span><input class="in mono" id="ag-bot" value="${esc(a.bot_id)}"></label>` : ""}
+      <label class="f ${a.kind === "openai" ? "" : "full"}">${a.kind === "coze" ? "个人令牌" : a.kind === "dify" ? "应用的 API Key" : "API Key"}<span class="hint">${a.kind === "openai" ? "Hermes 填 API_SERVER_KEY；不用就留空" : ""}</span>
+        <input class="in mono" id="ag-key" type="password" autocomplete="off" placeholder="${a.key_set ? `已设置 ${esc(a.key_hint || "")}，输入新值可替换` : a.kind === "openai" ? "不用就留空" : "未设置"}"></label>
+    </div>
+    ${a.kind === "dify" ? `<div class="cli-row" style="margin-top:8px"><div class="cli-k">Dify 类型</div><div>${seg(d.dify_modes, a.mode, "mode")}
+      <div class="small muted" style="margin-top:6px">工作流的输入变量要叫 query，输出变量要叫 answer。</div></div></div>` : ""}
+    ${a.kind === "openai" ? `<div class="cli-row" style="margin-top:8px"><div class="cli-k">慢了怎么办</div><div>${seg([{ value: "bg", label: "转后台，做完汇报" }, { value: "wait", label: "一直等着" }], a.background ? "bg" : "wait", "bg")}</div></div>` : ""}
+    <div class="actions"><span class="result muted" id="ag-result">${a.kind === "openai" ? "智能体自己有工具和记忆；小麦只把这台设备的对话发过去，念它的回答。" : ""}</span>
+      ${isNew ? "" : '<button class="btn danger" id="ag-del">删除</button><button class="btn" id="ag-test">测试</button>'}
+      <button class="btn" id="ag-cancel">取消</button><button class="btn primary" id="ag-save">保存</button></div>`;
+  const segVal = (attr) => (box.querySelector(`[data-${attr}].on`) || {}).dataset?.[attr];
+  box.querySelectorAll(".seg button").forEach((b) => (b.onclick = () => {
+    if (b.dataset.kind) { agentEdit = "new:" + b.dataset.kind; return renderAgentForm(box, d, root); }
+    b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+  }));
+  const out = (html) => ($("ag-result").innerHTML = html);
+  $("ag-cancel").onclick = () => { agentEdit = null; renderAgents(root); };
+  $("ag-save").onclick = (e) => busy(e.target, async () => {
+    const raw = $("ag-aliases").value.trim();
+    const body = { kind: a.kind, entry: isNew ? "" : a.entry, name: $("ag-name").value, api_key: $("ag-key").value.trim(),
+      aliases: raw ? raw.split(/[,，、\s]+/).filter(Boolean) : null };
+    if ($("ag-url")) body.base_url = $("ag-url").value.trim();
+    if ($("ag-model")) body.model = $("ag-model").value.trim();
+    if ($("ag-bot")) body.bot_id = $("ag-bot").value.trim();
+    if (a.kind === "dify") body.mode = segVal("mode");
+    if (a.kind === "openai") body.background = segVal("bg") !== "wait";
+    try { const r = await api("agents", body); agentEdit = r.entry; toast("已保存，说「嗨 + 称呼」就能叫它"); await renderAgents(root); }
+    catch (err) { out(`<span style="color:var(--err)">${esc(err.message)}</span>`); }
+  });
+  if ($("ag-test")) $("ag-test").onclick = (e) => busy(e.target, async () => {
+    out('<span class="muted">正在问它「你好」…（智能体可能要想一会儿，最多等 60 秒）</span>');
+    try { const r = await api("agents/test", { entry: a.entry });
+      out(r.ok ? `<span style="color:var(--ok)">✓ ${r.seconds} 秒：${esc(r.reply)}</span>` : `<span style="color:var(--err)">✗ ${esc(r.error)}</span>`); }
+    catch (err) { out(`<span style="color:var(--err)">${esc(err.message)}</span>`); }
+  });
+  if ($("ag-del")) $("ag-del").onclick = (e) => busy(e.target, async () => {
+    if (!confirm(`删掉「${a.name}」？它的称呼也一起删掉。`)) return;
+    try { await api("agents/delete", { entry: a.entry }); agentEdit = null; toast("已删除"); await renderAgents(root); }
+    catch (err) { out(`<span style="color:var(--err)">${esc(err.message)}</span>`); }
+  });
+}
+
 // ---------- Grok Bot ----------
 
 async function renderGrokBot(root) {
@@ -2041,6 +2176,7 @@ async function renderGrokBot(root) {
   // 还没从云端读过列表时，先列出已勾选的
   const list = bots || entries.map((e) => ({ id: e.bot_id, name: e.bot_name, preview: "", busy: false }));
   root.innerHTML = `
+    <p class="small" style="margin:0 0 6px"><a href="#agents">‹ 智能体</a></p>
     <div class="page-head"><div><h1>Grok Bot</h1><p class="sub">xAI 的云端 AI 同事。用 Cursor 账号登录后勾选 Bot，它的名字会自动成为称呼，对设备说“嗨 孙悟空，帮我……”就能派活，它的回复会念出来；长任务做完后在 Grok Bot App 里也能看到。</p></div>
       <span class="pill ${acc.logged_in ? "ok" : "warn"}">${acc.logged_in ? "已登录" : acc.needs_login ? "登录已失效" : "未登录"}</span></div>
     <div class="banner warn">走的是 Grok Bot 桌面 App 用的内部接口，不是官方公开的 API：App 升级后可能失效，使用频率请和手动聊天相当。凭证只保存在本机，不会显示在页面上。</div>
@@ -2550,6 +2686,9 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
 };
 let ui = store.get(UI_KEY, UI_DEFAULT);
+// 侧栏的「Grok Bot」改成了「智能体」（设计画布第 18 块）：存过的菜单顺序、隐藏项跟着换
+ui.nav = (ui.nav || []).map((p) => (p === "grokbot" ? "agents" : p));
+ui.hidden = (ui.hidden || []).map((p) => (p === "grokbot" ? "agents" : p));
 function applyUi() {
   const r = document.documentElement;
   if (ui.theme === "auto") delete r.dataset.theme; else r.dataset.theme = ui.theme;

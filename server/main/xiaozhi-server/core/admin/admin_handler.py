@@ -128,6 +128,10 @@ class AdminHandler:
                 web.get("/admin/api/llm", self.handle_llm),
                 web.post("/admin/api/llm/claude", self.handle_llm_claude),
                 web.post("/admin/api/llm/dsh", self.handle_llm_dsh),
+                web.get("/admin/api/agents", self.handle_agents),
+                web.post("/admin/api/agents", self.handle_agent_save),
+                web.post("/admin/api/agents/delete", self.handle_agent_delete),
+                web.post("/admin/api/agents/test", self.handle_agent_test),
                 web.post("/admin/api/llm/vendors/{vendor}", self.handle_llm_vendor),
                 web.post("/admin/api/llm/vendors/{vendor}/test", self.handle_llm_vendor_test),
                 web.post("/admin/api/llm/use", self.handle_llm_use),
@@ -662,6 +666,104 @@ class AdminHandler:
         self.logger.bind(tag=TAG).info(f"管理后台更新了 DSH 设置: {', '.join(changed) or '无变化'}")
         return self._json({"ok": True, "changed": changed, **await self._apply_if_selected("LLM", pages.DSH_ENTRY, changed)})
 
+    # ---------- [xiaozhi-hub] 智能体页（设计画布第 18 块） ----------
+
+    async def handle_agents(self, request: web.Request):
+        """一页列出所有能派活的：本机（DSH、Claude Code）、云端（Grok Bot）、自己加的（OpenAI 兼容、Dify、Coze）。"""
+        self._require_login(request)
+        merged = await self._blocking(self._merged)
+        llm = pages.describe_llm(merged)
+        calls = llm["callable"]
+        dsh_inst = await self._blocking(self._dsh_install, merged)
+        claude_inst = await self._blocking(self._claude_install, merged, False)
+        grok = self.grokbot.status()["account"]
+        return self._json({
+            "ok": True, "default": llm["selected"],
+            "local": [
+                {"id": "dsh", "name": "DSH", "sub": "DeepSeek Harness", "entry": pages.DSH_ENTRY,
+                 "state": "ready" if llm["dsh"]["exists"] and dsh_inst["installed"] else "missing" if not dsh_inst["installed"] else "setup",
+                 "version": dsh_inst.get("version", ""), "aliases": calls.get(pages.DSH_ENTRY, [])},
+                {"id": "claude", "name": "Claude Code", "sub": "Anthropic", "entry": pages.CLAUDE_CLI_ENTRY,
+                 "state": "ready" if claude_inst["installed"] and llm["claude"]["exists"] else "missing",
+                 "aliases": calls.get(pages.CLAUDE_CLI_ENTRY, [])},
+            ],
+            "cloud": {"bots": [{**b, "aliases": calls.get(b["entry"], [])} for b in llm["grok"]["bots"]],
+                      "logged_in": bool(grok.get("logged_in")), "needs_login": bool(grok.get("needs_login"))},
+            "custom": pages.custom_agents(merged),
+            "kinds": catalog.AGENT_KINDS, "dify_modes": catalog.DIFY_MODES,
+        })
+
+    async def handle_agent_save(self, request: web.Request):
+        self._require_login(request)
+        body = await self._read_json(request)
+        try:
+            merged = await self._blocking(self._merged)
+            entry = await self._blocking(pages.save_agent, body, merged, self.config_path)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        self.logger.bind(tag=TAG).info(f"管理后台保存了智能体 {entry}")
+        applied = await self._apply_if_selected("LLM", entry, ["saved"])
+        return self._json({"ok": True, "entry": entry, **applied})
+
+    async def handle_agent_delete(self, request: web.Request):
+        self._require_login(request)
+        body = await self._read_json(request)
+        try:
+            merged = await self._blocking(self._merged)
+            await self._blocking(pages.delete_agent, str(body.get("entry") or ""), merged, self.config_path)
+        except KeyError:
+            return self._error("没有这个智能体", 404)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        (self.config.get("LLM") or {}).pop(str(body.get("entry") or ""), None)
+        return self._json({"ok": True})
+
+    async def handle_agent_test(self, request: web.Request):
+        """{"entry"}：用保存的设置问一句「你好」，返回回答和用时（不记费用、不进聊天记录）。"""
+        self._require_login(request)
+        body = await self._read_json(request)
+        merged = await self._blocking(self._merged)
+        entry = str(body.get("entry") or "")
+        cfg = (merged.get("LLM") or {}).get(entry)
+        if not (entry.startswith(pages.AGENT_PREFIX) and isinstance(cfg, dict)):
+            return self._error("没有这个智能体", 404)
+        started = time.monotonic()
+        question = "你好，用一句话介绍一下你自己。"
+        try:
+            if cfg.get("type") == "agent_api":
+                from core.agent.api_agent_session import ApiAgentConfig, ApiAgentSession
+
+                s = ApiAgentSession(ApiAgentConfig(name=str(cfg.get("name") or entry), base_url=str(cfg.get("base_url") or ""),
+                                                   api_key=str(cfg.get("api_key") or ""), model=str(cfg.get("model") or "")))
+                await s.start()
+                parts, err = [], None
+                async def run_agent():
+                    nonlocal err
+                    async for ev in s.send(question):
+                        if hasattr(ev, "text"):
+                            parts.append(ev.text)
+                        elif hasattr(ev, "kind"):
+                            err = ev.detail or ev.kind.value
+                await asyncio.wait_for(run_agent(), 60)
+                if err:
+                    return self._json({"ok": False, "error": err[:300]})
+                text = "".join(parts).strip()
+            else:
+                from core.utils import llm as llm_factory
+
+                def run():
+                    inst = llm_factory.create_instance(cfg["type"], cfg)
+                    return "".join(t for t in inst.response("admin-test", [{"role": "user", "content": question}])
+                                   if isinstance(t, str))
+                text = (await asyncio.wait_for(self._blocking(run), 60)).strip()
+        except asyncio.TimeoutError:
+            return self._json({"ok": False, "error": "60 秒没回应"})
+        except Exception as e:  # noqa: BLE001 —— 各家的报错都原样告诉用户
+            return self._json({"ok": False, "error": f"{e.__class__.__name__}: {str(e)[:200]}"})
+        if not text:
+            return self._json({"ok": False, "error": "连上了，但它没有回答"})
+        return self._json({"ok": True, "reply": text[:300], "seconds": round(time.monotonic() - started, 1)})
+
     async def handle_llm(self, request: web.Request):
         self._require_login(request)
         merged = await self._blocking(self._merged)
@@ -843,6 +945,8 @@ class AdminHandler:
             options.insert(1 if install.get("installed") else 0,
                            {"kind": "dsh", "vendor": "dsh", "label": "DSH", "entry": pages.DSH_ENTRY,
                             "model": data["dsh"]["values"].get("model", "")})
+        options += [{"kind": "agent", "vendor": "agent", "label": a["name"], "entry": a["entry"], "model": "智能体"}
+                    for a in pages.custom_agents(merged) if a["ready"]]
         options += [{"kind": "grok", "vendor": "grok_bot", "label": b["bot_name"], "entry": b["entry"], "model": "Grok Bot"}
                     for b in data["grok"]["bots"] if llm_router.model_ready(merged, b["entry"])]
         selected = data["selected"]
@@ -877,6 +981,10 @@ class AdminHandler:
             name = pages.DSH_ENTRY
             if name not in (merged.get("LLM") or {}):
                 return self._error("还没在管理后台设置 DSH", 404)
+        elif kind == "agent":
+            name = str(body.get("entry") or "")
+            if name not in {a["entry"] for a in pages.custom_agents(merged) if a["ready"]}:
+                return self._error("没有这个智能体，请先在管理后台的「智能体」页加上", 404)
         elif kind == "cli":
             name = pages.CLAUDE_CLI_ENTRY
             if name not in (merged.get("LLM") or {}):

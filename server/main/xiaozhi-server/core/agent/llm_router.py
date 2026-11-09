@@ -125,7 +125,7 @@ def not_ready_reply(conn: "ConnectionHandler") -> Optional[str]:
 
 
 INTENT_MODES = ("nointent", "function_call")
-AGENT_TYPES = ("claude_cli", "grok_bot", "dsh_cli")  # 自己处理工具和对话的 Agent：不走 function_call
+AGENT_TYPES = ("claude_cli", "grok_bot", "dsh_cli", "agent_api", "dify", "coze")   # dify、coze 也不走插件  # 自己处理工具和对话的 Agent：不走 function_call
 
 
 def _entry_type(config: dict, section: str, name: Optional[str]) -> Optional[str]:
@@ -197,6 +197,8 @@ def model_label(name: str) -> str:
         return "Claude"
     if name == DSH_ENTRY:
         return "DSH"
+    if name.startswith("Agent_"):   # 智能体页加的：条目名 Agent_<名字>
+        return name[len("Agent_"):] or "智能体"
     if name.startswith(GROK_BOT_PREFIX):
         return name[len(GROK_BOT_PREFIX):] or "Grok Bot"
     vendor = catalog.VENDOR_BY_ENTRY.get(name)

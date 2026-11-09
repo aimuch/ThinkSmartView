@@ -28,7 +28,7 @@ TAG = __name__
 
 DEFAULT_MODELS = {"ClaudeCLI": ["claude", "cloud", "clod", "clot", "克劳德"]}
 # [xiaozhi-hub] DSH 第一次在后台保存时加进称呼表（识别常把 DSH 写成小写或带空格）；没设置 DSH 时不出现在呼名页
-DSH_ALIASES = ["dsh", "d s h", "deepseek 助手", "deep seek 助手"]
+DSH_ALIASES = ["dsh", "deepseek助手"]   # 称呼不能带空格（呼名页会拒）；识别出的空格在匹配时会去掉
 DEFAULT_REPLY = "我在"
 # 发缓存的音频前等一会儿：设备收到 tts start 后要先切到说话状态（会清空解码队列），切换完成前收到的音频会被丢掉。
 # 正常合成时中间有约 2 秒的合成时间，不会碰到；缓存的音频紧跟着就到，不等的话设备只显示文字、没有声音。

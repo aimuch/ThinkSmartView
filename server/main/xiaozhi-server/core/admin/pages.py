@@ -73,6 +73,8 @@ def llm_kind(merged: dict, name: str = None) -> str:
         return "grok"
     if config_store.entry_type(merged, "LLM", name) == "dsh_cli":
         return "dsh"
+    if str(name or "").startswith(AGENT_PREFIX):
+        return "agent"
     if name in catalog.VENDOR_BY_ENTRY and config_store.entry_type(merged, "LLM", name) == "openai":
         return "api"
     return "other"
@@ -204,6 +206,131 @@ def save_dsh(payload: dict, merged: dict, path: Path = None) -> list:
                 cn["models"] = models
             models[DSH_ENTRY] = CommentedSeq(list(call_names.DSH_ALIASES))
     return [k for k in changes if k != "type"]
+
+
+# ---------- [xiaozhi-hub] 智能体页（设计画布第 18 块） ----------
+
+AGENT_PREFIX = "Agent_"
+
+
+def custom_agents(merged: dict) -> list:
+    """后台「智能体」页自己加的：条目名 Agent_ 开头，类型是 agent_api / dify / coze。"""
+    from core.agent import call_names
+
+    aliases = {str(k): call_names._aliases(v) for k, v in ((merged.get("call_names") or {}).get("models") or {}).items()}
+    out = []
+    for name, e in (merged.get("LLM") or {}).items():
+        if not (isinstance(e, dict) and str(name).startswith(AGENT_PREFIX) and e.get("type") in catalog.AGENT_KIND_BY_TYPE):
+            continue
+        kind = catalog.AGENT_KIND_BY_TYPE[e["type"]]["id"]
+        secret = e.get("personal_access_token") if kind == "coze" else e.get("api_key")
+        item = {"entry": str(name), "name": str(e.get("name") or str(name)[len(AGENT_PREFIX):]), "kind": kind,
+                "base_url": str(e.get("base_url") or ""), "model": str(e.get("model") or ""),
+                "mode": str(e.get("mode") or "chat-messages"), "bot_id": str(e.get("bot_id") or ""),
+                "background": e.get("background", True) is not False,
+                "key_set": not config_store.is_placeholder(secret) and str(secret) != "none",
+                "key_hint": config_store.mask_key(secret) if not config_store.is_placeholder(secret) else "",
+                "aliases": aliases.get(str(name), [])}
+        item["ready"] = bool(item["base_url"]) if kind == "openai" else item["key_set"] and (kind != "coze" or bool(item["bot_id"]))
+        out.append(item)
+    return out
+
+
+def _agent_entry_name(name: str, taken) -> str:
+    base = AGENT_PREFIX + (GROK_NAME_BAD.sub("", name) or "agent")
+    entry, n = base, 2
+    while entry in taken:
+        entry, n = f"{base}_{n}", n + 1
+    return entry
+
+
+def save_agent(payload: dict, merged: dict, path: Path = None) -> str:
+    """建或改一个自己加的智能体，返回条目名。Key 留空表示不改。称呼同时写进呼名表。"""
+    from urllib.parse import urlparse
+
+    from core.agent import call_names
+
+    kind = catalog.AGENT_KIND_BY_ID.get(str(payload.get("kind") or ""))
+    if kind is None:
+        raise ValueError("不支持这种智能体")
+    name = re.sub(r"\s+", " ", str(payload.get("name") or "")).strip()
+    if not 1 <= len(name) <= 20:
+        raise ValueError("名字要 1 到 20 个字")
+    llm = merged.get("LLM") or {}
+    entry = str(payload.get("entry") or "")
+    if entry:
+        old = llm.get(entry)
+        if not (entry.startswith(AGENT_PREFIX) and isinstance(old, dict)):
+            raise ValueError("没有这个智能体")
+        if old.get("type") != kind["type"]:
+            raise ValueError("类型不能改，删掉重建一个")
+    else:
+        old, entry = {}, _agent_entry_name(name, llm)
+    secret_key = "personal_access_token" if kind["id"] == "coze" else "api_key"
+    key = str(payload.get("api_key") or "").strip()
+    if any(c.isspace() for c in key):
+        raise ValueError("Key 里不能有空格或换行")
+    fields = {"type": kind["type"], "name": name, "entry": entry}
+    if kind["id"] in ("openai", "dify"):
+        base_url = str(payload.get("base_url") or kind["base_url"]).strip().rstrip("/")
+        if urlparse(base_url).scheme not in ("http", "https") or not urlparse(base_url).netloc:
+            raise ValueError("接口地址要以 http:// 或 https:// 开头")
+        fields["base_url"] = base_url
+    if kind["id"] == "openai":
+        model = str(payload.get("model") or "").strip()
+        if any(c.isspace() for c in model):
+            raise ValueError("模型名里不能有空格")
+        fields["model"] = model
+        fields["background"] = payload.get("background", True) is not False
+    if kind["id"] == "dify":
+        mode = str(payload.get("mode") or "chat-messages")
+        if mode not in {m["value"] for m in catalog.DIFY_MODES}:
+            raise ValueError("Dify 只支持对话应用、工作流、文本生成")
+        fields["mode"] = mode
+    if kind["id"] == "coze":
+        bot_id = str(payload.get("bot_id") or old.get("bot_id") or "").strip()
+        if not bot_id.isdigit():
+            raise ValueError("Coze 的 bot_id 是一串数字，在智能体的网址里能找到")
+        fields["bot_id"] = bot_id
+        fields["user_id"] = str(old.get("user_id") or "xiaozhi")
+    if key:
+        fields[secret_key] = key
+    elif kind["id"] != "openai" and config_store.is_placeholder(old.get(secret_key)):
+        raise ValueError("请填写 Key" if kind["id"] == "dify" else "请填写 Coze 的个人令牌")
+    raw_aliases = payload.get("aliases")
+    if raw_aliases is None:
+        raw_aliases = [name.lower()]
+    effective = (merged.get("call_names") or {}).get("models") or call_names.DEFAULT_MODELS
+    taken = {}
+    for k, v in effective.items():
+        if str(k) != entry:
+            for a in call_names._aliases(v):
+                taken[a] = str(k)
+    aliases = _clean_aliases(list(raw_aliases), name, taken)
+    with config_store.edit_custom(path) as data:
+        target = data.setdefault("LLM", CommentedMap()).setdefault(entry, CommentedMap())
+        for k, v in fields.items():
+            target[k] = v
+        cn = data.setdefault("call_names", CommentedMap())
+        models = cn.get("models")
+        if not isinstance(models, CommentedMap):
+            models = CommentedMap((k, CommentedSeq(list(v))) for k, v in effective.items())
+            cn["models"] = models
+        models[entry] = CommentedSeq(aliases)
+    return entry
+
+
+def delete_agent(entry: str, merged: dict, path: Path = None) -> None:
+    llm = merged.get("LLM") or {}
+    if not (entry.startswith(AGENT_PREFIX) and isinstance(llm.get(entry), dict)):
+        raise KeyError(entry)
+    if _selected(merged, "LLM") == entry:
+        raise ValueError("它是现在的默认模型，先在「大模型」页换一个默认再删")
+    with config_store.edit_custom(path) as data:
+        (data.get("LLM") or {}).pop(entry, None)
+        models = (data.get("call_names") or {}).get("models")
+        if isinstance(models, dict):
+            models.pop(entry, None)
 
 
 # ---------- 大模型：Grok Bot ----------
@@ -454,7 +581,7 @@ def vendor_test_config(vendor_id: str, payload: dict, merged: dict) -> dict:
 def desired_intent(merged: dict, llm_name: str, path: Path = None):
     """切换大模型后意图识别应该是什么：Claude CLI 只能用 nointent；
     API 模型恢复用户上次在 API 模式下的选择，没有选过时用 function_call。"""
-    if config_store.entry_type(merged, "LLM", llm_name) in ("claude_cli", "dsh_cli"):
+    if config_store.entry_type(merged, "LLM", llm_name) in ("claude_cli", "dsh_cli", "agent_api", "dify", "coze"):
         return "nointent"
     pref = (config_store.load_custom(path).get("admin") or {}).get("api_intent")
     if pref in catalog.INTENT_MODES:
@@ -1098,6 +1225,9 @@ def call_targets(merged: dict) -> list:
     if config_store.entry_type(merged, "LLM", DSH_ENTRY) == "dsh_cli":
         result.append({"entry": DSH_ENTRY, "label": "DSH（DeepSeek Harness）",
                        "defaults": list(call_names.DSH_ALIASES)})
+    for a in custom_agents(merged):
+        if a["ready"]:
+            result.append({"entry": a["entry"], "label": f"{a['name']}（智能体）", "defaults": [a["name"].lower()]})
     for g in grok_entries(merged):
         if g["bot_id"]:
             result.append({"entry": g["entry"], "label": f"{g['bot_name']}（Grok Bot）",

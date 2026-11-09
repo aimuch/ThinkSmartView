@@ -99,6 +99,18 @@ DSH_PERMISSIONS = [
     {"value": "danger-full-access", "label": "完全访问", "desc": "不限制，能动整台电脑，慎用"},
 ]
 
+# ---------- [xiaozhi-hub] 智能体页（设计画布第 18 块）：自己加的智能体有三种 ----------
+AGENT_KINDS = [
+    {"id": "openai", "type": "agent_api", "label": "OpenAI 兼容", "hint": "Hermes Agent 等自己带工具和记忆的智能体",
+     "base_url": "http://127.0.0.1:8642/v1"},
+    {"id": "dify", "type": "dify", "label": "Dify", "hint": "Dify 的对话应用或工作流（流水线）", "base_url": "https://api.dify.ai/v1"},
+    {"id": "coze", "type": "coze", "label": "Coze", "hint": "扣子（coze.cn）上发布的智能体", "base_url": ""},
+]
+AGENT_KIND_BY_ID = {k["id"]: k for k in AGENT_KINDS}
+AGENT_KIND_BY_TYPE = {k["type"]: k for k in AGENT_KINDS}
+DIFY_MODES = [{"value": "chat-messages", "label": "对话应用"}, {"value": "workflows/run", "label": "工作流"},
+              {"value": "completion-messages", "label": "文本生成"}]
+
 # ---------- 大模型：Claude Code CLI ----------
 CLAUDE_MODELS = [
     {"value": "haiku", "label": "Haiku", "hint": "最快，适合语音"},

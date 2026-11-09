@@ -63,12 +63,15 @@ def prompt_phrases(config: dict) -> list:
     from core.providers.llm.grok_bot.grok_bot import DEFAULT_FILLER
     from core.utils.textUtils import get_string_no_punctuation_or_emoji
 
-    defaults = {"claude_cli": "好的，我看一下", "grok_bot": DEFAULT_FILLER, "dsh_cli": "好的，我想想"}
+    defaults = {"claude_cli": "好的，我看一下", "grok_bot": DEFAULT_FILLER, "dsh_cli": "好的，我想想", "agent_api": ""}
     phrases = []
     for entry in (config.get("LLM") or {}).values():
         if not isinstance(entry, dict) or entry.get("type") not in defaults:
             continue
-        for text in (entry.get("first_reply_filler", defaults[entry["type"]]),
+        filler = entry.get("first_reply_filler", defaults[entry["type"]])
+        if entry["type"] == "agent_api" and not entry.get("first_reply_filler"):
+            filler = f"交给{entry.get('name') or '智能体'}了"   # 和 agent_api provider 的默认填充语一致
+        for text in (filler,
                      entry.get("progress_reply") or DEFAULT_PROGRESS_REPLY):
             text = get_string_no_punctuation_or_emoji(single_sentence(text or ""))
             if text and text not in phrases:
