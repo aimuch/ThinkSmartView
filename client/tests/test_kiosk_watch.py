@@ -50,3 +50,9 @@ def test_no_kiosk_no_action():
     w, clock, events, killed = make(pids=())
     run_until(w, clock, 1000)
     assert killed == []
+
+
+def test_reopen_page_on_start():
+    killed = []
+    assert kw.reopen_page(find=lambda: [7, 8], kill=lambda p, s: killed.append(p)) == [7, 8] and killed == [7, 8]
+    assert kw.reopen_page(find=lambda: [], kill=lambda p, s: killed.append(p)) == [] and killed == [7, 8]
