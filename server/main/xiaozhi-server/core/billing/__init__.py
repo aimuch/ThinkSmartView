@@ -20,7 +20,7 @@ import time
 
 from config.logger import setup_logging
 
-from . import pricing
+from . import price_sync, pricing  # noqa: F401  price_sync 给后台的单价同步用
 from .store import UsageDB
 
 TAG = __name__
@@ -105,8 +105,10 @@ def unbilled():
         _ctx.skip = old
 
 
-def record(model, usage, session_id='', purpose=None, entry=None, device=None, estimated=False):
-    """usage: {'prompt', 'cache_hit', 'completion'} tokens. Never raises (billing must not break a reply)."""
+def record(model, usage, session_id='', purpose=None, entry=None, device=None, estimated=False,
+           first_ms=None, total_ms=None, ok=True, error=None):
+    """usage: {'prompt', 'cache_hit', 'completion'} tokens. Never raises (billing must not break a reply).
+    [xiaozhi-hub] first_ms / total_ms：首字和总耗时（毫秒）；ok=False、error：这次调用失败了（费用页的失败率）。"""
     if getattr(_ctx, 'skip', False):
         return
     try:
@@ -124,13 +126,21 @@ def record(model, usage, session_id='', purpose=None, entry=None, device=None, e
                   'entry': entry or who.get('entry'), 'model': model, 'purpose': purpose or who.get('purpose') or 'chat',
                   'prompt_tokens': int(usage.get('prompt') or 0), 'cache_hit_tokens': int(usage.get('cache_hit') or 0),
                   'completion_tokens': int(usage.get('completion') or 0), 'cost': money, 'currency': currency,
-                  'tier': tier, 'priced': 1 if rule else 0, 'estimated': 1 if estimated else 0})
+                  'tier': tier, 'priced': 1 if rule else 0, 'estimated': 1 if estimated else 0,
+                  'first_ms': int(first_ms) if first_ms is not None else None,
+                  'total_ms': int(total_ms) if total_ms is not None else None,
+                  'ok': 1 if ok else 0, 'error': (str(error)[:200] if error else None)})
         logger.bind(tag=TAG).info(
             f"用量 {model} 输入 {usage.get('prompt')}（缓存命中 {usage.get('cache_hit') or 0}）输出 {usage.get('completion')}"
             + (f" ≈ {pricing.CURRENCIES.get(currency, '')}{money:.4f}（{tier}）" if rule else '（没有单价）')
             + ('，估算' if estimated else ''))
     except Exception as e:
         logger.bind(tag=TAG).warning(f"记录用量失败: {e}")
+
+
+def record_failure(model, error, session_id='', total_ms=None):
+    """[xiaozhi-hub] 一次失败的调用（连不上、报错）：不花钱，记下来算失败率。"""
+    record(model, {}, session_id, total_ms=total_ms, ok=False, error=error)
 
 
 def record_cost(model, money, currency='USD', device=None, entry=None, purpose='chat'):

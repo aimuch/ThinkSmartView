@@ -1,5 +1,6 @@
 import socket
 import threading
+import time
 
 import httpx
 import openai
@@ -133,11 +134,24 @@ class LLMProvider(LLMProviderBase):
                 logger.bind(tag=TAG).info(f"{self.base_url} 不支持 stream_options，之后不再带（用量改为估算）")
         return self.client.chat.completions.create(**request_params)
 
-    def _bill(self, session_id, dialogue, usage, text):
+    def _bill(self, session_id, dialogue, usage, text, t0=None, first=None):
+        # [xiaozhi-hub] 首字、总耗时一起记（费用页的延迟）
+        now = time.monotonic()
+        times = {"first_ms": (first - t0) * 1000 if t0 and first else None, "total_ms": (now - t0) * 1000 if t0 else None}
         if usage is not None:
-            billing.record(self.model_name, billing.usage_of(usage), session_id)
+            billing.record(self.model_name, billing.usage_of(usage), session_id, **times)
         else:   # 被打断或接口不给用量：按字数估算
-            billing.record(self.model_name, billing.estimate(dialogue, text), session_id, estimated=True)
+            billing.record(self.model_name, billing.estimate(dialogue, text), session_id, estimated=True, **times)
+
+    def _create_billed(self, session_id, request_params):
+        """[xiaozhi-hub] 发请求；连不上、报错时记一条失败（不花钱），再照常抛出。返回 (流, 开始时间)。"""
+        t0 = time.monotonic()
+        try:
+            return self._create(request_params), t0
+        except Exception as e:
+            billing.record_failure(self.model_name, f"{type(e).__name__}: {e}", session_id,
+                                   total_ms=(time.monotonic() - t0) * 1000)
+            raise
 
     @staticmethod
     def normalize_dialogue(dialogue):
@@ -184,7 +198,8 @@ class LLMProvider(LLMProviderBase):
         # 禁用思考模式
         self._apply_thinking_disabled(request_params)
 
-        responses = self._create(request_params)
+        responses, t0 = self._create_billed(session_id, request_params)
+        first = None
         self._track(session_id, responses)
 
         is_active = True
@@ -192,6 +207,8 @@ class LLMProvider(LLMProviderBase):
         try:
             for chunk in responses:
                 usage = _chunk_usage(chunk) or usage
+                if first is None and getattr(chunk, "choices", None):
+                    first = time.monotonic()   # [xiaozhi-hub] 首字耗时
                 try:
                     delta = chunk.choices[0].delta if getattr(chunk, "choices", None) else None
                     content = getattr(delta, "content", "") if delta else ""
@@ -210,7 +227,7 @@ class LLMProvider(LLMProviderBase):
         finally:
             self._track(session_id, responses, False)
             responses.close()
-            self._bill(session_id, dialogue, usage, "".join(out))
+            self._bill(session_id, dialogue, usage, "".join(out), t0, first)
 
     def response_with_functions(self, session_id, dialogue, functions=None, **kwargs):
         dialogue = self.normalize_dialogue(dialogue)
@@ -236,12 +253,15 @@ class LLMProvider(LLMProviderBase):
         # 禁用思考模式
         self._apply_thinking_disabled(request_params)
 
-        stream = self._create(request_params)
+        stream, t0 = self._create_billed(session_id, request_params)
+        first = None
         self._track(session_id, stream)
 
         usage, out = None, []
         try:
             for chunk in stream:
+                if first is None and getattr(chunk, "choices", None):
+                    first = time.monotonic()   # [xiaozhi-hub] 首字耗时
                 usage = _chunk_usage(chunk) or usage
                 if getattr(chunk, "choices", None):
                     delta = chunk.choices[0].delta
@@ -253,4 +273,4 @@ class LLMProvider(LLMProviderBase):
         finally:
             self._track(session_id, stream, False)
             stream.close()
-            self._bill(session_id, dialogue, usage, "".join(out))
+            self._bill(session_id, dialogue, usage, "".join(out), t0, first)

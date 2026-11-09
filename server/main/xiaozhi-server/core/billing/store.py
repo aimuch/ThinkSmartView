@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS usage (
   estimated INTEGER DEFAULT 0 -- 1: the stream was cut before its usage arrived; tokens estimated
 );
 CREATE INDEX IF NOT EXISTS usage_day ON usage(day);
+CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts);
 CREATE INDEX IF NOT EXISTS usage_month ON usage(month);
 '''
 
@@ -42,6 +43,11 @@ class UsageDB:
         self._c.execute('PRAGMA journal_mode=WAL')
         self._c.execute('PRAGMA synchronous=NORMAL')
         self._c.executescript(SCHEMA)
+        # [xiaozhi-hub] 2026-11-09 加的列（设计画布第 20 块）：首字和总耗时、成没成功。老库补上，旧记录是空的
+        have = {r[1] for r in self._c.execute('PRAGMA table_info(usage)').fetchall()}
+        for col, decl in (('first_ms', 'INTEGER'), ('total_ms', 'INTEGER'), ('ok', 'INTEGER DEFAULT 1'), ('error', 'TEXT')):
+            if col not in have:
+                self._c.execute(f'ALTER TABLE usage ADD COLUMN {col} {decl}')
 
     def _q(self, sql, args=()):
         with self._lock:
@@ -77,6 +83,17 @@ class UsageDB:
         return [{'key': k, 'currency': cur, 'requests': n, 'prompt': p or 0, 'cache_hit': h or 0,
                  'completion': c or 0, 'cost': round(m or 0, 6), 'unpriced': not mp, 'estimated': bool(me)}
                 for k, cur, n, p, h, c, m, mp, me in self._q(sql, (*args, limit))]
+
+    def rows(self, start_ts, end_ts):
+        """[xiaozhi-hub] 费用页的分析：这段时间里的每一条（家用量小，汇总在 Python 里做）。"""
+        cols = ('ts', 'device', 'entry', 'model', 'purpose', 'prompt_tokens', 'cache_hit_tokens', 'completion_tokens',
+                'cost', 'currency', 'priced', 'first_ms', 'total_ms', 'ok', 'error')
+        return [dict(zip(cols, r)) for r in self._q(f'SELECT {", ".join(cols)} FROM usage WHERE ts >= ? AND ts < ? ORDER BY ts',
+                                                     (start_ts, end_ts))]
+
+    def models_with_counts(self, since_ts):
+        return {m: (n, e) for m, n, e in self._q('SELECT model, COUNT(*), MAX(entry) FROM usage WHERE ts >= ? AND model IS NOT NULL '
+                                                'GROUP BY model', (since_ts,))}
 
     def unpriced_models(self):
         return [m for (m,) in self._q('SELECT DISTINCT model FROM usage WHERE priced = 0 AND model IS NOT NULL')]

@@ -563,6 +563,33 @@
   .dv-sec textarea.in { min-height: 96px; resize: vertical; font-size: 13px; line-height: 1.6; }
   .dv-sec .chips { margin-top: 6px; }
   .dv-sec .chip { cursor: pointer; }
+
+  /* ---------- [xiaozhi-hub] 费用分析（设计画布第 20 块，参考 CPA Manager Plus） ---------- */
+  .c-tabs { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); width: max-content; margin-bottom: 12px; }
+  .c-tabs button { border: 0; background: none; color: var(--muted); padding: 6px 14px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 13px; }
+  .c-tabs button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .c-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .c-bar .seg { margin: 0; } .c-bar .seg button { padding: 4px 11px; font-size: 12px; }
+  .c-bar select.in, .c-bar input.in { margin: 0; width: auto; padding: 5px 8px; font-size: 12px; }
+  .c-bar .cmp { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .c-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+  .c-kpis .u-stat b { font-size: 22px; }
+  .c-up { color: var(--err); } .c-down { color: var(--ok); } .c-flat { color: var(--muted); }
+  .c-series { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .c-series button { border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 7px; padding: 2px 9px; font-size: 11px; cursor: pointer; display: flex; gap: 5px; align-items: center; }
+  .c-series button i { width: 8px; height: 8px; border-radius: 2px; }
+  .c-series button.on { color: var(--text); border-color: var(--accent-line); }
+  .c-chart { width: 100%; height: 210px; display: block; }
+  .c-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .c-two { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; }
+  .c-share { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; width: 90px; } .c-share i { display: block; height: 100%; background: var(--accent); }
+  .c-split { display: flex; height: 22px; border-radius: 6px; overflow: hidden; margin: 6px 0 10px; background: var(--line); }
+  .c-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+  .c-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .c-heat { display: grid; grid-template-columns: 40px repeat(24, minmax(0, 1fr)); gap: 3px; font-size: 11px; color: var(--muted); align-items: center; }
+  .c-heat i { height: 22px; border-radius: 3px; background: var(--accent); display: block; }
+  .u-table tr[data-rank] { cursor: pointer; } .u-table tr[data-rank]:hover td { background: var(--soft); }
+  @media (max-width: 900px) { .c-kpis { grid-template-columns: 1fr 1fr; } .c-two { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -2402,7 +2429,133 @@ async function renderMemory(root) {
 }
 
 // [xiaozhi-hub] 费用：core/billing（data/usage.db）
+
+// ---------- [xiaozhi-hub] 费用（设计画布第 20 块，参考 seakee/CPA-Manager-Plus 的用量分析，MIT） ----------
+let costTab = "overview", costPending = {}, costRank = "model", costHeatBy = "requests";
+const costQ = { range: "today", bucket: "auto", model: "", device: "", purpose: "", start: "", end: "" };
+const costSeries = new Set(["requests", "cost"]);
+const SERIES = [["requests", "调用次数", "#5b8cff"], ["input", "输入（没命中）", "#38c9b4"], ["cache_hit", "缓存命中", "#3ecf74"],
+  ["output", "输出", "#9b8cff"], ["cost", "费用", "#f59b3c"], ["failures", "失败", "#f2555a"]];
+const PURPOSE_LABEL = { chat: "对话", summary: "记忆总结", intent: "意图识别", search: "联网搜索", vision: "看图" };
+const RANGES = [["24h", "24 小时"], ["today", "今天"], ["yesterday", "昨天"], ["7d", "7 天"], ["30d", "30 天"], ["month", "本月"], ["custom", "自定义"]];
+function costHead() {
+  return `<div class="page-head"><div><h1>费用</h1><p class="sub">每次请求大模型记一条（data/usage.db）：token、费用、首字和总耗时、成没成功。费用按请求那一刻的单价估算，以各家账单为准。</p></div></div>
+    <div class="c-tabs">${[["overview", "总览"], ["rank", "排行"], ["heat", "热力图"], ["prices", "单价和额度"]].map(([k, t]) =>
+      `<button data-ctab="${k}" class="${costTab === k ? "on" : ""}">${t}</button>`).join("")}</div>`;
+}
+function bindCostTabs(root) {
+  root.querySelectorAll("[data-ctab]").forEach((b) => (b.onclick = () => {
+    if (b.dataset.ctab === costTab) return;
+    if (page.dirty && page.dirty() && !confirm("单价和额度有没保存的修改，确定切换吗？")) return;
+    costTab = b.dataset.ctab; page.dirty = null; openPage("cost", true);
+  }));
+}
 async function renderCost(root) {
+  if (costTab === "prices") { await renderCostPrices(root); bindCostTabs(root); return; }
+  const qs = new URLSearchParams(Object.entries(costQ).filter(([, v]) => v)).toString();
+  const d = await api("billing/analytics?" + qs);
+  if (d.pending && Object.keys(d.pending).length) costPending = d.pending;
+  const sym = (c) => (d.currencies || {})[c] || (c ? c + " " : "");
+  const cur = d.currency, t = d.totals, pv = d.previous;
+  const num = (n) => (n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n || 0));
+  const money = (v, c = cur) => `${sym(c)}${v < 0.01 && v > 0 ? v.toFixed(4) : (+v || 0).toFixed(2)}`;
+  const otherMoney = (m) => Object.entries(m || {}).filter(([c, v]) => c !== cur && v > 0).map(([c, v]) => " + " + money(v, c)).join("");
+  const ms = (v) => (v == null ? "—" : v >= 1000 ? (v / 1000).toFixed(1) + "s" : Math.round(v) + "ms");
+  const change = (a, b, goodDown = true) => {   // 花得多是坏事：涨红跌绿
+    if (!b) return a ? '<em class="c-flat">上一段没有</em>' : '<em class="c-flat">—</em>';
+    const r = (a - b) / b * 100, up = r > 0.5, dn = r < -0.5;
+    return `<em class="${up ? (goodDown ? "c-up" : "c-down") : dn ? (goodDown ? "c-down" : "c-up") : "c-flat"}">${up ? "▲" : dn ? "▼" : "＝"} ${Math.abs(r).toFixed(0)}%</em>`;
+  };
+  const o = d.options;
+  const sel = (k, items, all) => `<select class="in" data-cq="${k}"><option value="">${all}</option>${items.map(([v, label]) =>
+    `<option value="${esc(v)}" ${costQ[k] === v ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>`;
+  const bar = `<div class="c-bar">
+      <div class="seg">${RANGES.map(([k, l]) => `<button type="button" data-crange="${k}" class="${costQ.range === k ? "on" : ""}">${l}</button>`).join("")}</div>
+      ${costQ.range === "custom" ? `<input class="in" type="date" data-cq="start" value="${esc(costQ.start)}"> 到 <input class="in" type="date" data-cq="end" value="${esc(costQ.end)}">` : ""}
+      <div class="seg">${[["auto", "自动"], ["hour", "按小时"], ["day", "按天"]].map(([k, l]) => `<button type="button" data-cbucket="${k}" class="${costQ.bucket === k ? "on" : ""}">${l}</button>`).join("")}</div>
+      ${sel("model", o.models.map((m) => [m, m]), "全部模型")}
+      ${sel("device", o.devices.map((x) => [x.id, x.name || x.id]), "全部设备")}
+      ${sel("purpose", o.purposes.map((x) => [x, PURPOSE_LABEL[x] || x]), "全部用途")}
+      <span class="cmp">${esc(d.compare)}</span></div>`;
+  let body = "";
+  if (costTab === "overview") {
+    const failRate = t.requests ? (t.failures / t.requests * 100).toFixed(1) + "%" : "0%";
+    const cacheDiff = t.cache_rate != null && pv.cache_rate != null ? Math.round((t.cache_rate - pv.cache_rate) * 100) : null;
+    const kpis = `<div class="c-kpis">
+      <div class="card u-stat"><small>费用（${esc(cur)}）</small><b>${money(t.main_cost)}</b>${change(t.main_cost, pv.main_cost)}${otherMoney(t.cost) ? `<small>${esc(otherMoney(t.cost).slice(3))}</small>` : ""}</div>
+      <div class="card u-stat"><small>调用次数</small><b>${t.requests}</b>${change(t.requests, pv.requests)}</div>
+      <div class="card u-stat"><small>token</small><b>${num(t.tokens)}</b>${change(t.tokens, pv.tokens)}</div>
+      <div class="card u-stat"><small>缓存命中率</small><b>${t.cache_rate == null ? "—" : Math.round(t.cache_rate * 100) + "%"}</b>
+        <em class="${cacheDiff > 0 ? "c-down" : cacheDiff < 0 ? "c-up" : "c-flat"}">${cacheDiff == null ? "—" : (cacheDiff >= 0 ? "▲ " : "▼ ") + Math.abs(cacheDiff) + " 个点"}</em></div>
+      <div class="card u-stat"><small>首字耗时 P95</small><b>${ms(t.first_p95)}</b><em class="c-flat">平均 ${ms(t.first_avg)}</em></div>
+      <div class="card u-stat"><small>失败</small><b>${t.failures}</b><em class="${t.failures ? "c-up" : "c-flat"}">${failRate}${t.fail_reasons.length ? " · " + esc(t.fail_reasons.join("、")) : ""}</em></div></div>`;
+    const W = 1000, H = 200, n = d.series.length;
+    const x = (i) => (n <= 1 ? W / 2 : (i / (n - 1)) * W);
+    const lines = SERIES.filter(([k]) => costSeries.has(k)).map(([k, , color]) => {
+      const vals = d.series.map((b) => b[k]), mx = Math.max(...vals, 0);
+      if (!mx) return "";
+      const pts = vals.map((v, i) => `${x(i).toFixed(1)},${(H - 8 - (v / mx) * (H - 24)).toFixed(1)}`).join(" ");
+      return `${k === "requests" ? `<polygon points="0,${H} ${pts} ${W},${H}" fill="${color}22"/>` : ""}<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+    }).join("");
+    const hits = d.series.map((b, i) => `<rect x="${(x(i) - W / Math.max(n, 1) / 2).toFixed(1)}" y="0" width="${(W / Math.max(n, 1)).toFixed(1)}" height="${H}" fill="transparent">
+      <title>${esc(b.label)}：${b.requests} 次 · 输入 ${num(b.input)} · 命中 ${num(b.cache_hit)} · 输出 ${num(b.output)} · ${money(b.cost)}${b.failures ? " · 失败 " + b.failures : ""}</title></rect>`).join("");
+    const axis = n ? [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, a) => a.indexOf(v) === i).map((i) => `<span>${esc(d.series[i].label)}</span>`).join("") : "";
+    const models = d.groups.model.slice(0, 6), mmax = Math.max(1e-9, ...models.map((m) => m.main_cost));
+    const sp = d.split, spSum = sp.input + sp.cache + sp.output;
+    const pct = (v) => (spSum ? (v / spSum * 100).toFixed(1) : 0);
+    body = `${kpis}
+      <div class="card u-panel"><div class="h">趋势<span>每条线按自己的最大值缩放；鼠标停在一格上看数字</span>
+        <div class="c-series">${SERIES.map(([k, l, c]) => `<button type="button" data-cser="${k}" class="${costSeries.has(k) ? "on" : ""}"><i style="background:${c}"></i>${l}</button>`).join("")}</div></div>
+        <div style="padding:10px 16px 12px">${n ? `<svg class="c-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          <g stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"><line x1="0" y1="${H / 3}" x2="${W}" y2="${H / 3}"/><line x1="0" y1="${(2 * H) / 3}" x2="${W}" y2="${(2 * H) / 3}"/></g>
+          ${lines}${hits}</svg><div class="c-axis">${axis}</div>` : '<p class="muted small">这段时间没有记录</p>'}</div></div>
+      <div class="c-two">
+        <div class="card u-panel"><div class="h">花在哪个模型上</div>${models.length ? `<table class="u-table"><tr><th>模型</th><th class="n">调用</th><th class="n">token</th><th class="n">首字 P95</th><th class="n">费用</th><th>占比</th></tr>
+          ${models.map((m) => `<tr data-rank="model" data-key="${esc(m.key)}"><td>${esc(m.label || "—")}${m.unpriced ? ' <span class="pill warn">没有单价</span>' : ""}</td><td class="n">${m.requests}</td><td class="n">${num(m.tokens)}</td>
+            <td class="n">${ms(m.first_p95)}</td><td class="n">${money(m.main_cost)}${otherMoney(m.cost)}</td><td><div class="c-share"><i style="width:${(m.main_cost / mmax * 100).toFixed(0)}%"></i></div></td></tr>`).join("")}</table>` : '<p class="panel muted small">没有记录</p>'}</div>
+        <div class="card u-panel"><div class="h">token 构成<span>${esc(cur)} 的费用</span></div><div style="padding:12px 16px">
+          <div class="c-split"><i style="width:${pct(sp.input)}%;background:#38c9b4"></i><i style="width:${pct(sp.cache)}%;background:#3ecf74"></i><i style="width:${pct(sp.output)}%;background:#9b8cff"></i></div>
+          <div class="c-legend"><span><i style="background:#38c9b4"></i>输入（没命中）${num(t.prompt - t.cache_hit)} · ${money(sp.input)}</span>
+            <span><i style="background:#3ecf74"></i>缓存命中 ${num(t.cache_hit)} · ${money(sp.cache)}</span><span><i style="background:#9b8cff"></i>输出 ${num(t.completion)} · ${money(sp.output)}</span></div>
+          <p class="muted small" style="margin:10px 0 0">${sp.saved > 0 ? `命中缓存省了约 ${money(sp.saved)}（按没命中的价算）。` : ""}首字耗时和失败从 2026-11-09 起才记，之前的记录这两项是空的。</p></div></div></div>`;
+  } else if (costTab === "rank") {
+    const dims = [["model", "模型"], ["device", "设备"], ["purpose", "用途"], ["entry", "模型条目"]];
+    const rows = d.groups[costRank] || [], rmax = Math.max(1e-9, ...rows.map((r) => r.main_cost));
+    const label = (r) => costRank === "purpose" ? PURPOSE_LABEL[r.key] || r.key || "—" : costRank === "device" && !r.key ? "网关自己（记忆总结等）" : r.label || r.key || "—";
+    body = `<div class="card u-panel" style="margin-top:0!important"><div class="h"><div class="seg" style="margin:0">${dims.map(([k, l]) => `<button type="button" data-crank="${k}" class="${costRank === k ? "on" : ""}">${l}</button>`).join("")}</div>
+      <span>点一行，总览就只看这一项</span></div>
+      ${rows.length ? `<table class="u-table"><tr><th>${dims.find(([k]) => k === costRank)[1]}</th><th class="n">调用</th><th class="n">输入</th><th class="n">缓存命中</th><th class="n">输出</th><th class="n">首字 P95</th><th class="n">失败</th><th class="n">费用</th><th>占比</th></tr>
+        ${rows.map((r) => `<tr ${["model", "device", "purpose"].includes(costRank) ? `data-rank="${costRank}" data-key="${esc(r.key)}"` : ""}><td>${esc(label(r))}${costRank === "device" && r.key && r.label !== r.key ? `<div class="mono muted" style="font-size:11px">${esc(r.key)}</div>` : ""}${r.unpriced ? ' <span class="pill warn">没有单价</span>' : ""}</td>
+          <td class="n">${r.requests}</td><td class="n">${num(r.prompt - r.cache_hit)}</td><td class="n">${num(r.cache_hit)}</td><td class="n">${num(r.completion)}</td><td class="n">${ms(r.first_p95)}</td>
+          <td class="n">${r.failures || ""}</td><td class="n">${money(r.main_cost)}${otherMoney(r.cost)}</td><td><div class="c-share"><i style="width:${(r.main_cost / rmax * 100).toFixed(0)}%"></i></div></td></tr>`).join("")}</table>`
+        : '<p class="panel muted small">这段时间没有记录</p>'}</div>`;
+  } else {
+    const days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+    const vals = d.heat.flat().map((c) => c[costHeatBy]), mx = Math.max(1e-9, ...vals);
+    body = `<div class="card u-panel" style="margin-top:0!important"><div class="h">最近 ${d.heat_days} 天：星期几 × 几点<span>颜色越深用得越多；跟着上面的模型、设备、用途筛选，不跟时间范围</span>
+      <div class="seg" style="margin:0 0 0 auto">${[["requests", "按调用次数"], ["cost", "按费用"]].map(([k, l]) => `<button type="button" data-cheat="${k}" class="${costHeatBy === k ? "on" : ""}">${l}</button>`).join("")}</div></div>
+      <div style="padding:14px 16px"><div class="c-heat"><span></span>${Array.from({ length: 24 }, (_, h) => `<span style="text-align:center">${h % 3 ? "" : h}</span>`).join("")}
+        ${d.heat.map((row, wd) => `<span>${days[wd]}</span>${row.map((c, h) => `<i title="${days[wd]} ${h}:00–${h + 1}:00：${c.requests} 次 · ${money(c.cost)}" style="opacity:${c[costHeatBy] ? (0.12 + 0.88 * c[costHeatBy] / mx).toFixed(2) : 0.04}"></i>`).join("")}`).join("")}</div>
+        <p class="muted small" style="margin:12px 0 0">DeepSeek 工作日 9–12 点、14–18 点是高峰价，挪到别的时间就便宜一半（单价见「单价和额度」）。</p></div></div>`;
+  }
+  root.innerHTML = costHead() + bar + body;
+  bindCostTabs(root);
+  const reload = () => openPage("cost", true);
+  root.querySelectorAll("[data-crange]").forEach((b) => (b.onclick = () => { costQ.range = b.dataset.crange; if (costQ.range !== "custom" || (costQ.start && costQ.end)) reload(); else renderCostCustom(root); }));
+  root.querySelectorAll("[data-cbucket]").forEach((b) => (b.onclick = () => { costQ.bucket = b.dataset.cbucket; reload(); }));
+  root.querySelectorAll("[data-cq]").forEach((el) => (el.onchange = () => { costQ[el.dataset.cq] = el.value; if (costQ.range !== "custom" || (costQ.start && costQ.end)) reload(); }));
+  root.querySelectorAll("[data-cser]").forEach((b) => (b.onclick = () => { costSeries.has(b.dataset.cser) ? costSeries.delete(b.dataset.cser) : costSeries.add(b.dataset.cser); reload(); }));
+  root.querySelectorAll("[data-crank]").forEach((b) => (b.onclick = () => { costRank = b.dataset.crank; reload(); }));
+  root.querySelectorAll("[data-cheat]").forEach((b) => (b.onclick = () => { costHeatBy = b.dataset.cheat; reload(); }));
+  root.querySelectorAll("tr[data-rank]").forEach((tr) => (tr.onclick = () => { costQ[tr.dataset.rank] = tr.dataset.key; costTab = "overview"; reload(); }));
+}
+function renderCostCustom(root) {   // 选了自定义、还没填日期：先把日期框露出来
+  const today = new Date().toISOString().slice(0, 10);
+  costQ.start = costQ.start || new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10); costQ.end = costQ.end || today;
+  openPage("cost", true);
+}
+
+async function renderCostPrices(root) {
   const d = await api("billing");
   const sym = (c) => (d.currencies || {})[c] || (c ? c + " " : "");
   const money = (m) => {
@@ -2440,9 +2593,7 @@ async function renderCost(root) {
   const PURPOSE = { chat: "对话", summary: "记忆总结", intent: "意图识别", search: "联网搜索", vision: "看图" };
 
   root.innerHTML = `
-    <div class="page-head"><div><h1>费用</h1><p class="sub">每次请求大模型的 token 和费用记在本机（data/usage.db），按北京时间（${esc(st.timezone)}）分日、分月。
-      费用 = 未命中缓存的输入 × 输入单价 + 缓存命中 × 命中单价 + 输出 × 输出单价，单价按请求那一刻所在的时段算（比如 DeepSeek 高峰和空闲价不同）。
-      被打断、接口没给用量的请求按字数估算，标「含估算」。Claude Code 用它自己报的费用（美元；用订阅登录时是按 API 价折算的参考值）。</p></div></div>
+    ${costHead()}
     ${d.unpriced.length ? `<div class="banner warn">这些模型还没有单价，费用按 0 算：${d.unpriced.map(esc).join("、")}。在下面「单价」里加上。</div>` : ""}
     ${d.prices_default ? '<div class="banner info">单价现在用的是内置的参考价（DeepSeek，2026-11-08 按官网核对）。厂商会调价，请核对后保存；其他厂商的价格要自己填。</div>' : ""}
     <div class="cost-stats">
@@ -2450,14 +2601,6 @@ async function renderCost(root) {
       ${stat("本月 " + esc(d.this_month), d.month, d.tokens.month, q.used_month, q.monthly)}
       ${stat("累计", d.total, d.tokens.total, 0, 0)}
     </div>
-    <div class="card panel"><b>近 30 天（${esc(sym(q.currency || "CNY"))}）</b>
-      <div class="bars">${days.map((r) => `<div title="${esc(r.key)}：${sym(r.currency)}${r.cost.toFixed(4)}，${r.requests} 次" style="height:${(r.cost / maxDay * 100).toFixed(1)}%"></div>`).join("")}</div>
-      <div class="muted small" style="display:flex;justify-content:space-between;margin-top:4px"><span>${esc(days[0].key.slice(5))}</span><span>${esc(days[29].key.slice(5))}</span></div>
-    </div>
-    <div class="card panel"><b>本月按模型</b>${table(d.models, "模型")}</div>
-    <div class="card panel"><b>本月按设备</b>${table(d.devices, "设备")}</div>
-    <div class="card panel"><b>本月按用途</b>${table(d.purposes.map((r) => ({ ...r, key: PURPOSE[r.key] || r.key })), "用途")}</div>
-
     <div class="card panel"><b>额度</b><p class="muted small" style="margin:4px 0 10px">填 0 表示不限。超额后：拒绝（设备念一句「额度用完了」，不请求模型），或者改用下面选的便宜模型接着答（只对这台设备这一次连接，不改后台默认）。</p>
       <div class="price-row" style="grid-template-columns: 90px repeat(3, 1fr) 1fr 1.4fr">
         <label>币种<select class="in" data-q="currency">${Object.keys(d.currencies).map((c) => `<option ${quota.currency === c ? "selected" : ""}>${c}</option>`).join("")}</select></label>
@@ -2469,7 +2612,10 @@ async function renderCost(root) {
       </div>
       <div class="actions"><button class="btn primary" id="cost-save-quota">保存额度</button></div></div>
 
-    <div class="card panel"><b>单价</b><p class="muted small" style="margin:4px 0 0">每百万 token 的价格。模型名可以写多个（逗号分隔），支持 * 通配。时段：星期写 workday（工作日，按下面的节假日和调休）、weekend、all 或 1-5；时间写 09:00-12:00,14:00-18:00，可以跨午夜。
+    <div class="card panel"><div style="display:flex;align-items:center;gap:10px"><b>单价</b>
+        <span class="muted small" style="margin-left:auto" id="sync-note">同步只补没有单价的模型；核对过的、手动的不动</span>
+        <button class="btn sm" id="cost-sync">同步单价</button></div>
+      <div id="sync-pending"></div><p class="muted small" style="margin:4px 0 0">每百万 token 的价格。模型名可以写多个（逗号分隔），支持 * 通配。时段：星期写 workday（工作日，按下面的节假日和调休）、weekend、all 或 1-5；时间写 09:00-12:00,14:00-18:00，可以跨午夜。
       命中第一个时段就用它的价格，都不命中用这一行的价格。</p>
       <div id="cost-prices"></div>
       <div class="actions"><button class="btn" id="cost-add">＋ 加一个模型</button><button class="btn primary" id="cost-save-prices">保存单价</button></div></div>
@@ -2502,11 +2648,11 @@ async function renderCost(root) {
         <label>缓存命中<input class="in" data-t="cache_hit" type="number" min="0" step="any" value="${t.cache_hit}"></label>
         <label>输出<input class="in" data-t="output" type="number" min="0" step="any" value="${t.output}"></label>
         <button class="btn" data-tdel>删除</button></div>`).join("")}
-      <div class="muted small" style="margin-top:8px">${r.checked ? "核对：" + esc(r.checked) + " · " : ""}<a href="#" data-tadd>＋ 加一个时段</a>（比如高峰价、夜间价）</div>
+      <div class="muted small" style="margin-top:8px">${r.source ? `<span class="pill warn">${esc(r.source)} 同步 · ${esc(r.provider || "")} · ${esc(r.synced_at || "")}</span> ` : r.checked ? '<span class="pill ok">已核对</span> ' : '<span class="pill">手动</span> '}${r.checked ? "核对：" + esc(r.checked) + " · " : ""}<a href="#" data-tadd>＋ 加一个时段</a>（比如高峰价、夜间价）</div>
     </div>`).join("") || '<p class="muted small">没有单价：所有请求费用按 0 算</p>';
     $("cost-prices").querySelectorAll(".price-rule").forEach((el) => {
       const r = prices[+el.dataset.i];
-      el.querySelectorAll("[data-k]").forEach((inp) => (inp.oninput = () => { r[inp.dataset.k] = inp.type === "number" ? +inp.value : inp.value; }));
+      el.querySelectorAll("[data-k]").forEach((inp) => (inp.oninput = () => { r[inp.dataset.k] = inp.type === "number" ? +inp.value : inp.value; delete r.source; }));   // 手改过：变成手动的，同步不再动它
       el.querySelectorAll(".tier-row").forEach((row) => {
         const t = r.tiers[+row.dataset.j];
         row.querySelectorAll("[data-t]").forEach((inp) => (inp.oninput = () => { t[inp.dataset.t] = inp.type === "number" ? +inp.value : inp.value; }));
@@ -2521,6 +2667,25 @@ async function renderCost(root) {
     });
   };
   drawPrices();
+  const drawPending = (pending) => {
+    const items = Object.entries(pending || {});
+    $("sync-pending").innerHTML = items.length ? `<div class="banner warn" style="margin:10px 0 0">这些模型在官方名下没找到，下面是各来源里同名的候选（转售商的价格可能不一样），确认后点「用这个」：
+      ${items.map(([m, cs]) => `<div style="margin-top:6px"><b>${esc(m)}</b>：${cs.map((c, i) => `${esc(c.source)}/${esc(c.provider)} $${c.prices.input} / $${c.prices.cache_hit} / $${c.prices.output} <a href="#" data-accept="${esc(m)}" data-i="${i}">用这个</a>`).join("　")}</div>`).join("")}</div>` : "";
+    $("sync-pending").querySelectorAll("[data-accept]").forEach((el) => (el.onclick = (e) => { e.preventDefault(); busy(el, async () => {
+      try { await api("billing/prices/accept", { model: el.dataset.accept, index: +el.dataset.i }); toast("已加上，之后的请求按这个单价算"); page.dirty = null; openPage("cost", true); }
+      catch (err) { toast(err.message, true); } }); }));
+  };
+  drawPending(costPending);
+  $("cost-sync").onclick = (e) => busy(e.currentTarget, async () => {
+    if (page.dirty && page.dirty() && !confirm("单价有没保存的修改，同步会按已保存的单价来，确定吗？")) return;
+    $("sync-note").textContent = "正在问 models.dev、LiteLLM、OpenRouter…";
+    try {
+      const r = await api("billing/prices/sync", {});
+      costPending = r.pending;
+      toast(`查了 ${r.checked} 个模型：加了 ${r.added.length} 个，更新 ${r.updated.length} 个，${Object.keys(r.pending).length} 个待确认${r.failed.length ? "；没连上：" + r.failed.join("、") : ""}`);
+      page.dirty = null; openPage("cost", true);
+    } catch (err) { $("sync-note").textContent = err.message; }
+  });
   root.querySelectorAll("[data-q]").forEach((inp) => (inp.oninput = inp.onchange = () => { quota[inp.dataset.q] = inp.type === "number" ? +inp.value : inp.value; }));
   root.querySelectorAll("[data-s]").forEach((inp) => (inp.oninput = inp.onchange = () => { st[inp.dataset.s] = inp.type === "checkbox" ? inp.checked : inp.value; }));
   $("cost-add").onclick = () => { prices.push({ match: "", label: "", currency: "CNY", input: 0, cache_hit: 0, output: 0, tiers: [] }); drawPrices(); };

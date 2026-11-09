@@ -120,6 +120,9 @@ class AdminHandler:
                 web.post("/admin/api/asr/download", self.handle_asr_download),
                 web.post("/admin/api/billing", self.handle_billing_save),
                 web.post("/admin/api/billing/clear", self.handle_billing_clear),
+                web.get("/admin/api/billing/analytics", self.handle_billing_analytics),
+                web.post("/admin/api/billing/prices/sync", self.handle_prices_sync),
+                web.post("/admin/api/billing/prices/accept", self.handle_prices_accept),
                 web.get("/kiosk/billing", self.handle_kiosk_billing),
                 web.post("/admin/api/memory/save", self.handle_memory_save),
                 web.post("/admin/api/devices/{session_id}/emotion", self.handle_emotion_one),
@@ -2086,6 +2089,102 @@ class AdminHandler:
         billing.configure(self.config)
         return self._json({"ok": True})
 
+    # ---------- [xiaozhi-hub] 费用分析和单价同步（设计画布第 20 块） ----------
+
+    def _device_names(self) -> dict:
+        from core.utils import device_settings
+        return {k: v.get("name", "") for k, v in device_settings.all_devices().items() if v.get("name")}
+
+    async def handle_billing_analytics(self, request: web.Request):
+        """?range=today|24h|yesterday|7d|30d|month|custom&bucket=auto|hour|day&model=&device=&purpose=&start=&end="""
+        self._require_login(request)
+        from core.billing import analytics
+
+        q = request.query
+        merged = await self._blocking(self._merged)
+        cfg = billing.settings(merged)
+        names = self._device_names()
+        try:
+            data = await self._blocking(analytics.analyze, billing.db(), cfg, q.get("range", "today"), q.get("bucket", "auto"),
+                                        {k: q.get(k, "") for k in ("model", "device", "purpose")}, q.get("start", ""),
+                                        q.get("end", ""), None, names)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        data["options"] = await self._blocking(analytics.options, billing.db(), time.time(), names)
+        data["currencies"] = billing.pricing.CURRENCIES
+        data["pending"] = self._price_pending
+        return self._json({"ok": True, **data})
+
+    _price_pending = {}   # 上次同步没认准的模型 -> 候选（只在内存里：再同步一次就有）
+
+    async def handle_prices_sync(self, request: web.Request):
+        """依次下载 models.dev、LiteLLM、OpenRouter，补上没有单价的模型（见 core/billing/price_sync.py）。"""
+        self._require_login(request)
+        import aiohttp
+        from core.billing import price_sync
+
+        merged = await self._blocking(self._merged)
+        cfg = billing.settings(merged)
+        sources, failed = {}, []
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=40)) as s:
+            async def get(name):
+                try:
+                    async with s.get(price_sync.URLS[name]) as r:
+                        if r.status != 200:
+                            raise ValueError(f"HTTP {r.status}")
+                        sources[name] = await r.json(content_type=None)
+                except Exception as e:  # noqa: BLE001
+                    failed.append(f"{name}（{e.__class__.__name__}）")
+            await asyncio.gather(*(get(n) for n in price_sync.SOURCES))
+        if not sources:
+            return self._error("三个来源都连不上，单价没动：" + "、".join(failed), 502)
+        # 要找单价的模型：最近 90 天用过的，加上配置里各条目的模型名
+        models = {m: e for m, (n, e) in (await self._blocking(billing.db().models_with_counts, time.time() - 90 * 86400)).items()}
+        for section in ("LLM", "VLLM"):
+            for name, e in (merged.get(section) or {}).items():
+                if isinstance(e, dict) and e.get("type") == "openai" and e.get("model_name") and "你" not in str(e.get("model_name")):
+                    models.setdefault(str(e["model_name"]), name)
+        rules, added, updated, pending = price_sync.plan(billing.pricing.rules(cfg), models, sources)
+        if added or updated:
+            def save():
+                with config_store.edit_custom(self.config_path) as data:
+                    cur = dict(data.get("billing") or {})
+                    cur["prices"] = rules
+                    data["billing"] = cur
+                return dict((self._merged().get("billing") or {}))
+            self._push_config("billing", await self._blocking(save))
+            billing.configure(self.config)
+        AdminHandler._price_pending = pending
+        self.logger.bind(tag=TAG).info(f"同步单价：加了 {added}，更新了 {updated}，待确认 {list(pending)}，失败 {failed}")
+        return self._json({"ok": True, "added": added, "updated": updated, "pending": pending, "failed": failed,
+                           "checked": len(models)})
+
+    async def handle_prices_accept(self, request: web.Request):
+        """{"model", "index"}：待确认里选一个候选，加成这个模型的单价。"""
+        self._require_login(request)
+        from core.billing import price_sync
+
+        body = await self._read_json(request)
+        model = str(body.get("model") or "")
+        cands = self._price_pending.get(model) or []
+        try:
+            cand = cands[int(body.get("index", -1))]
+        except (ValueError, IndexError, TypeError):
+            return self._error("没有这个候选，再同步一次", 404)
+        merged = await self._blocking(self._merged)
+        rules = [dict(r) for r in billing.pricing.rules(billing.settings(merged))] + [price_sync.rule_for(model, cand)]
+
+        def save():
+            with config_store.edit_custom(self.config_path) as data:
+                cur = dict(data.get("billing") or {})
+                cur["prices"] = rules
+                data["billing"] = cur
+            return dict((self._merged().get("billing") or {}))
+        self._push_config("billing", await self._blocking(save))
+        billing.configure(self.config)
+        AdminHandler._price_pending = {k: v for k, v in self._price_pending.items() if k != model}
+        return self._json({"ok": True})
+
     async def handle_billing_clear(self, request: web.Request):
         self._require_login(request)
         await self._blocking(billing.db().clear)
@@ -2270,6 +2369,10 @@ def _billing_update(body: dict) -> dict:
                     **{k: money(r.get(k), "单价") for k in billing.pricing.PRICE_KEYS}, "tiers": []}
             if r.get("checked"):
                 rule["checked"] = str(r["checked"])[:120]
+            # [xiaozhi-hub] 同步来的单价：记着来源，下次同步可以更新；页面上手改过就不带这些，变成手动的
+            if r.get("source") in billing.price_sync.SOURCES:
+                rule.update({"source": r["source"], "provider": str(r.get("provider") or "")[:40],
+                             "synced_at": str(r.get("synced_at") or "")[:20]})
             for t in r.get("tiers") or []:
                 d, h = str(t.get("days") or "all").strip(), str(t.get("hours") or "").strip()
                 if not days_re.match(d):
