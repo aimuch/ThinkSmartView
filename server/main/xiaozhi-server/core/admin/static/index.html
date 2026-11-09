@@ -418,17 +418,17 @@
   .side-foot { border-top: 0; padding: 12px 0 0; }
   .sf-box { border: 1px solid var(--side-line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 9px;
             background: rgba(255, 255, 255, .02); transition: background .2s, border-color .2s; }
-  .sf-box:has(.hb[data-st="off"]) { border-color: color-mix(in srgb, var(--err) 40%, transparent); background: color-mix(in srgb, var(--err) 8%, transparent); }
-  .sf-box:has(.hb[data-st="expired"]) { border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 7%, transparent); }
   .sf-box .hb { margin: 0; padding: 0; border: 0; background: none; gap: 9px; min-width: 0; }
-  .sf-box .hb-txt b { font-size: 13px; font-weight: 500; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-  .hb[data-st="off"] .hb-txt b { color: var(--err); } .hb[data-st="expired"] .hb-txt b { color: var(--warn); }
+  .sf-box .hb-txt b { font-size: 13px; font-weight: 500; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
   .hb-ico { width: 18px; height: 18px; flex: none; overflow: visible; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
   .hb-dot { fill: currentColor; stroke: none; }
+  /* 状态只靠图标（参照 repo-sync）：连上是信号图标，连不上/登录过期换成警告圈；文字不跟着变色 */
+  .hb-alert, .hb[data-st="off"] .hb-live, .hb[data-st="expired"] .hb-live { display: none; }
+  .hb[data-st="off"] .hb-alert, .hb[data-st="expired"] .hb-alert { display: inline; }
+  .sf-box #online-short { color: #cbd5e1; }
   .hb-w1, .hb-w2 { transform-origin: 12px 12px; transform-box: view-box; }
   .hb-w2 { opacity: .55; }
   .hb[data-st="none"] .hb-w1, .hb[data-st="none"] .hb-w2 { opacity: .35; }
-  .hb[data-st="off"] .hb-w1, .hb[data-st="off"] .hb-w2, .hb[data-st="expired"] .hb-w1, .hb[data-st="expired"] .hb-w2 { stroke-dasharray: 2 2.6; opacity: .8; }
   .hb.beat .hb-w1 { animation: hbWave 1.4s ease-out; } .hb.beat .hb-w2 { animation: hbWave 1.4s ease-out .15s; }
   .hb[data-st="talk"] .hb-w1 { animation: hbWave 1.2s ease-out infinite; } .hb[data-st="talk"] .hb-w2 { animation: hbWave 1.2s ease-out .2s infinite; }
   @keyframes hbWave { 0% { transform: scale(.7); opacity: .2; } 35% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); opacity: .55; } }
@@ -711,7 +711,7 @@
       <button data-page="update"><span class="ico">⟳</span>更新网关</button>
     </nav>
     <div class="side-foot"><div class="sf-box">
-      <div class="side-status hb" id="hb" data-st="none"><svg class="hb-ico" viewBox="0 0 24 24" aria-hidden="true"><circle class="hb-dot" cx="12" cy="12" r="2.2"/><path class="hb-w1" d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7"/><path class="hb-w2" d="M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>
+      <div class="side-status hb" id="hb" data-st="none"><svg class="hb-ico" viewBox="0 0 24 24" aria-hidden="true"><g class="hb-live"><circle class="hb-dot" cx="12" cy="12" r="2.2"/><path class="hb-w1" d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7"/><path class="hb-w2" d="M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></g><g class="hb-alert"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></g></svg>
         <span class="hb-txt"><b id="online-text">没有设备在线</b></span><span id="online-short">无设备</span>
         <button id="logout" class="sf-out" type="button">退出登录</button></div>
       <small class="sf-sub" id="hb-sub"></small>
