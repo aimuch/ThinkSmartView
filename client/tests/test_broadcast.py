@@ -64,7 +64,7 @@ def test_due_days_window_and_fired():
 def test_request_text_and_tag():
     s = bc.normalize(None, {'enabled': True, 'reminders': True, 'news': True})
     morning = bc.request_text('07:30', s, '上海市青浦区', ['08:30 给宝宝带水杯'])
-    assert morning.startswith('【早安播报 07:30】早上好，请播报上海市青浦区今天的天气')
+    assert morning.startswith('【早安播报 07:30】早上好，先调用查天气工具查最新的天气')
     assert '08:30 给宝宝带水杯' in morning and '新闻' in morning
     assert '今天没有闹钟和提醒' in bc.request_text('07:30', s, None, [])
     noon = bc.request_text('12:30', s, '青浦区', ['13:00 开会'])
@@ -188,7 +188,7 @@ def test_loop_plays_when_idle_and_waits_when_busy(tmp_path, monkeypatch):
     asyncio.run(run('speaking', 31))
     assert c.said == [] and not c.alarms.missed            # busy: waits
     asyncio.run(run('idle', 32))
-    assert len(c.said) == 1 and c.said[0].startswith('【早安播报 07:30】早上好，请播报上海市青浦区今天的天气')
+    assert len(c.said) == 1 and c.said[0].startswith('【早安播报 07:30】早上好，先调用查天气工具查最新的天气')
     assert c.played == ['report']
     asyncio.run(run('idle', 33))
     assert len(c.said) == 1                                  # once a day

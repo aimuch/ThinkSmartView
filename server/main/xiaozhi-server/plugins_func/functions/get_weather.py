@@ -1,3 +1,4 @@
+import datetime
 import httpx
 from bs4 import BeautifulSoup
 from config.logger import setup_logging
@@ -19,7 +20,8 @@ GET_WEATHER_FUNCTION_DESC = {
             "获取某个地点的天气，用户应提供一个位置，比如用户说杭州天气，参数为：杭州。"
             "如果用户说的是省份，默认用省会城市。如果用户说的不是省份或城市而是一个地名，默认用该地所在省份的省会城市。"
             "问本地天气（没说地点，比如「明天下雨吗」）时不传 location，会用这台设备的住宅地址。如果系统提示里已经列出了本地未来7天天气，问本地天气就直接回答、不要调用；"
-            "系统提示里没有本地天气（或写着没查到）时必须调用，不要根据之前的对话说查不到——天气服务可能已经恢复。"
+            "系统提示里没有本地天气（或写着没查到）时必须调用。天气随时在变：每次问天气都重新调用，"
+            "不要拿之前对话里的天气来回答，也不要根据之前的对话说查不到——天气服务可能已经恢复。"
         ),
         "parameters": {
             "type": "object",
@@ -232,7 +234,8 @@ async def get_weather(conn: "ConnectionHandler", location: str = None, lang: str
     # 没说地点（或说的就是住宅地址的名字）：用设备存的坐标，不再查一遍地名
     home = device_home(conn)
     place = home if home and location == home["name"] else None
-    weather_cache_key = f"full_weather_{location}_{lang}"
+    # [xiaozhi-hub] 按小时缓存：天气缓存本身 8 小时，跨过午夜后「今天」会变成昨天的预报，当前气温也早变了
+    weather_cache_key = f"full_weather_{location}_{lang}_{datetime.datetime.now():%Y%m%d%H}"
     cached_weather_report = cache_manager.get(CacheType.WEATHER, weather_cache_key)
     if cached_weather_report:
         return ActionResponse(Action.REQLLM, cached_weather_report, None)

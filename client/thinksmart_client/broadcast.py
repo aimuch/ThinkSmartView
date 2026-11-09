@@ -97,15 +97,19 @@ def due(setting, now, fired):
     return out
 
 
+FRESH = '先调用查天气工具查最新的天气（不要用之前对话里的天气，可能是旧的），再'
+
+
 def request_text(hhmm, setting, home_name, reminders_today=None):
-    """What is sent to the model (as if typed): the tag the page shows, then the request."""
+    """What is sent to the model (as if typed): the tag the page shows, then the request. It asks for
+    a fresh lookup: with yesterday's broadcast still in the conversation the model answered from that."""
     place = home_name or '这里'
     if about(hhmm) == 'tomorrow':
-        ask = (f'请播报{place}明天的天气：天气怎么样、气温范围、会不会下雨，需要带伞、加衣服的话提醒一句。'
+        ask = (f'{FRESH}播报{place}明天的天气：天气怎么样、气温范围、会不会下雨，需要带伞、加衣服的话提醒一句。'
                '两三句话说完，不要问问题。')
         return f'【天气播报 {hhmm}】{ask}'
     morning = int(hhmm[:2]) < MORNING_UNTIL
-    parts = [f'请播报{place}今天的天气：现在的天气和气温、今天的气温范围、会不会下雨，需要带伞、加衣服的话提醒一句']
+    parts = [f'{FRESH}播报{place}今天的天气：现在的天气和气温、今天的气温范围、会不会下雨，需要带伞、加衣服的话提醒一句']
     if morning and setting.get('reminders'):
         if reminders_today:
             parts.append('再说一下今天的闹钟和提醒：' + '；'.join(reminders_today))

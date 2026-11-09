@@ -73,7 +73,9 @@ async def test_get_weather_failure_not_cached(monkeypatch):
     conn = SimpleNamespace(config={"plugins": {"get_weather": {"home_location": "测试区"}}}, client_ip=None)
     r = await get_weather.get_weather(conn)
     assert r.response == "failed" and "连不上" in r.result and "不要编造" in r.result
-    assert cache_manager.get(CacheType.WEATHER, "full_weather_测试区_zh_CN") is None
+    import datetime
+    hour = f"{datetime.datetime.now():%Y%m%d%H}"
+    assert cache_manager.get(CacheType.WEATHER, f"full_weather_测试区_zh_CN_{hour}") is None
 
     async def ok(place=None, location=None):
         return f"您查询的位置是：{location}"
@@ -123,8 +125,10 @@ async def test_weather_uses_the_device_home(tmp_path, monkeypatch):
     monkeypatch.setattr(open_meteo, "report_at", report_at)
     conn = SimpleNamespace(config={"plugins": {"get_weather": {"home_location": "青浦区"}}}, client_ip=None, device_id="dev-1")
     assert get_weather.resolve_location(conn) == "浙江省杭州市西湖区"
-    for key in ("full_weather_浙江省杭州市西湖区_zh_CN", "full_weather_东京_zh_CN", "full_weather_青浦区_zh_CN"):
-        cache_manager.delete(CacheType.WEATHER, key)
+    import datetime
+    hour = f"{datetime.datetime.now():%Y%m%d%H}"
+    for name in ("浙江省杭州市西湖区", "东京", "青浦区"):
+        cache_manager.delete(CacheType.WEATHER, f"full_weather_{name}_zh_CN_{hour}")
     assert (await get_weather.get_weather(conn)).result == "您查询的位置是：浙江省杭州市西湖区"
     assert seen[-1] == ("浙江省杭州市西湖区", "浙江省杭州市西湖区")
     await get_weather.get_weather(conn, location="东京")
