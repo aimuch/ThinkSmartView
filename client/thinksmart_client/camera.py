@@ -127,11 +127,12 @@ class Camera:
         await self.acquire()
         log.info('camera preview: a page is watching')
         try:
-            seen = -1
+            seen = self.seq if self.frame is None else self.seq - 1   # 刚打开还没出画面：等第一帧，别拿空的就走
             while True:
                 async with self.changed:
-                    await asyncio.wait_for(self.changed.wait_for(lambda: self.seq != seen or self.proc.returncode is not None), 10)
-                if self.proc.returncode is not None or self.frame is None:
+                    await asyncio.wait_for(self.changed.wait_for(
+                        lambda: (self.seq != seen and self.frame is not None) or self.proc.returncode is not None), 10)
+                if self.proc.returncode is not None:
                     return
                 seen = self.seq
                 yield self.frame

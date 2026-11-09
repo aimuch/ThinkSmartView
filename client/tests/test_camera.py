@@ -18,3 +18,29 @@ def test_rotation_filters():
     assert graph('270').startswith('[0:v]hflip,vflip,')
     assert 'hflip[pv]' in graph('normal') and '[st]' in graph('normal')   # 预览镜像，整图不镜像
     assert 'scale=-2:640' in graph('normal') and 'scale=-2:360' in graph('90')
+
+
+def test_preview_waits_for_the_first_frame(monkeypatch):
+    """摄像头刚打开、第一帧还没出来时，预览要等它，不能马上结束（曾经一连上就断开）。"""
+    import asyncio
+    from types import SimpleNamespace
+
+    async def run():
+        cam = camera.Camera(lambda: 'normal')
+        cam.seq = 41                                     # 上一次打开留下的计数
+        proc = SimpleNamespace(returncode=None, terminate=lambda: None)
+
+        async def start():
+            cam.proc = proc
+        monkeypatch.setattr(cam, '_start', start)
+        gen = cam.frames()
+        first = asyncio.create_task(gen.__anext__())
+        await asyncio.sleep(0.05)
+        assert not first.done()                          # 还没有画面：在等
+        async with cam.changed:
+            cam.frame, cam.seq = b'\xff\xd8x\xff\xd9', cam.seq + 1
+            cam.changed.notify_all()
+        assert await asyncio.wait_for(first, 1) == b'\xff\xd8x\xff\xd9'
+        await gen.aclose()
+        assert cam.users == 0
+    asyncio.run(run())
