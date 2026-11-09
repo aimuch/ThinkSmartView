@@ -1,5 +1,5 @@
 """Device tools the hub's models may call (MCP over the xiaozhi channel): speaker volume, sleep hours,
-screen brightness, countdowns / alarms / reminders and their volume.
+screen brightness, closing a photo slideshow, countdowns / alarms / reminders and their volume.
 
 For alarms the model passes what the user meant (a duration, or a clock time with a date, a repeat
 rule, what it is about); the device works out the time point and answers with it for the model to
@@ -62,6 +62,12 @@ TOOLS = [
     {
         'name': 'self.screen.get_brightness',
         'description': '读取屏幕亮度：level 当前亮度 0-100，dimmed 是否因睡眠时段调暗。',
+        'inputSchema': {'type': 'object', 'properties': {}},
+    },
+    {
+        'name': 'self.screen.close_photos',
+        'description': '关掉屏幕上正在轮播的照片，回到对话界面。用户说「关掉照片」「不看了」「把照片关了」时调用。'
+                       '照片是设备上别的程序放上去的，这个工具只能关，不能打开或找照片。',
         'inputSchema': {'type': 'object', 'properties': {}},
     },
     {
@@ -475,6 +481,10 @@ async def handle(payload, client=None):
                     level=args.get('brightness'), change=args.get('change'))})
             elif name == 'self.screen.get_brightness' and client:
                 text = json.dumps(client.brightness())
+            elif name == 'self.screen.close_photos' and client:
+                closed = await client.close_photos()
+                text = _dumps({'success': True, 'closed': closed} if closed else
+                              {'success': True, 'closed': False, 'note': '屏幕上本来就没有在放照片'})
             elif name == 'self.alarm.create' and client:
                 text = _dumps({'success': True, **_brief(await client.create_alarm(**_alarm_args(args)))})
             elif name == 'self.alarm.list' and client:

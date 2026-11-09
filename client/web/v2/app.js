@@ -831,7 +831,7 @@ function standbyBusy() {
   const st = ui.status || {};
   // 设备详情、确认框不是 .sheet：也算在用，待机页不盖上来
   return st.state !== 'idle' || document.querySelector('.sheet.on, .h-detail.on, .h-confirm.on') || ui.photo || (ui.cook && ui.cook.on) || !$('qrOv').hidden
-    || (ui.alarms && ui.alarms.ringing) || ww.holding || bc.holding;
+    || (ui.alarms && ui.alarms.ringing) || ww.holding || bc.holding || (typeof slides !== 'undefined' && slides.show);
 }
 function showStandby(on) {
   if (on === sb.shown) return;
@@ -1946,6 +1946,69 @@ function showVolume(v) {
   hudTimer = setTimeout(() => $('hud').classList.remove('on'), 1600);
 }
 
+/* ---- photo slideshow (photos.py: programs on the device post the images; upstream PR #3) ---- */
+const slides = { show: null, i: 0, front: 0, timer: null, barTimer: null, down: null };
+const slideUrl = n => `/photos/${slides.show.id}/${n}`;
+
+function renderSlides(p) {
+  if (p && slides.show && p.id === slides.show.id) return;   // the same show (a snapshot after reconnecting)
+  clearTimeout(slides.timer);
+  slides.show = p || null;
+  document.body.classList.toggle('showing-slides', !!p);
+  for (const id of ['slideA', 'slideB']) { $(id).classList.remove('on'); $(id).removeAttribute('src'); }
+  if (!p) { $('slides').classList.remove('bar'); return; }
+  $('slideTitle').textContent = p.title || '照片';
+  showSlide(0);
+  showSlideBar();
+}
+
+function showSlide(n) {
+  const s = slides.show;
+  if (!s) return;
+  const i = slides.i = ((n % s.count) + s.count) % s.count;
+  const next = $(slides.front ? 'slideA' : 'slideB'), cur = $(slides.front ? 'slideB' : 'slideA');
+  const advance = () => {
+    clearTimeout(slides.timer);
+    if (s.count > 1) slides.timer = setTimeout(() => showSlide(slides.i + 1), s.interval * 1000);
+  };
+  next.onload = () => {
+    if (slides.show !== s || slides.i !== i) return;   // moved on while it loaded
+    next.classList.add('on'); cur.classList.remove('on');
+    slides.front = 1 - slides.front;
+    if (s.count > 1) new Image().src = slideUrl((i + 1) % s.count);   // ready for the next turn
+    advance();
+  };
+  next.onerror = () => { if (slides.show === s && slides.i === i) advance(); };   // skip it, keep going
+  next.src = slideUrl(i);
+  $('slideNum').textContent = s.count > 1 ? `${i + 1} / ${s.count}` : '';
+}
+
+function showSlideBar() {
+  $('slides').classList.add('bar');
+  clearTimeout(slides.barTimer);
+  slides.barTimer = setTimeout(() => $('slides').classList.remove('bar'), 4000);
+}
+
+// one finger: swipe left/right to turn, tap to show or hide the bar (the close button is on it)
+$('slides').addEventListener('pointerdown', e => { slides.down = { x: e.clientX, y: e.clientY }; });
+$('slides').addEventListener('pointercancel', () => { slides.down = null; });
+$('slides').addEventListener('pointerup', e => {
+  const d = slides.down;
+  slides.down = null;
+  if (!d || !slides.show || e.target.closest('.slide-close')) return;
+  const dx = e.clientX - d.x, dy = e.clientY - d.y;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+    if (slides.show.count > 1) showSlide(slides.i + (dx < 0 ? 1 : -1));
+    showSlideBar();
+  } else if ($('slides').classList.contains('bar')) {
+    clearTimeout(slides.barTimer);
+    $('slides').classList.remove('bar');
+  } else {
+    showSlideBar();
+  }
+});
+$('slideClose').addEventListener('click', () => post('/api/photos/close'));
+
 /* ---- events from the client ---- */
 const handlers = {
   snapshot(s) {
@@ -1967,6 +2030,7 @@ const handlers = {
     if (s.wake_words) ui.wake = s.wake_words;
     if (s.broadcast) ui.broadcast = s.broadcast;
     if (s.looks) ui.looks = s.looks;
+    if ('slides' in s) renderSlides(s.slides);   // the demo's snapshots have none
     if (s.kids) { ui.kids = s.kids; renderKids(); }
     if (s.standby) { ui.standby = s.standby; renderStandbyCard(); }
     if (s.cook) { ui.cook = s.cook; renderCook(); }
@@ -2066,6 +2130,7 @@ const handlers = {
   photo(p) {
     ui.photo = p.state === 'closed' ? null : p; renderPhoto();
   },
+  slides: p => renderSlides(p),
   level(l) {
     level.target = ui.status.state === 'speaking' ? Math.min(1, l.out * 6) : micLevel(l.mic);
     if (ww.holding) wakeMeter(micLevel(l.mic));

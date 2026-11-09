@@ -10,7 +10,11 @@ States shown to the page: idle, connecting, listening, thinking, speaking.
   The same while the hub is still recognising what was said (the wake word is listened for again
   once its VAD says the user stopped) or thinking: the question is dropped, whatever of that turn
   still arrives (its text, its reply) is ignored, and the mic opens for a new one at once.
-- After a reply the microphone stays open for follow_up_seconds, then stops uploading.
+- After a reply the microphone stays open for follow_up_seconds, then stops uploading. With
+  follow_up 'question' (the default) only a reply that asks something back opens it: otherwise
+  talking on after an answer, to someone else in the room, would be taken as the next question.
+  'always' opens it after every reply, 'never' after none (the wake word is then needed each time);
+  翻译模式 always does (its replies are translations, never questions).
   The connection itself stays until the hub closes it (no speech for ~2 minutes, an exit
   word, the end button), so waking again within that time keeps the conversation.
 - The hub keeps every model's conversation on disk (data/chat.db) and gives the next connection
@@ -45,7 +49,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import alarms, broadcast, bt, config, cook, daily, kids, looks, mcp, media, offline, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, config, cook, daily, kids, looks, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -80,6 +84,11 @@ MAX_LISTEN = 60          # seconds: one wake never keeps the mic open longer (a 
 RECOGNITION_WAIT = 15    # seconds to wait for the hub's text after the user stops (long sentences)
 NORMAL_STOP_TAIL = 0.6   # a normal "tts stop" leaves less than this queued; more means aborted
 PUNCT = set('，。！？；：、,.!?;:…')
+QUESTION_TAIL = 15       # a reply asks back when a question mark is among its last this many characters
+# after the last question mark: closing quotes and brackets, a trailing emoji, or a short add-on
+# such as "要不要设个闹钟？比如明早七点"
+TRAILING = set(' \t\n）)」』"”’\'～~…—*')
+FOLLOW_UPS = ('question', 'always', 'never')
 REPORT_POLL = 10         # seconds between asking the hub for pending reports (local HTTP)
 HISTORY_LIMIT = 50       # messages per model shown from the hub's saved conversations
 MODEL_POLL = 30          # seconds between asking the hub for its models (changes made in its admin page)
@@ -145,6 +154,15 @@ def overlay(base, extra, at):
 
 ZAI_AT = 0.15   # seconds into the wake chime: just after its second note (0.09 s)
 C5, E5, G5, A5, B5, C6, D6, E6 = 523.25, 659.25, 783.99, 880.0, 987.77, 1046.5, 1174.66, 1318.5
+
+
+def asks_back(text):
+    """The reply ends by asking the user something (the hub keeps "？" on the sentences it sends;
+    it strips "。！" and emoji). Upstream PR #2 (naplesblue)."""
+    t = (text or '').rstrip()
+    while t and (t[-1] in TRAILING or ord(t[-1]) >= 0x1F000):
+        t = t[:-1]
+    return t.endswith('吗') or any(ch in '？?' for ch in t[-QUESTION_TAIL:])
 
 
 def has_default_route():
@@ -251,6 +269,8 @@ class Client:
         self.tools_listed = asyncio.Event()   # the hub asked for our device tools on this connection
         self.connecting = asyncio.Lock()      # one connection: a second wake while connecting waits for it
         self.screen = Screen()
+        self.slides = photos.Slides(photos.spool_root())   # 照片轮播 (photos.py, upstream PR #3)
+        self._slides_timer = None     # closes the open show after its minutes
         try:
             self.sleep = sleep.normalize(cfg.get('sleep'))
         except ValueError:
@@ -1441,6 +1461,7 @@ class Client:
         self.audio.start()
         self.keys.start()
         self.screen.release()   # a hold left by a previous run must not keep the screen on
+        self.slides.clear_all()
         self._apply_sleep()
         asyncio.create_task(self._sender())
         asyncio.create_task(self._ticker())
@@ -1550,7 +1571,7 @@ class Client:
     def snapshot(self):
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
                 'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
-                'broadcast': self.broadcast_view(), 'photo': self.photo_view(),
+                'broadcast': self.broadcast_view(), 'photo': self.photo_view(), 'slides': self.slides_view(),
                 'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),
                 'standby': self.standby_view(), 'cook': self.cook_view(), 'media': self.media_view(),
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
@@ -1910,11 +1931,17 @@ class Client:
                     log.warning('the turn ended without a reply')
                     self.events.publish('toast', {'kind': 'error', 'text': '网络还没连上，稍后再试' if not has_default_route()
                                                   else '没收到回答，可能是网络或模型服务连不上，稍后再试'})
+                said = self.bot_msg['text'] if self.bot_msg else None
                 self.bot_msg = self.question = None
                 if self.reconnect_after_reply:
                     # 翻译模式 changed in this turn: the new prompt needs a new connection
                     self.listen_after_reply = False
                     asyncio.create_task(self._after_playback(self._reconnect_for_translate))
+                elif self.listen_after_reply and not msg.get('interrupted') and not self.wants_follow_up(said):
+                    # an answer that asks nothing back: what is said next isn't for us unless the wake
+                    # word comes first. The connection stays, so waking again keeps the conversation
+                    self.listen_after_reply = False
+                    self.set_state('idle')
                 elif self.listen_after_reply:
                     asyncio.create_task(self._listen_after_reply())
                 elif self.uploading:
@@ -1954,6 +1981,21 @@ class Client:
             x['entry'] = self.entry
         self.threads.setdefault(self.entry, []).extend(moved)
         self.events.publish('thread', {'entry': self.entry, 'messages': self.threads[self.entry]})
+
+    def wants_follow_up(self, said):
+        """Open the mic after this reply? (said: its text; None when nothing was shown, e.g. the turn
+        failed, and then the user may want to say it again at once.)"""
+        if self.cfg.get('translate', {}).get('enabled'):
+            return True   # 翻译模式: the replies are translations; the next sentence is for it too
+        mode = self.cfg.get('follow_up', 'question')
+        if mode not in FOLLOW_UPS:
+            mode = 'question'
+        if mode != 'question' or said is None:
+            ok = mode != 'never'
+        else:
+            ok = asks_back(said)
+        log.info('after the reply: %s', 'listening for a follow-up' if ok else 'mic closed until the wake word')
+        return ok
 
     async def _listen_after_reply(self):
         """Reopen the mic for a follow-up once the last of the reply has been played (uploading
@@ -2212,6 +2254,35 @@ class Client:
         log.info('screen-off: %s', self.screen_off)
         self.set_state(self.state)
         return self.screen_off
+
+    # ---- photo slideshow (photos.py: POST /api/photos from programs on the device; upstream PR #3) ----
+
+    def slides_view(self):
+        show = self.slides.current if self.slides else None
+        return show.view() if show else None
+
+    def show_photos(self, show):
+        """A show was committed (web.py): put it on the page, keep the screen on, close it after its minutes."""
+        if self._slides_timer:
+            self._slides_timer.cancel()
+        self._slides_timer = asyncio.get_running_loop().call_later(
+            show.minutes * 60, lambda: asyncio.create_task(self.close_photos(show.id)))
+        self.screen.photos(True)
+        self.events.publish('slides', show.view())
+
+    async def close_photos(self, show_id=None):
+        """Page, voice (mcp) or the timer. show_id: only if that show is still the open one (a timer of a
+        replaced show does nothing). True if a show was open."""
+        show = self.slides.current if self.slides else None
+        if show is None or (show_id is not None and show.id != show_id):
+            return False
+        if self._slides_timer:
+            self._slides_timer.cancel()
+            self._slides_timer = None
+        self.slides.close()
+        self.screen.photos(False)
+        self.events.publish('slides', None)
+        return True
 
     # ---- reports (the hub's local-only /kiosk/reports endpoint) ----
 

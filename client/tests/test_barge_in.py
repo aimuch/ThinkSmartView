@@ -53,7 +53,7 @@ class FakeHub:
 
 def make_client():
     c = app.Client.__new__(app.Client)
-    c.cfg = {'follow_up_seconds': 10}
+    c.cfg = {'follow_up_seconds': 10, 'follow_up': 'always'}   # test_follow_up.py tries the others
     c.events = app.Events()
     c.state = 'idle'
     c.uploading = False
@@ -82,6 +82,7 @@ def make_client():
     c.keys = types.SimpleNamespace(mic_on=True)
     c.sleep, c.sleeping, c.reports = {}, False, 0
     c.screen_off = {'enabled': True, 'minutes': 5}
+    c.slides, c._slides_timer = None, None
     c.sounds = {}
     c.verifier = None
     c.speech_end = 0.0

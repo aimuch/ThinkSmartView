@@ -40,6 +40,9 @@ DEFAULTS = {
     # open: when the hub can't be asked, the wake counts
     'wake_verify': 'hub',
     'follow_up_seconds': 10,   # after a reply: keep listening this long for a follow-up
+    # which replies open that window: 'question' only one that asks something back (ends in a
+    # question), 'always' every reply, 'never' none (the wake word each time). 翻译模式 always listens.
+    'follow_up': 'question',
     'port': 8090,
     'sleep': {'enabled': False, 'start': '22:00', 'end': '07:00'},   # sleep.py
     'brightness': 100,    # the screen's 0-100, set on the page or by voice (no automatic brightness: the user asked)

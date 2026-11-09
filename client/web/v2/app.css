@@ -359,6 +359,26 @@ body[data-state="listening"] .mic-ring { opacity: .75; }
 
 /* ---- overlays ---- */
 /* an alarm rings: covers everything (also the settings) until 停止 / 再睡 or the wake word */
+/* photo slideshow (photos.py, upstream PR #3): over the conversation and the settings, under toasts, a ring and the volume HUD */
+.slides { position: fixed; z-index: 28; inset: 0; display: none; background: #000; touch-action: none; }
+.showing-slides .slides { display: block; }
+.slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .9s ease; }
+.slide.on { opacity: 1; }
+.slide-bar { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 18px; padding: 22px 28px 22px 66px;
+             background: linear-gradient(#000000b0, transparent); opacity: 0; transition: opacity .3s; pointer-events: none; }
+.slides.bar .slide-bar { opacity: 1; pointer-events: auto; }
+.slide-title { font-size: 30px; font-weight: 700; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.slide-num { font-size: 24px; color: var(--ink2); font-variant-numeric: tabular-nums; margin-right: auto; }
+.slide-close { min-width: 160px; height: 72px; border-radius: 24px; font-size: 28px; font-weight: 700;
+               background: var(--card2); border: 1px solid var(--line); }
+.slide-hint { position: absolute; left: 0; right: 0; bottom: 18px; margin: 0; text-align: center; font-size: 20px; color: var(--ink3);
+              opacity: 0; transition: opacity .3s; }
+.slides.bar .slide-hint { opacity: 1; }
+/* the conversation goes on behind the photos: a dot in its colours shows it (opacity only, Adreno 506) */
+.slide-dot { position: absolute; z-index: 1; top: 49px; left: 30px; width: 18px; height: 18px; border-radius: 50%;
+             background: var(--c1); opacity: .35; }
+body:not([data-state="idle"]) .slide-dot { animation: slide-dot 1.1s ease-in-out infinite; }
+@keyframes slide-dot { 50% { opacity: 1; } }
 .ring { position: fixed; z-index: 35; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
         background: radial-gradient(700px 520px at 50% 40%, #3a2a7a 0%, transparent 70%), linear-gradient(160deg, #141a40, #05070f); }
 .ringing .ring { display: flex; }

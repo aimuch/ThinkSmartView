@@ -481,6 +481,17 @@
     <div class="ring-btns"><button class="ring-snooze" id="hcNo">取消</button><button class="ring-stop" id="hcYes">确定</button></div></div>
 </div>
 
+<!-- 照片轮播：设备上别的程序发来的照片（photos.py，上游 PR #3） -->
+<div class="slides" id="slides">
+  <img class="slide" id="slideA" alt=""><img class="slide" id="slideB" alt="">
+  <span class="slide-dot"></span>
+  <div class="slide-bar">
+    <b class="slide-title" id="slideTitle"></b>
+    <span class="slide-num" id="slideNum"></span>
+    <button class="slide-close" id="slideClose">关闭</button>
+  </div>
+  <p class="slide-hint">左右滑动翻页，点一下显示按钮；也可以说「关掉照片」</p>
+</div>
 <div class="ring" id="ring">
   <svg class="ring-bell" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>

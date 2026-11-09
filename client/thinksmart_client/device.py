@@ -46,11 +46,13 @@ def normalize_screen_off(setting, changes=None):
 class Screen:
     """Hints for the blanker: hold() while a conversation goes on, release() when it ends, dim()
     for the sleep hours, brightness() for the user's level, blank_after() for the user's
-    screen-off. A new seq is activity (wakes the screen); a setting change alone is not."""
+    screen-off, photos() while a slideshow is open. A new seq is activity (wakes the screen); a
+    setting change alone is not."""
 
     def __init__(self):
         self.held = None
         self.ringing = False         # an alarm rings: on until it stops, whatever the conversation does
+        self.showing = False         # a photo slideshow is open (photos.py): on until it closes
         self.dimmed = False
         self.level = 100             # the user's 0-100
         self.idle = 300              # the user's screen-off in seconds, 0: never
@@ -71,6 +73,12 @@ class Screen:
         the user's screen-off."""
         if self.ringing != on:
             self.ringing = on
+            self._write(activity=True)
+
+    def photos(self, on):
+        """A slideshow opens (light the screen, keep it on) or closes (blank after the user's screen-off)."""
+        if self.showing != on:
+            self.showing = on
             self._write(activity=True)
 
     def poke(self):
@@ -95,7 +103,7 @@ class Screen:
     def _write(self, activity):
         if activity:
             self._seq += 1
-        hint = {'hold': bool(self.held or self.ringing), 'dim': self.dimmed, 'seq': self._seq,
+        hint = {'hold': bool(self.held or self.ringing or self.showing), 'dim': self.dimmed, 'seq': self._seq,
                 'brightness': self.level, 'idle': self.idle}
         if not hint['hold'] and self.idle:
             hint['after'] = self.idle   # for a blanker older than "idle": the time after a conversation
