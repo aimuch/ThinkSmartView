@@ -63,7 +63,7 @@ def prompt_phrases(config: dict) -> list:
     from core.providers.llm.grok_bot.grok_bot import DEFAULT_FILLER
     from core.utils.textUtils import get_string_no_punctuation_or_emoji
 
-    defaults = {"claude_cli": "好的，我看一下", "grok_bot": DEFAULT_FILLER}
+    defaults = {"claude_cli": "好的，我看一下", "grok_bot": DEFAULT_FILLER, "dsh_cli": "好的，我想想"}
     phrases = []
     for entry in (config.get("LLM") or {}).values():
         if not isinstance(entry, dict) or entry.get("type") not in defaults:

@@ -34,13 +34,49 @@ MAX_BYTES = 8 * 1024 * 1024
 QUESTION_MAX = 100
 VISION_TIMEOUT = 40
 
+# [xiaozhi-hub] 看图模型（设计画布第 15 块 A）。都走 OpenAI 兼容的 chat.completions + image_url。
+# share：和「大模型」页的哪个厂商共用 Key（那边填过就直接用）；local：本机/局域网服务，Key 可以不填，接口地址可改。
+# models：候选，第一个是默认；页面上可以填别的。DeepSeek 只有 V4.1 Flash 收图（2026-11-09 实测 V4-Pro 返回空）。
 PROVIDERS = {
-    "zhipu": {"entry": "ChatGLMVLLM", "label": "智谱 GLM-4V-Flash", "note": "免费，注册智谱开放平台拿 Key",
-              "model_name": "glm-4v-flash", "url": "https://open.bigmodel.cn/api/paas/v4/",
-              "key_url": "https://bigmodel.cn/usercenter/proj-mgmt/apikeys"},
-    "qwen": {"entry": "QwenVLVLLM", "label": "通义千问 VL（百炼）", "note": "按量付费，和千问 TTS 共用百炼 Key",
-             "model_name": "qwen-vl-plus", "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-             "key_url": "https://bailian.console.aliyun.com/?apiKey=1#/api-key"},
+    "deepseek": {"entry": "DeepSeekVLLM", "label": "DeepSeek", "note": "V4.1 Flash 能看图，约 0.001 元一张",
+                 "model_name": "deepseek-flash", "models": ["deepseek-flash"], "url": "https://api.deepseek.com",
+                 "key_url": "https://platform.deepseek.com/api_keys", "share": "deepseek",
+                 # 不关思考的话，400 个 token 全花在思考上、回答是空的；关了 1 秒出答案（2026-11-09 实测）
+                 "extra_body": {"thinking": {"type": "disabled"}}},
+    "zhipu": {"entry": "ChatGLMVLLM", "label": "智谱 GLM", "note": "GLM-4V-Flash 免费，注册智谱开放平台拿 Key",
+              "model_name": "glm-4v-flash", "models": ["glm-4v-flash", "glm-4.5v"], "url": "https://open.bigmodel.cn/api/paas/v4/",
+              "key_url": "https://bigmodel.cn/usercenter/proj-mgmt/apikeys", "share": "glm"},
+    "qwen": {"entry": "QwenVLVLLM", "label": "通义千问 VL", "note": "按量付费，和千问 TTS 共用百炼 Key",
+             "model_name": "qwen-vl-plus", "models": ["qwen-vl-plus", "qwen-vl-max", "qwen3-vl-plus"],
+             "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+             "key_url": "https://bailian.console.aliyun.com/?apiKey=1#/api-key", "share": "qwen"},
+    "doubao": {"entry": "DoubaoVLLM", "label": "豆包", "note": "火山方舟；模型名以方舟控制台开通的为准",
+               "model_name": "doubao-seed-2-0-lite-260215", "models": ["doubao-seed-2-0-lite-260215"],
+               "url": "https://ark.cn-beijing.volces.com/api/v3", "key_url": "https://console.volcengine.com/ark", "share": "doubao"},
+    "kimi": {"entry": "KimiVLLM", "label": "Kimi", "note": "月之暗面的视觉模型",
+             "model_name": "moonshot-v1-8k-vision-preview", "models": ["moonshot-v1-8k-vision-preview", "kimi-latest"],
+             "url": "https://api.moonshot.cn/v1", "key_url": "https://platform.moonshot.cn/console/api-keys", "share": "kimi"},
+    "stepfun": {"entry": "StepFunVLLM", "label": "阶跃星辰", "note": "阶跃的视觉模型",
+                "model_name": "step-1o-turbo-vision", "models": ["step-1o-turbo-vision"], "url": "https://api.stepfun.com/v1",
+                "key_url": "https://platform.stepfun.com/interface-key", "share": "stepfun"},
+    "siliconflow": {"entry": "SiliconFlowVLLM", "label": "硅基流动", "note": "开源视觉模型，模型名写成「厂商/模型」",
+                    "model_name": "Qwen/Qwen2.5-VL-72B-Instruct", "models": ["Qwen/Qwen2.5-VL-72B-Instruct", "Qwen/Qwen2.5-VL-32B-Instruct"],
+                    "url": "https://api.siliconflow.cn/v1", "key_url": "https://cloud.siliconflow.cn/account/ak", "share": "siliconflow"},
+    "openai": {"entry": "OpenAIVLLM", "label": "OpenAI", "note": "国内可能需要代理",
+               "model_name": "gpt-5-mini", "models": ["gpt-5-mini", "gpt-5"], "url": "https://api.openai.com/v1",
+               "key_url": "https://platform.openai.com/api-keys", "share": "openai"},
+    "gemini": {"entry": "GeminiVLLM", "label": "Gemini", "note": "国内可能需要代理",
+               "model_name": "gemini-2.5-flash", "models": ["gemini-2.5-flash", "gemini-2.5-pro"],
+               "url": "https://generativelanguage.googleapis.com/v1beta/openai/", "key_url": "https://aistudio.google.com/apikey",
+               "share": "gemini"},
+    "claude": {"entry": "ClaudeVLLM", "label": "Claude", "note": "国内可能需要代理",
+               "model_name": "claude-haiku-5-5", "models": ["claude-haiku-5-5", "claude-sonnet-5-5"],
+               "url": "https://api.anthropic.com/v1/", "key_url": "https://console.anthropic.com/settings/keys", "share": "claude"},
+    "ollama": {"entry": "OllamaVLLM", "label": "Ollama", "note": "本机或局域网的 Ollama，用能看图的模型（如 qwen2.5vl、gemma3）",
+               "model_name": "qwen2.5vl:7b", "models": ["qwen2.5vl:7b", "gemma3:4b", "llava:7b"], "url": "http://127.0.0.1:11434/v1",
+               "key_url": "", "share": "ollama", "local": True},
+    "custom": {"entry": "CustomVLLM", "label": "自定义", "note": "其他 OpenAI 兼容接口，例如 LM Studio、中转站",
+               "model_name": "", "models": [], "url": "", "key_url": "", "local": True},
 }
 ENTRY_TO_PROVIDER = {p["entry"]: k for k, p in PROVIDERS.items()}
 
@@ -61,8 +97,23 @@ def _placeholder(value) -> bool:
 
 # ---------- 看图模型设置 ----------
 
+def _shared_key(merged: dict, p: dict):
+    """这一家在「大模型」页填过的 Key；没有返回 None。"""
+    from core.admin import catalog
+
+    vendor = catalog.VENDOR_BY_ID.get(p.get("share") or "")
+    if not vendor:
+        return None
+    key = ((merged.get("LLM") or {}).get(vendor["entry"]) or {}).get("api_key")
+    return None if _placeholder(key) else str(key)
+
+
+def _url_of(entry: dict, p: dict) -> str:
+    return str(entry.get("base_url") or entry.get("url") or p["url"])
+
+
 def vision_settings(merged: dict) -> dict:
-    """后台显示用：选的是哪个、各自有没有 Key（不返回 Key 本身）。"""
+    """后台显示用：选的是哪个、各自有没有 Key（自己的或「大模型」页共用的；不返回 Key 本身）。"""
     vllm = merged.get("VLLM") or {}
     selected = ENTRY_TO_PROVIDER.get((merged.get("selected_module") or {}).get("VLLM") or "")
     out = []
@@ -71,14 +122,21 @@ def vision_settings(merged: dict) -> dict:
         model = entry.get("model_name") or p["model_name"]
         if pid == "qwen" and model == "qwen3.5-flash":   # 上游配置里的默认值，保存时换成看图用的 qwen-vl-plus
             model = p["model_name"]
-        out.append({"id": pid, "label": p["label"], "note": p["note"], "key_url": p["key_url"],
-                    "configured": not _placeholder(entry.get("api_key")), "model": model})
+        own = not _placeholder(entry.get("api_key"))
+        shared = not own and _shared_key(merged, p) is not None
+        out.append({"id": pid, "label": p["label"], "note": p["note"], "key_url": p["key_url"], "local": bool(p.get("local")),
+                    "own_key": own, "shared_key": shared, "configured": own or shared or bool(p.get("local")),
+                    "model": model, "models": p["models"], "url": _url_of(entry, p)})
     ready = bool(selected) and next(o for o in out if o["id"] == selected)["configured"]
+    if selected == "custom":
+        ready = ready and bool(next(o for o in out if o["id"] == "custom")["url"])
     return {"selected": selected, "ready": ready, "providers": out}
 
 
-def save_vision(provider: str, api_key: str, path=None) -> list:
-    """选用 provider；api_key 非空时一起保存。返回改了哪些项。"""
+def save_vision(provider: str, api_key: str, path=None, model: str = None, url: str = None) -> list:
+    """选用 provider；api_key 非空时一起保存（留空：用已存的，或「大模型」页这一家的 Key）。返回改了哪些项。"""
+    from urllib.parse import urlparse
+
     from ruamel.yaml.comments import CommentedMap
 
     from core.admin import config_store
@@ -89,16 +147,35 @@ def save_vision(provider: str, api_key: str, path=None) -> list:
     key = str(api_key or "").strip()
     if any(c.isspace() for c in key):
         raise ValueError("API Key 里不能有空格或换行")
+    model = str(model or "").strip()
+    if any(c.isspace() for c in model) or len(model) > 120:
+        raise ValueError("模型名里不能有空格")
+    url = str(url or "").strip()
+    if url and (urlparse(url).scheme not in ("http", "https") or not urlparse(url).netloc):
+        raise ValueError("接口地址要以 http:// 或 https:// 开头")
     merged = config_store.load_merged(custom_path=path) if path else config_store.load_merged()
     entry = (merged.get("VLLM") or {}).get(p["entry"]) or {}
-    if not key and _placeholder(entry.get("api_key")):
+    if not key and _placeholder(entry.get("api_key")) and not p.get("local") and _shared_key(merged, p) is None:
         raise ValueError(f"请填写{p['label']}的 API Key")
+    final_model = model or entry.get("model_name") or p["model_name"]
+    if provider == "qwen" and final_model == "qwen3.5-flash":
+        final_model = p["model_name"]
+    if not final_model:
+        raise ValueError("请填写模型名")
+    final_url = url or _url_of(entry, p)
+    if not final_url:
+        raise ValueError("请填写接口地址")
     changed = []
     with config_store.edit_custom(path) as data:
         target = data.setdefault("VLLM", CommentedMap()).setdefault(p["entry"], CommentedMap())
-        for k in ("model_name", "url"):
-            if not entry.get(k) or (k == "model_name" and provider == "qwen" and entry.get(k) == "qwen3.5-flash"):
-                target[k] = p[k]
+        if target.get("model_name") != final_model:
+            target["model_name"] = final_model
+            changed.append("model_name")
+        if _url_of(entry, p) != final_url or not entry.get("url"):
+            target["url"] = final_url
+            if entry.get("base_url"):
+                target["base_url"] = final_url
+            changed.append("url")
         target["type"] = "openai"
         if key and key != str(entry.get("api_key") or ""):
             target["api_key"] = key
@@ -111,11 +188,18 @@ def save_vision(provider: str, api_key: str, path=None) -> list:
 
 
 def _vision_entry(merged: dict):
+    """(条目名, 条目, Key)。没配好抛 PhotoError。"""
     name = (merged.get("selected_module") or {}).get("VLLM") or ""
     entry = (merged.get("VLLM") or {}).get(name) or {}
-    if name not in ENTRY_TO_PROVIDER or _placeholder(entry.get("api_key")):
+    pid = ENTRY_TO_PROVIDER.get(name)
+    if pid is None:
         raise PhotoError("还没配置看图模型，在网关后台「大模型 → 看图模型」里选一个、填上 Key")
-    return name, entry
+    p = PROVIDERS[pid]
+    key = None if _placeholder(entry.get("api_key")) else str(entry["api_key"])
+    key = key or _shared_key(merged, p) or ("local" if p.get("local") else None)
+    if key is None:
+        raise PhotoError("还没配置看图模型，在网关后台「大模型 → 看图模型」里选一个、填上 Key")
+    return name, entry, key
 
 
 def ask_vision(merged: dict, question: str, jpeg: bytes, device: str = None) -> str:
@@ -124,20 +208,24 @@ def ask_vision(merged: dict, question: str, jpeg: bytes, device: str = None) -> 
 
     from core import billing
 
-    name, entry = _vision_entry(merged)
-    model = entry.get("model_name") or PROVIDERS[ENTRY_TO_PROVIDER[name]]["model_name"]
-    client = openai.OpenAI(api_key=entry["api_key"], base_url=entry.get("base_url") or entry.get("url"),
-                           timeout=VISION_TIMEOUT, max_retries=1)
+    name, entry, key = _vision_entry(merged)
+    p = PROVIDERS[ENTRY_TO_PROVIDER[name]]
+    model = entry.get("model_name") or p["model_name"]
+    client = openai.OpenAI(api_key=key, base_url=_url_of(entry, p), timeout=VISION_TIMEOUT, max_retries=1)
     image = base64.b64encode(jpeg).decode()
+    mime = "image/png" if jpeg[:4] == b"\x89PNG" else "image/jpeg"   # 后台「试一下」发的是 PNG
     try:
-        resp = client.chat.completions.create(model=model, stream=False, max_tokens=400, messages=[{
+        # max_tokens 给够：会思考的看图模型（GLM-4.5V 等）思考也算在里面，太少时回答是空的
+        resp = client.chat.completions.create(model=model, stream=False, max_tokens=1000, extra_body=p.get("extra_body"), messages=[{
             "role": "user", "content": [
                 {"type": "text", "text": PROMPT.format(q=question)},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image}"}}]}])
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image}"}}]}])
     except openai.AuthenticationError:
         raise PhotoError("看图模型的 API Key 不对，到网关后台「大模型 → 看图模型」重新填")
     except openai.APITimeoutError:
         raise PhotoError("看图模型太久没回应，稍后再试")
+    except openai.APIConnectionError:
+        raise PhotoError("连不上看图模型的接口，检查一下接口地址和网络")
     except openai.APIError as e:
         raise PhotoError(f"看图模型出错：{getattr(e, 'message', None) or e}")
     text = (resp.choices[0].message.content or "").strip()

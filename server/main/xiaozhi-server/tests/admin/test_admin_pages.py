@@ -181,7 +181,7 @@ def test_save_tts_voice(cfg_path):
 def test_qwen3_tts_engine(cfg_path):
     """千问 TTS：没有条目时第一次保存按默认值新建；必须有 Key；Key 留空表示不改；音色要在列表里。"""
     d = pages.describe_tts(merged(cfg_path))
-    assert d["engine"] == "edge" and [e["id"] for e in d["engines"]] == ["edge", "qwen3"]
+    assert d["engine"] == "edge" and [e["id"] for e in d["engines"]] == ["edge", "qwen3", "lan"]
     q = d["engines"][1]
     assert q["exists"] is False and q["key_set"] is False and q["configured"] is False
     assert any(v["value"] == "Jada" and "上海" in v["group"] for v in q["voices"])
@@ -1087,7 +1087,7 @@ async def test_photo_rejects_bad_files_and_cancel(kiosk, tmp_path, monkeypatch):
 
 async def test_vision_settings(client, cfg_path):
     d = await (await client.get("/admin/api/vision")).json()
-    assert d["ok"] and d["ready"] is False and [p["id"] for p in d["providers"]] == ["zhipu", "qwen"]
+    assert d["ok"] and d["ready"] is False and [p["id"] for p in d["providers"]][:3] == ["deepseek", "zhipu", "qwen"]
     r = await client.post("/admin/api/vision", json={"provider": "zhipu"})
     assert r.status == 400 and "API Key" in (await r.json())["error"]
     r = await client.post("/admin/api/vision", json={"provider": "zhipu", "api_key": "abc.def123"})

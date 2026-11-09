@@ -108,6 +108,17 @@ def collect_status(config: dict, merged: dict) -> dict:
             checks.append(_check("大模型密钥", not missing,
                                  "已填写" if not missing else f"{selected.get('LLM')} 未填写 {', '.join(missing)}"))
 
+    # [xiaozhi-hub] DSH：设成默认或配了条目时，查一下装没装
+    if llm_type == "dsh_cli" or (merged.get("LLM") or {}).get("DshCLI", {}).get("type") == "dsh_cli":
+        from core.agent.dsh_session import find_dsh, find_node_dir
+
+        entry = (merged.get("LLM") or {}).get("DshCLI") or {}
+        dsh = find_dsh(entry.get("dsh_path") or None)
+        node = find_node_dir(entry.get("node_dir") or None)
+        checks.append(_check("DSH", bool(dsh), (f"{dsh}" + ("" if node else "（没找到 Node 24，DSH 可能起不来）")) if dsh
+                             else "没找到 dsh：npm i --prefix ~/.local/dsh @deepseek-ai/dsh，并装 Node 24",
+                             level=None if dsh and node else "warn" if dsh else "error"))
+
     # 后台能设置的插件：勾选了、但必填的设置（如 API Key）没填，而且会用到插件时提醒
     checks.extend(_plugin_setting_checks(merged, llm_type))
 

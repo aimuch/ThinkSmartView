@@ -71,6 +71,8 @@ def llm_kind(merged: dict, name: str = None) -> str:
         return "cli"
     if config_store.entry_type(merged, "LLM", name) == "grok_bot":
         return "grok"
+    if config_store.entry_type(merged, "LLM", name) == "dsh_cli":
+        return "dsh"
     if name in catalog.VENDOR_BY_ENTRY and config_store.entry_type(merged, "LLM", name) == "openai":
         return "api"
     return "other"
@@ -127,6 +129,7 @@ def describe_llm(merged: dict) -> dict:
         "kind": kind,
         "vendor": vendor["id"] if vendor else None,
         "claude": describe_claude_cli(merged),
+        "dsh": describe_dsh(merged),
         "vendors": [describe_vendor(v, merged) for v in catalog.LLM_VENDORS],
         "grok": {"bots": grok_entries(merged),
                  "selected": next((g for g in grok_entries(merged) if g["entry"] == selected), None)},
@@ -134,6 +137,73 @@ def describe_llm(merged: dict) -> dict:
         "call_names_enabled": calls["enabled"],
         "callable": {m["entry"]: m["aliases"] for m in calls["models"] if m["aliases"]},
     }
+
+
+# ---------- [xiaozhi-hub] 大模型：DeepSeek Harness（DSH） ----------
+
+DSH_ENTRY = "DshCLI"
+DSH_DEFAULTS = {"type": "dsh_cli", "model": "deepseek-flash", "effort": "low", "permission": "read-only",
+                "workdir": "~/xiaozhi-workspace", "key_from": "DeepSeekLLM", "first_reply_filler": "好的，我想想",
+                "idle_timeout_seconds": 300, "resume_window_minutes": 120}
+
+
+def describe_dsh(merged: dict) -> dict:
+    entry = _entry(merged, "LLM", DSH_ENTRY)
+    exists = entry.get("type") == "dsh_cli"
+    values = {**{k: v for k, v in DSH_DEFAULTS.items() if k != "type"}, **({k: v for k, v in entry.items() if k != "api_key"} if exists else {})}
+    own = exists and not config_store.is_placeholder(entry.get("api_key"))
+    shared = not config_store.is_placeholder(_entry(merged, "LLM", values.get("key_from") or "DeepSeekLLM").get("api_key"))
+    return {"exists": exists, "values": {k: values[k] for k in ("model", "effort", "permission", "workdir", "first_reply_filler")},
+            "own_key": own, "key_hint": config_store.mask_key(entry.get("api_key")) if own else "", "shared_key": shared,
+            "options": {"model": catalog.DSH_MODELS, "effort": catalog.DSH_EFFORTS, "permission": catalog.DSH_PERMISSIONS}}
+
+
+def save_dsh(payload: dict, merged: dict, path: Path = None) -> list:
+    """建好或更新 DshCLI 条目。Key 留空：用自己存过的，或「大模型」页 DeepSeek 的。"""
+    entry = _entry(merged, "LLM", DSH_ENTRY)
+    if entry and entry.get("type") != "dsh_cli":
+        raise ValueError(f"配置里的 {DSH_ENTRY} 不是 DSH，请在配置文件里改名或删掉它")
+    model = str(payload.get("model") or entry.get("model") or DSH_DEFAULTS["model"]).strip()
+    if any(c.isspace() for c in model) or not model:
+        raise ValueError("模型名不对")
+    effort = str(payload.get("effort") if payload.get("effort") is not None else entry.get("effort", "low"))
+    if effort not in {o["value"] for o in catalog.DSH_EFFORTS}:
+        raise ValueError("思考档位只能是低、高、最高")
+    permission = str(payload.get("permission") or entry.get("permission") or "read-only")
+    if permission not in {o["value"] for o in catalog.DSH_PERMISSIONS}:
+        raise ValueError("不支持这个权限档位")
+    workdir = str(payload.get("workdir") or entry.get("workdir") or DSH_DEFAULTS["workdir"]).strip()
+    filler = str(payload.get("first_reply_filler") if payload.get("first_reply_filler") is not None
+                 else entry.get("first_reply_filler", DSH_DEFAULTS["first_reply_filler"])).strip()[:30]
+    key = str(payload.get("api_key") or "").strip()
+    if any(c.isspace() for c in key):
+        raise ValueError("API Key 里不能有空格或换行")
+    final = {**({} if entry else DSH_DEFAULTS), "model": model, "effort": effort, "permission": permission,
+             "workdir": workdir, "first_reply_filler": filler}
+    if key:
+        final["api_key"] = key
+    has_key = key or not config_store.is_placeholder(entry.get("api_key")) or \
+        not config_store.is_placeholder(_entry(merged, "LLM", entry.get("key_from") or "DeepSeekLLM").get("api_key"))
+    if not has_key:
+        raise ValueError("先在「API Key」里填好 DeepSeek 的 Key，或在这里单独填一个")
+    changes = {k: v for k, v in final.items() if entry.get(k) != v}
+    if not changes:
+        return []
+    from core.agent import call_names
+    effective = (merged.get("call_names") or {}).get("models") or call_names.DEFAULT_MODELS
+    with config_store.edit_custom(path) as data:
+        target = data.setdefault("LLM", CommentedMap()).setdefault(DSH_ENTRY, CommentedMap())
+        for k, v in changes.items():
+            target[k] = v
+        if not entry and DSH_ENTRY not in effective:
+            # 第一次建好：配上默认称呼「DSH」。自定义文件里还没有称呼表时，先把当前生效的抄进去
+            cn = data.setdefault("call_names", CommentedMap())
+            models = cn.get("models")
+            if not isinstance(models, CommentedMap):
+                models = CommentedMap((k, CommentedSeq(list(v))) for k, v in effective.items())
+                cn["models"] = models
+            models[DSH_ENTRY] = CommentedSeq(list(call_names.DSH_ALIASES))
+    return [k for k in changes if k != "type"]
 
 
 # ---------- 大模型：Grok Bot ----------
@@ -384,7 +454,7 @@ def vendor_test_config(vendor_id: str, payload: dict, merged: dict) -> dict:
 def desired_intent(merged: dict, llm_name: str, path: Path = None):
     """切换大模型后意图识别应该是什么：Claude CLI 只能用 nointent；
     API 模型恢复用户上次在 API 模式下的选择，没有选过时用 function_call。"""
-    if config_store.entry_type(merged, "LLM", llm_name) == "claude_cli":
+    if config_store.entry_type(merged, "LLM", llm_name) in ("claude_cli", "dsh_cli"):
         return "nointent"
     pref = (config_store.load_custom(path).get("admin") or {}).get("api_intent")
     if pref in catalog.INTENT_MODES:
@@ -547,7 +617,8 @@ def describe_asr_provider(p: dict, merged: dict) -> dict:
     for f in p.get("fields", []):
         raw = entry.get(f["key"]) if exists else None
         is_set = not config_store.is_placeholder(raw)
-        item = {"key": f["key"], "label": f["label"], "secret": bool(f.get("secret")), "set": is_set}
+        item = {"key": f["key"], "label": f["label"], "secret": bool(f.get("secret")), "set": is_set or bool(f.get("optional")),
+                "optional": bool(f.get("optional"))}
         if f.get("secret"):
             item["hint"] = config_store.mask_key(raw)
         else:
@@ -591,7 +662,7 @@ def save_asr_provider(provider_id: str, values: dict, merged: dict, path: Path =
         changes = {"type": p["type"], **p.get("defaults", {}), **changes}
     final = {**entry, **changes}
     for f in p.get("fields", []):
-        if config_store.is_placeholder(final.get(f["key"])):
+        if config_store.is_placeholder(final.get(f["key"])) and not f.get("optional"):
             raise ValueError(f"请填写 {f['label']}")
     if not changes:
         return []
@@ -846,7 +917,14 @@ def describe_tts(merged: dict) -> dict:
             key = item.get("api_key") if exists else None
             info["key_set"] = not config_store.is_placeholder(key)
             info["key_hint"] = config_store.mask_key(key)
-        info["configured"] = exists and info.get("key_set", True)
+        if e.get("custom"):
+            cur = {**catalog.LAN_TTS_DEFAULTS, **(item if exists else {})}
+            info["custom"] = True
+            info["fields"] = {k: str(cur.get(k) or "") for k in ("api_url", "model", "voice", "format")}
+            key = item.get("api_key") if exists else None
+            info["key_set"] = exists and not config_store.is_placeholder(key) and str(key) != "none"
+            info["key_hint"] = config_store.mask_key(key) if info["key_set"] else ""
+        info["configured"] = exists and (info.get("key_set", True) or bool(e.get("custom")))
         engines.append(info)
     return {
         "selected": name,
@@ -868,6 +946,8 @@ def save_tts(engine_id: str, values: dict, merged: dict, path: Path = None) -> l
     if entry and entry.get("type") != e["type"]:
         raise ValueError(f"配置里的 {e['entry']} 不是 {e['label']}，请在配置文件里改名或删掉它")
     voice = str(values.get("voice") or "").strip()
+    if e.get("custom"):
+        return _save_custom_tts(e, values, entry, path)
     if voice not in {v["value"] for v in e["voices"]}:
         raise ValueError("不支持这个音色")
     changes = {}
@@ -885,6 +965,36 @@ def save_tts(engine_id: str, values: dict, merged: dict, path: Path = None) -> l
         if e["id"] != "qwen3":
             raise ValueError(f"配置里没有 {e['entry']}")
         changes = {**catalog.QWEN3_TTS_DEFAULTS, **changes}
+    if not changes:
+        return []
+    with config_store.edit_custom(path) as data:
+        target = data.setdefault("TTS", CommentedMap()).setdefault(e["entry"], CommentedMap())
+        for k, v in changes.items():
+            target[k] = v
+    return [k for k in changes if k != "type"]
+
+
+def _save_custom_tts(e: dict, values: dict, entry: dict, path: Path = None) -> list:
+    """局域网合成服务：接口地址、模型、音色、格式手填，Key 可以不填。"""
+    from urllib.parse import urlparse
+
+    out = {}
+    for k in ("api_url", "model", "voice", "format"):
+        v = str(values.get(k) or entry.get(k) or catalog.LAN_TTS_DEFAULTS[k]).strip()
+        if not v or any(c.isspace() for c in v) or len(v) > 300:
+            raise ValueError({"api_url": "接口地址", "model": "模型", "voice": "音色", "format": "格式"}[k] + "不对（不能有空格）")
+        out[k] = v
+    if urlparse(out["api_url"]).scheme not in ("http", "https") or not urlparse(out["api_url"]).netloc:
+        raise ValueError("接口地址要以 http:// 或 https:// 开头")
+    if out["format"] not in ("wav", "mp3", "opus", "flac", "pcm"):
+        raise ValueError("格式只能是 wav、mp3、opus、flac")
+    key = str(values.get("api_key") or "").strip()
+    if any(c.isspace() for c in key):
+        raise ValueError("API Key 里不能有空格或换行")
+    if key:
+        out["api_key"] = key
+    base = {} if entry else {k: v for k, v in catalog.LAN_TTS_DEFAULTS.items()}
+    changes = {k: v for k, v in {**base, **out}.items() if entry.get(k) != v}
     if not changes:
         return []
     with config_store.edit_custom(path) as data:
@@ -985,6 +1095,9 @@ def call_targets(merged: dict) -> list:
     if config_store.entry_type(merged, "LLM", CLAUDE_CLI_ENTRY) == "claude_cli":
         result.append({"entry": CLAUDE_CLI_ENTRY, "label": "Claude（本机 Claude Code）",
                        "defaults": list(call_names.DEFAULT_MODELS[CLAUDE_CLI_ENTRY])})
+    if config_store.entry_type(merged, "LLM", DSH_ENTRY) == "dsh_cli":
+        result.append({"entry": DSH_ENTRY, "label": "DSH（DeepSeek Harness）",
+                       "defaults": list(call_names.DSH_ALIASES)})
     for g in grok_entries(merged):
         if g["bot_id"]:
             result.append({"entry": g["entry"], "label": f"{g['bot_name']}（Grok Bot）",

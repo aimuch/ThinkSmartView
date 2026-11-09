@@ -82,6 +82,23 @@ LLM_VENDORS = [
 VENDOR_BY_ID = {v["id"]: v for v in LLM_VENDORS}
 VENDOR_BY_ENTRY = {v["entry"]: v for v in LLM_VENDORS}
 
+# ---------- [xiaozhi-hub] 大模型：DeepSeek Harness（DSH） ----------
+# 模型名和档位来自 DeepSeek 的 /models（2026-11-09）；deepseek-flash 就是 V4.1 Flash
+DSH_MODELS = [
+    {"value": "deepseek-flash", "label": "V4.1 Flash", "hint": "快，能看图，适合语音"},
+    {"value": "deepseek-v4-pro", "label": "V4 Pro", "hint": "更聪明，较慢"},
+]
+DSH_EFFORTS = [
+    {"value": "low", "label": "低"},
+    {"value": "high", "label": "高", "slow": True},
+    {"value": "max", "label": "最高", "slow": True},
+]
+DSH_PERMISSIONS = [
+    {"value": "read-only", "label": "只读", "desc": "只能看、搜工作目录里的文件"},
+    {"value": "workspace-write", "label": "可写", "desc": "还能在工作目录里改文件、在沙箱里跑命令"},
+    {"value": "danger-full-access", "label": "完全访问", "desc": "不限制，能动整台电脑，慎用"},
+]
+
 # ---------- 大模型：Claude Code CLI ----------
 CLAUDE_MODELS = [
     {"value": "haiku", "label": "Haiku", "hint": "最快，适合语音"},
@@ -180,6 +197,13 @@ TTS_ENGINES = [
      "desc": "通义千问 qwen3-tts-flash，有上海话、北京话、四川话、粤语等方言音色。按字数计费，需要百炼的 API Key。",
      "link": "https://bailian.console.aliyun.com/?tab=model#/api-key", "voices": QWEN3_TTS_VOICES},
 ]
+# [xiaozhi-hub] 局域网里的 OpenAI 兼容合成服务（Kokoro-FastAPI、Speaches 等）：地址、模型、音色都手填
+LAN_TTS_ENTRY = "LanTTS"
+LAN_TTS_DEFAULTS = {"type": "openai", "api_url": "http://192.168.1.10:8880/v1/audio/speech", "model": "kokoro",
+                    "voice": "zf_xiaobei", "format": "wav", "speed": 1.0, "api_key": "none", "output_dir": "tmp/"}
+TTS_ENGINES.append({"id": "lan", "entry": LAN_TTS_ENTRY, "type": "openai", "label": "局域网合成服务", "mark": "OpenAI 兼容",
+                    "desc": "家里另一台电脑上的合成服务，例如 Kokoro-FastAPI（中文音色 zf_xiaobei、zm_yunxi 等）、Speaches。",
+                    "link": "https://github.com/remsky/Kokoro-FastAPI", "voices": [], "custom": True})
 TTS_ENGINE_BY_ID = {e["id"]: e for e in TTS_ENGINES}
 
 VOICE_SAMPLE = {
@@ -335,6 +359,14 @@ ASR_PROVIDERS = [
                 {"key": "model_name", "label": "模型", "default": "whisper-large-v3-turbo"},
                 {"key": "base_url", "label": "接口地址", "default": "https://api.groq.com/openai/v1/audio/transcriptions"}],
      "defaults": {"output_dir": "tmp/"}},
+    # [xiaozhi-hub] 局域网里的 OpenAI 兼容识别服务（Speaches、faster-whisper-server 等），设计画布第 15 块 D
+    {"id": "lanasr", "group": "lan", "label": "局域网识别服务", "mark": "LAN", "entry": "LanASR", "type": "openai",
+     "desc": "家里另一台电脑上的 OpenAI 兼容识别服务，例如 Speaches（faster-whisper）；有显卡的电脑上很快",
+     "link": "https://speaches.ai/",
+     "fields": [{"key": "base_url", "label": "接口地址", "default": "http://192.168.1.10:8000/v1/audio/transcriptions"},
+                {"key": "model_name", "label": "模型", "default": "Systran/faster-whisper-small"},
+                {"key": "api_key", "label": "API Key（不用就留空）", "secret": True, "optional": True}],
+     "defaults": {"output_dir": "tmp/", "api_key": "none"}},
 ]
 ASR_PROVIDER_BY_ID = {p["id"]: p for p in ASR_PROVIDERS}
 ASR_PROVIDER_BY_ENTRY = {p["entry"]: p for p in ASR_PROVIDERS}

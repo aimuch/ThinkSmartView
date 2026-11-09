@@ -61,7 +61,7 @@ def test_asr_provider_catalog():
     ids = [p["id"] for p in catalog.ASR_PROVIDERS]
     assert len(ids) == len(set(ids)) and catalog.LOCAL_ASR_ENTRY not in catalog.ASR_PROVIDER_BY_ENTRY
     for p in catalog.ASR_PROVIDERS:
-        assert p["group"] in ("local", "cloud")
+        assert p["group"] in ("local", "cloud", "lan")
         assert (p["group"] == "local") == bool(p.get("download")), p["id"]
 
 

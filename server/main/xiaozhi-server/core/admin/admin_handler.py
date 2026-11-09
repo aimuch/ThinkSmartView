@@ -25,7 +25,7 @@ from pathlib import Path
 from aiohttp import web
 
 from config.logger import setup_logging
-from core.admin import auth, catalog, config_store, connections, pages, pipeline, plugin_settings, updater
+from core.admin import auth, brand, catalog, config_store, connections, pages, pipeline, plugin_settings, presence, updater
 from core.admin.grokbot import GrokBotAdmin
 from core.admin.status import _claude_version, collect_status
 from core import billing
@@ -80,9 +80,11 @@ class AdminHandler:
         self.ws_server = ws_server
         self.config_path = config_path
         billing.configure(config)   # [xiaozhi-hub] 费用统计读单价、额度用的配置
-        self.sessions = auth.SessionStore()
         # 后台点了更新网关、网关重启后，接着用重启前的登录（文件在 data/ 下，和配置放在一起）
         data_dir = Path(config_path).parent if config_path else updater.SERVER_DIR / "data"
+        self.data_dir = data_dir
+        self.started_at = time.time()
+        self.sessions = auth.SessionStore(kept_path=data_dir / ".admin-sessions-kept.json")
         self.sessions_handover = data_dir / ".admin-sessions.json"
         if self.sessions.restore(self.sessions_handover):
             logger.bind(tag=TAG).info("更新网关后沿用了更新前的后台登录")
@@ -102,6 +104,10 @@ class AdminHandler:
                 web.post("/admin/api/setup", self.handle_setup),
                 web.post("/admin/api/login", self.handle_login),
                 web.post("/admin/api/logout", self.handle_logout),
+                web.post("/admin/api/password", self.handle_password),
+                web.get("/admin/favicon", self.handle_favicon),
+                web.get("/admin/api/brand", self.handle_brand),
+                web.post("/admin/api/brand", self.handle_brand_save),
                 web.get("/admin/api/status", self.handle_status),
                 web.get("/admin/api/update", self.handle_update),
                 web.post("/admin/api/update/check", self.handle_update_check),
@@ -121,6 +127,7 @@ class AdminHandler:
                 web.post("/admin/api/devices/{session_id}/emotion-test/stop", self.handle_emotion_stop),
                 web.get("/admin/api/llm", self.handle_llm),
                 web.post("/admin/api/llm/claude", self.handle_llm_claude),
+                web.post("/admin/api/llm/dsh", self.handle_llm_dsh),
                 web.post("/admin/api/llm/vendors/{vendor}", self.handle_llm_vendor),
                 web.post("/admin/api/llm/vendors/{vendor}/test", self.handle_llm_vendor_test),
                 web.post("/admin/api/llm/use", self.handle_llm_use),
@@ -184,6 +191,7 @@ class AdminHandler:
                 web.get("/admin/api/vision", self.handle_vision),
                 web.post("/admin/api/vision", self.handle_vision_save),
                 web.post("/admin/api/vision/test", self.handle_vision_test),
+                web.post("/admin/api/models/list", self.handle_models_list),
             ]
         )
 
@@ -216,15 +224,16 @@ class AdminHandler:
             raise web.HTTPBadRequest(text="JSON 格式错误")
         return body
 
-    def _login_response(self, request: web.Request, data: dict):
+    def _login_response(self, request: web.Request, data: dict, remember: bool = False):
+        """remember（勾了「保持登录」）：30 天，网关重启后也有效；不勾：关掉浏览器就失效（服务端最多 12 小时）。"""
         response = self._json(data)
         response.set_cookie(
             COOKIE_NAME,
-            self.sessions.create(),
+            self.sessions.create(remember),
             httponly=True,
             samesite="Strict",
             path="/admin",
-            max_age=self.sessions.ttl,
+            max_age=auth.REMEMBER_SECONDS if remember else None,
         )
         return response
 
@@ -240,13 +249,56 @@ class AdminHandler:
         html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
         return web.Response(text=html, content_type="text/html", headers=SECURITY_HEADERS)
 
+    def _connected_ids(self):
+        return [d["device_id"] for d in connections.snapshot() if d.get("device_id")]
+
     async def handle_state(self, request: web.Request):
+        """登录前也能看的：要不要先设密码、名称图标、几台设备在线（登录页底部那行）、地址。"""
+        token = request.cookies.get(COOKIE_NAME)
+        expiry = self.sessions.expiry(token)
         return self._json(
             {
                 "needs_setup": not config_store.get_password_hash(self.config_path),
-                "logged_in": self._logged_in(request),
+                "logged_in": expiry is not None,
+                "session_expires": int(expiry) if expiry else None,
+                "brand": await self._blocking(brand.load, self.data_dir),
+                "online": presence.online_count(self._connected_ids()),
+                "host": request.host,
             }
         )
+
+    async def handle_favicon(self, request: web.Request):
+        body, ctype = await self._blocking(brand.favicon, self.data_dir)
+        return web.Response(body=body, content_type=ctype, headers={"Cache-Control": "no-cache"})
+
+    async def handle_brand(self, request: web.Request):
+        return self._json({"ok": True, **await self._blocking(brand.load, self.data_dir)})
+
+    async def handle_brand_save(self, request: web.Request):
+        self._require_login(request)
+        body = await self._read_json(request)
+        try:
+            saved = await self._blocking(brand.save, self.data_dir, body)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        return self._json({"ok": True, **saved})
+
+    async def handle_password(self, request: web.Request):
+        """{"old", "new"}：改密码。其他浏览器的登录全部失效，改密码的这个留着。"""
+        self._require_login(request)
+        body = await self._read_json(request)
+        stored = await self._blocking(config_store.get_password_hash, self.config_path)
+        if not await self._blocking(auth.verify_password, str(body.get("old") or ""), stored or ""):
+            await asyncio.sleep(1)
+            return self._error("原密码不对", 400)
+        new = str(body.get("new") or "")
+        if len(new) < auth.MIN_PASSWORD_LENGTH:
+            return self._error(f"新密码至少 {auth.MIN_PASSWORD_LENGTH} 位", 400)
+        password_hash = await self._blocking(auth.hash_password, new)
+        await self._blocking(config_store.set_password_hash, password_hash, self.config_path)
+        self.sessions.revoke_all(keep=request.cookies.get(COOKIE_NAME))
+        self.logger.bind(tag=TAG).info("管理后台密码已修改，其他登录已失效")
+        return self._json({"ok": True})
 
     async def handle_setup(self, request: web.Request):
         if config_store.get_password_hash(self.config_path):
@@ -258,7 +310,7 @@ class AdminHandler:
         password_hash = await self._blocking(auth.hash_password, password)
         await self._blocking(config_store.set_password_hash, password_hash, self.config_path)
         self.logger.bind(tag=TAG).info("管理后台密码已设置")
-        return self._login_response(request, {"ok": True})
+        return self._login_response(request, {"ok": True}, remember=bool(body.get("remember")))
 
     async def handle_login(self, request: web.Request):
         body = await self._read_json(request)
@@ -269,7 +321,7 @@ class AdminHandler:
             await asyncio.sleep(1)  # 减缓暴力尝试
             self.logger.bind(tag=TAG).warning(f"管理后台登录失败，来源 {request.remote}")
             return self._error("密码错误", 401)
-        return self._login_response(request, {"ok": True})
+        return self._login_response(request, {"ok": True}, remember=bool(body.get("remember")))
 
     async def handle_logout(self, request: web.Request):
         self.sessions.revoke(request.cookies.get(COOKIE_NAME))
@@ -501,7 +553,31 @@ class AdminHandler:
         self._require_login(request)
         merged = await self._blocking(self._merged)
         status = await self._blocking(collect_status, self.config, merged)
-        return self._json({"ok": True, **status})
+        return self._json({"ok": True, **status, **await self._blocking(self._activity, merged)})
+
+    def _activity(self, merged: dict) -> dict:
+        """状态页顶部：运行时长、最近 24 小时每小时说了几句、今天几句、今天和本月的费用。"""
+        now = time.time()
+        since = (int(now // 3600) - 23) * 3600
+        try:
+            hours = chat_history.db().hourly_turns(since)
+        except Exception:  # noqa: BLE001 —— 聊天记录关着或库坏了，不影响状态页
+            hours = []
+        midnight = time.mktime(time.localtime(now)[:3] + (0, 0, 0, 0, 0, -1))
+        try:
+            today = chat_history.db().hourly_turns(midnight, 24)
+        except Exception:  # noqa: BLE001
+            today = []
+        try:
+            cost = billing.brief(merged)
+        except Exception:  # noqa: BLE001
+            cost = {}
+        try:
+            stages = pipeline.describe_stages(merged)
+        except Exception:  # noqa: BLE001
+            stages = []
+        return {"stages": stages, "uptime": int(now - self.started_at), "hours": hours, "hours_since": since,
+                "turns_today": sum(today), "cost": {k: cost.get(k) for k in ("today", "month", "currencies")}}
 
     # ---------- 更新网关 ----------
 
@@ -550,11 +626,42 @@ class AdminHandler:
         cli = find_claude_cli(entry.get("cli_path") or None)
         return {"installed": bool(cli), "path": cli or "", "version": _claude_version(cli) if cli and version else ""}
 
+    _dsh_version_cache = {}
+
+    def _dsh_install(self, merged: dict, version: bool = True) -> dict:
+        """网关上有没有 dsh 和 Node 24；版本要启动一次 node（约 1 秒），按路径缓存。"""
+        from core.agent.dsh_session import dsh_version, find_dsh, find_node_dir
+
+        entry = (merged.get("LLM") or {}).get(pages.DSH_ENTRY) or {}
+        dsh, node = find_dsh(entry.get("dsh_path") or None), find_node_dir(entry.get("node_dir") or None)
+        ver = ""
+        if dsh and version:
+            ver = self._dsh_version_cache.get(dsh)
+            if ver is None:
+                try:
+                    ver = dsh_version(dsh, node)
+                except Exception:  # noqa: BLE001
+                    ver = ""
+                self._dsh_version_cache[dsh] = ver
+        return {"installed": bool(dsh), "path": dsh or "", "node": node or "", "version": ver}
+
+    async def handle_llm_dsh(self, request: web.Request):
+        self._require_login(request)
+        body = await self._read_json(request)
+        try:
+            merged = await self._blocking(self._merged)
+            changed = await self._blocking(pages.save_dsh, body, merged, self.config_path)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        self.logger.bind(tag=TAG).info(f"管理后台更新了 DSH 设置: {', '.join(changed) or '无变化'}")
+        return self._json({"ok": True, "changed": changed, **await self._apply_if_selected("LLM", pages.DSH_ENTRY, changed)})
+
     async def handle_llm(self, request: web.Request):
         self._require_login(request)
         merged = await self._blocking(self._merged)
         data = pages.describe_llm(merged)
         data["claude"]["install"] = await self._blocking(self._claude_install, merged)
+        data["dsh"]["install"] = await self._blocking(self._dsh_install, merged)
         data["running"] = self._running("LLM")
         return self._json({"ok": True, **data})
 
@@ -665,6 +772,10 @@ class AdminHandler:
         merged = await self._blocking(self._merged)
         if body.get("kind") == "cli":
             name = pages.CLAUDE_CLI_ENTRY
+        elif body.get("kind") == "dsh":
+            name = pages.DSH_ENTRY
+            if name not in (merged.get("LLM") or {}):
+                return None, self._error("先保存一次 DSH 的设置", 400)
         else:
             vendor = catalog.VENDOR_BY_ID.get(str(body.get("vendor") or ""))
             if vendor is None:
@@ -722,6 +833,10 @@ class AdminHandler:
         if install.get("installed"):
             options.insert(0, {"kind": "cli", "vendor": "claude-code", "label": "Claude Code",
                                "entry": pages.CLAUDE_CLI_ENTRY, "model": data["claude"]["values"].get("model", "")})
+        if data["dsh"]["exists"] and (await self._blocking(self._dsh_install, merged, False))["installed"]:
+            options.insert(1 if install.get("installed") else 0,
+                           {"kind": "dsh", "vendor": "dsh", "label": "DSH", "entry": pages.DSH_ENTRY,
+                            "model": data["dsh"]["values"].get("model", "")})
         options += [{"kind": "grok", "vendor": "grok_bot", "label": b["bot_name"], "entry": b["entry"], "model": "Grok Bot"}
                     for b in data["grok"]["bots"] if llm_router.model_ready(merged, b["entry"])]
         selected = data["selected"]
@@ -752,6 +867,10 @@ class AdminHandler:
             name = str(body.get("entry") or "")
             if name not in {b["entry"] for b in pages.grok_entries(merged)} or not llm_router.model_ready(merged, name):
                 return self._error("没有这个 Grok Bot，请先在管理后台的 Grok Bot 页勾选", 404)
+        elif kind == "dsh":
+            name = pages.DSH_ENTRY
+            if name not in (merged.get("LLM") or {}):
+                return self._error("还没在管理后台设置 DSH", 404)
         elif kind == "cli":
             name = pages.CLAUDE_CLI_ENTRY
             if name not in (merged.get("LLM") or {}):
@@ -803,6 +922,7 @@ class AdminHandler:
         if not device:
             return self._error("缺少 device", 400)
         reports.set_quiet(device, bool(body.get("quiet")))
+        presence.beat(device, str(body.get("version") or ""))   # 设备每 10 秒查一次：顺便当心跳（状态页的在线/待机）
         playing = bool(body.get("play")) and reports.deliver_now(device)
         return self._json({"ok": True, "count": reports.count(device), "playing": playing})
 
@@ -1198,12 +1318,12 @@ class AdminHandler:
         return self._json({"ok": True, **photo_ask.vision_settings(await self._blocking(self._merged))})
 
     async def handle_vision_save(self, request: web.Request):
-        """{"provider": "zhipu" | "qwen", "api_key"?}：选用看图模型（Key 留空表示不改）。"""
+        """{"provider", "api_key"?, "model"?, "url"?}：选用看图模型（Key 留空表示不改，或用「大模型」页同一家的）。"""
         self._require_login(request)
         body = await self._read_json(request)
         try:
             changed = await self._blocking(photo_ask.save_vision, str(body.get("provider") or ""),
-                                           body.get("api_key"), self.config_path)
+                                           body.get("api_key"), self.config_path, body.get("model"), body.get("url"))
         except KeyError:
             return self._error("没有这个看图模型", 404)
         except ValueError as e:
@@ -1227,6 +1347,59 @@ class AdminHandler:
         except Exception as e:
             return self._json({"ok": False, "error": f"连不上看图模型：{e}"})
         return self._json({"ok": True, "message": text})
+
+    async def handle_models_list(self, request: web.Request):
+        """{"url", "api_key"?, "vendor"?}：问一个 OpenAI 兼容服务（Ollama、LM Studio 等）有哪些模型。
+
+        先问 {url}/models（OpenAI 协议）；Ollama 再问 /api/tags 拿到大小和能不能看图。vendor 给了而 api_key 没给时，
+        用「大模型」页这一家已保存的 Key。"""
+        self._require_login(request)
+        body = await self._read_json(request)
+        url = str(body.get("url") or "").strip().rstrip("/")
+        from urllib.parse import urlparse
+        if urlparse(url).scheme not in ("http", "https") or not urlparse(url).netloc:
+            return self._error("接口地址要以 http:// 或 https:// 开头", 400)
+        key = str(body.get("api_key") or "").strip()
+        if not key and body.get("vendor") in catalog.VENDOR_BY_ID:
+            merged = await self._blocking(self._merged)
+            saved = ((merged.get("LLM") or {}).get(catalog.VENDOR_BY_ID[body["vendor"]]["entry"]) or {}).get("api_key")
+            key = "" if config_store.is_placeholder(saved) else str(saved)
+        import aiohttp
+        headers = {"Authorization": f"Bearer {key}"} if key else {}
+        models = []
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as s:
+                async with s.get(url + "/models", headers=headers) as r:
+                    if r.status == 401:
+                        return self._json({"ok": False, "error": "这个服务要 Key（401），先填上 Key 再读取"})
+                    if r.status == 200:
+                        data = await r.json(content_type=None)
+                        models = [{"id": str(m.get("id"))} for m in (data.get("data") or []) if isinstance(m, dict) and m.get("id")]
+                root = url[:-3] if url.endswith("/v1") else url
+                try:
+                    async with s.get(root + "/api/tags") as r:
+                        if r.status == 200:
+                            tags = (await r.json(content_type=None)).get("models") or []
+                            info = {t.get("name"): t for t in tags if isinstance(t, dict)}
+                            if not models:
+                                models = [{"id": n} for n in info]
+                            for m in models:
+                                t = info.get(m["id"]) or {}
+                                if t.get("size"):
+                                    m["size"] = f"{t['size'] / 1e9:.1f} GB"
+                                fam = " ".join((t.get("details") or {}).get("families") or []).lower()
+                                if any(w in (m["id"] + " " + fam) for w in ("vl", "vision", "llava", "gemma3", "clip", "mllama")):
+                                    m["vision"] = True
+                except aiohttp.ClientError:
+                    pass
+        except asyncio.TimeoutError:
+            return self._json({"ok": False, "error": "8 秒没回应：地址对吗？服务开着吗？"})
+        except aiohttp.ClientError as e:
+            hint = "（Ollama 默认只听 127.0.0.1，局域网访问要设 OLLAMA_HOST=0.0.0.0）" if "11434" in url else ""
+            return self._json({"ok": False, "error": f"连不上 {url}：{e.__class__.__name__}{hint}"})
+        if not models:
+            return self._json({"ok": False, "error": "服务没有返回模型列表"})
+        return self._json({"ok": True, "models": models[:200]})
 
     async def handle_kiosk_chat_clear(self, request: web.Request):
         """{"device", "memory_only"?}：清除这台设备的聊天记录（所有模型），和语音"清除聊天记录"同一套。
@@ -1452,8 +1625,8 @@ class AdminHandler:
         try:
             merged = await self._blocking(self._merged)
             if engine:
-                changed = await self._blocking(pages.save_tts, engine, {"voice": body.get("voice"),
-                                               "api_key": body.get("api_key")}, merged, self.config_path)
+                changed = await self._blocking(pages.save_tts, engine, {k: body.get(k) for k in (
+                    "voice", "api_key", "api_url", "model", "format")}, merged, self.config_path)
                 name = catalog.TTS_ENGINE_BY_ID[engine]["entry"]
             else:
                 changed = await self._blocking(pages.save_tts_voice, str(body.get("voice") or ""), merged, self.config_path)
@@ -1477,6 +1650,8 @@ class AdminHandler:
         voice = request.query.get("voice", "")
         if request.query.get("engine") == "qwen3":
             return await self._qwen3_preview(voice)
+        if request.query.get("engine") == "lan":
+            return await self._lan_tts_preview()
         info = next((v for v in catalog.EDGE_VOICES if v["value"] == voice), None)
         if info is None:
             return self._error("不支持这个音色", 400)
@@ -1498,6 +1673,29 @@ class AdminHandler:
             self._voice_samples[voice] = audio
         return web.Response(body=audio, content_type="audio/mpeg",
                             headers={**SECURITY_HEADERS, "Cache-Control": "private, max-age=86400"})
+
+    async def _lan_tts_preview(self):
+        """局域网合成服务：用已保存的地址、模型、音色合成一句，原样返回。"""
+        import aiohttp
+
+        merged = await self._blocking(self._merged)
+        entry = pages._entry(merged, "TTS", catalog.LAN_TTS_ENTRY)
+        if entry.get("type") != "openai":
+            return self._error("先保存一次局域网合成服务的设置，才能试听", 400)
+        fmt = str(entry.get("format") or "wav")
+        key = str(entry.get("api_key") or "none")
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=25)) as s:
+                async with s.post(str(entry.get("api_url")), headers={"Authorization": f"Bearer {key}"},
+                                  json={"model": entry.get("model"), "input": catalog.voice_sample("普通话"),
+                                        "voice": entry.get("voice"), "response_format": fmt}) as r:
+                    body = await r.read()
+                    if r.status != 200:
+                        return self._error(f"合成服务返回 {r.status}：{body[:200].decode('utf-8', 'replace')}", 502)
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            return self._error(f"连不上合成服务：{e.__class__.__name__}", 502)
+        ctype = {"mp3": "audio/mpeg", "opus": "audio/ogg", "flac": "audio/flac"}.get(fmt, "audio/wav")
+        return web.Response(body=body, content_type=ctype, headers=SECURITY_HEADERS)
 
     async def _qwen3_preview(self, voice: str):
         from core.utils import qwen3_tts_api
@@ -1713,10 +1911,12 @@ class AdminHandler:
             d["emotion_test"] = self._emotion_progress(d["session_id"])
             # 这台设备此刻在跟谁说话（呼名切到的模型）；和大模型页的全局默认是两回事
             d["model_label"] = ("Claude Code" if d.get("model") == llm_router.CLAUDE_CLI_ENTRY
+                                else "DSH" if d.get("model") == llm_router.DSH_ENTRY
                                 else llm_router.model_label(d["model"])) if d.get("model") else ""
             home = device_homes.get(d.get("device_id") or "")
             d["home"] = home["name"] if home else ""
         return self._json({"ok": True, "devices": devices, "now": int(time.time()),
+                           "seen": presence.snapshot(self._connected_ids()),
                            "emotions": [{"emotion": name, "emoji": emoji, "label": catalog.EMOTION_LABELS.get(name, name)}
                                         for emoji, name in EMOJI_MAP.items()]})
 

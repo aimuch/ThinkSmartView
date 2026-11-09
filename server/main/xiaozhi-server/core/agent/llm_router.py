@@ -31,6 +31,7 @@ TAG = __name__
 logger = setup_logging()
 
 CLAUDE_CLI_ENTRY = "ClaudeCLI"
+DSH_ENTRY = "DshCLI"   # [xiaozhi-hub] DeepSeek Harness
 GROK_BOT_PREFIX = "GrokBot_"  # 每个 Grok Bot 一个条目：GrokBot_<Bot 名>，由管理后台生成
 # 第一期的配置里称呼的键是 "claude"，指的就是本机 Claude Code
 LEGACY_KEYS = {"claude": CLAUDE_CLI_ENTRY}
@@ -124,7 +125,7 @@ def not_ready_reply(conn: "ConnectionHandler") -> Optional[str]:
 
 
 INTENT_MODES = ("nointent", "function_call")
-AGENT_TYPES = ("claude_cli", "grok_bot")  # 自己处理工具和对话的 Agent：不走 function_call
+AGENT_TYPES = ("claude_cli", "grok_bot", "dsh_cli")  # 自己处理工具和对话的 Agent：不走 function_call
 
 
 def _entry_type(config: dict, section: str, name: Optional[str]) -> Optional[str]:
@@ -194,6 +195,8 @@ def model_label(name: str) -> str:
 
     if name == CLAUDE_CLI_ENTRY:
         return "Claude"
+    if name == DSH_ENTRY:
+        return "DSH"
     if name.startswith(GROK_BOT_PREFIX):
         return name[len(GROK_BOT_PREFIX):] or "Grok Bot"
     vendor = catalog.VENDOR_BY_ENTRY.get(name)

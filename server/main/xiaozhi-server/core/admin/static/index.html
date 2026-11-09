@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>小麦网关 · 管理后台</title>
+<link rel="icon" id="favicon" href="/admin/favicon">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='#6c8cff'/%3E%3Cstop offset='1' stop-color='#5ee0ff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='18' fill='url(#g)'/%3E%3Cg transform='translate(8 7) scale(2)' fill='#fff'%3E%3Cpath d='M12 22V8.6' stroke='#fff' stroke-width='1.5' stroke-linecap='round' fill='none'/%3E%3Cpath d='M12 1.9 Q14.05 5 12 8.1 Q9.95 5 12 1.9Z'/%3E%3Cpath transform='translate(9.85 9.4) rotate(-30)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(14.15 9.4) rotate(30)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(9.75 13.3) rotate(-32)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(14.25 13.3) rotate(32)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(9.7 17.2) rotate(-34)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(14.3 17.2) rotate(34)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3C/g%3E%3C/svg%3E">
 <style>
   :root {
@@ -16,19 +17,21 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --side: #0b1120; --side-hover: #172033; --side-line: #172033;
-      --bg: #0f172a; --card: #111a2e; --text: #e2e8f0; --muted: #94a3b8; --line: #23304a; --field: #0b1324; --soft: #0d1629;
-      --accent: #8fa6ff; --btn: #5a78f0; --btn-hover: #4a66e0; --accent-soft: #1a2350; --accent-line: #34407a;
-      --ok: #34d399; --ok-soft: #0f2a24; --warn: #fbbf24; --warn-soft: #2a2110; --err: #f87171; --err-soft: #2c1517;
+      /* [xiaozhi-hub] 设计画布第 14 块：中性深灰（参考 UniFi），蓝色只给强调和选中 */
+      --side: #131417; --side-hover: #1e1f23; --side-line: #2a2c31;
+      --bg: #0e0f11; --card: #17181b; --text: #e8e9ec; --muted: #8b8f98; --line: #2a2c31; --field: #111214; --soft: #1b1c20;
+      --accent: #7aa2ff; --btn: #4f7cff; --btn-hover: #3f6cf0; --accent-soft: #1b2440; --accent-line: #34407a;
+      --ok: #3ecf74; --ok-soft: #12291c; --warn: #f5a524; --warn-soft: #2b2110; --err: #f2555a; --err-soft: #2e1517;
       --shadow: none;
     }
   }
   /* [xiaozhi-hub] 「界面」里选了深色：不管系统 */
   :root[data-theme="dark"] {
-      --side: #0b1120; --side-hover: #172033; --side-line: #172033;
-      --bg: #0f172a; --card: #111a2e; --text: #e2e8f0; --muted: #94a3b8; --line: #23304a; --field: #0b1324; --soft: #0d1629;
-      --accent: #8fa6ff; --btn: #5a78f0; --btn-hover: #4a66e0; --accent-soft: #1a2350; --accent-line: #34407a;
-      --ok: #34d399; --ok-soft: #0f2a24; --warn: #fbbf24; --warn-soft: #2a2110; --err: #f87171; --err-soft: #2c1517;
+      /* [xiaozhi-hub] 设计画布第 14 块：中性深灰（参考 UniFi），蓝色只给强调和选中 */
+      --side: #131417; --side-hover: #1e1f23; --side-line: #2a2c31;
+      --bg: #0e0f11; --card: #17181b; --text: #e8e9ec; --muted: #8b8f98; --line: #2a2c31; --field: #111214; --soft: #1b1c20;
+      --accent: #7aa2ff; --btn: #4f7cff; --btn-hover: #3f6cf0; --accent-soft: #1b2440; --accent-line: #34407a;
+      --ok: #3ecf74; --ok-soft: #12291c; --warn: #f5a524; --warn-soft: #2b2110; --err: #f2555a; --err-soft: #2e1517;
       --shadow: none;
     }
   * { box-sizing: border-box; }
@@ -44,8 +47,12 @@
   aside { background: var(--side); color: var(--side-text); padding: 20px 14px; position: sticky; top: 0; height: 100vh;
           display: flex; flex-direction: column; }
   .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 600; font-size: 15px; padding: 0 8px 22px; }
-  .logo { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, #6c8cff, #5ee0ff);
-          display: grid; place-items: center; font-size: 16px; font-weight: 700; color: #fff; flex: none; }
+  .logo { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, #6c8cff, #5ee0ff);
+          display: grid; place-items: center; font-size: 18px; font-weight: 700; color: #fff; flex: none; overflow: hidden; }
+  .logo svg { width: 82%; height: 82%; display: block; }
+  .logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .logo.img { background: none; }
+  .logo.xl { width: 60px; height: 60px; border-radius: 16px; font-size: 34px; }
   .nav button { display: flex; width: 100%; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; border: 0;
                 background: none; color: inherit; cursor: pointer; text-align: left; margin-bottom: 2px; }
   .nav button:hover { background: var(--side-hover); color: #e2e8f0; }
@@ -251,11 +258,48 @@
   details.pseg > summary::-webkit-details-marker { display: none; }
   details.pseg > summary .toggle { margin-left: auto; color: var(--muted); font-size: 12px; }
 
-  /* 登录 */
-  .auth { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
-  .auth .card { width: 100%; max-width: 380px; padding: 28px; }
-  .auth .brand { color: var(--text); padding: 0 0 18px; }
-  .auth h2 { margin: 0 0 4px; font-size: 18px; }
+  /* 登录（设计画布第 14 块 A）：居中的窄卡片，底部一行地址和在线设备数 */
+  .auth { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px 56px; position: relative;
+          background: radial-gradient(640px 380px at 50% 0%, var(--accent-soft), transparent 70%), var(--bg); }
+  .auth-card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
+  .auth-top { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 6px; text-align: center; }
+  .auth-top h2 { margin: 0; font-size: 21px; font-weight: 600; }
+  .auth-top p { margin: 0; color: var(--muted); font-size: 13px; }
+  .auth label.f { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .auth .in { height: 42px; font-size: 15px; }
+  .pw { position: relative; }
+  .pw .in { padding-right: 56px; }
+  .pw .eye { position: absolute; right: 8px; bottom: 7px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 6px; }
+  .remember { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; cursor: pointer; }
+  .remember input { width: 16px; height: 16px; accent-color: var(--btn); }
+  .auth .btn.primary { height: 42px; font-size: 15px; }
+  .meter { display: flex; gap: 4px; margin-top: 8px; } .meter i { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+  .meter i.on { background: var(--ok); }
+  .auth-foot { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; color: var(--muted); font-size: 11px; opacity: .8; }
+
+  /* 侧栏底部（第 14 块 B）：在线状态 + 账号菜单 */
+  .side-status { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 0 4px 8px; }
+  .dot.idle { background: #f5a524; box-shadow: 0 0 0 3px rgba(245, 165, 36, .18); }
+  .side-foot .acct { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px; border-radius: 9px; border: 0; cursor: pointer;
+          background: var(--side-hover); color: inherit; text-align: left; text-decoration: none !important; }
+  .acct:hover { color: #e2e8f0; }
+  .acct .av { width: 26px; height: 26px; border-radius: 50%; background: #2a3557; color: #9db7ff; display: grid; place-items: center;
+              font-size: 12px; font-weight: 700; flex: none; }
+  .acct b { display: block; font-size: 12px; font-weight: 500; color: #e2e8f0; } .acct small { display: block; font-size: 11px; opacity: .75; }
+  .acct .more { margin-left: auto; }
+  .acct-menu { position: fixed; z-index: 60; width: 232px; background: var(--card); color: var(--text); border: 1px solid var(--line);
+               border-radius: 11px; box-shadow: 0 18px 44px rgba(0, 0, 0, .35); padding: 6px; font-size: 13px; }
+  .acct-menu button, .acct-menu a { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
+               border-radius: 7px; border: 0; background: none; color: inherit; cursor: pointer; text-decoration: none; text-align: left; }
+  .acct-menu button:hover, .acct-menu a:hover { background: var(--soft); }
+  .acct-menu span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
+  .acct-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+  .acct-menu .out { color: var(--err); }
+  .icon-pick { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 6px; }
+  .icon-pick button { aspect-ratio: 1; border-radius: 9px; border: 1px solid var(--line); background: var(--soft); cursor: pointer;
+                      font-size: 18px; display: grid; place-items: center; padding: 0; color: var(--muted); }
+  .icon-pick button.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .icon-pick .logo { width: 26px; height: 26px; border-radius: 7px; }
 
   /* 更新网关 */
   .kv.two { grid-template-columns: max-content minmax(0, 1fr); }
@@ -281,6 +325,8 @@
     .side-foot #logout, #online-text { display: none; }
     #online-short { display: inline; }
     .side-foot .dot { margin-right: 4px; }
+    .side-status { padding: 0; } .side-foot .acct { width: auto; padding: 4px; background: none; }
+    .side-foot .acct > span:not(.av) { display: none; }
     main { padding: 20px 16px 56px; }
     .choices, .choices.three, .grid2, .grid3, .plugins, .tips, .levels { grid-template-columns: 1fr; }
     .cli-row { grid-template-columns: 1fr; gap: 6px; } .cli-k { padding-top: 0; }
@@ -335,6 +381,9 @@
     :root[data-side="rail"] .nav .ico { font-size: 16px; width: auto; }
     :root[data-side="rail"] .side-foot { padding: 10px 0 0; text-align: center; }
     :root[data-side="rail"] .side-foot .row { justify-content: center; }
+    :root[data-side="rail"] .side-status { justify-content: center; padding: 0 0 8px; }
+    :root[data-side="rail"] .side-foot .acct { justify-content: center; background: none; }
+    :root[data-side="rail"] .side-foot .acct > span:not(.av) { display: none; }
     :root[data-side="drawer"] .app { grid-template-columns: minmax(0, 1fr); }
     :root[data-side="drawer"] aside { position: fixed; left: 0; top: 0; width: 232px; z-index: 40; transform: translateX(-100%);
       transition: transform .22s ease; box-shadow: 12px 0 30px rgba(15, 23, 42, .25); }
@@ -380,33 +429,130 @@
   .device .btn.detail { margin-left: auto; }
   .dkv { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; font-size: 13px; }
   .dkv span { color: var(--muted); }
+
+  /* ---------- [xiaozhi-hub] 设计画布第 14 块：状态页、工作原理（UniFi 式的拓扑和数字）----------
+     动效参考 Arc Library（github.com/kuratlielia/arc-library，MIT）的 motion tokens：进场 ease-enter、不回弹，
+     时长 160 / 240 / 480ms；层次用三档阴影；系统要求减少动效时全部关掉 */
+  :root { --ease-enter: cubic-bezier(.16, 1, .3, 1); --ease-standard: cubic-bezier(.22, 1, .36, 1);
+          --d-fast: 160ms; --d-std: 240ms; --d-slow: 480ms;
+          --shadow-raised: 0 6px 18px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .04);
+          --shadow-floating: 0 20px 48px rgba(0, 0, 0, .12), 0 3px 10px rgba(0, 0, 0, .05); }
+  .drawer { transition-timing-function: var(--ease-enter) !important; }
+  .acct-menu { animation: u-pop var(--d-std) var(--ease-enter); box-shadow: var(--shadow-floating); transform-origin: bottom left; }
+  @keyframes u-pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+  @keyframes u-rise { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes u-grow { from { transform: scaleY(0); } }
+  @keyframes u-flow { from { left: 0; } to { left: calc(100% - 8px); } }
+  .u-head { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .u-head h1 { margin: 0; } .u-head .sub { margin-top: 2px; }
+  .u-head .r { margin-left: auto; display: flex; gap: 8px; }
+  .u-act { display: flex; align-items: flex-end; gap: 3px; height: 34px; margin-bottom: 4px; }
+  .u-act i { flex: 1; border-radius: 2px; background: var(--accent); opacity: .75; min-height: 3px; transform-origin: bottom;
+             animation: u-grow var(--d-slow) var(--ease-enter) both; }
+  .u-act i.z { background: var(--line); opacity: 1; }
+  .u-act-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 14px; }
+  .u-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .u-stat { padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; margin: 0 !important; animation: u-rise var(--d-slow) var(--ease-enter) both; }
+  .u-stat small { color: var(--muted); font-size: 12px; } .u-stat em { font-style: normal; font-size: 12px; color: var(--muted); }
+  .u-stat b { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.25; }
+  .u-stat em.ok { color: var(--ok); } .u-stat em.warn { color: var(--warn); }
+  .u-panel { margin-top: 12px !important; overflow: hidden; }
+  .u-panel > .h { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--line); font-weight: 600; font-size: 13px; }
+  .u-panel > .h span { color: var(--muted); font-weight: 400; font-size: 12px; } .u-panel > .h .r { margin-left: auto; }
+  .topo { display: grid; grid-template-columns: auto 1fr auto 1fr auto; align-items: center; gap: 0; padding: 22px 20px; }
+  .tnode { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; min-width: 108px; border: 0;
+           background: none; color: inherit; padding: 4px; border-radius: 12px; cursor: default; font: inherit; }
+  button.tnode { cursor: pointer; } button.tnode:hover .ic { border-color: var(--accent); }
+  .tnode .ic { width: 52px; height: 52px; border-radius: 14px; background: var(--soft); border: 1px solid var(--line); display: grid; place-items: center;
+               font-size: 22px; position: relative; transition: border-color var(--d-fast) var(--ease-standard); }
+  .tnode .ic .logo { width: 34px; height: 34px; border-radius: 10px; }
+  .tnode.hub .ic { width: 60px; height: 60px; border-color: var(--accent-line); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .tnode .ic .s { position: absolute; right: -3px; top: -3px; width: 11px; height: 11px; border-radius: 50%; background: var(--muted); border: 2px solid var(--card); }
+  .tnode .ic .s.ok { background: var(--ok); } .tnode .ic .s.idle { background: var(--warn); } .tnode .ic .s.err { background: var(--err); }
+  .tnode b { font-size: 12px; font-weight: 600; } .tnode small { font-size: 11px; color: var(--muted); line-height: 1.4; max-width: 150px; }
+  .tlink { position: relative; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-line)); margin: 0 6px; top: -18px; min-width: 40px; }
+  .tlink.off { background: var(--line); }
+  .tlink b { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); font-size: 10px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+  .tlink .p { position: absolute; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent);
+              animation: u-flow 2.4s var(--ease-standard) infinite; }
+  .tlink.off .p { display: none; }
+  .tmods { display: flex; flex-direction: column; gap: 10px; }
+  .tmod { display: flex; align-items: center; gap: 10px; border: 0; background: none; color: inherit; padding: 4px 6px; border-radius: 10px;
+          cursor: pointer; text-align: left; font: inherit; }
+  .tmod:hover { background: var(--soft); }
+  .tmod .ic { width: 38px; height: 38px; border-radius: 11px; background: var(--soft); border: 1px solid var(--line); display: grid; place-items: center; position: relative; flex: none; }
+  .tmod .ic .s { position: absolute; right: -3px; top: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); border: 2px solid var(--card); }
+  .tmod .ic .s.warn { background: var(--warn); }
+  .tmod b { display: block; font-size: 12px; } .tmod small { display: block; font-size: 11px; color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .u-two { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; }
+  .u-two > .card { margin-top: 12px !important; }
+  .u-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .u-table th, .u-table td { text-align: left; padding: 9px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .u-table th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .u-table tr:last-child td { border-bottom: 0; }
+  .u-table td.mono { font-size: 12px; } .u-table .btn { padding: 3px 10px; }
+  .spill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 1px 9px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
+  .spill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .spill.idle { background: var(--warn-soft); color: var(--warn); } .spill.off { background: var(--soft); color: var(--muted); }
+  .u-checks > div { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .u-checks > div:last-child { border-bottom: 0; }
+  .u-checks .dot { margin: 0; flex: none; } .u-checks .dot.ok { background: var(--ok); } .u-checks .dot.warn { background: var(--warn); } .u-checks .dot.error { background: var(--err); }
+  .u-checks span.d { margin-left: auto; color: var(--muted); font-size: 12px; text-align: right; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .u-addr { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto; gap: 8px 14px; align-items: center; padding: 12px 16px; font-size: 13px; }
+  .u-addr .k { color: var(--muted); }
+  /* 工作原理：一句话的路径 */
+  .hflow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; padding: 34px 18px 18px; position: relative; }
+  .hstage { position: relative; padding: 12px; border-radius: 12px; background: var(--soft); border: 1px solid var(--line); display: flex; flex-direction: column;
+            gap: 5px; text-align: left; color: inherit; font: inherit; cursor: pointer; animation: u-rise var(--d-slow) var(--ease-enter) both;
+            transition: border-color var(--d-fast) var(--ease-standard), box-shadow var(--d-fast) var(--ease-standard); }
+  .hstage:hover { border-color: var(--accent-line); }
+  .hstage.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .hstage .where { position: absolute; top: -21px; left: 2px; font-size: 11px; color: var(--muted); }
+  .hstage .i { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 16px; }
+  .hstage b { font-size: 13px; } .hstage .v { font-size: 12px; overflow-wrap: anywhere; } .hstage small { font-size: 11px; color: var(--muted); line-height: 1.45; }
+  .hstage:not(:last-child)::after { content: ""; position: absolute; right: -15px; top: 28px; width: 16px; height: 2px; background: var(--accent-line); }
+  .hbranch { display: flex; gap: 12px; flex-wrap: wrap; padding: 0 18px 18px; }
+  .hbranch div { border: 1px dashed var(--accent-line); border-radius: 10px; padding: 8px 12px; font-size: 12px; color: var(--muted); background: var(--accent-soft); }
+  .hbranch b { color: var(--text); margin-right: 6px; }
+  .hdetail { display: flex; align-items: center; gap: 16px; padding: 12px 16px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .hdetail b { color: var(--text); }
+  .hdetail .btn { margin-left: auto; }
+  @media (max-width: 900px) {
+    .u-stats { grid-template-columns: 1fr 1fr; } .u-two { grid-template-columns: 1fr; }
+    .topo { grid-template-columns: 1fr; justify-items: center; gap: 14px; } .tlink { width: 2px; height: 26px; min-width: 0; top: 0; margin: 0; }
+    .tlink .p, .tlink b { display: none; }
+    .hflow { grid-template-columns: 1fr 1fr; } .hstage::after { display: none; }
+    .u-table th:nth-child(4), .u-table td:nth-child(4) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .u-act i, .u-stat, .hstage, .acct-menu { animation: none; } .tlink .p { animation: none; display: none; }
+  }
 </style>
 </head>
 <body>
 
 <div id="auth" class="auth hidden">
-  <form class="card" id="auth-form">
-    <div class="brand"><div class="logo"><svg width="19" height="19" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 22V8.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M12 1.9 Q14.05 5 12 8.1 Q9.95 5 12 1.9Z"/><path transform="translate(9.85 9.4) rotate(-30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.15 9.4) rotate(30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(9.75 13.3) rotate(-32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.25 13.3) rotate(32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(9.7 17.2) rotate(-34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.3 17.2) rotate(34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/></svg></div>小麦网关 · 管理后台</div>
+  <form class="auth-card" id="auth-form">
+    <div class="auth-top"><div class="logo xl" data-logo></div><h2 data-brand-name>小麦网关</h2><p id="auth-sub">输入管理后台密码</p></div>
     <input type="text" name="username" value="admin" autocomplete="username" class="hidden" tabindex="-1">
     <div id="auth-setup" class="hidden">
-      <h2>设置管理后台密码</h2>
-      <p class="muted small">首次使用请设置访问密码（至少 6 位）。设置后，用这个密码登录。</p>
-      <label class="f">密码<input class="in" id="setup-pw" type="password" autocomplete="new-password"></label>
-      <label class="f" style="margin-top:12px">再次输入<input class="in" id="setup-pw2" type="password" autocomplete="new-password"></label>
+      <label class="f">设置密码（至少 6 位）<div class="pw"><input class="in" id="setup-pw" type="password" autocomplete="new-password"><button type="button" class="eye" data-eye="setup-pw">显示</button></div></label>
+      <div class="meter" id="pw-meter"><i></i><i></i><i></i><i></i></div>
+      <label class="f" style="margin-top:12px">再输入一次<input class="in" id="setup-pw2" type="password" autocomplete="new-password"></label>
     </div>
     <div id="auth-login" class="hidden">
-      <h2>登录</h2>
-      <p class="muted small">输入管理后台密码。</p>
-      <label class="f">密码<input class="in" id="login-pw" type="password" autocomplete="current-password"></label>
+      <label class="f">密码<div class="pw"><input class="in" id="login-pw" type="password" autocomplete="current-password"><button type="button" class="eye" data-eye="login-pw">显示</button></div></label>
     </div>
-    <div id="auth-error" class="banner err hidden" style="margin:14px 0 0"></div>
-    <button class="btn primary" id="auth-btn" type="submit" style="width:100%;margin-top:18px">登录</button>
+    <label class="remember"><input type="checkbox" id="auth-remember" checked>在这台电脑上保持登录 30 天</label>
+    <div id="auth-error" class="banner err hidden" style="margin:0"></div>
+    <button class="btn primary" id="auth-btn" type="submit" style="width:100%">登录</button>
   </form>
+  <div class="auth-foot" id="auth-foot"></div>
 </div>
 
 <div id="app" class="app hidden">
   <aside>
-    <div class="brand"><div class="logo"><svg width="19" height="19" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 22V8.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M12 1.9 Q14.05 5 12 8.1 Q9.95 5 12 1.9Z"/><path transform="translate(9.85 9.4) rotate(-30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.15 9.4) rotate(30)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(9.75 13.3) rotate(-32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.25 13.3) rotate(32)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(9.7 17.2) rotate(-34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/><path transform="translate(14.3 17.2) rotate(34)" d="M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z"/></svg></div><span>小麦网关</span></div>
+    <div class="brand"><div class="logo" data-logo></div><span data-brand-name>小麦网关</span></div>
     <nav class="nav" id="nav">
       <button data-page="status"><span class="ico">◎</span>状态</button>
       <button data-page="how"><span class="ico">⇄</span>工作原理</button>
@@ -420,9 +566,9 @@
       <button data-page="intent"><span class="ico">⚙</span>意图识别</button>
       <button data-page="update"><span class="ico">⟳</span>更新网关</button>
     </nav>
-    <div class="side-foot"><span class="dot" id="online-dot"></span><span id="online-text">没有设备在线</span><span id="online-short">无设备</span>
-      <div class="row"><button id="logout">退出登录</button><button id="ui-btn" title="主题、布局、侧栏、菜单顺序">界面 ⚙</button>
-        <a href="https://github.com/justhalfbit/xiaozhi-hub-server" target="_blank" rel="noopener" title="xiaozhi-hub-server 开源仓库">GitHub ↗</a></div></div>
+    <div class="side-foot"><div class="side-status"><span class="dot" id="online-dot"></span><span id="online-text">没有设备在线</span><span id="online-short">无设备</span></div>
+      <button class="acct" id="acct-btn" aria-haspopup="menu"><span class="av">管</span><span><b>管理员</b><small id="acct-sub">已登录</small></span><span class="more">⋯</span></button>
+      <button id="logout" class="hidden">退出登录</button><button id="ui-btn" class="hidden">界面</button></div>
   </aside>
   <main id="page"></main>
 </div>
@@ -489,18 +635,47 @@ function snapshot(fn) { const first = JSON.stringify(fn()); return () => JSON.st
 
 // ---------- 登录与页面切换 ----------
 
+// ---------- [xiaozhi-hub] 名称和图标（设计画布第 14 块 E、F） ----------
+const WHEAT_LEAVES = [[9.6, 9.6, -30], [14.4, 9.6, 30], [9.5, 13.8, -32], [14.5, 13.8, 32], [9.4, 18, -34], [14.6, 18, 34]];
+function wheatSvg() {
+  return `<svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 22.5V8.6" stroke="#fff" stroke-width="1.7" stroke-linecap="round" fill="none"/>`
+    + `<path d="M12 1.4Q14.3 4.9 12 8.3Q9.7 4.9 12 1.4Z"/>`
+    + WHEAT_LEAVES.map(([x, y, r]) => `<path transform="translate(${x} ${y}) rotate(${r})" d="M0 -3.4Q2.3 0 0 3.4Q-2.3 0 0 -3.4Z"/>`).join("") + "</svg>";
+}
+function logoHtml(icon) {
+  if (icon && icon.kind === "emoji") return esc(icon.value);
+  if (icon && icon.kind === "image") return `<img src="${esc(icon.value)}" alt="">`;
+  return wheatSvg();
+}
+let brandInfo = { name: "小麦网关", icon: { kind: "wheat" }, repo_url: "", repo_label: "" };
+function applyBrand(b) {
+  if (b) brandInfo = b;
+  document.querySelectorAll("[data-logo]").forEach((el) => { el.innerHTML = logoHtml(brandInfo.icon); el.classList.toggle("img", brandInfo.icon.kind === "image"); });
+  document.querySelectorAll("[data-brand-name]").forEach((el) => (el.textContent = brandInfo.name));
+  const title = PAGE_TITLES[page.name];
+  document.title = brandInfo.name + (title ? " · " + title : " · 管理后台");
+  $("favicon").href = "/admin/favicon?v=" + encodeURIComponent(brandInfo.icon.kind + (brandInfo.icon.value || "").length + brandInfo.icon.value.slice(-12));
+}
+const PAGE_TITLES = { status: "状态", how: "工作原理", llm: "大模型", calls: "呼名", grokbot: "Grok Bot", memory: "记忆", cost: "费用",
+  asr: "语音识别", tts: "语音合成", intent: "意图识别", update: "更新网关" };
+
 let authMode = "login";
 async function route() {
   let st;
   try { st = await (await fetch("/admin/api/state")).json(); } catch (e) { return; }
+  if (st.brand) applyBrand(st.brand);
+  $("auth-foot").textContent = `${st.host || location.host} · ${st.online ? st.online + " 台设备在线" : "没有设备在线"}`;
+  if (st.session_expires) $("acct-sub").textContent = st.session_expires - Date.now() / 1000 > 86400
+    ? `保持登录到 ${new Date(st.session_expires * 1000).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}` : "关掉浏览器后需要重新登录";
   if (st.needs_setup || !st.logged_in) {
     authMode = st.needs_setup ? "setup" : "login";
-    clearInterval(page.timer); page.name = "";
+    clearInterval(page.timer); page.name = ""; applyBrand();
     clearInterval(onlineTimer); onlineTimer = null;
     $("app").classList.add("hidden"); $("auth").classList.remove("hidden");
     $("auth-setup").classList.toggle("hidden", authMode !== "setup");
     $("auth-login").classList.toggle("hidden", authMode !== "login");
     $("auth-btn").textContent = authMode === "setup" ? "设置并进入" : "登录";
+    $("auth-sub").textContent = authMode === "setup" ? "第一次使用，先设置一个后台密码" : "输入管理后台密码";
     $("auth-error").classList.add("hidden");
     $(authMode === "setup" ? "setup-pw" : "login-pw").focus();
     return;
@@ -519,15 +694,104 @@ $("auth-form").addEventListener("submit", async (ev) => {
       if (authMode === "setup") {
         if ($("setup-pw").value.length < 6) return fail("密码至少 6 位");
         if ($("setup-pw").value !== $("setup-pw2").value) return fail("两次输入的密码不一致");
-        await api("setup", { password: $("setup-pw").value });
+        await api("setup", { password: $("setup-pw").value, remember: $("auth-remember").checked });
       } else {
-        await api("login", { password: $("login-pw").value });
+        await api("login", { password: $("login-pw").value, remember: $("auth-remember").checked });
         $("login-pw").value = "";
       }
       await route();
     } catch (e) { fail(e.message); }
   });
 });
+document.querySelectorAll("[data-eye]").forEach((b) => (b.onclick = () => {
+  const el = $(b.dataset.eye), show = el.type === "password";
+  el.type = show ? "text" : "password"; b.textContent = show ? "隐藏" : "显示"; el.focus();
+}));
+$("setup-pw").addEventListener("input", () => {   // 粗略的强度：长度、字母数字混合、符号
+  const v = $("setup-pw").value;
+  const score = (v.length >= 6) + (v.length >= 10) + (/[a-z]/i.test(v) && /\d/.test(v)) + /[^a-z0-9]/i.test(v);
+  $("pw-meter").querySelectorAll("i").forEach((i, n) => i.classList.toggle("on", n < score));
+});
+
+// 账号菜单（侧栏底部）：界面、名称和图标、修改密码、仓库链接、退出登录
+function openAcctMenu() {
+  closeAcctMenu();
+  const r = $("acct-btn").getBoundingClientRect();
+  const m = document.createElement("div");
+  m.className = "acct-menu"; m.id = "acct-menu"; m.setAttribute("role", "menu");
+  m.innerHTML = `<button data-m="ui">界面<span>主题、布局、菜单</span></button>
+    <button data-m="brand">名称和图标<span>${esc(brandInfo.name)}</span></button>
+    <button data-m="pw">修改密码</button>
+    ${brandInfo.repo_url ? `<a href="${esc(brandInfo.repo_url)}" target="_blank" rel="noopener">${esc(brandInfo.repo_label || "仓库")} ↗<span>仓库</span></a>` : ""}
+    <hr><button data-m="out" class="out">退出登录</button>`;
+  document.body.appendChild(m);
+  const top = Math.max(8, r.top - m.offsetHeight - 6);
+  m.style.left = Math.min(r.left, innerWidth - m.offsetWidth - 8) + "px";
+  m.style.top = (r.top > m.offsetHeight + 12 ? top : r.bottom + 6) + "px";
+  m.querySelector('[data-m="ui"]').onclick = () => { closeAcctMenu(); $("ui-btn").click(); };
+  m.querySelector('[data-m="brand"]').onclick = () => { closeAcctMenu(); openDrawer("名称和图标", "", renderBrandDrawer); };
+  m.querySelector('[data-m="pw"]').onclick = () => { closeAcctMenu(); openDrawer("修改密码", "", renderPasswordDrawer); };
+  m.querySelector('[data-m="out"]').onclick = () => { closeAcctMenu(); $("logout").click(); };
+  setTimeout(() => document.addEventListener("click", closeAcctMenuOutside), 0);
+}
+function closeAcctMenu() { const m = $("acct-menu"); if (m) m.remove(); document.removeEventListener("click", closeAcctMenuOutside); }
+function closeAcctMenuOutside(e) { if (!e.target.closest("#acct-menu")) closeAcctMenu(); }
+$("acct-btn").onclick = (e) => { e.stopPropagation(); $("acct-menu") ? closeAcctMenu() : openAcctMenu(); };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAcctMenu(); });
+
+const BRAND_EMOJI = ["🏠", "🤖", "🌾", "🐱", "🐻", "⭐", "🎧", "🍀", "🦊", "☀️"];
+function renderBrandDrawer(body) {
+  let icon = { ...brandInfo.icon };
+  const draw = () => {
+    body.innerHTML = `
+      <label class="f">名称<span class="hint">侧栏、登录页、浏览器标签</span><input class="in" id="br-name" maxlength="20" value="${esc(fields["br-name"] ?? brandInfo.name)}"></label>
+      <div class="f" style="margin-top:16px"><b style="font-weight:500">图标</b>
+        <div class="icon-pick"><button data-k="wheat" class="${icon.kind === "wheat" ? "on" : ""}" title="麦穗"><span class="logo">${wheatSvg()}</span></button>
+          ${BRAND_EMOJI.map((e) => `<button data-k="emoji" data-v="${e}" class="${icon.kind === "emoji" && icon.value === e ? "on" : ""}">${e}</button>`).join("")}
+          <button data-k="image" class="${icon.kind === "image" ? "on" : ""}" title="上传图片">${icon.kind === "image" ? `<span class="logo img"><img src="${esc(icon.value)}" alt=""></span>` : '<small style="font-size:11px">上传</small>'}</button></div>
+        <input type="file" id="br-file" accept="image/*" class="hidden"></div>
+      <label class="f" style="margin-top:16px">仓库链接<span class="hint">留空不显示</span><input class="in mono" id="br-url" placeholder="https://github.com/你的名字/仓库" value="${esc(fields["br-url"] ?? brandInfo.repo_url)}"></label>
+      <label class="f" style="margin-top:12px">链接上显示的名字<span class="hint">留空用仓库名</span><input class="in" id="br-label" maxlength="40" value="${esc(fields["br-label"] ?? brandInfo.repo_label)}"></label>
+      <div class="actions"><button class="btn" id="br-reset">恢复默认</button><button class="btn primary" id="br-save">保存</button></div>`;
+    body.querySelectorAll(".icon-pick button").forEach((b) => (b.onclick = () => {
+      if (b.dataset.k === "image") { $("br-file").click(); return; }
+      icon = { kind: b.dataset.k, value: b.dataset.v || "" }; keep(); draw();
+    }));
+    $("br-file").onchange = () => {
+      const f = $("br-file").files[0]; if (!f) return;
+      const img = new Image();
+      img.onload = () => {   // 网关没有图像库：在这里裁成正方形、缩到 128×128 的 PNG 再传
+        const c = document.createElement("canvas"); c.width = c.height = 128;
+        const side = Math.min(img.width, img.height);
+        c.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 128, 128);
+        icon = { kind: "image", value: c.toDataURL("image/png") }; URL.revokeObjectURL(img.src); keep(); draw();
+      };
+      img.onerror = () => toast("这个文件打不开，换一张图片试试", true);
+      img.src = URL.createObjectURL(f);
+    };
+    const save = (payload) => busy($("br-save"), async () => {
+      try { applyBrand(await api("brand", payload)); toast("已保存"); closeDrawer(); } catch (err) { toast(err.message, true); }
+    });
+    $("br-save").onclick = () => save({ name: $("br-name").value, icon, repo_url: $("br-url").value, repo_label: $("br-label").value });
+    $("br-reset").onclick = () => save({ name: "", icon: { kind: "wheat" }, repo_url: "", repo_label: "" });
+  };
+  const fields = {};
+  const keep = () => ["br-name", "br-url", "br-label"].forEach((id) => { if ($(id)) fields[id] = $(id).value; });
+  draw();
+}
+function renderPasswordDrawer(body) {
+  body.innerHTML = `<label class="f">原密码<input class="in" id="pw-old" type="password" autocomplete="current-password"></label>
+    <label class="f" style="margin-top:12px">新密码<span class="hint">至少 6 位</span><input class="in" id="pw-new" type="password" autocomplete="new-password"></label>
+    <label class="f" style="margin-top:12px">再输入一次<input class="in" id="pw-new2" type="password" autocomplete="new-password"></label>
+    <p class="muted small">改完后，其他浏览器上的登录都会失效，这里保持登录。</p>
+    <div class="actions"><button class="btn primary" id="pw-save">修改</button></div>`;
+  $("pw-save").onclick = (ev) => busy(ev.target, async () => {
+    if ($("pw-new").value !== $("pw-new2").value) return toast("两次输入的新密码不一致", true);
+    try { await api("password", { old: $("pw-old").value, new: $("pw-new").value }); toast("密码已修改"); closeDrawer(); }
+    catch (err) { toast(err.message, true); }
+  });
+}
+
 $("logout").onclick = async () => { if (!confirmLeave()) return; page.dirty = null; await api("logout", {}); await route(); };
 
 const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, update: renderUpdate };
@@ -539,6 +803,7 @@ async function openPage(name, force) {
   if (!force && name === page.name) return;
   if (!force && !confirmLeave()) { history.replaceState(null, "", "#" + page.name); return; }
   clearInterval(page.timer); page.timer = null; page.dirty = null; page.name = name;
+  applyBrand();   // 浏览器标签上的标题跟着页面变
   if (audio) { audio.pause(); audio = null; }
   if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.page === name));
@@ -554,12 +819,28 @@ window.addEventListener("hashchange", () => openPage(currentPage()));
 window.addEventListener("beforeunload", (e) => { if (page.dirty && page.dirty()) { e.preventDefault(); e.returnValue = ""; } });
 
 // devices 为 null 表示查不到（连不上服务、登录过期）：不能停在上一次的结果上，否则服务停了还显示"1 台设备在线"
-function setOnline(devices, reason = OFFLINE) {
-  $("online-dot").classList.toggle("on", !!devices && devices.length > 0);
-  $("online-dot").classList.toggle("off", !devices);
-  $("online-text").textContent = !devices ? reason : devices.length ? `${devices.length} 台设备在线` : "没有设备在线";
-  $("online-short").textContent = !devices ? (reason === OFFLINE ? "已断开" : "需登录") : devices.length ? `${devices.length} 台` : "无设备";  // 窄屏用
-  $("online-dot").parentElement.title = $("online-text").textContent;
+// [xiaozhi-hub] dev 是 /devices 的结果（带 seen：心跳算出的 对话中/待机/离线），或只有在连接的设备数组（呼名页）。
+// 设备只在对话时连着网关，所以「在线」按心跳算：对话中是绿点，待机是琥珀点（设计画布第 14 块 B）
+let lastSeen = [];
+function setOnline(dev, reason = OFFLINE) {
+  let talking = 0, idle = 0;
+  if (dev) {
+    if (Array.isArray(dev)) {
+      const ids = new Set(dev.map((d) => d.device_id));
+      talking = dev.length; idle = lastSeen.filter((d) => d.state === "idle" && !ids.has(d.device_id)).length;
+    } else {
+      lastSeen = dev.seen || (dev.devices || []).map((d) => ({ device_id: d.device_id, state: "talking" }));
+      talking = lastSeen.filter((d) => d.state === "talking").length; idle = lastSeen.filter((d) => d.state === "idle").length;
+    }
+  }
+  $("online-dot").classList.toggle("on", talking > 0);
+  $("online-dot").classList.toggle("idle", !talking && idle > 0);
+  $("online-dot").classList.toggle("off", !dev);
+  $("online-text").textContent = !dev ? reason : talking ? `${talking} 台在对话${idle ? ` · ${idle} 台待机` : ""}`
+    : idle ? `${idle} 台在线 · 待机中` : "没有设备在线";
+  $("online-short").textContent = !dev ? (reason === OFFLINE ? "已断开" : "需登录") : talking + idle ? `${talking + idle} 台` : "无设备";  // 窄屏用
+  $("online-dot").parentElement.title = !dev ? reason : talking + idle ? $("online-text").textContent
+    : "设备只在对话时连着网关；待机时每 10 秒有一次心跳（客户端 0.1.625 起）。1 分钟没有心跳算离线";
 }
 const OFFLINE = "连不上服务";  // api() 连不上服务时抛出的错误以这几个字开头
 const EXPIRED = "登录已过期";
@@ -582,7 +863,7 @@ let onlineTimer = null;
 function watchOnline() {
   const refresh = async () => {
     if (document.hidden || page.name === "status" || (page.name === "calls" && page.timer)) return;
-    try { setOnline((await api("devices", undefined, true)).devices); } catch (e) { onDevicesError(e); }
+    try { setOnline(await api("devices", undefined, true)); } catch (e) { onDevicesError(e); }
   };
   clearInterval(onlineTimer);
   refresh();
@@ -602,36 +883,75 @@ function duration(sec) {
   return `已连接 ${Math.floor(sec / 3600)} 小时 ${Math.floor((sec % 3600) / 60)} 分`;
 }
 
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+// 数字从 0 数上去（Arc 的 count-up）：480ms，ease-enter；减少动效时直接显示
+function countUp(el) {
+  const target = Number(el.dataset.count), fmt = (v) => (el.dataset.dec ? v.toFixed(+el.dataset.dec) : Math.round(v)) + (el.dataset.unit || "");
+  if (REDUCED || !isFinite(target) || target === 0) { el.textContent = (el.dataset.pre || "") + fmt(target || 0); return; }
+  const t0 = performance.now(), ease = (x) => 1 - Math.pow(1 - x, 4);
+  const step = (t) => { const x = Math.min(1, (t - t0) / 480); el.textContent = (el.dataset.pre || "") + fmt(target * ease(x)); if (x < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function uptimeText(sec) {
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+  return d ? `${d} 天 ${h} 小时` : h ? `${h} 小时 ${m} 分` : `${m} 分钟`;
+}
+function ago(now, ts) {
+  const s = Math.max(0, now - ts);
+  return s < 60 ? `${s} 秒前` : s < 3600 ? `${Math.floor(s / 60)} 分钟前` : s < 86400 ? `${Math.floor(s / 3600)} 小时前` : `${Math.floor(s / 86400)} 天前`;
+}
+
+// 设计画布第 14 块 C：活动条、四个数字、拓扑、设备表、自检、连接地址
 async function renderStatus(root) {
-  const [s, dev, tts] = await Promise.all([api("status"), api("devices"), api("tts")]);
-  setOnline(dev.devices);
-  const voice = tts.voices.find((v) => v.value === tts.voice);
-  const tiles = Object.entries(s.modules).map(([k, m]) => {
-    const value = k === "Intent" ? (INTENT_LABEL[m.type] || m.selected) : m.selected;
-    const detail = k === "TTS" && voice ? `音色：${voice.name}` : k === "Intent" ? m.selected : m.type;
-    return `<button class="card tile" data-go="${MODULE_PAGES[k]}">
-      <div class="k">${MODULE_TITLES[k]}</div><div class="v">${esc(value)}</div>
-      <div class="d">${m.running && m.running !== m.selected ? `<span class="pill warn">运行中仍是 ${esc(m.running)}</span>` : esc(detail)}</div></button>`;
-  }).join("");
+  const [s, dev] = await Promise.all([api("status"), api("devices")]);
+  setOnline(dev);
+  const stage = Object.fromEntries((s.stages || []).map((x) => [x.id, x]));
+  const bad = s.checks.filter((c) => c.level !== "ok");
+  const cost = s.cost || {}, cur = Object.keys(cost.today || {})[0] || "CNY", sym = (cost.currencies || {})[cur] || "¥";
+  const today = (cost.today || {})[cur] || 0, month = (cost.month || {})[cur] || 0;
+  const seen = dev.seen || [], live = seen.filter((d) => d.state !== "offline");
+  const max = Math.max(1, ...(s.hours || []));
+  const hourLabel = (i) => new Date(((s.hours_since || 0) + i * 3600) * 1000).getHours() + " 时";
+  const mod = (id, icon, label, warn) => { const x = stage[id] || {}; return `<button class="tmod" data-go="${esc(x.page || id)}">
+      <span class="ic">${icon}<span class="s ${warn ? "warn" : ""}"></span></span><span><b>${esc(label)}</b><small>${esc(x.value || "")}</small></span></button>`; };
+  const modWarn = (k) => { const m = s.modules[k]; return m && m.running && m.running !== m.selected; };
+  const first = live[0] || seen[0];
+  const devState = first ? first.state : "offline";
   const addr = [["本机 IP", s.addresses.ip], ["OTA 地址", s.addresses.ota], ["管理后台", s.addresses.admin]];
-  const levelPill = { ok: '<span class="pill ok">正常</span>', warn: '<span class="pill warn">注意</span>', error: '<span class="pill err">异常</span>' };
-  const bad = s.checks.filter((c) => c.level !== "ok").length;
   root.innerHTML = `
-    <div class="page-head"><div><h1>状态</h1><p class="sub">服务运行情况、在线设备和连接地址。</p></div>
-      <button class="btn" id="refresh">刷新</button></div>
-    <div class="tiles">${tiles}</div>
-    <div class="section-title">在线设备</div>
-    <div class="card" id="devices"></div>
-    <div class="section-title">连接地址</div>
-    <div class="card panel">
-      <p class="muted small" style="margin:0 0 12px">设备配网时填写 OTA 地址。请在路由器里给这台电脑设置固定 IP，否则 IP 变了设备会连不上。</p>
-      <div class="kv">${addr.map(([k, v]) => `<div class="k">${k}</div><code>${esc(v)}</code>
-        <button class="btn sm copy" data-copy="${esc(v)}">复制</button>`).join("")}</div>
+    <div class="u-head"><div><h1>状态</h1><p class="sub">已运行 ${uptimeText(s.uptime || 0)} · ${bad.length ? `${bad.length} 项需要注意` : "全部正常"}</p></div>
+      <div class="r"><button class="btn" id="copy-ota">复制 OTA 地址</button><button class="btn" id="refresh">刷新</button></div></div>
+    <div class="u-act" title="最近 24 小时每小时说了几句">${(s.hours || []).map((n, i) => `<i class="${n ? "" : "z"}" style="height:${n ? Math.max(12, n / max * 100) : 10}%;animation-delay:${i * 12}ms" title="${hourLabel(i)}：${n} 句"></i>`).join("")}</div>
+    <div class="u-act-axis"><span>24 小时前</span><span>最近 24 小时，每格一小时的对话量</span><span>现在</span></div>
+    <div class="u-stats">
+      <div class="card u-stat"><small>在线设备</small><b data-count="${live.length}"></b><em class="${live.length ? "ok" : ""}">${live.some((d) => d.state === "talking") ? "● 有设备在对话" : live.length ? "● 待机中" : "设备待机时也会显示"}</em></div>
+      <div class="card u-stat" style="animation-delay:40ms"><small>今天说了</small><b data-count="${s.turns_today || 0}" data-unit=" 句"></b><em>所有设备、所有模型</em></div>
+      <div class="card u-stat" style="animation-delay:80ms"><small>今天的费用</small><b data-count="${today}" data-pre="${esc(sym)}" data-dec="2"></b><em>本月 ${esc(sym)}${month.toFixed(2)}</em></div>
+      <div class="card u-stat" style="animation-delay:120ms"><small>环境自检</small><b>${s.checks.length - bad.length} / ${s.checks.length}</b><em class="${bad.length ? "warn" : "ok"}">${bad.length ? `${bad.length} 项需要注意` : "● 全部正常"}</em></div>
     </div>
-    <div class="section-title">环境自检 ${bad ? `<span class="pill warn">${bad} 项需要注意</span>` : '<span class="pill ok">全部正常</span>'}</div>
-    <div class="card rows">${s.checks.map((c) => `<div><b>${esc(c.name)}</b>${levelPill[c.level] || ""}<span class="muted">${esc(c.detail)}</span></div>`).join("")}</div>`;
+    <div class="card u-panel"><div class="h">拓扑<span>点一个节点去改它</span></div>
+      <div class="topo">
+        <div class="tnode"><span class="ic">📟<span class="s ${devState === "talking" ? "ok" : devState === "idle" ? "idle" : ""}"></span></span>
+          <b>${first ? "小麦" + (live.length > 1 ? ` 等 ${live.length} 台` : "") : "还没有设备"}</b>
+          <small>${first ? `${first.version ? first.version + " · " : ""}${devState === "talking" ? "对话中" : devState === "idle" ? "待机 · " + ago(dev.now, first.last_seen) + "心跳" : "离线 · " + ago(dev.now, first.last_seen)}` : "配网时填下面的 OTA 地址"}</small></div>
+        <div class="tlink ${live.length ? "" : "off"}"><b>${devState === "talking" ? "WebSocket" : "心跳"}</b><span class="p"></span></div>
+        <div class="tnode hub"><span class="ic"><span class="logo" data-logo></span><span class="s ${bad.some((c) => c.level === "error") ? "err" : bad.length ? "idle" : "ok"}"></span></span>
+          <b data-brand-name>小麦网关</b><small>${esc(s.addresses.ip)}</small></div>
+        <div class="tlink"><span class="p" style="animation-delay:1.2s"></span></div>
+        <div class="tmods">${mod("asr", "📝", "语音识别", modWarn("ASR"))}${mod("llm", "✦", "大模型", modWarn("LLM"))}${mod("tts", "🔊", "语音合成", modWarn("TTS"))}</div>
+      </div></div>
+    <div class="u-two">
+      <div class="card u-panel"><div class="h">设备<span>待机时每 10 秒一次心跳</span></div><div id="devices"></div></div>
+      <div class="card u-panel"><div class="h">环境自检<span class="r" style="color:var(${bad.length ? "--warn" : "--ok"})">${bad.length ? `${bad.length} 项需要注意` : "● 全部正常"}</span></div>
+        <div class="u-checks">${s.checks.map((c) => `<div title="${esc(c.detail)}"><span class="dot ${esc(c.level)}"></span>${esc(c.name)}<span class="d">${esc(c.detail)}</span></div>`).join("")}</div></div>
+    </div>
+    <div class="card u-panel"><div class="h">连接地址<span>设备配网时填 OTA 地址；在路由器里给这台电脑固定 IP</span></div>
+      <div class="u-addr">${addr.map(([k, v]) => `<span class="k">${k}</span><code>${esc(v)}</code><button class="btn sm copy" data-copy="${esc(v)}">复制</button>`).join("")}</div></div>`;
+  applyBrand();
+  root.querySelectorAll("[data-count]").forEach(countUp);
   root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => openPage(b.dataset.go)));
   root.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
+  $("copy-ota").onclick = () => copyText(s.addresses.ota);
   $("refresh").onclick = (e) => busy(e.target, () => openPage("status", true));
   renderDevices(dev);
   // 平时每 5 秒查一次；有设备在做表情测试时每 1.5 秒查一次，让进度跟上设备屏幕
@@ -640,12 +960,12 @@ async function renderStatus(root) {
     const testing = (lastDevices?.devices || []).some((d) => d.emotion_test && d.emotion_test.running);
     if (document.hidden || (!testing && Date.now() - last < 5000)) return;
     last = Date.now();
-    try { const d = await api("devices", undefined, true); setOnline(d.devices); renderDevices(d); }
+    try { const d = await api("devices", undefined, true); setOnline(d); renderDevices(d); }
     catch (e) { onDevicesError(e); if (isOffline(e)) devicesOffline(); }
   }, 1500);
 }
 
-let lastDevices = null;  // 最近一次查到的在线设备，状态页据此决定多久再查
+let lastDevices = null;  // 最近一次查到的设备，状态页据此决定多久再查
 // 连不上服务时不能继续显示上一次的列表，否则侧边栏说"连不上服务"，这里还列着设备
 function devicesOffline() {
   const box = $("devices");
@@ -653,37 +973,38 @@ function devicesOffline() {
   box.dataset.key = "offline";
   box.innerHTML = '<div class="panel muted">连不上服务，设备列表暂停更新。服务恢复后会自动刷新。</div>';
 }
+const STATE_PILL = { talking: '<span class="spill">对话中</span>', idle: '<span class="spill idle">待机</span>', offline: '<span class="spill off">离线</span>' };
 function renderDevices(dev) {
   lastDevices = dev;
   const box = $("devices");
   if (!box) return;
-  if (!dev.devices.length) {
+  const conn = Object.fromEntries((dev.devices || []).map((d) => [d.device_id, d]));
+  const rows = (dev.seen || []).length ? dev.seen : (dev.devices || []).map((d) => ({ device_id: d.device_id, state: "talking", last_seen: dev.now }));
+  if (deviceDrawer) renderDeviceDrawer(dev);
+  if (!rows.length) {
     box.dataset.key = "";
-    box.innerHTML = '<div class="panel muted">暂无设备在线。唤醒设备后会自动出现在这里。</div>';
+    box.innerHTML = '<div class="panel muted">还没有设备。设备开机后 10 秒内出现在这里（客户端 0.1.625 起；更早的版本只在对话时出现）。</div>';
     return;
   }
-  const key = JSON.stringify(dev.devices.map((d) => [d.session_id, d.model_label, d.home]));  // 设备切了模型也要重绘
-  if (deviceDrawer) renderDeviceDrawer(dev);
-  if (box.dataset.key === key) {  // 只更新连接时长，避免重绘打断点击
+  const key = JSON.stringify(rows.map((r) => [r.device_id, r.state, r.version, (conn[r.device_id] || {}).model_label, (conn[r.device_id] || {}).session_id]));
+  if (box.dataset.key === key) {  // 只更新时间，避免重绘打断点击
+    box.querySelectorAll("[data-ago]").forEach((el) => (el.textContent = ago(dev.now, +el.dataset.ago)));
     box.querySelectorAll("[data-since]").forEach((el) => (el.textContent = duration(dev.now - +el.dataset.since)));
     return;
   }
   box.dataset.key = key;
-  box.innerHTML = dev.devices.map((d) => `<div class="device" data-sid="${esc(d.session_id)}">
-      <div class="device-top"><span class="dot on"></span><b class="mono">${esc(d.device_id || "未知设备")}</b>
-        ${d.model_label ? `<span class="pill" title="这台设备此刻在跟谁说话（叫称呼切换）；和大模型页的全局默认是两回事">当前：${esc(d.model_label)}</span>` : ""}
-        ${d.home ? `<span class="muted small">${esc(d.home)}</span>` : ""}
-        <span class="muted small" data-since="${d.connected_at}">${duration(dev.now - d.connected_at)}</span>
-        <button class="btn sm detail" data-act="detail">详情 ›</button></div>
-    </div>`).join("");
-  box.querySelectorAll(".device").forEach((el) => {
-    el.querySelector('[data-act="detail"]').onclick = () => {
-      deviceDrawer = el.dataset.sid;
-      openDrawer("", "");
-      openDrawer.onclose = () => { deviceDrawer = null; };
-      renderDeviceDrawer(lastDevices);
-    };
-  });
+  box.innerHTML = `<table class="u-table"><tr><th>设备</th><th>状态</th><th>当前模型</th><th>版本</th><th>最近</th><th></th></tr>
+    ${rows.map((r) => { const c = conn[r.device_id]; return `<tr>
+      <td class="mono" title="${esc(r.device_id)}">${esc(r.device_id || "未知设备")}${c && c.home ? `<div class="muted small" style="font-family:inherit">${esc(c.home)}</div>` : ""}</td>
+      <td>${STATE_PILL[r.state] || ""}</td><td>${esc(c ? c.model_label || "默认" : "—")}</td><td class="mono">${esc(r.version || "—")}</td>
+      <td>${c ? `<span data-since="${c.connected_at}">${duration(dev.now - c.connected_at)}</span>` : `<span data-ago="${r.last_seen}">${ago(dev.now, r.last_seen)}</span>`}</td>
+      <td>${c ? `<button class="btn sm" data-sid="${esc(c.session_id)}">详情 ›</button>` : ""}</td></tr>`; }).join("")}</table>`;
+  box.querySelectorAll("[data-sid]").forEach((b) => (b.onclick = () => {
+    deviceDrawer = b.dataset.sid;
+    openDrawer("", "");
+    openDrawer.onclose = () => { deviceDrawer = null; };
+    renderDeviceDrawer(lastDevices);
+  }));
 }
 
 // 在线设备的详情（设计画布第 9 块 C）：模型、住宅地址、连接时长、表情测试
@@ -725,6 +1046,7 @@ function renderDeviceDrawer(dev) {
 // ---------- 工作原理 ----------
 
 const SOURCE_PILL = { "服务端": "ok", "Claude Code": "warn" };
+let selStage = 3;   // 默认选中「大模型」
 async function renderHow(root) {
   const d = await api("pipeline");
   const f = d.flow, p = d.prompt, m = p.marks;
@@ -739,10 +1061,21 @@ async function renderHow(root) {
     const body = `<div class="ico">${s.icon}</div><b>${esc(s.title)}</b><span class="mod">${esc(s.value)}</span><small>${esc(s.hint)}</small>`;
     return s.page ? `<button class="stage" data-go="${esc(s.page)}" title="去设置">${body}</button>` : `<div class="stage static">${body}</div>`;
   };
+  // 设计画布第 14 块 D：唤醒 → 收音 → 识别 → 大模型 → 合成 → 播放，上方小字标在哪里发生
+  const by = Object.fromEntries(f.stages.map((x) => [x.id, x]));
+  const cloud = (x) => x && /需要联网|云端/.test(x.hint || "");
+  const lan = (x) => x && /Ollama|LM Studio|Magpie|局域网/.test((x.value || "") + (x.hint || ""));
+  const stages = [{ id: "wake", icon: "◉", title: "唤醒", value: "「小麦小麦」", hint: "设备上的唤醒词，网关再听一遍确认；唤醒词在设备的设置里改", where: "设备", page: null },
+    { ...by.listen, where: "设备 → 网关" }, { ...by.asr, where: cloud(by.asr) ? "网关 → 云端" : "网关" },
+    { ...by.llm, where: lan(by.llm) ? "网关 → 局域网" : /DSH|Claude/.test(by.llm.value) ? "网关上的智能体" : "网关 → 云端" },
+    { ...by.tts, where: cloud(by.tts) ? "网关 → 云端" : "网关" }, { ...by.play, where: "设备" }].filter((x) => x.title);
+  if (selStage >= stages.length) selStage = 0;
   root.innerHTML = `
     <div class="page-head"><div><h1>工作原理</h1><p class="sub">说一句话之后会发生什么、可以怎么跟它说话。内容按当前配置生成，修改设置后会跟着变。</p></div></div>
-    <div class="section-title">一句话怎么走 <span class="muted small" style="font-weight:400">点一步去改它的设置</span></div>
-    <div class="flow">${f.stages.map((s, i) => `${i ? '<span class="arrow">→</span>' : ""}${stage(s)}`).join("")}</div>
+    <div class="card u-panel" style="margin-top:0!important"><div class="h">一句话怎么走<span>点一步看说明，再点「去设置」</span></div>
+      <div class="hflow">${stages.map((x, i) => `<button class="hstage ${i === selStage ? "sel" : ""}" data-stage="${i}" style="animation-delay:${i * 40}ms">
+        <span class="where">${esc(x.where)}</span><span class="i">${x.icon}</span><b>${esc(x.title)}</b><span class="v">${esc(x.value)}</span></button>`).join("")}</div>
+      <div class="hdetail" id="hdetail"></div></div>
 
     <div class="section-title">怎么跟它说话</div>
     <div class="tips">${f.tips.map((t) => `<div class="card tip"><b>${esc(t.title)}</b>
@@ -769,6 +1102,16 @@ async function renderHow(root) {
 
     <p class="how-foot">每一步为什么这样设计、连接和 Claude Code 进程什么时候启动和关闭、哪些记录会保存，见 GitHub 上的
       <a href="${esc(d.design_url)}" target="_blank" rel="noopener">设计细节 ↗</a>。</p>`;
+  const detail = () => {
+    const x = stages[selStage];
+    $("hdetail").innerHTML = `<b>${esc(x.title)}</b><span>${esc(x.value)}${x.hint ? " · " + esc(x.hint) : ""}</span>
+      ${x.page ? `<button class="btn sm" data-go="${esc(x.page)}">去设置 ›</button>` : ""}`;
+    $("hdetail").querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => openPage(b.dataset.go)));
+  };
+  root.querySelectorAll("[data-stage]").forEach((b) => (b.onclick = () => {
+    selStage = +b.dataset.stage; root.querySelectorAll("[data-stage]").forEach((y) => y.classList.toggle("sel", y === b)); detail();
+  }));
+  detail();
   root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => openPage(b.dataset.go)));
   root.querySelectorAll("[data-copyseg]").forEach((b) => (b.onclick = () => copyText(plain(p.segments[+b.dataset.copyseg].text))));
 }
@@ -776,15 +1119,58 @@ async function renderHow(root) {
 // ---------- 大模型 ----------
 
 let llmVendor = null;  // 正在查看的 API 厂商
+let agentView = null;   // 本地 CLI 与智能体：正在看 claude 还是 dsh
 async function renderLLM(root) {
   const d = await api("llm");
+  const dsh = d.dsh || { exists: false, values: {}, options: { model: [], effort: [], permission: [] } };
+  if (!agentView) agentView = d.kind === "dsh" ? "dsh" : d.kind === "cli" ? "claude" : (dsh.install && dsh.install.installed && !(d.claude.install || {}).installed) ? "dsh" : "claude";
+  // DSH 的设置（设计画布第 15 块 B）
+  const dv = dsh.values;
+  const seg = (k, opts, cur) => `<div class="seg" data-dk="${k}">${opts.map((o) => `<button type="button" data-v="${esc(o.value)}" class="${o.value === cur ? "on" : ""}">${esc(o.label)}${o.hint ? `<small>${esc(o.hint)}</small>` : ""}</button>`).join("")}</div>`;
+  const dshForm = () => `
+    ${d.kind === "dsh" ? "" : `<div class="banner info">DSH 是 DeepSeek 官方的智能体（github.com/deepseek-ai/deepseek-harness），在网关上读文件、搜索、做事。保存后说“嗨 DSH”就能叫它${dsh.exists ? "" : "（第一次保存会建好配置和称呼）"}；想让它当默认模型就点"保存并设为默认"。</div>`}
+    ${dsh.install && dsh.install.installed ? "" : '<div class="banner err">网关上没有找到 dsh。在网关上运行：npm i --prefix ~/.local/dsh @deepseek-ai/dsh，再装 Node 24 到 ~/.local/node24。</div>'}
+    <div class="cli-row"><div class="cli-k">模型</div><div>${seg("model", dsh.options.model, dv.model)}</div></div>
+    <div class="cli-row"><div class="cli-k">思考档位</div><div>${seg("effort", dsh.options.effort, dv.effort)}
+      <div class="small muted" style="margin-top:6px">语音对话用「低」最快；高和最高要多等几秒。</div></div></div>
+    <div class="cli-row"><div class="cli-k">权限</div><div><div class="levels">${dsh.options.permission.map((o) => `<button type="button" class="level ${o.value === dv.permission ? "on" : ""} ${o.value === "danger-full-access" ? "auto" : ""}" data-dperm="${esc(o.value)}">
+      <b>${esc(o.label)}</b><small>${esc(o.desc)}</small></button>`).join("")}</div></div></div>
+    <div class="grid2" style="margin-top:6px">
+      <label class="f">工作目录<span class="hint">它只在这个目录里干活</span><input class="in mono" id="dsh-workdir" value="${esc(dv.workdir || "")}"></label>
+      <label class="f">填充语<span class="hint">回复慢时先说这句</span><input class="in" id="dsh-filler" value="${esc(dv.first_reply_filler || "")}"></label>
+      <label class="f full">API Key<span class="hint">${dsh.shared_key ? "留空：用「API Key → DeepSeek」里的" : "还没填 DeepSeek 的 Key，在这里填一个"}</span>
+        <input class="in mono" id="dsh-key" type="password" autocomplete="off" placeholder="${dsh.own_key ? `已单独设置 ${esc(dsh.key_hint)}` : dsh.shared_key ? "沿用 DeepSeek 的 Key" : "未设置"}"></label>
+    </div>
+    <div class="actions"><span class="result muted" id="dsh-result">每句话起一个 dsh 进程（约 2 秒），同一台设备接着上一轮聊。</span>
+      <button class="btn ${d.kind === "dsh" ? "primary" : ""}" id="dsh-save">保存</button>
+      ${d.kind === "dsh" ? "" : `<button class="btn primary" id="dsh-use" ${dsh.install && dsh.install.installed ? "" : "disabled"}>保存并设为默认</button>`}</div>`;
+  const bindDshForm = () => {
+    const f = $("dsh-form");
+    f.querySelectorAll(".seg[data-dk] button").forEach((b) => (b.onclick = () => b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b))));
+    f.querySelectorAll("[data-dperm]").forEach((b) => (b.onclick = () => {
+      if (b.dataset.dperm === "danger-full-access" && !confirm("完全访问：DSH 能读写这台电脑上的任何文件、执行任何命令。确定吗？")) return;
+      f.querySelectorAll("[data-dperm]").forEach((x) => x.classList.toggle("on", x === b));
+    }));
+    const vals = () => ({ model: (f.querySelector('[data-dk="model"] .on') || {}).dataset?.v, effort: (f.querySelector('[data-dk="effort"] .on') || {}).dataset?.v,
+      permission: (f.querySelector("[data-dperm].on") || {}).dataset?.dperm, workdir: $("dsh-workdir").value.trim(),
+      first_reply_filler: $("dsh-filler").value.trim(), api_key: $("dsh-key").value.trim() });
+    const bad = (m) => { $("dsh-result").innerHTML = `<span style="color:var(--err)">${esc(m)}</span>`; };
+    $("dsh-save").onclick = (e) => busy(e.target, async () => {
+      try { const r = await api("llm/dsh", vals()); toast(r.changed.length ? r.note : "没有修改", r.failed); page.dirty = null; await openPage("llm", true); }
+      catch (err) { bad(err.message); }
+    });
+    if ($("dsh-use")) $("dsh-use").onclick = (e) => busy(e.target, async () => {
+      try { await api("llm/dsh", vals()); const r = await api("llm/use", { kind: "dsh" }); toast(r.note, r.failed); page.dirty = null; await openPage("llm", true); }
+      catch (err) { bad(err.message); }
+    });
+  };
   const c = d.claude, v = c.values, inst = c.install;
   const usingCli = d.kind === "cli";
   const active = d.vendors.find((x) => x.id === d.vendor);
   if (!llmVendor || !d.vendors.find((x) => x.id === llmVendor)) {
     llmVendor = d.vendor || (d.vendors.find((x) => x.configured) || d.vendors[0]).id;
   }
-  const current = usingCli ? `Claude Code · ${v.model || "默认模型"}` : d.kind === "grok" && d.grok.selected ? `Grok Bot · ${d.grok.selected.bot_name}` : active ? `${active.label} · ${active.model}` : d.selected;
+  const current = d.kind === "dsh" ? `DSH · ${dv.model}` : usingCli ? `Claude Code · ${v.model || "默认模型"}` : d.kind === "grok" && d.grok.selected ? `Grok Bot · ${d.grok.selected.bot_name}` : active ? `${active.label} · ${active.model}` : d.selected;
   const customModel = !!v.model && !c.options.model.find((o) => o.value === v.model);
   const num = (name, label, hint) => `<label class="f">${label}${hint ? `<span class="hint">${hint}</span>` : ""}
     <input class="in" data-k="${name}" value="${esc(v[name] ?? "")}" inputmode="decimal"></label>`;
@@ -801,10 +1187,15 @@ async function renderLLM(root) {
 
     <div class="section-title">本地 CLI 与智能体 · 用你自己的账号，不走下面的 API Key</div>
     <div class="choices three">
-      <div class="choice ${usingCli ? "on" : ""}">
+      <div class="choice ${agentView === "claude" ? "on" : ""}" data-agent="claude" style="cursor:pointer">
         <div class="mark" style="background:#fef3c7;color:#b45309">C</div>
         <div><b>Claude Code CLI</b> ${defaultPill(usingCli)} ${callPill("ClaudeCLI")}
           <small>${inst.installed ? esc(`${inst.version} · ${inst.path}`) : '<span style="color:var(--err)">没有找到 Claude Code，请先安装并登录</span>'}</small></div>
+      </div>
+      <div class="choice ${agentView === "dsh" ? "on" : ""}" data-agent="dsh" style="cursor:pointer">
+        <div class="mark" style="background:#1f3a8a;color:#cfe0ff">D</div>
+        <div><b>DeepSeek Harness</b> ${defaultPill(d.kind === "dsh")} ${callPill("DshCLI")}
+          <small>${dsh.install && dsh.install.installed ? esc(`${dsh.install.version || "已安装"} · 用 DeepSeek 的 Key${dsh.install.node ? "" : " · 没找到 Node 24"}`) : '<span style="color:var(--err)">网关上没有找到 dsh</span>'}</small></div>
       </div>
       <div class="choice off" title="即将支持">
         <div class="mark" style="background:var(--soft);color:var(--muted)">X</div>
@@ -816,7 +1207,8 @@ async function renderLLM(root) {
           <small>${d.grok.bots.length ? `已勾选 ${d.grok.bots.length} 个 Bot${grokAliases.length < d.grok.bots.length ? "，有的还没配称呼" : ""}，叫名字就能派活` : "xAI 的云端 AI 同事：登录、勾选 Bot，叫名字派活，回复念给你听"}</small></div>
       </div>
     </div>
-    <div class="card panel" id="cli-form">
+    <div class="card panel ${agentView === "dsh" ? "" : "hidden"}" id="dsh-form">${dshForm()}</div>
+    <div class="card panel ${agentView === "claude" ? "" : "hidden"}" id="cli-form">
       ${c.exists ? `
       ${usingCli ? "" : `<div class="banner info">本地 CLI 不是默认模型${active ? `（默认是 ${esc(active.label)}）` : ""}${d.callable.ClaudeCLI ? "，但配了称呼，说“嗨 Claude”就能用它" : ""}。这里改的设置保存后，设备重新连接时生效；想让它当默认模型就点"保存并设为默认"。</div>`}
       <div class="cli-row"><div class="cli-k">模型</div><div>
@@ -873,6 +1265,12 @@ async function renderLLM(root) {
     <div class="card panel" id="api-form"></div>`;
 
   $("grok-choice").onclick = () => openPage("grokbot");
+  root.querySelectorAll("[data-agent]").forEach((b) => (b.onclick = () => {
+    agentView = b.dataset.agent;
+    root.querySelectorAll("[data-agent]").forEach((y) => y.classList.toggle("on", y === b));
+    $("dsh-form").classList.toggle("hidden", agentView !== "dsh"); $("cli-form").classList.toggle("hidden", agentView !== "claude");
+  }));
+  bindDshForm();
 
   // ----- 本地 CLI -----
   const form = $("cli-form");
@@ -934,7 +1332,9 @@ async function renderLLM(root) {
         <label class="f">接口地址<input class="in mono" id="api-url" value="${esc(x.base_url)}" placeholder="https://…/v1"></label>
         <label class="f">模型${x.models.length ? '<span class="hint">可从列表选，也可以手填</span>' : ""}
           <input class="in mono" id="api-model" value="${esc(x.model)}" list="api-models" placeholder="模型名称">
-          <datalist id="api-models">${x.models.map((m) => `<option value="${esc(m)}">`).join("")}</datalist></label>
+          <datalist id="api-models">${x.models.map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
+          <button type="button" class="btn sm" id="api-fetch" style="margin-top:6px">读取模型列表</button></label>
+        <div class="full chips" id="api-list" style="margin-top:0"></div>
         <label class="f full">API Key${x.key_optional ? '<span class="hint">本机服务不需要 Key 时可以留空</span>' : ""}
           <input class="in mono" id="api-key" type="password" autocomplete="off"
             placeholder="${x.key_set ? `已设置 ${esc(x.key_hint)}，输入新值可替换` : "未设置，粘贴后保存"}"></label>
@@ -948,6 +1348,7 @@ async function renderLLM(root) {
     apiDirty = snapshot(values);
     const result = (html) => ($("api-result").innerHTML = html);
     const bad = (msg) => result(`<span style="color:var(--err)">${esc(msg)}</span>`);
+    $("api-fetch").onclick = (e) => busy(e.target, () => fetchModels($("api-url").value, $("api-key").value, x.id, $("api-list"), $("api-model")));
     $("api-test").onclick = (e) => busy(e.target, async () => {
       result('<span class="muted">正在发一句话测试（推理型模型要先想一会儿，最多等一分钟）…</span>');
       try {
@@ -981,42 +1382,75 @@ async function renderLLM(root) {
   renderVision(box);
 }
 
-// 看图模型（拍照问答，core/agent/photo_ask.py）：DeepSeek 看不了图，另选一个
+// 看图模型（拍照问答，core/agent/photo_ask.py；设计画布第 15 块 A）。「大模型」里填过 Key 的同一家直接沿用
 let visionPick = null;
 const visionDirty = () => !!($("vision-key") && $("vision-key").value.trim());
+const VISION_MARK = { deepseek: "D", zhipu: "智", qwen: "千", doubao: "豆", kimi: "K", stepfun: "阶", siliconflow: "硅", openai: "O",
+  gemini: "G", claude: "C", ollama: "🦙", custom: "⋯" };
 async function renderVision(box) {
   const d = await api("vision");
-  if (!visionPick || !d.providers.find((p) => p.id === visionPick)) visionPick = d.selected || "zhipu";
+  if (!visionPick || !d.providers.find((p) => p.id === visionPick)) visionPick = d.selected || (d.providers.find((x) => x.shared_key) || d.providers[0]).id;
   const p = d.providers.find((x) => x.id === visionPick);
+  const state = (x) => x.id === d.selected ? (x.configured ? '<span class="pill ok">使用中</span>' : '<span class="pill warn">已选，缺 Key</span>')
+    : x.own_key ? '<span class="pill">已配置</span>' : x.shared_key ? '<span class="pill ok">已有 Key</span>' : x.local ? '<span class="pill">本机/局域网</span>' : "";
+  const customModel = p.model && !p.models.includes(p.model);
   box.innerHTML = `
     <div class="card panel" style="margin-top:20px">
       <h2 style="margin:0 0 6px">看图模型 ${d.ready ? '<span class="pill ok">可以用</span>' : '<span class="pill warn">还没配好</span>'}</h2>
-      <p class="muted small" style="margin:0 0 14px">设备上说“帮我看下这是什么”，用手机扫码拍照，照片交给这里选的看图模型（DeepSeek 看不了图）。填完 Key 点“试一下”用一张测试图验证。</p>
-      <div class="choices">${d.providers.map((x) => `
+      <p class="muted small" style="margin:0 0 14px">设备上说“帮我看下这是什么”，手机扫码拍照，照片交给这里选的模型。「大模型」里填过 Key 的同一家直接沿用（标「已有 Key」）。DeepSeek 只有 V4.1 Flash 能看图。</p>
+      <div class="choices three vgrid">${d.providers.map((x) => `
         <button class="choice ${x.id === visionPick ? "on" : ""}" data-vision="${esc(x.id)}">
-          <div class="mark" style="background:${x.id === "zhipu" ? "#eef2ff;color:#4f46e5" : "#fff7ed;color:#c2410c"}">${x.id === "zhipu" ? "智" : "千"}</div>
-          <div><b>${esc(x.label)}</b> ${x.id === d.selected ? (x.configured ? '<span class="pill ok">使用中</span>' : '<span class="pill warn">已选，缺 Key</span>') : x.configured ? '<span class="pill">已配置</span>' : '<span class="pill">未配置</span>'}<small>${esc(x.note)} · ${esc(x.model)}</small></div></button>`).join("")}</div>
-      <div class="grid2" style="margin-top:14px"><label class="f">${esc(p.label)} 的 API Key
-        <input class="in mono" id="vision-key" type="password" autocomplete="off" placeholder="${p.configured ? "已设置，输入新值可替换" : "未设置，粘贴后保存"}"></label></div>
-      <p class="muted small" style="margin:8px 0 14px"><a href="${esc(p.key_url)}" target="_blank" rel="noopener">去这里创建 API Key</a>。Key 只保存在这台电脑的配置文件里。</p>
+          <div class="mark" style="background:var(--accent-soft);color:var(--accent)">${VISION_MARK[x.id] || "·"}</div>
+          <div><b>${esc(x.label)}</b> ${state(x)}<small>${esc(x.note)}</small></div></button>`).join("")}</div>
+      <div class="grid2" style="margin-top:14px">
+        <label class="f">模型<span class="hint">可以选，也可以手填</span>
+          <input class="in mono" id="vision-model" value="${esc(p.model)}" list="vision-models" placeholder="模型名">
+          <datalist id="vision-models">${p.models.map((m) => `<option value="${esc(m)}">`).join("")}</datalist></label>
+        <label class="f">接口地址${p.local ? '<span class="hint">本机或局域网的地址</span>' : '<span class="hint">一般不用改</span>'}
+          <input class="in mono" id="vision-url" value="${esc(p.url)}" placeholder="http://…/v1"></label>
+        <label class="f full">API Key${p.shared_key && !p.own_key ? '<span class="hint">留空：沿用「大模型 → ' + esc(p.label) + '」的 Key</span>' : p.local ? '<span class="hint">不需要就留空</span>' : ""}
+          <input class="in mono" id="vision-key" type="password" autocomplete="off" placeholder="${p.own_key ? "已设置，输入新值可替换" : p.shared_key ? "沿用大模型页的 Key" : p.local ? "留空" : "未设置，粘贴后保存"}"></label>
+      </div>
+      ${p.local ? '<div class="chips" id="vision-list"></div>' : ""}
+      <p class="muted small" style="margin:8px 0 14px">${p.key_url ? `<a href="${esc(p.key_url)}" target="_blank" rel="noopener">去这里创建 API Key</a>。` : ""}Key 只保存在这台电脑的配置文件里。「试一下」用已保存的设置发一张测试图。</p>
       <div class="actions"><span class="result muted" id="vision-result"></span>
+        ${p.local ? '<button class="btn" id="vision-fetch">读取模型列表</button>' : ""}
         <button class="btn" id="vision-test">试一下</button>
         <button class="btn primary" id="vision-save">${p.id === d.selected ? "保存" : "保存并使用"}</button></div>
     </div>`;
+  void customModel;
   box.querySelectorAll("[data-vision]").forEach((b) => (b.onclick = () => { visionPick = b.dataset.vision; renderVision(box); }));
   $("vision-save").onclick = (ev) => busy(ev.target, async () => {
-    try { await api("vision", { provider: p.id, api_key: $("vision-key").value.trim() }); toast("看图模型已保存"); renderVision(box); }
-    catch (err) { toast(err.message, true); }
+    try {
+      await api("vision", { provider: p.id, api_key: $("vision-key").value.trim(), model: $("vision-model").value.trim(), url: $("vision-url").value.trim() });
+      toast("看图模型已保存"); renderVision(box);
+    } catch (err) { toast(err.message, true); }
   });
+  if ($("vision-fetch")) $("vision-fetch").onclick = (ev) => busy(ev.target, () => fetchModels($("vision-url").value, $("vision-key").value, p.id === "ollama" ? "ollama" : "", $("vision-list"), $("vision-model"), true));
   $("vision-test").onclick = (ev) => busy(ev.target, async () => {
-    const out = $("vision-result");
-    out.textContent = "正在问看图模型…";
+    const out = $("vision-result"), t0 = performance.now();
+    out.textContent = "正在问看图模型…"; out.className = "result muted";
     try {
       const r = await api("vision/test", {});
-      out.textContent = r.ok ? "✓ " + r.message : "✗ " + r.error;
-      out.className = "result " + (r.ok ? "" : "err");
-    } catch (err) { out.textContent = "✗ " + err.message; out.className = "result err"; }
+      const sec = ((performance.now() - t0) / 1000).toFixed(1);
+      out.textContent = r.ok ? `✓ ${r.message}（${sec} 秒）` : "✗ " + r.error;
+      out.className = "result"; out.style.color = r.ok ? "var(--ok)" : "var(--err)";
+    } catch (err) { out.textContent = "✗ " + err.message; out.style.color = "var(--err)"; }
   });
+}
+
+// 问 OpenAI 兼容服务（Ollama、LM Studio 等）有哪些模型，点一个填进 input（设计画布第 15 块 C）
+async function fetchModels(url, key, vendor, listBox, input, visionFirst) {
+  listBox.innerHTML = '<span class="muted small">正在读取…</span>';
+  try {
+    const r = await api("models/list", { url: url.trim(), api_key: (key || "").trim(), vendor });
+    const models = visionFirst ? [...r.models].sort((a, b) => (b.vision ? 1 : 0) - (a.vision ? 1 : 0)) : r.models;
+    listBox.innerHTML = models.map((m) => `<button type="button" class="chip ${m.id === input.value ? "on" : ""}" data-m="${esc(m.id)}">${esc(m.id)}${m.size ? ` <span class="muted small">${esc(m.size)}</span>` : ""}${m.vision ? ' <span class="muted small">能看图</span>' : ""}</button>`).join("");
+    listBox.querySelectorAll("[data-m]").forEach((b) => (b.onclick = () => {
+      input.value = b.dataset.m; listBox.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c === b));
+      input.dispatchEvent(new Event("input"));
+    }));
+  } catch (err) { listBox.innerHTML = `<span class="small" style="color:var(--err)">${esc(err.message)}</span>`; }
 }
 
 // ---------- 语音识别 ----------
@@ -1060,6 +1494,8 @@ async function renderASR(root) {
           <small>火山引擎，边说边识别</small></div></button>
       ${(d.providers || []).filter((x) => x.group === "cloud").map(provChoice).join("")}
     </div>
+    ${(d.providers || []).some((x) => x.group === "lan") ? `<h3 class="asr-group">局域网服务 <span class="muted small" style="font-weight:400">家里另一台电脑上的识别服务（OpenAI 兼容）</span></h3>
+    <div class="choices">${(d.providers || []).filter((x) => x.group === "lan").map(provChoice).join("")}</div>` : ""}
     <div class="card panel" id="asr-form"></div>
     ${vadCard(d.vad)}
     ${hotwordsCard(d.hotwords)}
@@ -1089,7 +1525,7 @@ async function renderASR(root) {
         ${x.model.ok ? "" : `<div style="margin-top:8px"><button class="btn" data-dl="${esc(x.id)}" ${x.download && x.download.state === "running" ? "disabled" : ""}>下载模型（${esc(x.download_size)}）</button>${dlLine(x.download)}</div>`}` : ""}
       ${x.fields.length ? `<div class="grid2" style="margin-top:6px">${x.fields.map((f) => `<label class="f">${esc(f.label)}
         <input class="in mono" data-k="${esc(f.key)}" ${f.secret ? 'type="password" autocomplete="off"' : ""}
-          ${f.secret ? `placeholder="${f.set ? `已设置 ${esc(f.hint)}，输入新值可替换` : "未设置，粘贴后保存"}"` : `value="${esc(f.value)}"`}></label>`).join("")}</div>
+          ${f.secret ? `placeholder="${f.optional ? (f.hint && f.hint !== "未设置" ? `已设置 ${esc(f.hint)}` : "不用就留空") : f.set ? `已设置 ${esc(f.hint)}，输入新值可替换` : "未设置，粘贴后保存"}"` : `value="${esc(f.value)}"`}></label>`).join("")}</div>
         <p class="muted small" style="margin:8px 0 0">密钥只保存在这台电脑的配置文件里，页面上只显示首尾 4 位。</p>` : ""}
       <div class="actions"><span class="result muted">切换后新连接马上生效，在线设备重新连接后生效。</span>
         ${x.fields.length ? `<button class="btn ${using ? "primary" : ""}" id="pv-save">保存</button>` : ""}
@@ -1388,7 +1824,7 @@ async function renderTTS(root) {
   const engines = Object.fromEntries((d.engines || []).map((e) => [e.id, e]));
   if (!ttsView || !engines[ttsView]) ttsView = engines[d.engine] ? d.engine : "edge";
   const e = engines[ttsView];
-  const isQwen = e.id === "qwen3";
+  const isQwen = e.id === "qwen3", isLan = !!e.custom;
   let chosen = e.voice || (e.voices[0] && e.voices[0].value);
   const groups = [];
   e.voices.forEach((v) => { let g = groups.find((x) => x.name === v.group); if (!g) groups.push(g = { name: v.group, items: [] }); g.items.push(v); });
@@ -1401,7 +1837,7 @@ async function renderTTS(root) {
     ${d.engine === "other" ? `<div class="banner warn">当前使用的 ${esc(d.selected)} 不在后台管理范围内（可能是手动改了配置文件）。在下面选一种并保存即可切换。</div>` : ""}
     <div class="choices">${(d.engines || []).map((x) => `
       <button class="choice ${ttsView === x.id ? "on" : ""}" data-engine="${esc(x.id)}">
-        <div class="mark" style="background:${x.id === "edge" ? "var(--accent-soft);color:var(--accent)" : "#fff7ed;color:#c2410c"}">${x.id === "edge" ? "E" : "千"}</div>
+        <div class="mark" style="background:${x.id === "edge" ? "var(--accent-soft);color:var(--accent)" : "#fff7ed;color:#c2410c"}">${x.id === "edge" ? "E" : x.custom ? "LAN" : "千"}</div>
         <div><b>${esc(x.label)}</b> ${tag(x)}<small>${esc(x.mark)} · ${esc(x.desc)}</small></div></button>`).join("")}</div>
     <div class="card panel">
       ${e.conflict ? `<div class="banner err">配置里已有一个叫 ${esc(e.entry)} 的条目，但类型不对，请在配置文件里改名或删掉它。</div>` : ""}
@@ -1409,14 +1845,28 @@ async function renderTTS(root) {
           <input class="in mono" id="tts-key" type="password" autocomplete="off"
             placeholder="${e.key_set ? `已设置 ${esc(e.key_hint)}，输入新值可替换` : "未设置，粘贴后保存"}"></label></div>
         <p class="muted small" style="margin:8px 0 14px">在<a href="${esc(e.link)}" target="_blank" rel="noopener">百炼控制台</a>创建 API Key（sk- 开头）。Key 只保存在这台电脑的配置文件里，页面上只显示首尾 4 位。保存 Key 之后才能试听。</p>` : ""}
+      ${isLan ? `<div class="grid2">
+          <label class="f full">接口地址<span class="hint">OpenAI 兼容的 /v1/audio/speech</span><input class="in mono" id="lan-url" value="${esc(e.fields.api_url)}"></label>
+          <label class="f">模型<input class="in mono" id="lan-model" value="${esc(e.fields.model)}"></label>
+          <label class="f">音色<span class="hint">例如 Kokoro 的 zf_xiaobei、zm_yunxi</span><input class="in mono" id="lan-voice" value="${esc(e.fields.voice)}"></label>
+          <label class="f">格式<input class="in mono" id="lan-format" value="${esc(e.fields.format)}" list="lan-formats"><datalist id="lan-formats"><option value="wav"><option value="mp3"></datalist></label>
+          <label class="f">API Key<span class="hint">不用就留空</span><input class="in mono" id="tts-key" type="password" autocomplete="off" placeholder="${e.key_set ? `已设置 ${esc(e.key_hint)}` : "留空"}"></label></div>
+        <p class="muted small" style="margin:8px 0 0">例如 <a href="${esc(e.link)}" target="_blank" rel="noopener">Kokoro-FastAPI</a>（默认 8880 端口）、Speaches。保存之后点「试听」用保存的设置合成一句。</p>` : ""}
       ${groups.map((g) => `<div class="voice-group"><h3>${esc(g.name)}</h3><div class="voices">${g.items.map((v) => `
         <div class="voice ${v.value === chosen ? "on" : ""}" data-voice="${esc(v.value)}" role="button" tabindex="0">
           <div class="meta"><b>${esc(v.name)}</b> <span class="muted small">${esc(v.gender)}</span><small>${esc(v.style)}</small></div>
           <button class="play" data-play="${esc(v.value)}" title="试听">▶</button></div>`).join("")}</div></div>`).join("")}
       <div class="actions"><span class="result muted">保存后，设备重新连接时生效。</span>
-        <button class="btn primary" id="tts-save">${e.using ? "保存音色" : "保存并使用"}</button></div>
+        ${isLan && e.exists ? '<button class="btn" id="lan-play">试听</button>' : ""}
+        <button class="btn primary" id="tts-save">${e.using ? (isLan ? "保存" : "保存音色") : "保存并使用"}</button></div>
     </div>`;
-  const keyValue = () => (isQwen ? $("tts-key").value.trim() : "");
+  const keyValue = () => (isQwen || isLan ? $("tts-key").value.trim() : "");
+  if ($("lan-play")) $("lan-play").onclick = () => {
+    if (audio) { audio.pause(); audio = null; }
+    const a = audio = new Audio("/admin/api/tts/preview?engine=lan&t=" + Date.now());
+    a.onerror = async () => { let msg = "试听失败"; try { const r = await fetch(a.src); if (!r.ok) msg = (await r.json()).error || msg; } catch (_) {} toast(msg, true); };
+    a.play().catch(() => {});
+  };
   page.dirty = () => chosen !== (e.voice || chosen) || !!keyValue();
   root.querySelectorAll("[data-engine]").forEach((b) => (b.onclick = async () => {
     if (b.dataset.engine === ttsView) return;
@@ -1452,6 +1902,8 @@ async function renderTTS(root) {
     try {
       const body = { engine: e.id, voice: chosen };
       if (isQwen) body.api_key = keyValue();
+      if (isLan) Object.assign(body, { api_key: keyValue(), api_url: $("lan-url").value.trim(), model: $("lan-model").value.trim(),
+        voice: $("lan-voice").value.trim(), format: $("lan-format").value.trim() });
       const r = await api("tts", body);
       toast(r.changed && r.changed.length || !e.using ? r.note : "没有修改", r.failed);
       page.dirty = null; await openPage("tts", true);

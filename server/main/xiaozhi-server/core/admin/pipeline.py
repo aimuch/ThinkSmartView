@@ -85,6 +85,8 @@ def _voice_name(voice: str) -> str:
 def _llm_label(name: str, entry: dict) -> str:
     if entry.get("type") == "claude_cli":
         return "Claude Code"
+    if entry.get("type") == "dsh_cli":
+        return "DSH"
     vendor = catalog.VENDOR_BY_ENTRY.get(name)
     return vendor["label"] if vendor else name
 
@@ -122,6 +124,10 @@ def describe_stages(merged: dict) -> list:
     if llm.get("type") == "claude_cli":
         llm_value = f"Claude Code · {_claude_model_label(llm.get('model'))}"
         llm_hint = f"思考力度：{_effort_label(llm.get('effort'))}"
+    elif llm.get("type") == "dsh_cli":
+        opt = next((o for o in catalog.DSH_MODELS if o["value"] == llm.get("model")), None)
+        llm_value = f"DSH · {opt['label'] if opt else llm.get('model') or 'V4.1 Flash'}"
+        llm_hint = "DeepSeek Harness，能读文件、做事"
     else:
         llm_value = _llm_label(llm_name, llm)
         llm_hint = str(llm.get("model_name") or "")
