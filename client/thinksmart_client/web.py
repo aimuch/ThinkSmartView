@@ -55,9 +55,6 @@ def make_app(client: Client):
                 try:
                     event, data = await asyncio.wait_for(q.get(), timeout=15)
                     await resp.write(f'event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n'.encode())
-                    if event == 'bye':   # 客户端要停了：把这条流正常结束掉（__main__.py）
-                        await resp.write_eof()
-                        return resp
                 except asyncio.TimeoutError:
                     await resp.write(b'event: ping\ndata: {}\n\n')   # 页面看得到：40 秒什么都没收到就重连（app.js connectEvents）
         except (ConnectionResetError, asyncio.CancelledError):
@@ -301,7 +298,7 @@ def make_app(client: Client):
     app.router.add_post('/api/text', text)
 
     async def page_log(request):
-        """屏幕页面的脚本错误（index.html 开头的上报）：写进日志，每分钟最多 20 条。"""
+        """屏幕页面的脚本错误（index.html 开头的上报）和第一次显示出来的内容：写进日志，每分钟最多 20 条。"""
         now = time.monotonic()
         recent = [t for t in page_log.times if now - t < 60]
         page_log.times = recent
@@ -311,7 +308,10 @@ def make_app(client: Client):
                 body = (await request.text())[:2000]
             except Exception:  # noqa: BLE001
                 body = '?'
-            log.warning('page error: %s', body)
+            if body.startswith('{"kind":"rendered"'):
+                log.info('page shown: %s', body)
+            else:
+                log.warning('page error: %s', body)
         return web.Response(status=204)
     page_log.times = []
     app.router.add_post('/api/page-log', page_log)

@@ -1945,21 +1945,12 @@ function showVolume(v) {
 
 /* ---- events from the client ---- */
 const handlers = {
-  // The client is stopping (update, restart): drop the stream ourselves and reload once it answers again,
-  // instead of keeping a connection the kiosk's WebKitGTK never recovers from
-  bye() {
-    if (events) events.close();
-    events = null; clearTimeout(eventsRetry);
-    const tryBack = () => fetch('/api/health', { cache: 'no-store' }).then(r => r.ok ? location.reload() : Promise.reject())
-      .catch(() => { eventsRetry = setTimeout(tryBack, 2000); });
-    eventsRetry = setTimeout(tryBack, 2000);
-  },
   snapshot(s) {
     if (ui.build && s.build && s.build !== ui.build) return location.reload();   // client restarted (deployed)
     if (!ui.build && !DEMO) setTimeout(() => {   // 第一份状态画完后，把屏幕上实际显示的记到设备日志（排查屏幕不动用）
       try {
-        navigator.sendBeacon('/api/page-log', JSON.stringify({ kind: 'rendered', model: $('pillLabel').textContent, time: $('time').textContent,
-          hidden: document.hidden, visibility: document.visibilityState, size: `${innerWidth}x${innerHeight}`, status: ui.status }));
+        fetch('/api/page-log', { method: 'POST', body: JSON.stringify({ kind: 'rendered', model: $('pillLabel').textContent, time: $('time').textContent,
+          hidden: document.hidden, visibility: document.visibilityState, size: `${innerWidth}x${innerHeight}`, state: ui.status && ui.status.state }) }).catch(() => {});
       } catch (e) { /* ignore */ }
     }, 1500);
     ui.build = s.build;
@@ -2099,10 +2090,8 @@ setInterval(watchNetwork, 15000);
 setTimeout(watchNetwork, 3000);
 
 // The stream must survive the client restarting (updates, crashes). EventSource reconnects by itself after a
-// dropped connection, but the kiosk's WebKitGTK has given up for good after a restart (readyState CLOSED, no
-// connection to the client at all): the screen then sat on the empty start state – no clock, no model, no
-// replies – until the browser was restarted. So reconnect ourselves when it closes, and when nothing (not even
-// the client's 15 s ping) has arrived for 40 s.
+// dropped connection; in case it gives up (readyState CLOSED) or a half-open connection never delivers again,
+// reconnect ourselves when it closes, and when nothing (not even the client's 15 s ping) has arrived for 40 s.
 let events = null, eventsSeen = 0, eventsRetry = null;
 function connectEvents() {
   clearTimeout(eventsRetry); eventsRetry = null;
