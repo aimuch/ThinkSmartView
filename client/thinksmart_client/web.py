@@ -299,6 +299,22 @@ def make_app(client: Client):
     app.router.add_post('/api/ptt/stop', action(client.ptt_stop))
     app.router.add_post('/api/model', model)
     app.router.add_post('/api/text', text)
+
+    async def page_log(request):
+        """屏幕页面的脚本错误（index.html 开头的上报）：写进日志，每分钟最多 20 条。"""
+        now = time.monotonic()
+        recent = [t for t in page_log.times if now - t < 60]
+        page_log.times = recent
+        if len(recent) < 20:
+            page_log.times.append(now)
+            try:
+                body = (await request.text())[:2000]
+            except Exception:  # noqa: BLE001
+                body = '?'
+            log.warning('page error: %s', body)
+        return web.Response(status=204)
+    page_log.times = []
+    app.router.add_post('/api/page-log', page_log)
     app.router.add_post('/api/sleep', sleep_setting)
     app.router.add_post('/api/brightness', brightness)
     app.router.add_post('/api/screen-off', screen_off)

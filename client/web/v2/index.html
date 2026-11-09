@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
+<script>
+// 页面脚本出错时记到设备日志（journalctl -u thinksmart-client）：屏幕上的 WebKitGTK 没有开发者工具，出错时只看得到一个空白首页
+(() => {
+  const send = (o) => { try { navigator.sendBeacon('/api/page-log', JSON.stringify(o)); } catch (e) { /* ignore */ } };
+  addEventListener('error', (e) => send({ kind: 'error', msg: String(e.message), src: e.filename, line: e.lineno, col: e.colno,
+                                          stack: e.error && String(e.error.stack || '').slice(0, 1500) }));
+  addEventListener('unhandledrejection', (e) => send({ kind: 'rejection', msg: String(e.reason && (e.reason.stack || e.reason)).slice(0, 1500) }));
+})();
+</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>小麦</title>
