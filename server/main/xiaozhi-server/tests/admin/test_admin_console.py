@@ -272,7 +272,8 @@ async def test_dsh_session_with_fake_cli(tmp_path, monkeypatch):
     assert isinstance(events[-1], Done) and s.session_id == "session-new" and usage[0]["outputTokens"] == 3
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     assert calls[0]["task"].startswith("系统提示：住在青浦") and calls[0]["key"] == "sk-x" and "--session-id" not in calls[0]["args"]
-    assert calls[0]["args"][:6] == ["--profile", "headless", "--json", "--permission-mode", "read-only", "--patch"]
+    assert calls[0]["args"][:3] == ["--profile", "headless", "--patch"]
+    assert calls[0]["args"][4:7] == ["--json", "--permission-mode", "read-only"]
     [e async for e in s.send("接着说")]
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     assert calls[1]["task"] == "接着说" and calls[1]["args"][calls[1]["args"].index("--session-id") + 1] == "session-new"

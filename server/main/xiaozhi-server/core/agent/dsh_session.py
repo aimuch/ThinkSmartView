@@ -155,8 +155,9 @@ class DshSession(AgentSession):
             yield ev
 
     async def _send_once(self, text: str) -> AsyncIterator[AgentEvent]:
-        args = [self.cfg.dsh_path, "--profile", "headless", "--json", "--permission-mode", self.cfg.permission,
-                "--patch", self.cfg.patch_path]
+        # --patch 是启动器的选项，要紧跟在 --profile 后面；放到 headless 自己的选项后面会报 unknown option
+        args = [self.cfg.dsh_path, "--profile", "headless", "--patch", self.cfg.patch_path,
+                "--json", "--permission-mode", self.cfg.permission]
         first = self._session_id is None
         if not first:
             args += ["--session-id", self._session_id]
