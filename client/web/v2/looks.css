@@ -98,6 +98,10 @@ body.av-photo-on[data-state="speaking"] .av-photo { animation: av-talk .38s ease
 @keyframes av-sway { 25% { transform: rotate(-6deg) translateX(-5px); } 75% { transform: rotate(6deg) translateX(5px); } }
 @keyframes av-talk { from { transform: scale(1.04, .95); } to { transform: scale(.98, 1.04); } }
 @media (prefers-reduced-motion: reduce) { body.av-photo-on .av-photo { animation: none !important; } }
+/* 去了白底的全身公仔：不裁圆、不加白边，整只放大一点站在光里（只画一次阴影，不做动画滤镜） */
+body.av-cutout .av-photo { inset: -46px; width: calc(100% + 92px); height: calc(100% + 92px); border-radius: 0; object-fit: contain;
+                           box-shadow: none !important; filter: drop-shadow(0 12px 18px #0008); }
+body.av-cutout .core { background: none; box-shadow: none; }
 
 /* ---- 首页「常用设备」（设计画布第 16 块 A；上游 client issue #1 网友的建议）：轻点开关，长按看详情 ---- */
 .home-devices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 20px; max-width: 640px; }

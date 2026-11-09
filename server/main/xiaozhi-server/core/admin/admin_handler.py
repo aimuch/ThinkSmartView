@@ -1486,7 +1486,11 @@ class AdminHandler:
     async def handle_kiosk_avatar_image(self, request: web.Request):
         if not self._from_this_machine(request):
             return self._error("仅限本机", 403)
-        path = photo_ask.avatar_path(request.match_info["token"])
+        try:
+            pose = int(request.query.get("pose", 0))   # 「原图」形象的第几张：0 待机、1 在听、2 在想、3 在说
+        except ValueError:
+            return self._error("pose 要是数字", 400)
+        path = photo_ask.avatar_path(request.match_info["token"], pose)
         if not path or not os.path.isfile(path):
             return self._error("还没画好", 404)
         return web.FileResponse(path, headers={"Content-Type": "application/octet-stream", "Cache-Control": "no-store"})

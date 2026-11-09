@@ -281,7 +281,7 @@ def start(device: str, question: str, purpose: str = "ask") -> dict:
                 s["state"], s["error"] = "cancelled", "已取消"
         _sessions[token] = {"device": device, "question": question, "created": now, "state": "waiting",
                             "answer": None, "error": None, "photo": None, "purpose": purpose, "avatar": None,
-                            "album": []}
+                            "album": [], "poses": []}
     purge_old_photos(now)
     return {"token": token, "question": question, "expires": now + UPLOAD_SECONDS}
 
@@ -300,7 +300,8 @@ def view(token: str):
         return None
     return {"state": s["state"], "question": s["question"], "answer": s["answer"], "error": s["error"],
             "expires": s["created"] + UPLOAD_SECONDS, "has_photo": bool(s["photo"]), "purpose": s.get("purpose", "ask"),
-            "has_avatar": bool(s.get("avatar")), "album_count": len(s.get("album") or [])}
+            "has_avatar": bool(s.get("avatar")), "album_count": len(s.get("album") or []),
+            "poses": len(s.get("avatar_poses") or s.get("poses") or [])}
 
 
 def cancel(token: str) -> bool:
@@ -327,7 +328,9 @@ def receive(token: str, jpeg: bytes, question: str = None) -> dict:
         s = _sessions.get(token or "")
         if not s:
             raise LookupError("这个链接无效，在小麦上重新说一次")
-        if s["state"] != "waiting" or time.time() - s["created"] > UPLOAD_SECONDS:
+        more_poses = (s.get("purpose") == "avatar" and s["state"] == "received"
+                      and 0 < len(s.get("poses") or []) < AVATAR_POSES)   # 形象：同一个码接着传第 2～4 张
+        if (s["state"] != "waiting" and not more_poses) or time.time() - s["created"] > UPLOAD_SECONDS:
             raise LookupError("这个链接已经用过或过期了，在小麦上重新说一次")
         if s.get("purpose") == "album" and len(s["album"]) >= ALBUM_PER_SESSION:
             raise ValueError(f"一次最多传 {ALBUM_PER_SESSION} 张，在小麦上再扫一次码接着传")
@@ -336,11 +339,16 @@ def receive(token: str, jpeg: bytes, question: str = None) -> dict:
             s["question"] = q
         folder = _photos_dir(s["device"])
         os.makedirs(folder, exist_ok=True)
-        path = os.path.join(folder, f"{int(time.time() * 1000)}-{token[:8]}.jpg")
+        ext = "png" if jpeg[:8] == b"\x89PNG\r\n\x1a\n" else "jpg"   # 去掉白底的公仔图是带透明的 PNG
+        path = os.path.join(folder, f"{int(time.time() * 1000)}-{token[:8]}.{ext}")
         with open(path, "wb") as f:
             f.write(jpeg)
         if s.get("purpose") == "album":   # 相册：一个码可以传好几张，一直收到过期
             s["album"].append(path)
+            return dict(s)
+        if s.get("purpose") == "avatar":
+            s.setdefault("poses", []).append(path)
+            s["photo"], s["state"] = s["poses"][0], "received"
             return dict(s)
         s["photo"], s["state"] = path, "received"
         return dict(s)
@@ -388,6 +396,7 @@ WANX_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image-generation
 WANX_TASK_URL = "https://dashscope.aliyuncs.com/api/v1/tasks/{}"
 # 0「原图」：不经过 AI、不用 Key，照片原样当形象（拍孩子自己的公仔，设计画布第 26 块）；其余是通义万相的画风
 ORIGINAL_STYLE = 0
+AVATAR_POSES = 4   # 「原图」形象最多几张：待机、在听、在想、在说，按上传顺序
 AVATAR_STYLES = {ORIGINAL_STYLE: "原图", 1: "3D童话", 2: "二次元", 7: "炫彩卡通", 3: "小清新", 30: "童话世界", 31: "黏土世界"}
 AVATAR_SECONDS = 90
 
@@ -401,9 +410,12 @@ def dashscope_key(merged: dict):
     return None
 
 
-def avatar_path(token: str):
+def avatar_path(token: str, pose: int = 0):
     s = get(token)
-    return s and s.get("avatar")
+    if not s:
+        return None
+    poses = s.get("avatar_poses") or ([s["avatar"]] if s.get("avatar") else [])
+    return poses[pose] if 0 <= pose < len(poses) else None
 
 
 def _wanx(key: str, jpeg: bytes, style: int) -> bytes:
@@ -448,8 +460,10 @@ def generate_avatar(token: str, style: int, merged: dict):
     if not s or s.get("purpose") != "avatar" or not s.get("photo"):
         return
     try:
-        if style == ORIGINAL_STYLE:
-            with open(s["photo"], "rb") as f:   # 手机页面上传前已经缩过、转成 JPEG
+        poses = None
+        if style == ORIGINAL_STYLE:   # 原样用：手机页面上传前已经缩过（去白底的是 PNG）；几张都留着
+            poses = list(s.get("poses") or [s["photo"]])
+            with open(poses[0], "rb") as f:
                 img = f.read()
         else:
             key = dashscope_key(merged)
@@ -471,6 +485,7 @@ def generate_avatar(token: str, style: int, merged: dict):
         cur = _sessions.get(token)
         if cur and cur["state"] == "generating":
             cur["avatar"], cur["state"], cur["error"] = path, state, err
+            cur["avatar_poses"] = poses if state == "generated" and poses else ([path] if path else [])
             if state == "error":
                 cur["state"] = "received"   # 还能换个画风再试
                 cur["error"] = err

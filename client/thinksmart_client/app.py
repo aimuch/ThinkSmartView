@@ -525,6 +525,9 @@ class Client:
                     self.publish_photo()
                 if state == 'generated' and not p['preview']:
                     p['preview'] = await self._fetch_photo(p['token'], avatar=True)
+                    # 「原图」形象可以有 2～4 张：在听、在想、在说的样子（设计画布第 26 块）
+                    p['poses'] = [p['preview']] + [await self._fetch_photo(p['token'], avatar=True, pose=i)
+                                                   for i in range(1, min(int(v.get('poses') or 1), looks.POSES))]
                 error = v.get('error') or (None if v.get('ok') else '二维码过期了')
                 if state != p['state'] or error != p['error']:
                     p['state'], p['error'] = state, error
@@ -548,15 +551,16 @@ class Client:
         except asyncio.CancelledError:
             pass
 
-    async def _fetch_photo(self, token, avatar=False):
+    async def _fetch_photo(self, token, avatar=False, pose=0):
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
-                async with s.get(f"{self.cfg['hub_http']}/kiosk/photo/{token}/{'avatar' if avatar else 'image'}") as r:
+                async with s.get(f"{self.cfg['hub_http']}/kiosk/photo/{token}/{'avatar' if avatar else 'image'}"
+                                 + (f'?pose={pose}' if pose else '')) as r:
                     if r.status != 200:
                         return None
                     data = await r.read()
             PHOTOS.mkdir(parents=True, exist_ok=True)
-            name = f"{int(time.time())}-{re.sub(r'[^0-9A-Za-z_-]', '', token)[:10]}{'-av' if avatar else ''}.jpg"
+            name = f"{int(time.time())}-{re.sub(r'[^0-9A-Za-z_-]', '', token)[:10]}{'-av' if avatar else ''}{pose or ''}.jpg"
             (PHOTOS / name).write_bytes(data)
             return f'/api/photos/{name}'
         except Exception as e:
@@ -564,11 +568,8 @@ class Client:
             return None
 
     async def avatar_start(self):
-        r = await self.photo_start('卡通形象', purpose='avatar')
-        if not r['avatar_ready']:
-            await self.photo_cancel()
-            raise ValueError('要百炼 Key 才能生成形象：在网关后台「语音合成 → 千问 TTS」或「看图模型 → 千问 VL」里填')
-        return r
+        # 没有百炼 Key 也能开始：「原图」不用 Key（拍自己的公仔）；选别的画风时网关会说要 Key
+        return await self.photo_start('卡通形象', purpose='avatar')
 
     async def avatar_style(self, style):
         """Draw the received photo in this style (the hub's wanx-style-repaint; ~15 s)."""
@@ -587,8 +588,8 @@ class Client:
         p = self.photo
         if not p or not p.get('preview'):
             raise ValueError('还没画好')
-        png = (PHOTOS / p['preview'].rsplit('/', 1)[1]).read_bytes()
-        avatar = await self.make_avatar(png)
+        pngs = [(PHOTOS / u.rsplit('/', 1)[1]).read_bytes() for u in (p.get('poses') or [p['preview']]) if u]
+        avatar = await self.make_avatar(pngs)
         self.photo = None
         self.publish_photo()
         return {'looks': await self.set_looks(avatar=avatar)}
@@ -1287,19 +1288,25 @@ class Client:
                     self.events.publish('looks', self.looks_view())
 
     async def make_avatar(self, png):
-        """Keep a generated avatar (PNG bytes) -> its id. At most looks.PHOTO_MAX: the oldest goes."""
+        """Keep a generated avatar (PNG bytes, or a list: the idle picture then the listening, thinking and
+        speaking ones) -> its id. At most looks.PHOTO_MAX: the oldest goes."""
+        pngs = png if isinstance(png, list) else [png]
         looks.PHOTO_DIR.mkdir(parents=True, exist_ok=True)
         name = f'a{int(time.time())}'
-        (looks.PHOTO_DIR / f'{name}.png').write_bytes(png)
+        (looks.PHOTO_DIR / f'{name}.png').write_bytes(pngs[0])
+        if len(pngs) > 1:
+            looks.POSE_DIR.mkdir(parents=True, exist_ok=True)
+            for i, data in enumerate(pngs[1:looks.POSES], 1):
+                (looks.POSE_DIR / f'{name}-{i}.png').write_bytes(data)
         for old in looks.photo_avatars()[looks.PHOTO_MAX:]:
-            (looks.PHOTO_DIR / old['url'].rsplit('/', 1)[1]).unlink(missing_ok=True)
+            looks.remove_photo(old['id'][6:])
         self.events.publish('looks', self.looks_view())
         return f'photo:{name}'
 
     async def delete_avatar(self, avatar_id):
         if not avatar_id.startswith('photo:') or not looks.PHOTO_NAME.match(avatar_id[6:]):
             raise ValueError('只能删用照片生成的形象')
-        (looks.PHOTO_DIR / f'{avatar_id[6:]}.png').unlink(missing_ok=True)
+        looks.remove_photo(avatar_id[6:])
         if self.cfg['avatar'] == avatar_id:
             return await self.set_looks(avatar='orb')
         view = self.looks_view()

@@ -140,7 +140,8 @@ def test_avatar_flow(tmp_path, monkeypatch):
     assert ('/kiosk/photo/tokA/avatar', {'style': 1}) in calls
 
 
-def test_avatar_needs_a_bailian_key(tmp_path, monkeypatch):
+def test_avatar_starts_without_a_bailian_key(tmp_path, monkeypatch):
+    """「原图」不用百炼 Key（拍自己的公仔，设计画布第 26 块）：没有 Key 也能开始，别的画风由网关说要 Key。"""
     c = make_client(tmp_path, monkeypatch)
     c.photo = c.photo_task = None
 
@@ -151,9 +152,27 @@ def test_avatar_needs_a_bailian_key(tmp_path, monkeypatch):
     c._hub_http = hub_http
 
     async def run():
-        with pytest.raises(ValueError, match='百炼'):
-            await c.avatar_start()
-        assert c.photo is None
+        r = await c.avatar_start()
+        assert c.photo and c.photo['purpose'] == 'avatar' and r['avatar_ready'] is False
+        if c.photo_task:
+            c.photo_task.cancel()
+    asyncio.run(run())
+
+
+def test_photo_avatar_with_poses(tmp_path, monkeypatch):
+    """一个照片形象存 4 张：页面按状态换；透明 PNG 当全身公仔；删掉时几张一起删。"""
+    from thinksmart_client import looks
+    monkeypatch.setattr(looks, 'PHOTO_DIR', tmp_path / 'avatars')
+    monkeypatch.setattr(looks, 'POSE_DIR', tmp_path / 'avatars' / 'poses')
+    c = make_client(tmp_path, monkeypatch)
+    rgba = b'\x89PNG\r\n\x1a\n' + b'\x00\x00\x00\rIHDR' + b'\x00\x00\x00\x10\x00\x00\x00\x10' + b'\x08\x06' + b'rest'
+
+    async def run():
+        avatar = await c.make_avatar([rgba, rgba + b'1', rgba + b'2', rgba + b'3'])
+        a = next(x for x in looks.photo_avatars() if x['id'] == avatar)
+        assert len(a['poses']) == 4 and a['cutout'] is True and a['poses'][2].endswith('-2.png')
+        await c.delete_avatar(avatar)
+        assert not list((tmp_path / 'avatars').rglob('*.png'))
     asyncio.run(run())
 
 

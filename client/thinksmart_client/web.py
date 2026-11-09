@@ -466,6 +466,13 @@ def make_app(client: Client):
             raise web.HTTPNotFound()
         return web.FileResponse(path, headers={'Cache-Control': 'max-age=31536000'})
 
+    async def avatar_pose_file(request):
+        name = request.match_info['name']
+        path = looks.POSE_DIR / name
+        if not re.fullmatch(r'[0-9A-Za-z_-]{1,40}-[1-9]\.png', name) or not path.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(path, headers={'Cache-Control': 'max-age=31536000'})
+
     async def avatar_start(_request):
         return await wake_call(client.avatar_start)
 
@@ -585,6 +592,7 @@ def make_app(client: Client):
     app.router.add_post('/api/kids', kids_set)
     app.router.add_post('/api/looks', looks_set)
     app.router.add_get('/api/avatars/{name}', avatar_file)
+    app.router.add_get('/api/avatars/poses/{name}', avatar_pose_file)
     app.router.add_post('/api/photo', photo_start)
     app.router.add_post('/api/photo/cancel', photo_cancel)
     app.router.add_get('/api/photos/{name}', photo_file)

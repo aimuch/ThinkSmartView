@@ -42,7 +42,10 @@
     <div id="askBox"><label for="q">想问什么（可以改）</label>
     <input type="text" id="q" maxlength="100"></div>
     <p class="box" id="albumTip" hidden>选几张家里的照片（一次最多 30 张），小麦待机的时候会轮播。照片只存在小麦上。</p>
-    <p class="box" id="avatarTip" hidden>拍一张<b>正脸</b>照，或者拍你的<b>公仔</b>：放在画面中间、别太小，背景干净、光线亮一点。拍好后在小麦上选「原图」直接用，或者选一种画风生成卡通形象。</p>
+    <p class="box" id="avatarTip" hidden>拍一张<b>正脸</b>照，或者拍你的<b>公仔</b>：放在画面中间、别太小，背景干净、光线亮一点。拍好后在小麦上选「原图」直接用，或者选一种画风生成卡通形象。<br>
+      从相册可以一次选 <b>最多 4 张</b>，按顺序当小麦的 待机、在听、在想、在说 四个样子（要在小麦上选「原图」）。</p>
+    <label class="box" id="cutBox" hidden style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cut" checked style="width:22px;height:22px">
+      <span>去掉白底（白底的图片用；实拍的照片不用勾）</span></label>
     <div style="height:14px"></div>
     <button class="big" id="shoot" style="width:100%"><span>📷</span>拍照</button>
     <div style="height:12px"></div>
@@ -71,7 +74,8 @@ fetch(`/photo/${token}/status`).then(r => r.json()).then(s => {
   if (!s.ok) return fatal(s.error || '这个链接无效，在小麦上重新说一次');
   $('q').value = s.question || '这是什么';
   purpose = s.purpose || 'ask';
-  if (purpose === 'avatar') { show('askBox', false); show('avatarTip', true); document.title = '小麦 · 生成形象'; }
+  if (purpose === 'avatar') { show('askBox', false); show('avatarTip', true); show('cutBox', true); $('lib').multiple = true;
+    $('album').textContent = '从相册选（最多 4 张）'; document.title = '小麦 · 生成形象'; }
   if (purpose === 'album') { show('askBox', false); show('albumTip', true); show('shoot', false); $('album').textContent = '选照片（可以多选）';
     $('album').classList.add('big'); $('lib').multiple = true; document.title = '小麦 · 家庭相册'; }
   if (s.state !== 'waiting') fatal(s.error || '这个链接已经用过了，在小麦上重新说一次');
@@ -79,8 +83,9 @@ fetch(`/photo/${token}/status`).then(r => r.json()).then(s => {
 
 $('shoot').onclick = () => $('cam').click();
 $('album').onclick = () => $('lib').click();
-$('cam').onchange = e => e.target.files[0] && send(e.target.files[0]);
-$('lib').onchange = e => purpose === 'album' ? sendMany([...e.target.files]) : e.target.files[0] && send(e.target.files[0]);
+$('lib').onchange = e => purpose === 'album' ? sendMany([...e.target.files]) : purpose === 'avatar' ? sendPoses([...e.target.files])
+  : e.target.files[0] && send(e.target.files[0]);
+$('cam').onchange = e => e.target.files[0] && (purpose === 'avatar' ? sendPoses([e.target.files[0]]) : send(e.target.files[0]));
 
 // shrink to at most 1600 px on the long side, JPEG: a phone photo is 3-8 MB, the model needs far less
 function shrink(file, max = 1600) {
@@ -112,6 +117,76 @@ async function send(file) {
     if (purpose === 'avatar') { $('status').textContent = '✓ 已发给小麦。到小麦的屏幕上选一个画风，就开始画了。'; return; }
     $('status').textContent = '✓ 已发给小麦，正在看…（答案会在小麦上念出来）';
     poll();
+  } catch (e) {
+    $('status').classList.add('err');
+    $('status').textContent = e.message || '没传上去，在小麦上重新说一次';
+  }
+}
+
+// 形象：最多 4 张（待机、在听、在想、在说）。勾了「去掉白底」：从四边把接近白色的连通区域变透明、
+// 边缘半透明过渡，再裁掉四周的空白，传带透明的 PNG（小麦上按全身显示，不裁成圆形）
+function cutout(file, max = 800) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+      const d = g.getImageData(0, 0, w, h), px = d.data;
+      const white = i => { const r = px[i], gg = px[i + 1], b = px[i + 2];
+        return Math.min(r, gg, b) > 228 && Math.max(r, gg, b) - Math.min(r, gg, b) < 24; };
+      const seen = new Uint8Array(w * h), stack = [];
+      for (let x = 0; x < w; x++) stack.push(x, (h - 1) * w + x);
+      for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
+      while (stack.length) {
+        const p = stack.pop();
+        if (seen[p] || !white(p * 4)) continue;
+        seen[p] = 1; px[p * 4 + 3] = 0;
+        const x = p % w, y = (p / w) | 0;
+        if (x > 0) stack.push(p - 1); if (x < w - 1) stack.push(p + 1);
+        if (y > 0) stack.push(p - w); if (y < h - 1) stack.push(p + w);
+      }
+      let x0 = w, y0 = h, x1 = -1, y1 = -1;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const p = y * w + x;
+        if (seen[p]) continue;
+        // 挨着透明区域的浅色边缘：半透明，免得一圈白边
+        if ((x > 0 && seen[p - 1]) || (x < w - 1 && seen[p + 1]) || (y > 0 && seen[p - w]) || (y < h - 1 && seen[p + w])) {
+          const m = Math.min(px[p * 4], px[p * 4 + 1], px[p * 4 + 2]);
+          if (m > 200) px[p * 4 + 3] = Math.round(255 * (255 - m) / 55);
+        }
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      if (x1 < 0) return reject(new Error('整张都是白的，换一张试试'));
+      g.putImageData(d, 0, 0);
+      const pad = 6, cw = x1 - x0 + 1 + pad * 2, ch = y1 - y0 + 1 + pad * 2;
+      const o = document.createElement('canvas'); o.width = cw; o.height = ch;
+      o.getContext('2d').drawImage(c, x0 - pad, y0 - pad, cw, ch, 0, 0, cw, ch);
+      o.toBlob(b => b ? resolve(b) : reject(new Error('处理失败')), 'image/png');
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => reject(new Error('这张图片打不开，换一张试试'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function sendPoses(files) {
+  show('pick', false); show('sent', true);
+  const names = ['待机', '在听', '在想', '在说'], list = files.slice(0, 4);
+  try {
+    for (const [i, file] of list.entries()) {
+      $('status').textContent = `正在处理第 ${i + 1} / ${list.length} 张（${names[i]}）…`;
+      const blob = $('cut').checked ? await cutout(file) : await shrink(file, 1000);
+      if (i === 0) $('preview').src = URL.createObjectURL(blob);
+      const form = new FormData();
+      form.append('photo', blob, $('cut').checked ? 'pose.png' : 'pose.jpg');
+      const r = await (await fetch(`/photo/${token}`, { method: 'POST', body: form })).json();
+      if (!r.ok) throw new Error(r.error || '没传上去');
+    }
+    $('status').textContent = list.length > 1
+      ? `✓ 传好了 ${list.length} 张（${names.slice(0, list.length).join('、')}）。到小麦的屏幕上选「原图」。`
+      : '✓ 已发给小麦。到小麦的屏幕上选「原图」直接用，或者选一个画风。';
   } catch (e) {
     $('status').classList.add('err');
     $('status').textContent = e.message || '没传上去，在小麦上重新说一次';

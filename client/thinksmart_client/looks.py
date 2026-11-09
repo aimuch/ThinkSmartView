@@ -13,6 +13,8 @@ BLOCKS = {'clock': '问候和时钟', 'date': '日期和农历', 'weather': '天
           'suggest': '试试这样问我', 'devices': '常用设备（米家）'}
 PHOTO_DIR = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'avatars'
 PHOTO_MAX = 6
+POSES = 4                   # 一个照片形象最多几张：待机、在听、在想、在说（设计画布第 26 块）
+POSE_DIR = PHOTO_DIR / 'poses'
 PHOTO_NAME = re.compile(r'^[0-9A-Za-z_-]{1,40}$')
 
 
@@ -21,7 +23,30 @@ def photo_avatars():
     if not PHOTO_DIR.is_dir():
         return []
     files = sorted(PHOTO_DIR.glob('*.png'), key=lambda p: p.stat().st_mtime, reverse=True)
-    return [{'id': f'photo:{p.stem}', 'name': '照片形象', 'url': f'/api/avatars/{p.name}'} for p in files]
+    out = []
+    for p in files:
+        poses = [f'/api/avatars/{p.name}'] + [f'/api/avatars/poses/{p.stem}-{i}.png' for i in range(1, POSES)
+                                               if (POSE_DIR / f'{p.stem}-{i}.png').is_file()]
+        out.append({'id': f'photo:{p.stem}', 'name': '照片形象', 'url': poses[0], 'poses': poses, 'cutout': has_alpha(p)})
+    return out
+
+
+def has_alpha(path):
+    """A PNG with an alpha channel (a cut-out figure: shown whole, not in a circle)."""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(26)
+        return head[:8] == b'\x89PNG\r\n\x1a\n' and head[25] in (4, 6)
+    except OSError:
+        return False
+
+
+def remove_photo(name):
+    if not PHOTO_NAME.match(name):
+        return
+    (PHOTO_DIR / f'{name}.png').unlink(missing_ok=True)
+    for i in range(1, POSES):
+        (POSE_DIR / f'{name}-{i}.png').unlink(missing_ok=True)
 
 
 def normalize_theme(value):

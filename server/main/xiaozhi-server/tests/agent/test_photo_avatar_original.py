@@ -25,3 +25,24 @@ def test_ai_style_without_key_points_to_original(tmp_path, monkeypatch):
     photo_ask.generate_avatar(s["token"], 1, {})
     cur = photo_ask.get(s["token"])
     assert cur["state"] == "received" and "原图" in cur["error"]
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"cutout" * 40
+
+
+def test_original_style_keeps_up_to_four_poses(tmp_path, monkeypatch):
+    monkeypatch.setattr(photo_ask, "_photos_dir", lambda device="": str(tmp_path))
+    s = photo_ask.start("dev-3", "", purpose="avatar")
+    for i in range(photo_ask.AVATAR_POSES):
+        photo_ask.receive(s["token"], PNG + bytes([i]))           # 同一个码接着传 4 张
+    try:
+        photo_ask.receive(s["token"], PNG)
+        assert False, "第 5 张应该被拒"
+    except LookupError:
+        pass
+    assert photo_ask.view(s["token"])["poses"] == 4
+    photo_ask.begin_avatar(s["token"], photo_ask.ORIGINAL_STYLE)
+    photo_ask.generate_avatar(s["token"], photo_ask.ORIGINAL_STYLE, {})
+    paths = [photo_ask.avatar_path(s["token"], i) for i in range(4)]
+    assert all(p and p.endswith(".png") for p in paths) and photo_ask.avatar_path(s["token"], 4) is None
+    assert [open(p, "rb").read()[-1] for p in paths] == [0, 1, 2, 3]

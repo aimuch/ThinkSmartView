@@ -195,6 +195,7 @@ function renderStatus() {
   const { state, connected } = ui.status;
   const shown = shownState();
   document.body.dataset.state = shown;
+  if (typeof showAvPose === 'function') showAvPose();
   // 叫醒时家居页、设备详情自动收起，屏幕让给对话（上游 client issue #1 网友的建议）
   if (shown === 'listening' && window.miAutoClose) window.miAutoClose();
   const text = {
@@ -917,6 +918,14 @@ const THEME_DOT = { night: 'linear-gradient(135deg,#18245a,#050813)', dawn: 'lin
 const BLOCK_ELS = { clock: ['greet', 'bigTime'], date: ['bigDate'], weather: ['homeWeather'], alarms: ['nextAlarms', 'missedBox', 'homeNotes', 'homeList'],
   suggest: ['tryLabel', 'chips'], devices: ['homeDevices'] };
 let looksArmed = null;
+// 照片形象的几个样子（设计画布第 26 块）：待机、在听、在想、在说；没传的状态用待机那张
+let avPoses = null;
+const POSE_OF = { idle: 0, connecting: 0, listening: 1, thinking: 2, speaking: 3 };
+function showAvPose() {
+  if (!avPoses) return;
+  const url = avPoses[POSE_OF[document.body.dataset.state] || 0] || avPoses[0];
+  if ($('avPhoto').getAttribute('src') !== url) $('avPhoto').src = url;
+}
 function renderLooks() {
   const l = ui.looks;
   if (!l) return;
@@ -924,7 +933,9 @@ function renderLooks() {
   const photo = l.avatar.startsWith('photo:') && l.photos.find(p => p.id === l.avatar);
   document.body.dataset.avatar = photo ? 'photo' : l.avatar;
   document.body.classList.toggle('av-photo-on', !!photo);
-  if (photo && $('avPhoto').getAttribute('src') !== photo.url) $('avPhoto').src = photo.url;
+  document.body.classList.toggle('av-cutout', !!(photo && photo.cutout));   // 去了白底的公仔：全身显示
+  avPoses = photo ? (photo.poses && photo.poses.length ? photo.poses : [photo.url]) : null;
+  showAvPose();
   // home blocks: CSS order inside the welcome column; missed alarms always show with the alarms
   l.blocks.forEach((b, i) => (BLOCK_ELS[b.id] || []).forEach((id, k) => {
     const el = $(id);
