@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from core.connection import ConnectionHandler
 from core.utils.util import audio_to_data
-from core.agent import clear_command
+from core.agent import clear_command, photo_command
 from core.agent.call_names import handle_call_name
 from core.handle.abortHandle import handleAbortMessage
 from core.handle.intentHandler import handle_user_intent, speak_txt
@@ -117,6 +117,11 @@ async def startToChat(conn: "ConnectionHandler", text, gen=None):
 
     # [xiaozhi-hub] "清除聊天记录"：先问一遍，说确定才清（不交给模型，各种模型都能用）
     actual_text = await clear_command.handle(conn, actual_text)
+    if actual_text is None:
+        return
+
+    # [xiaozhi-hub] 「帮我看下这是什么」：直接让设备拍照（模型有时只嘴上说拍、不调用工具）
+    actual_text = await photo_command.handle(conn, actual_text)
     if actual_text is None:
         return
 
