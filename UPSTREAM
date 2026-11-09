@@ -3,5 +3,5 @@
 # scripts/sync-upstream.sh merges what upstream did since that commit and moves it forward.
 system https://github.com/justhalfbit/thinksmart-ubuntu-image.git d2e32393b30dfcc8397192747fced0fb7115fc33
 client https://github.com/justhalfbit/xiaozhi-thinksmart-client.git e7ec0de8db6f7105d96a6964025651e1d3094e08
-server https://github.com/justhalfbit/xiaozhi-hub-server.git 731d35e0a3b32fcf766c0fd015fbc4aa545b6a9b
+server https://github.com/justhalfbit/xiaozhi-hub-server.git 4b6eec40fb8a8df1475b420e6830e454e715b8b2
 reference/menubar-mijia https://gitlab.com/jryang1997/MenuBarMijia.git 852a29468d55789f90f2620652f6e0d62c6c4d15

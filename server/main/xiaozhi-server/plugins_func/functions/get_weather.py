@@ -28,7 +28,8 @@ GET_WEATHER_FUNCTION_DESC = {
             "properties": {
                 "location": {
                     "type": "string",
-                    "description": "地点名。国内写城市或区县的全称，如 杭州市、青浦区；国外写英文名，如 Tokyo、Paris。可选参数，问本地天气时不传",
+                    "description": "地点名。国内写城市或区县的全称，如 杭州市、青浦区；用户说的是省份就传省会城市（广东→广州），"
+                                   "景点换成它所在的区县或城市；国外写英文名，如 Tokyo、Paris。可选参数，问本地天气时不传",
                 },
                 "lang": {
                     "type": "string",
@@ -170,7 +171,8 @@ def weather_settings(config: dict) -> dict:
     上游配置里的 api_key 是项目共用的和风 Key（已失效），不再使用。"""
     cfg = (config.get("plugins") or {}).get("get_weather") or {}
     text = lambda k: str(cfg.get(k) or "").strip()
-    return {"home_location": text("home_location"), "qweather_key": text("qweather_key"),
+    # 上游 2026-11-08 起把所在地叫 location：两种写法都认
+    return {"home_location": text("home_location") or text("location"), "qweather_key": text("qweather_key"),
             "qweather_host": text("qweather_host"), "default_location": text("default_location") or "上海"}
 
 
