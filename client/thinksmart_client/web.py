@@ -7,7 +7,7 @@ import time
 
 from aiohttp import web
 
-from . import __version__, looks, update
+from . import __version__, kiosk_watch, looks, update
 from .app import ALBUM, PHOTOS, ROOT, Client, local_ip
 
 log = logging.getLogger(__name__)
@@ -282,6 +282,7 @@ def make_app(client: Client):
 
     async def watch_updates(_app):
         watchers.append(asyncio.create_task(update.watch(client.events.publish)))
+        watchers.append(asyncio.create_task(kiosk_watch.watch(client.events)))   # 屏幕页面卡住时让 kiosk 重新打开
 
     app.on_startup.append(watch_updates)
     app.router.add_get('/', index)
