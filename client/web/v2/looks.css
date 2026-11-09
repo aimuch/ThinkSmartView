@@ -379,18 +379,29 @@ body.av-photo-on .zzz { z-index: 2; }
 }
 
 /* ---- 设置页分类（设计画布第 32 块）：左边分类，右边只显示这一类的卡片 ---- */
-.set-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 28px; }
-.set-nav { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; scrollbar-width: none; padding-bottom: 12px; }
-.set-nav button { position: relative; display: flex; align-items: center; gap: 14px; min-height: 66px; padding: 10px 14px; border-radius: 20px;
+.set-body { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--set-w, 250px) 22px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0 8px; }
+.set-body.mini { --set-w: 84px; }
+.set-resize { touch-action: none; cursor: col-resize; display: flex; align-items: center; justify-content: center; }
+.set-resize::before { content: ""; width: 5px; height: 72px; border-radius: 3px; background: var(--line); transition: background .2s, height .2s; }
+.set-resize.drag::before { background: var(--accent2); height: 120px; }
+.set-col { margin-top: auto; opacity: .75; }
+.set-col svg { transition: transform .25s; }
+.set-body.mini .set-col svg { transform: rotate(180deg); }
+.set-body.mini .set-name { display: none; }
+.set-body.mini .set-nav button { justify-content: center; padding: 10px 0; }
+.set-body.mini .set-dot { left: auto; right: 12px; top: 8px; }
+.set-nav { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; scrollbar-width: none; padding-bottom: 12px; }
+.set-nav button { position: relative; display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 7px 12px; border-radius: 18px;
                   background: none; border: 1.5px solid transparent; color: var(--ink2); font-size: 21px; text-align: left; transition: background .2s, color .2s; }
 .set-nav button.on { background: var(--card); border-color: var(--line); color: var(--ink); }
 .set-nav button:active { transform: scale(.97); }
-.set-ico { flex: none; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--card2); transition: background .2s, color .2s; }
+.set-ico { flex: none; width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: var(--card2); transition: background .2s, color .2s; }
 .set-nav button.on .set-ico { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
 .set-ico svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .set-name { min-width: 0; } .set-name b { font-weight: 600; white-space: nowrap; } .set-name .short { display: none; }
 .set-dot { position: absolute; top: 10px; left: 48px; width: 12px; height: 12px; border-radius: 50%; background: #ff5d6c; box-shadow: 0 0 0 3px var(--sheet2, #060a18); display: none; }
 .set-dot.on { display: block; }
+.set-panel { max-width: none; margin: 0; }   /* 分类栏收窄时卡片跟着变宽 */
 .set-pane { display: none; flex-direction: column; gap: 22px; padding-bottom: 24px; }
 .set-pane.on { display: flex; }
 .set-head { display: flex; align-items: baseline; gap: 16px; margin: 4px 6px 0; }
@@ -403,7 +414,9 @@ body.av-photo-on .zzz { z-index: 2; }
 .pf-mini b.ok { color: #3ecf74; } .pf-mini b.warn { color: #f5a524; } .pf-mini b.hot { color: #ff6b81; }
 #pmTop { font-size: 20px; line-height: 38px; }
 @media (orientation: portrait) {
-  .set-body { grid-template-columns: 150px minmax(0, 1fr); gap: 16px; }
+  .set-body { grid-template-columns: var(--set-wp, 150px) 0 minmax(0, 1fr); gap: 0 8px; }
+  .set-body.mini { --set-wp: 84px; }
+  .set-resize { visibility: hidden; pointer-events: none; }   /* 竖屏不拖：占着 0 宽的那一列 */
   .set-nav button { flex-direction: column; justify-content: center; gap: 6px; min-height: 0; padding: 12px 4px; font-size: 16px; text-align: center; }
   .set-name .long { display: none; } .set-name .short { display: inline; }
   .set-dot { left: auto; right: 38px; top: 8px; }

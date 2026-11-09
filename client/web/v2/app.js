@@ -2113,7 +2113,7 @@ var perfMiniTimer = null;   // var：演示模式在脚本前面就会调 setPan
 function setPane(name) {
   if (!document.querySelector(`.set-pane[data-pane="${name}"]`)) name = 'screen';
   document.querySelectorAll('.set-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === name));
-  document.querySelectorAll('#setNav button').forEach(b => {
+  document.querySelectorAll('#setNav button[data-pane]').forEach(b => {
     const on = b.dataset.pane === name;
     b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false');
   });
@@ -2141,7 +2141,32 @@ async function loadPerfMini() {
   const top = s.top[0];
   $('pmTop').textContent = top ? `${top.name} ${Math.round(top.cpu)}%` : '—';
 }
-document.querySelectorAll('#setNav button').forEach(b => b.addEventListener('click', () => setPane(b.dataset.pane)));
+document.querySelectorAll('#setNav button[data-pane]').forEach(b => b.addEventListener('click', () => setPane(b.dataset.pane)));
+// 分类栏：底部「收起」只剩图标；横屏时按住中间的竖条左右拖调宽度，拖到 150px 以下收成只剩图标。记在这台设备上
+const SET_MIN = 200, SET_MAX = 360, SET_SNAP = 150;
+const setNav = (() => { try { return JSON.parse(localStorage.getItem('setNav') || '{}'); } catch (e) { return {}; } })();
+function applySetNav(save) {
+  const body = $('setNav').parentElement;
+  body.classList.toggle('mini', !!setNav.mini);
+  if (setNav.w && !setNav.mini) body.style.setProperty('--set-w', `${setNav.w}px`); else body.style.removeProperty('--set-w');
+  $('setCol').setAttribute('aria-label', setNav.mini ? '展开分类' : '收起分类');
+  if (save) try { localStorage.setItem('setNav', JSON.stringify(setNav)); } catch (e) {}
+}
+$('setCol').addEventListener('click', () => { setNav.mini = !setNav.mini; applySetNav(true); });
+$('setResize').addEventListener('pointerdown', e => {
+  const bar = e.currentTarget, left = $('setNav').getBoundingClientRect().left;
+  bar.setPointerCapture(e.pointerId); bar.classList.add('drag');
+  const move = ev => {
+    const w = ev.clientX - left - 11;
+    if (w < SET_SNAP) setNav.mini = true;
+    else { setNav.mini = false; setNav.w = Math.round(Math.min(SET_MAX, Math.max(SET_MIN, w))); }
+    applySetNav(false);
+  };
+  const up = () => { bar.classList.remove('drag'); bar.removeEventListener('pointermove', move); applySetNav(true); };
+  bar.addEventListener('pointermove', move);
+  bar.addEventListener('pointerup', up, { once: true }); bar.addEventListener('pointercancel', up, { once: true });
+});
+applySetNav(false);
 new MutationObserver(perfMini).observe($('settings'), { attributes: true, attributeFilter: ['class'] });
 setPane((() => { try { return localStorage.getItem('setPane'); } catch (e) { return null; } })() || 'screen');
 $('perfClose').addEventListener('click', () => openPerf(false));
