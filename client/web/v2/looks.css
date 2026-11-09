@@ -29,6 +29,8 @@ body[data-theme="black"] {
 body[data-theme="dawn"] .tile, body[data-theme="candy"] .tile { box-shadow: 0 0 0 1px var(--line); }
 body[data-theme="dawn"] .msg.bot .body, body[data-theme="candy"] .msg.bot .body { color: var(--ink); }
 body[data-theme="dawn"] .gloss, body[data-theme="candy"] .gloss { opacity: .7; }
+body[data-theme="dawn"] .title em, body[data-theme="candy"] .title em { background: none; -webkit-text-fill-color: currentColor; color: var(--accent); }
+body[data-theme="dawn"] { --accent: #5b6cff; } body[data-theme="candy"] { --accent: #e0559b; }
 
 /* ---- avatars (body[data-avatar]): the orb's face stays, the body changes colour and gets ears ---- */
 .deco { position: absolute; inset: 0; pointer-events: none; }
@@ -60,12 +62,13 @@ body[data-avatar="rabbit"] .deco .ear { display: block; top: -92px; width: 40px;
 body[data-avatar="rabbit"] .ear-l { left: 44px; --r: -8deg; } body[data-avatar="rabbit"] .ear-r { right: 44px; --r: 8deg; }
 
 body[data-avatar="panda"] .core i { background: radial-gradient(circle at 34% 28%, #ffffff 0%, #f4f4f7 40%, #cfd0d8 82%, #8c8e9c 100%); }
-body[data-avatar="panda"] .deco .ear { display: block; top: -4px; width: 62px; height: 62px; border-radius: 50%; --ear: #1d1d24; }
+body[data-avatar="panda"] .deco .ear { display: block; top: -4px; width: 62px; height: 62px; border-radius: 50%; --ear: #1d1d24;
+  box-shadow: 0 0 0 3px #ffffff30; }
 body[data-avatar="panda"] .ear-l { left: 4px; } body[data-avatar="panda"] .ear-r { right: 4px; }
 body[data-avatar="panda"] .eye { box-shadow: 0 0 0 9px #1d1d24; }
 
 body[data-avatar="wheat"] .core i { background: radial-gradient(circle at 34% 28%, #fffbe6 0%, #f5d37a 30%, #d9a22e 72%, #7d5410 100%); }
-body[data-avatar="wheat"] .deco .sprout { display: block; left: 50%; top: -58px; width: 44px; height: 70px; margin-left: -22px; background: none;
+body[data-avatar="wheat"] .deco .sprout { display: block; left: 50%; top: -96px; width: 76px; height: 110px; margin-left: -38px; background: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 3 24 20'%3E%3Cg fill='%23d9a22e'%3E%3Cpath d='M12 22V8.6' stroke='%23d9a22e' stroke-width='1.5'/%3E%3Cpath d='M12 1.9 Q14.05 5 12 8.1 Q9.95 5 12 1.9Z'/%3E%3Cpath transform='translate(9.85 9.4) rotate(-30)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(14.15 9.4) rotate(30)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(9.75 13.3) rotate(-32)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3Cpath transform='translate(14.25 13.3) rotate(32)' d='M0 -3.1 Q2.05 0 0 3.1 Q-2.05 0 0 -3.1Z'/%3E%3C/g%3E%3C/svg%3E");
   background-size: contain; background-repeat: no-repeat; transform-origin: 50% 100%; }
 body[data-state="listening"][data-avatar="wheat"] .deco .sprout { animation: ear-wiggle .45s ease-in-out 2; }
@@ -109,3 +112,5 @@ body.av-photo-on .av-photo { display: block; }
 .looks-blocks .al .al-text b { font-size: 22px; }
 .looks-blocks .al.off .al-text b { color: var(--ink3); }
 .looks-blocks .switch { margin-left: 8px; }
+/* the list rows' kind badge (.al i) must not restyle the switch knob */
+.looks-blocks .al .switch i { width: 40px; height: 40px; border-radius: 50%; background: #fff; display: block; color: transparent; }
