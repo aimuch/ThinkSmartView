@@ -47,6 +47,11 @@ def online_count(connected_ids=()) -> int:
     return sum(1 for d in snapshot(connected_ids) if d["state"] != "offline")
 
 
+def forget(device_id: str) -> None:
+    with _lock:
+        _seen.pop(device_id, None)
+
+
 def reset() -> None:
     with _lock:
         _seen.clear()

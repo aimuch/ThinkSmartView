@@ -829,6 +829,15 @@ class ConnectionHandler:
 
     async def _initialize_private_config_async(self):
         """从接口异步获取差异化配置（异步版本，不阻塞主循环）"""
+        # [xiaozhi-hub] 后台「设备」页给这台设备单独设的人设、音色、插件（core/utils/device_settings.py）
+        try:
+            from core.utils import device_settings
+
+            applied = device_settings.apply(self)
+            if applied:
+                self.logger.bind(tag=TAG).info(f"设备 {self.device_id} 用单独的设置：{'、'.join(applied)}")
+        except Exception as e:
+            self.logger.bind(tag=TAG).warning(f"设备单独的设置没套上: {e}")
         if not self.read_config_from_api:
             self.need_bind = False
             self.bind_completed_event.set()

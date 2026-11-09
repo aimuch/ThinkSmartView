@@ -150,7 +150,7 @@ async def test_heartbeat_and_status_activity(client):
     r = await client.post("/kiosk/reports", json={"device": "aa:bb", "quiet": False, "version": "0.1.625"})
     assert r.status == 200 and (await r.json())["admin"].endswith("/admin")   # 设备设置页「本机 IP」用
     d = await (await client.get("/admin/api/devices")).json()
-    assert d["seen"] == [{"device_id": "aa:bb", "state": "idle", "last_seen": d["seen"][0]["last_seen"], "version": "0.1.625"}]
+    assert d["seen"] == [{"device_id": "aa:bb", "state": "idle", "last_seen": d["seen"][0]["last_seen"], "version": "0.1.625", "name": ""}]
     assert (await (await client.get("/admin/api/state")).json())["online"] == 1
     s = await (await client.get("/admin/api/status")).json()
     assert s["uptime"] >= 0 and len(s["hours"]) in (0, 24) and "today" in s["cost"]

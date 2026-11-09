@@ -244,6 +244,10 @@ class ChatDB:
                 c.execute("ROLLBACK")
                 raise
 
+    def message_count(self, device) -> int:
+        """[xiaozhi-hub] 设备页：这台设备存了多少条聊天记录（全部模型）。"""
+        return int(self._exec("SELECT COUNT(*) FROM messages WHERE device=?", (device,)).fetchone()[0])
+
     def memory_devices(self) -> List[str]:
         rows = self._exec("SELECT device FROM device_memory UNION SELECT DISTINCT device FROM messages").fetchall()
         return sorted(r[0] for r in rows)

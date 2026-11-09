@@ -129,6 +129,9 @@ class AdminHandler:
                 web.post("/admin/api/llm/claude", self.handle_llm_claude),
                 web.post("/admin/api/llm/dsh", self.handle_llm_dsh),
                 web.get("/admin/api/agents", self.handle_agents),
+                web.get("/admin/api/device-settings", self.handle_device_settings),
+                web.post("/admin/api/device-settings", self.handle_device_settings_save),
+                web.post("/admin/api/device-settings/forget", self.handle_device_forget),
                 web.post("/admin/api/agents", self.handle_agent_save),
                 web.post("/admin/api/agents/delete", self.handle_agent_delete),
                 web.post("/admin/api/agents/test", self.handle_agent_test),
@@ -665,6 +668,116 @@ class AdminHandler:
             return self._error(str(e), 400)
         self.logger.bind(tag=TAG).info(f"管理后台更新了 DSH 设置: {', '.join(changed) or '无变化'}")
         return self._json({"ok": True, "changed": changed, **await self._apply_if_selected("LLM", pages.DSH_ENTRY, changed)})
+
+    # ---------- [xiaozhi-hub] 设备页（设计画布第 19 块）：每台设备分别配置 ----------
+
+    def _device_summary(self, device: str, merged: dict) -> dict:
+        """这台设备在网关上的数据：住宅地址、儿童模式、家人声音、聊天记录。"""
+        from core.utils import device_homes, device_prefs, local_voiceprint
+
+        home = device_homes.get(device)
+        kids = device_prefs.kids(device)
+        try:
+            count = chat_history.db().message_count(device)
+            memory = len((chat_history.db().memory(device) or {}).get("summary") or "")
+        except Exception:  # noqa: BLE001
+            count, memory = 0, 0
+        try:
+            people = len(local_voiceprint.people(device))
+        except Exception:  # noqa: BLE001
+            people = 0
+        return {"home": home["name"] if home else "", "kids": f"开 · {kids['age']} 岁" if kids else "关",
+                "voices": people, "messages": count, "memory_chars": memory}
+
+    async def handle_device_settings(self, request: web.Request):
+        """设备页：见过的每台设备（心跳、连过、存过设置或记录的），各自单独设了什么，以及可选的模型、音色、人设、插件。"""
+        self._require_login(request)
+        from core.utils import device_settings
+
+        merged = await self._blocking(self._merged)
+        connected = {d["device_id"]: d for d in connections.snapshot() if d.get("device_id")}
+        seen = {d["device_id"]: d for d in presence.snapshot(list(connected))}
+        settings = device_settings.all_devices()
+        try:
+            stored = await self._blocking(chat_history.db().memory_devices)
+        except Exception:  # noqa: BLE001
+            stored = []
+        ids = list(seen) + [d for d in list(settings) + list(stored) if d not in seen]
+        models = (await self._kiosk_models(merged))["options"]
+        label_of = {o["entry"]: o["label"] + (f" · {o['model']}" if o.get("model") and o["kind"] == "api" else "") for o in models}
+        tts = pages.describe_tts(merged)
+        intent = pages.describe_intent(merged)
+        global_voice = next((v["name"] for v in tts["voices"] if v["value"] == tts["voice"]), tts["voice"])
+        out = []
+        for d in ids:
+            s = settings.get(d, {})
+            remembered = (llm_router.store().get(d) or {}).get("model")
+            p = seen.get(d) or {"state": "offline", "last_seen": 0, "version": ""}
+            out.append({"device_id": d, "name": s.get("name", ""), "state": p["state"], "last_seen": p["last_seen"],
+                        "version": p.get("version", ""), "model": s.get("model"), "remembered": remembered,
+                        "remembered_label": llm_router.model_label(remembered) if remembered else "",
+                        "tts": s.get("tts"), "prompt": s.get("prompt"), "plugins": s.get("plugins"),
+                        "data": await self._blocking(self._device_summary, d, merged)})
+        engines = [{"entry": e["entry"], "label": e["label"], "custom": bool(e.get("custom")),
+                    "voices": [{"value": v["value"], "name": v["name"], "group": v.get("group", "")} for v in
+                               next(c for c in catalog.TTS_ENGINES if c["id"] == e["id"])["voices"]]}
+                   for e in tts["engines"] if e["configured"]]
+        return self._json({
+            "ok": True, "devices": out, "now": int(time.time()),
+            "global": {"model": llm_router.model_label((merged.get("selected_module") or {}).get("LLM") or ""), "voice": global_voice,
+                       "tts_label": next((e["label"] for e in tts["engines"] if e.get("using")), tts["selected"]),
+                       "plugins": [p["name"] for p in intent["plugins"] if p["enabled"]], "prompt": str(merged.get("prompt") or "")},
+            "options": {"models": [{"entry": o["entry"], "label": label_of[o["entry"]]} for o in models],
+                        "tts": engines, "personas": device_settings.PERSONAS,
+                        "plugins": [{"name": p["name"], "label": p["label"]} for p in catalog.PLUGINS]},
+        })
+
+    async def handle_device_settings_save(self, request: web.Request):
+        """{"device", "name"?, "model"?, "tts"?, "prompt"?, "plugins"?}：给了的项才改，null 是改回跟着全局。
+        默认模型：写进这台设备记住的模型，在线的连接马上换过去（和叫名字换模型同一个机制）。"""
+        self._require_login(request)
+        from core.utils import device_settings
+
+        body = await self._read_json(request)
+        device = str(body.get("device") or "")
+        merged = await self._blocking(self._merged)
+        values = {k: body[k] for k in ("name", "model", "tts", "prompt", "plugins") if k in body}
+        try:
+            saved = await self._blocking(device_settings.put, device, values, merged)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        note = "已保存，这台设备下一次对话就用上"
+        if "model" in values:
+            if values["model"]:
+                name = str(values["model"])
+                running = self.config.setdefault("LLM", {})
+                if running.get(name) != merged["LLM"][name]:
+                    running[name] = copy.deepcopy(merged["LLM"][name])
+                await self._blocking(llm_router.store().put, device, {"model": name})
+                for item in connections.snapshot():
+                    conn = connections.get(item["session_id"])
+                    if conn is not None and item["device_id"] == device:
+                        try:
+                            await self._blocking(llm_router.switch, conn, name, remember=False)
+                        except Exception as e:  # noqa: BLE001
+                            self.logger.bind(tag=TAG).warning(f"设备 {device} 在线切模型失败: {e}")
+            else:
+                await self._blocking(llm_router.store().forget, device)
+        self.logger.bind(tag=TAG).info(f"管理后台改了设备 {device} 的设置：{', '.join(values) or '无'}")
+        return self._json({"ok": True, "settings": saved, "note": note})
+
+    async def handle_device_forget(self, request: web.Request):
+        """忘掉这台设备：名字、单独的设置、记住的模型、心跳都删掉（聊天记录在「记忆」页单独清）。"""
+        self._require_login(request)
+        from core.utils import device_settings
+
+        device = str((await self._read_json(request)).get("device") or "")
+        if not device:
+            return self._error("缺少设备", 400)
+        await self._blocking(device_settings.forget, device)
+        await self._blocking(llm_router.store().forget, device)
+        presence.forget(device)
+        return self._json({"ok": True})
 
     # ---------- [xiaozhi-hub] 智能体页（设计画布第 18 块） ----------
 
@@ -2033,8 +2146,16 @@ class AdminHandler:
                                 else llm_router.model_label(d["model"])) if d.get("model") else ""
             home = device_homes.get(d.get("device_id") or "")
             d["home"] = home["name"] if home else ""
+        from core.utils import device_settings
+
+        names = {k: v.get("name", "") for k, v in device_settings.all_devices().items()}
+        for d in devices:
+            d["name"] = names.get(d.get("device_id") or "", "")
+        seen = presence.snapshot(self._connected_ids())
+        for d in seen:
+            d["name"] = names.get(d["device_id"], "")
         return self._json({"ok": True, "devices": devices, "now": int(time.time()),
-                           "seen": presence.snapshot(self._connected_ids()),
+                           "seen": seen,
                            "emotions": [{"emotion": name, "emoji": emoji, "label": catalog.EMOTION_LABELS.get(name, name)}
                                         for emoji, name in EMOJI_MAP.items()]})
 

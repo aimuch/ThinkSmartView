@@ -551,6 +551,18 @@
   .ag-add:hover { border-color: var(--accent); color: var(--accent); }
   .ag-form { margin-top: 12px !important; }
   @media (max-width: 900px) { .ag-cards { grid-template-columns: 1fr; } }
+
+  /* ---------- [xiaozhi-hub] 设备页（设计画布第 19 块） ---------- */
+  .dv-table tr[data-dev] { cursor: pointer; } .dv-table tr[data-dev]:hover td { background: var(--soft); }
+  .dv-table td b { font-weight: 600; } .dv-table .mono.sub { display: block; font-size: 11px; color: var(--muted); }
+  .dv-ov { color: var(--accent); } .dv-inh { color: var(--muted); }
+  .dv-sec { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+  .dv-sec > .t { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+  .dv-sec > .t .seg { margin: 0 0 0 auto; } .dv-sec > .t .seg button { padding: 3px 10px; font-size: 12px; }
+  .dv-sec .body { margin-top: 8px; } .dv-sec .body.hidden { display: none; }
+  .dv-sec textarea.in { min-height: 96px; resize: vertical; font-size: 13px; line-height: 1.6; }
+  .dv-sec .chips { margin-top: 6px; }
+  .dv-sec .chip { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -579,6 +591,7 @@
     <div class="brand"><div class="logo" data-logo></div><span data-brand-name>小麦网关</span></div>
     <nav class="nav" id="nav">
       <button data-page="status"><span class="ico">◎</span>状态</button>
+      <button data-page="devices"><span class="ico">▣</span>设备</button>
       <button data-page="how"><span class="ico">⇄</span>工作原理</button>
       <button data-page="llm"><span class="ico">✦</span>大模型</button>
       <button data-page="calls"><span class="ico">☎</span>呼名</button>
@@ -680,7 +693,7 @@ function applyBrand(b) {
   document.title = brandInfo.name + (title ? " · " + title : " · 管理后台");
   $("favicon").href = "/admin/favicon?v=" + encodeURIComponent(brandInfo.icon.kind + (brandInfo.icon.value || "").length + brandInfo.icon.value.slice(-12));
 }
-const PAGE_TITLES = { status: "状态", how: "工作原理", llm: "大模型", calls: "呼名", grokbot: "Grok Bot", agents: "智能体", memory: "记忆", cost: "费用",
+const PAGE_TITLES = { status: "状态", how: "工作原理", llm: "大模型", calls: "呼名", grokbot: "Grok Bot", agents: "智能体", devices: "设备", memory: "记忆", cost: "费用",
   asr: "语音识别", tts: "语音合成", intent: "意图识别", update: "更新网关" };
 
 let authMode = "login";
@@ -818,7 +831,7 @@ function renderPasswordDrawer(body) {
 
 $("logout").onclick = async () => { if (!confirmLeave()) return; page.dirty = null; await api("logout", {}); await route(); };
 
-const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, update: renderUpdate };
+const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, devices: renderDeviceSettings, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, update: renderUpdate };
 const page = { name: "", dirty: null, timer: null };
 function currentPage() { const p = location.hash.slice(1); return PAGES[p] ? p : "status"; }
 function confirmLeave() { return !(page.dirty && page.dirty()) || confirm("当前页面有修改还没保存，确定离开吗？"); }
@@ -1013,7 +1026,7 @@ function renderDevices(dev) {
     box.innerHTML = '<div class="panel muted">还没有设备。设备开机后 10 秒内出现在这里（客户端 0.1.625 起；更早的版本只在对话时出现）。</div>';
     return;
   }
-  const key = JSON.stringify(rows.map((r) => [r.device_id, r.state, r.version, (conn[r.device_id] || {}).model_label, (conn[r.device_id] || {}).session_id]));
+  const key = JSON.stringify(rows.map((r) => [r.device_id, r.name, r.state, r.version, (conn[r.device_id] || {}).model_label, (conn[r.device_id] || {}).session_id]));
   if (box.dataset.key === key) {  // 只更新时间，避免重绘打断点击
     box.querySelectorAll("[data-ago]").forEach((el) => (el.textContent = ago(dev.now, +el.dataset.ago)));
     box.querySelectorAll("[data-since]").forEach((el) => (el.textContent = duration(dev.now - +el.dataset.since)));
@@ -1022,7 +1035,7 @@ function renderDevices(dev) {
   box.dataset.key = key;
   box.innerHTML = `<table class="u-table"><tr><th>设备</th><th>状态</th><th>当前模型</th><th>版本</th><th>最近</th><th></th></tr>
     ${rows.map((r) => { const c = conn[r.device_id]; return `<tr>
-      <td class="mono" title="${esc(r.device_id)}">${esc(r.device_id || "未知设备")}${c && c.home ? `<div class="muted small" style="font-family:inherit">${esc(c.home)}</div>` : ""}</td>
+      <td title="${esc(r.device_id)}">${r.name ? `<b style="font-weight:600">${esc(r.name)}</b><div class="mono muted" style="font-size:11px">${esc(r.device_id)}</div>` : `<span class="mono">${esc(r.device_id || "未知设备")}</span>`}${c && c.home ? `<div class="muted small">${esc(c.home)}</div>` : ""}</td>
       <td>${STATE_PILL[r.state] || ""}</td><td>${esc(c ? c.model_label || "默认" : "—")}</td><td class="mono">${esc(r.version || "—")}</td>
       <td>${c ? `<span data-since="${c.connected_at}">${duration(dev.now - c.connected_at)}</span>` : `<span data-ago="${r.last_seen}">${ago(dev.now, r.last_seen)}</span>`}</td>
       <td>${c ? `<button class="btn sm" data-sid="${esc(c.session_id)}">详情 ›</button>` : ""}</td></tr>`; }).join("")}</table>`;
@@ -2053,6 +2066,98 @@ async function openPluginSettings(id, label, onSaved) {
   });
 }
 
+
+
+// ---------- [xiaozhi-hub] 设备（设计画布第 19 块）：每台设备分别配置默认模型、音色、人设、插件 ----------
+
+const DV_STATE = { talking: '<span class="spill">对话中</span>', idle: '<span class="spill idle">待机</span>', offline: '<span class="spill off">离线</span>' };
+let dvData = null;
+async function renderDeviceSettings(root) {
+  const d = dvData = await api("device-settings");
+  const g = d.global;
+  const ov = (text) => `<span class="dv-ov">${esc(text)}</span>`, inh = (text) => `<span class="dv-inh">跟着全局${text ? " · " + esc(text) : ""}</span>`;
+  const modelText = (x) => x.model ? ov((d.options.models.find((m) => m.entry === x.model) || {}).label || x.model)
+    : x.remembered ? `<span class="dv-inh">${esc(x.remembered_label)}（叫名字换的）</span>` : inh(g.model);
+  const voiceText = (x) => { if (!x.tts) return inh(g.voice); const e = d.options.tts.find((t) => t.entry === x.tts.entry);
+    const v = e && e.voices.find((y) => y.value === x.tts.voice); return ov(`${e ? e.label + " · " : ""}${v ? v.name : x.tts.voice}`); };
+  const personaText = (x) => x.prompt ? ov((d.options.personas.find((p) => p.text === x.prompt) || { label: "自己写的" }).label) : inh("");
+  const pluginText = (x) => x.plugins ? ov(`${x.plugins.length} 个`) : inh(`${g.plugins.length} 个`);
+  root.innerHTML = `
+    <div class="page-head"><div><h1>设备</h1><p class="sub">每台设备可以单独设默认模型、音色、人设、插件，没单独设的跟着全局。设备上的设置（唤醒词、外观、播报……）在设备自己的设置页改。</p></div></div>
+    <div class="card u-panel" style="margin-top:0!important">${d.devices.length ? `<table class="u-table dv-table">
+      <tr><th>设备</th><th>状态</th><th>默认模型</th><th>音色</th><th>人设</th><th>插件</th><th>版本</th></tr>
+      ${d.devices.map((x) => `<tr data-dev="${esc(x.device_id)}"><td>${x.name ? `<b>${esc(x.name)}</b>` : '<span class="muted">没起名字</span>'}<span class="mono sub">${esc(x.device_id)}</span></td>
+        <td>${DV_STATE[x.state] || ""}</td><td>${modelText(x)}</td><td>${voiceText(x)}</td><td>${personaText(x)}</td><td>${pluginText(x)}</td>
+        <td class="mono">${esc(x.version || "—")}</td></tr>`).join("")}</table>`
+      : '<div class="panel muted">还没有设备。设备第一次连上网关就会出现在这里。</div>'}</div>
+    <p class="muted small">蓝字是这台单独设的，灰字是跟着全局。改完设备下一次对话就用上（设备每次叫醒都会重连）。全局的在「大模型」「语音合成」「意图识别」页。</p>`;
+  root.querySelectorAll("[data-dev]").forEach((tr) => (tr.onclick = () => openDeviceDrawer(tr.dataset.dev, root)));
+}
+
+function openDeviceDrawer(id, root) {
+  const d = dvData, x = d.devices.find((y) => y.device_id === id);
+  if (!x) return;
+  openDrawer(x.name || "没起名字的设备", "", (body) => {
+    const tog = (key, on) => `<div class="seg" data-tog="${key}"><button type="button" data-v="inherit" class="${on ? "" : "on"}">跟着全局</button><button type="button" data-v="own" class="${on ? "on" : ""}">单独设</button></div>`;
+    const ttsSel = x.tts || { entry: (d.options.tts[0] || {}).entry, voice: "" };
+    const engineOf = (entry) => d.options.tts.find((t) => t.entry === entry) || d.options.tts[0];
+    const voiceOptions = (e, cur) => e && e.voices.length ? e.voices.map((v) => `<option value="${esc(v.value)}" ${v.value === cur ? "selected" : ""}>${esc(v.name)}${v.group ? " · " + esc(v.group) : ""}</option>`).join("") : "";
+    const plugins = x.plugins || d.global.plugins;
+    body.innerHTML = `
+      <div class="dkv"><span>设备 ID</span><b class="mono" style="font-weight:400">${esc(x.device_id)}</b>
+        <span>状态</span><b style="font-weight:400">${{ talking: "对话中", idle: "待机", offline: "离线" }[x.state]}${x.version ? " · 客户端 " + esc(x.version) : ""}</b></div>
+      <div class="dv-sec"><div class="t">名字</div><div class="body"><input class="in" id="dv-name" maxlength="16" value="${esc(x.name)}" placeholder="比如 客厅小麦、儿童房"></div></div>
+      <div class="dv-sec"><div class="t">默认模型 ${tog("model", !!x.model)}</div>
+        <div class="body ${x.model ? "" : "hidden"}" data-body="model"><select class="in" id="dv-model">${d.options.models.map((m) => `<option value="${esc(m.entry)}" ${m.entry === x.model ? "selected" : ""}>${esc(m.label)}</option>`).join("")}</select>
+          <p class="muted small" style="margin:6px 0 0">保存时这台设备立刻换过去；之后说「嗨 + 称呼」换走了照常记住。</p></div>
+        <p class="muted small ${x.model ? "hidden" : ""}" data-inh="model" style="margin:6px 0 0">全局：${esc(d.global.model)}${x.remembered ? `；这台现在用 ${esc(x.remembered_label)}（叫名字换的）` : ""}</p></div>
+      <div class="dv-sec"><div class="t">音色 ${tog("tts", !!x.tts)}</div>
+        <div class="body ${x.tts ? "" : "hidden"}" data-body="tts">
+          <div class="grid2" style="gap:8px"><select class="in" id="dv-engine">${d.options.tts.map((t) => `<option value="${esc(t.entry)}" ${t.entry === ttsSel.entry ? "selected" : ""}>${esc(t.label)}</option>`).join("")}</select>
+          <span id="dv-voice-box"></span></div></div>
+        <p class="muted small ${x.tts ? "hidden" : ""}" data-inh="tts" style="margin:6px 0 0">全局：${esc(d.global.tts_label)} · ${esc(d.global.voice)}</p></div>
+      <div class="dv-sec"><div class="t">人设 ${tog("prompt", !!x.prompt)}</div>
+        <div class="body ${x.prompt ? "" : "hidden"}" data-body="prompt"><div class="chips">${d.options.personas.map((p, i) => `<span class="chip" data-persona="${i}">${esc(p.label)}</span>`).join("")}</div>
+          <textarea class="in" id="dv-prompt" maxlength="2000" placeholder="写这台设备的人设，比如：你叫小麦，是一个耐心的小老师……">${esc(x.prompt || "")}</textarea></div>
+        <p class="muted small ${x.prompt ? "hidden" : ""}" data-inh="prompt" style="margin:6px 0 0">全局人设：${esc(d.global.prompt.slice(0, 60))}${d.global.prompt.length > 60 ? "…" : ""}</p></div>
+      <div class="dv-sec"><div class="t">插件 ${tog("plugins", !!x.plugins)}</div>
+        <div class="body ${x.plugins ? "" : "hidden"}" data-body="plugins"><div class="chips">${d.options.plugins.map((p) => `<span class="chip ${plugins.includes(p.name) ? "on" : ""}" data-plugin="${esc(p.name)}">${esc(p.label)}</span>`).join("")}</div></div>
+        <p class="muted small ${x.plugins ? "hidden" : ""}" data-inh="plugins" style="margin:6px 0 0">全局开着 ${d.global.plugins.length} 个</p></div>
+      <div class="dv-sec"><div class="t">这台设备的数据</div><div class="body dkv">
+        <span>住宅地址</span><b style="font-weight:400">${esc(x.data.home || "没设")}</b><span>儿童模式</span><b style="font-weight:400">${esc(x.data.kids)}</b>
+        <span>家人声音</span><b style="font-weight:400">${x.data.voices} 人</b><span>聊天记录</span><b style="font-weight:400">${x.data.messages} 条 · 记忆 ${x.data.memory_chars} 字 <a href="#memory">去看 ›</a></b></div></div>
+      <div class="actions"><span class="result" id="dv-result"></span><button class="btn danger" id="dv-forget">忘掉这台设备</button><button class="btn primary" id="dv-save">保存</button></div>`;
+    const voiceBox = () => {
+      const e = engineOf($("dv-engine").value), cur = $("dv-engine").value === ttsSel.entry ? ttsSel.voice : "";
+      $("dv-voice-box").innerHTML = e && e.voices.length ? `<select class="in" id="dv-voice">${voiceOptions(e, cur)}</select>`
+        : `<input class="in mono" id="dv-voice" value="${esc(cur)}" placeholder="音色名">`;
+    };
+    if (d.options.tts.length) { voiceBox(); $("dv-engine").onchange = voiceBox; }
+    body.querySelectorAll("[data-tog]").forEach((sg) => sg.querySelectorAll("button").forEach((b) => (b.onclick = () => {
+      sg.querySelectorAll("button").forEach((y) => y.classList.toggle("on", y === b));
+      const own = b.dataset.v === "own", k = sg.dataset.tog;
+      body.querySelector(`[data-body="${k}"]`).classList.toggle("hidden", !own);
+      body.querySelector(`[data-inh="${k}"]`).classList.toggle("hidden", own);
+    })));
+    body.querySelectorAll("[data-persona]").forEach((c) => (c.onclick = () => { $("dv-prompt").value = d.options.personas[+c.dataset.persona].text; }));
+    body.querySelectorAll("[data-plugin]").forEach((c) => (c.onclick = () => c.classList.toggle("on")));
+    const own = (k) => body.querySelector(`[data-tog="${k}"] .on`).dataset.v === "own";
+    $("dv-save").onclick = (e) => busy(e.target, async () => {
+      const payload = { device: x.device_id, name: $("dv-name").value,
+        model: own("model") ? $("dv-model").value : null,
+        tts: own("tts") && $("dv-voice") ? { entry: $("dv-engine").value, voice: $("dv-voice").value.trim() } : null,
+        prompt: own("prompt") ? $("dv-prompt").value : null,
+        plugins: own("plugins") ? [...body.querySelectorAll("[data-plugin].on")].map((c) => c.dataset.plugin) : null };
+      try { const r = await api("device-settings", payload); toast(r.note); closeDrawer(); await renderDeviceSettings(root); }
+      catch (err) { $("dv-result").innerHTML = `<span style="color:var(--err)">${esc(err.message)}</span>`; }
+    });
+    $("dv-forget").onclick = (e) => busy(e.target, async () => {
+      if (!confirm("忘掉这台设备？它的名字、单独的设置、记住的模型都删掉（聊天记录不删，在「记忆」页单独清）。设备再连上时会重新出现。")) return;
+      try { await api("device-settings/forget", { device: x.device_id }); toast("已忘掉"); closeDrawer(); await renderDeviceSettings(root); }
+      catch (err) { $("dv-result").innerHTML = `<span style="color:var(--err)">${esc(err.message)}</span>`; }
+    });
+  });
+}
 
 // ---------- [xiaozhi-hub] 智能体（设计画布第 18 块）：叫名字派活，做完回来汇报 ----------
 
