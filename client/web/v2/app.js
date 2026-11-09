@@ -579,6 +579,46 @@ $('wwReset').addEventListener('click', () => {
   postJson('/api/wake-words/reset').then(r => { if (r.ok) toast('已恢复默认的唤醒词'); });
 });
 
+/* ---- 定时任务、主动告警、翻译模式 (设计画布第 12 块) ---- */
+const proPost = (kind, body) => DEMO === null ? postJson('/api/proactive/' + kind, body).then(r => { if (!r.ok && r.error) toast(r.error, 'error'); return r; }) : Promise.resolve({});
+const DAYS_TEXT = { daily: '每天', workdays: '工作日', weekend: '周末', once: '只一次' };
+let taskArmed = null;
+function renderTasks() {
+  const t = ui.tasks;
+  if (!t) return;
+  $('tasksCount').textContent = t.tasks.length ? `${t.tasks.length} 个` : '';
+  $('tasksList').innerHTML = t.tasks.length ? t.tasks.map(x => `<div class="al"><div class="al-text"><b>${DAYS_TEXT[x.days] || ''} ${esc(x.time)}</b><span>${esc(x.prompt)}</span></div>` +
+    `<button class="al-del ${taskArmed === x.id ? 'armed' : ''}" data-task="${esc(x.id)}">${taskArmed === x.id ? '确认删除' : '删除'}</button></div>`).join('')
+    : '<div class="alarm-empty">还没有定时任务</div>';
+}
+$('tasksList').addEventListener('click', e => {
+  const b = e.target.closest('[data-task]');
+  if (!b) return;
+  if (taskArmed !== b.dataset.task) { taskArmed = b.dataset.task; renderTasks(); setTimeout(() => { taskArmed = null; renderTasks(); }, 3000); return; }
+  taskArmed = null; proPost('tasks', { delete: b.dataset.task });
+});
+function banners() { document.body.classList.toggle('has-banner', !$('alertBar').hidden || !$('trBar').hidden); }
+function renderAlertsUi() {
+  const a = ui.alerts;
+  if (!a) return;
+  $('alertLeak').setAttribute('aria-checked', String(!!a.leak));
+  $('alertDoor').setAttribute('aria-checked', String(!!a.door_night));
+  $('alertsNow').textContent = a.sensors ? `米家 ${a.sensors} 个传感器` : '';
+  $('alertBar').hidden = !a.alert;
+  if (a.alert) { $('alertText').textContent = a.alert.text; $('alertTime').textContent = hhmm(a.alert.time); }
+  banners();
+}
+$('alertLeak').addEventListener('click', () => proPost('alerts', { leak: !(ui.alerts && ui.alerts.leak) }));
+$('alertDoor').addEventListener('click', () => proPost('alerts', { door_night: !(ui.alerts && ui.alerts.door_night) }));
+$('alertOk').addEventListener('click', () => proPost('alerts', { clear: true }));
+function renderTranslate() {
+  const t = ui.translate;
+  $('trBar').hidden = !(t && t.enabled);
+  if (t && t.enabled) $('trText').textContent = `翻译模式 · ${t.a} ⇄ ${t.b}`;
+  banners();
+}
+$('trExit').addEventListener('click', () => proPost('translate', { enabled: false }));
+
 /* ---- 电台和助眠声、场景、留言、清单 (media.py, daily.py; 设计画布第 11 块) ---- */
 let mediaMinutes = 30, nowTimer = null;
 const dailyPost = (kind, body) => DEMO === null ? postJson('/api/daily/' + kind, body).then(r => { if (!r.ok && r.error) toast(r.error, 'error'); return r; }) : Promise.resolve({});
@@ -1715,11 +1755,11 @@ function fmtTime(t) {
 const BROADCAST_TAG = /^【?([^【】]{1,20})】/;
 const broadcastTag = m => {
   const tag = m.role === 'user' && (BROADCAST_TAG.exec(m.text || '') || [])[1];
-  return tag && (tag.includes('播报') || tag.startsWith('拍照问')) ? tag : null;
+  return tag && (tag.includes('播报') || tag.startsWith('拍照问') || tag.startsWith('定时任务')) ? tag : null;
 };
 function fillMsg(el, m) {
   const tag = broadcastTag(m);
-  if (tag) { el.innerHTML = `${tag.startsWith('早安') ? '☀' : tag.startsWith('拍照') ? '📷' : '⛅'} ${esc(tag)}`; return; }
+  if (tag) { el.innerHTML = `${tag.startsWith('早安') ? '☀' : tag.startsWith('拍照') ? '📷' : tag.startsWith('定时') ? '⏰' : '⛅'} ${esc(tag)}`; return; }
   if (m.role === 'card') {   // self.screen.show_card: a recipe, a list, a table (markdown rendered by home.js)
     const steps = ((m.card || {}).markdown || '').split('\n').filter(l => /^\s*(\d+[.、)）]|第[一二三四五六七八九十\d]+步)/.test(l)).length;
     el.querySelector('.body').innerHTML = `<h3 class="rich-title">${esc(m.text)}</h3>`
@@ -1858,6 +1898,9 @@ const handlers = {
     if (s.scenes) { ui.scenes = s.scenes; renderScenes(); }
     if (s.notes) { ui.notes = s.notes; renderNotes(); }
     ui.lists = s.lists || ui.lists; renderLists();
+    if (s.tasks) { ui.tasks = s.tasks; renderTasks(); }
+    if (s.alerts) { ui.alerts = s.alerts; renderAlertsUi(); }
+    if (s.translate) { ui.translate = s.translate; renderTranslate(); }
     ui.today = s.today || ui.today; renderLooks(); renderToday();
     ui.photo = s.photo || null; renderPhoto();
     renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth(); renderWake(); renderBroadcast();
@@ -1904,6 +1947,15 @@ const handlers = {
   },
   broadcast(b) {
     ui.broadcast = b; renderBroadcast();
+  },
+  tasks(t) {
+    ui.tasks = t; renderTasks();
+  },
+  alerts(a) {
+    ui.alerts = a; renderAlertsUi();
+  },
+  translate(t) {
+    ui.translate = t; renderTranslate();
   },
   media(m) {
     ui.media = m; renderMedia();

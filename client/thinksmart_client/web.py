@@ -450,6 +450,21 @@ def make_app(client: Client):
             return {'media': client.media_view()}
         return await wake_call(change)
 
+    async def proactive_set(request):
+        body = await request.json()
+        kind = request.match_info['kind']
+
+        async def change():
+            if kind == 'tasks':
+                return {'tasks': await client.task_delete(str(body.get('delete') or ''))}
+            if kind == 'alerts':
+                if body.get('clear'):
+                    return {'alerts': await client.clear_alert()}
+                return {'alerts': await client.set_alerts(**{k: body[k] for k in ('leak', 'door_night') if k in body})}
+            return {'translate': await client.set_translate(body.get('enabled'), body.get('a'), body.get('b'))}
+        return await wake_call(change)
+
+    app.router.add_post('/api/proactive/{kind}', proactive_set)
     app.router.add_post('/api/daily/{kind}', daily_set)
     app.router.add_post('/api/cook/start', cook_start)
     app.router.add_post('/api/cook/go', cook_go)

@@ -126,7 +126,7 @@ def tag_of(text):
     """The label of a request the device sent on its own ('早安播报 07:30', '拍照问 09:41'), or None for
     anything the user said."""
     m = TAG.match(text or '')
-    return m.group(1) if m and ('播报' in m.group(1) or m.group(1).startswith('拍照问')) else None
+    return m.group(1) if m and ('播报' in m.group(1) or m.group(1).startswith(('拍照问', '定时任务'))) else None
 
 
 def describe(setting):

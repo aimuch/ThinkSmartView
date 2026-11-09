@@ -673,12 +673,15 @@ class ConnectionHandler:
         from core.utils import device_prefs  # [xiaozhi-hub] 儿童模式
 
         kids = device_prefs.kids(self.device_id or "")
+        tr = device_prefs.translate(self.device_id or "")
         enhanced_prompt = self.prompt_manager.build_enhanced_prompt(
             self.config["prompt"],
             self.device_id,
             self.client_ip,
             emoji_enabled=(self.features or {}).get("emoji", True),
             kids_age=kids["age"] if kids else 0,
+            translate_a=tr["a"] if tr else "",
+            translate_b=tr["b"] if tr else "",
         )
         if enhanced_prompt:
             self.change_system_prompt(enhanced_prompt)

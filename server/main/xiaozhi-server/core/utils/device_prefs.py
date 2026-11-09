@@ -59,6 +59,31 @@ def put_kids(device: str, value: dict):
         os.replace(tmp, path)
 
 
+def translate(device: str):
+    """这台设备的翻译模式 {"enabled", "a", "b"}（两种语言，如 中文、英文）；没开返回 None。"""
+    if not device:
+        return None
+    with _lock:
+        t = (_load().get(device) or {}).get("translate") or {}
+    return t if t.get("enabled") and t.get("a") and t.get("b") else None
+
+
+def put_translate(device: str, value: dict):
+    if not device:
+        raise ValueError("缺少设备 ID")
+    v = value or {}
+    a, b = str(v.get("a") or "中文").strip()[:12], str(v.get("b") or "英文").strip()[:12]
+    with _lock:
+        data = _load()
+        data.setdefault(device, {})["translate"] = {"enabled": bool(v.get("enabled")), "a": a, "b": b, "updated": time.time()}
+        path = _path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+
+
 def apply_voice(tts, device: str):
     """儿童模式要童声时，把这个连接的 Edge TTS 换成童声（其他引擎不动）。"""
     k = kids(device)

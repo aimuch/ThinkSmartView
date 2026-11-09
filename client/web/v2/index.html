@@ -255,6 +255,19 @@
       <div class="alarm-list" id="scenesList"></div>
       <p class="opt-note">直接说：「以后我说『我出门了』，就把灯和空调都关了，再说一下天气」。叫醒后说口令，小麦就照着做；要改就重说一遍。</p>
     </div>
+    <div class="alarms-card" id="tasksCard">
+      <div class="bright-head"><b>定时任务</b><span class="bright-num" id="tasksCount"></span></div>
+      <div class="alarm-list" id="tasksList"></div>
+      <p class="opt-note">直接说「每天早上七点告诉我今天要不要带伞」「每周五晚上七点提醒我交水电费，再看看待办里还有什么」。和闹钟提醒不同：到点由大模型去查、去判断再说。</p>
+    </div>
+    <div class="alarms-card" id="alertsCard">
+      <div class="bright-head"><b>主动告警</b><span class="bright-num" id="alertsNow"></span></div>
+      <div class="opt rot-auto"><div class="opt-text"><b>漏水</b><span>米家水浸传感器检测到水就响铃并念出来（睡眠时段也念）</span></div>
+        <button class="switch" id="alertLeak" role="switch" aria-checked="true" aria-label="漏水告警"><i></i></button></div>
+      <div class="opt rot-auto"><div class="opt-text"><b>门窗打开（睡眠时段）</b><span>夜里门窗传感器被打开时提醒</span></div>
+        <button class="switch" id="alertDoor" role="switch" aria-checked="false" aria-label="门窗打开告警"><i></i></button></div>
+      <p class="opt-note">要先在「家居」里登录米家。每分钟查一次这些传感器。</p>
+    </div>
     <div class="alarms-card ww-card" id="wwCard">
       <div class="bright-head"><b>唤醒词</b><span class="bright-num" id="wwCount"></span></div>
       <div class="alarm-list" id="wwList"></div>
@@ -496,6 +509,10 @@
     <button class="ctl-big pri" id="cookNext">下一步</button><button class="ctl-big" id="cookExit">退出</button></div>
   <div class="cook-say">不用叫醒，直接说「下一步」「上一步」「再说一遍」「开始计时」「退出做菜」</div>
 </div>
+<!-- 米家传感器告警、翻译模式的横条 -->
+<div class="alert-bar" id="alertBar" hidden><span>⚠</span><b id="alertText"></b><span class="alert-time" id="alertTime"></span>
+  <button id="alertOk">知道了</button></div>
+<div class="tr-bar" id="trBar" hidden><span>🌐</span><b id="trText"></b><span class="tr-sub">不用叫醒，直接说</span><button id="trExit">退出</button></div>
 <!-- 电台、助眠声的播放条 -->
 <div class="now-bar" id="nowBar" hidden><span id="nowIcon"></span><b id="nowName"></b><span class="now-sub" id="nowSub"></span>
   <button class="now-x" id="nowStop" aria-label="停止">✕</button></div>

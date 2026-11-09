@@ -277,7 +277,28 @@ DAILY_TOOLS = [
                                                         'name': {'type': 'string'}, 'minutes': {'type': 'number'}}},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + home_tools.TOOLS
+PROACTIVE_TOOLS = [
+    {
+        'name': 'self.schedule.update',
+        'description': '定时任务：到点由你（大模型）去做一件事，可以查天气、看清单、调米家，比固定文字的提醒更聪明。'
+                       '「每天早上七点告诉我今天要不要带伞」action="add", time="07:00", days="daily", '
+                       'prompt="查一下今天会不会下雨，下雨就提醒带伞，不下就说不用带"。只提醒一句固定的话用 self.alarm.create。'
+                       'days：daily 每天、workdays 工作日、weekend 周末、once 只一次。查看 action="list"，删除 action="delete" 和 id。',
+        'inputSchema': {'type': 'object', 'properties': {'action': {'type': 'string', 'enum': ['add', 'list', 'delete']},
+                                                        'time': {'type': 'string'}, 'days': {'type': 'string'},
+                                                        'prompt': {'type': 'string'}, 'id': {'type': 'string'}},
+                        'required': ['action']},
+    },
+    {
+        'name': 'self.translate.set',
+        'description': '翻译模式：「帮我们中英互译」「我要和日本人说话，帮我翻译」时 enabled=true, a="中文", b="英文"（或日文等）。'
+                       '打开后你只说译文，设备连续听 30 秒不用叫醒。「退出翻译」「不用翻译了」时 enabled=false。'
+                       '调用后只说一句「好，开始中英互译」或「好，翻译结束」。',
+        'inputSchema': {'type': 'object', 'properties': {'enabled': {'type': 'boolean'}, 'a': {'type': 'string'}, 'b': {'type': 'string'}},
+                        'required': ['enabled']},
+    },
+]
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -497,6 +518,25 @@ async def handle(payload, client=None):
             elif name in ('self.scene.save', 'self.scene.run', 'self.message.leave', 'self.list.update', 'self.media.play') and client:
                 try:
                     text = _dumps(await _daily(client, name, args))
+                except ValueError as e:
+                    text = _dumps({'success': False, 'reason': str(e)})
+            elif name == 'self.schedule.update' and client:
+                try:
+                    action = args.get('action')
+                    if action == 'add':
+                        t = await client.task_add(args.get('time'), args.get('prompt'), args.get('days') or 'daily')
+                        text = _dumps({'success': True, 'task': t})
+                    elif action == 'delete':
+                        await client.task_delete(str(args.get('id') or ''))
+                        text = _dumps({'success': True})
+                    else:
+                        text = _dumps(client.tasks_view())
+                except ValueError as e:
+                    text = _dumps({'success': False, 'reason': str(e)})
+            elif name == 'self.translate.set' and client:
+                try:
+                    t = await client.set_translate(args.get('enabled'), args.get('a'), args.get('b'))
+                    text = _dumps({'action': 'RESPONSE', 'response': f"好，开始{t['a']}和{t['b']}互译，直接说就行。" if t['enabled'] else '好，翻译结束。'})
                 except ValueError as e:
                     text = _dumps({'success': False, 'reason': str(e)})
             elif name == 'self.cooking.start' and client:

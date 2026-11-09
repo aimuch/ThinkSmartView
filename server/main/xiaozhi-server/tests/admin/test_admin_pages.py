@@ -1231,3 +1231,19 @@ async def test_lists_device_and_phone(kiosk, tmp_path, monkeypatch):
     assert (await (await kiosk.get("/lists/wrong/data")).json())["ok"] is False
     v = await (await kiosk.get("/kiosk/lists?device=dev-1")).json()
     assert v["version"] == 2 and v["lists"]["购物清单"][1]["done"]
+
+
+async def test_kiosk_prefs_translate(kiosk, tmp_path, monkeypatch):
+    from jinja2 import Template
+
+    from core.utils import device_prefs
+
+    monkeypatch.setattr(device_prefs, "_path", lambda: str(tmp_path / "device_prefs.json"))
+    r = await kiosk.post("/kiosk/prefs", json={"device": "dev-1", "translate": {"enabled": True, "a": "中文", "b": "英文"}})
+    assert r.status == 200 and device_prefs.translate("dev-1") == {**device_prefs.translate("dev-1"), "a": "中文", "b": "英文"}
+    assert device_prefs.kids("dev-1") is None      # translate didn't touch kids
+    text = open("hub-base-prompt.txt", encoding="utf-8").read()
+    out = Template(text).render(translate_a="中文", translate_b="英文", base_prompt="", language="中文", emojiList=[])
+    assert "<translate_mode>" in out and "ONLY with its 英文 translation" in out
+    await kiosk.post("/kiosk/prefs", json={"device": "dev-1", "translate": {"enabled": False}})
+    assert device_prefs.translate("dev-1") is None

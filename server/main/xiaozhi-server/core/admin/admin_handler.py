@@ -976,8 +976,12 @@ class AdminHandler:
         from core.utils import device_prefs
 
         body = await self._read_json(request)
+        device = str(body.get("device") or "")
         try:
-            await self._blocking(device_prefs.put_kids, str(body.get("device") or ""), body.get("kids") or {})
+            if "kids" in body:
+                await self._blocking(device_prefs.put_kids, device, body.get("kids") or {})
+            if "translate" in body:
+                await self._blocking(device_prefs.put_translate, device, body.get("translate") or {})
         except (ValueError, TypeError) as e:
             return self._error(str(e), 400)
         return self._json({"ok": True})

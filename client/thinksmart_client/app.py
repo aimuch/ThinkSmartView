@@ -185,6 +185,8 @@ class Client:
     media = None                              # 电台、助眠声 (media.py)
     notes = []                                # 留言 (daily.py)
     lists = None                              # 清单 (the hub keeps them: /kiosk/lists)
+    alert = None                              # the red banner of a Mijia sensor alert
+    reconnect_after_reply = False             # 翻译模式 changed: the next connection gets the new prompt
     kids_seconds = 0.0
     kids_clips = {}
 
@@ -556,6 +558,155 @@ class Client:
         hhmm = datetime.datetime.now().strftime('%H:%M')
         await self.say(f"【拍照问 {hhmm}】我用手机拍了张照片问：「{p['question']}」。看图模型看到的是：{answer}"
                        '\n请根据这些直接回答我，一两句话说清楚，不要提「看图模型」。')
+
+    # ---- 定时任务: at a time, ask the model to do something (weather, lists, Mijia…) ----
+
+    def tasks_view(self):
+        return {'tasks': self.cfg.get('tasks') or [], 'max': 20}
+
+    async def task_add(self, time_, prompt, days='daily'):
+        prompt = str(prompt or '').strip()
+        if not prompt:
+            raise ValueError('要说清楚到点做什么')
+        if days not in ('daily', 'workdays', 'weekend', 'once'):
+            raise ValueError('days 只能是 daily、workdays、weekend、once')
+        hhmm = broadcast._time(time_)
+        tasks = list(self.cfg.get('tasks') or [])
+        if len(tasks) >= 20:
+            raise ValueError('最多 20 个定时任务，先删掉一个')
+        task = {'id': f't{int(time.time() * 1000)}', 'time': hhmm, 'days': days, 'prompt': prompt[:300]}
+        self.cfg['tasks'] = tasks + [task]
+        config.save(tasks=self.cfg['tasks'])
+        self.events.publish('tasks', self.tasks_view())
+        return task
+
+    async def task_delete(self, task_id):
+        tasks = [t for t in self.cfg.get('tasks') or [] if t['id'] != task_id]
+        if len(tasks) == len(self.cfg.get('tasks') or []):
+            raise ValueError('没有这个定时任务')
+        self.cfg['tasks'] = tasks
+        if tasks:
+            config.save(tasks=tasks)
+        else:
+            config.unset('tasks')
+        self.events.publish('tasks', self.tasks_view())
+        return self.tasks_view()
+
+    def _due_tasks(self, now):
+        out = []
+        for t in self.cfg.get('tasks') or []:
+            days = 'daily' if t['days'] == 'once' else t['days']
+            for hhmm, key, at in broadcast.due({'enabled': True, 'times': [t['time']], 'days': days}, now, self.broadcast_fired):
+                out.append((t, f"{key} {t['id']}", at))
+        return [(t, k, at) for t, k, at in out if k not in self.broadcast_fired]
+
+    async def _run_task(self, task):
+        log.info('scheduled task %s: %s', task['time'], task['prompt'])
+        if task['days'] == 'once':
+            await self.task_delete(task['id'])
+        self.screen.poke()
+        self.play('report')
+        await self.say(f"【定时任务 {task['time']}】{task['prompt']}（这是我之前让你定时做的事，现在到点了，直接做，"
+                       '需要的话调用工具查最新的数据，说得简短）')
+
+    # ---- 主动告警: Mijia leak / door sensors watched in the background ----
+
+    def alerts_view(self):
+        sensors = [c for c in (self.mijia.cards.values() if self.mijia else []) if {'leak', 'contact'} & set(c.get('feats') or {})]
+        return {**self.cfg['alerts'], 'sensors': len(sensors), 'alert': self.alert}
+
+    async def set_alerts(self, **changes):
+        a = {**self.cfg['alerts'], **{k: bool(v) for k, v in changes.items() if k in ('leak', 'door_night')}}
+        self.cfg['alerts'] = a
+        if a == config.DEFAULTS['alerts']:
+            config.unset('alerts')
+        else:
+            config.save(alerts=a)
+        self.events.publish('alerts', self.alerts_view())
+        return self.alerts_view()
+
+    async def clear_alert(self):
+        self.alert = None
+        self.events.publish('alerts', self.alerts_view())
+        return self.alerts_view()
+
+    async def _alert_loop(self):
+        last = {}   # card id -> {'leak': bool, 'contact': bool}
+        while True:
+            await asyncio.sleep(60)
+            try:
+                m = self.mijia
+                if not m or not m.session or m.state != 'ready':
+                    continue
+                cards = [c for c in m.cards.values() if {'leak', 'contact'} & set(c.get('feats') or {})]
+                if not cards:
+                    continue
+                if not m.visible:     # the page polls while it is open
+                    await asyncio.wait_for(m.poll(cards), 15)
+                for c in cards:
+                    v, before = c.get('values') or {}, last.get(c['id'])
+                    now = {'leak': v.get('leak'), 'contact': v.get('contact')}
+                    last[c['id']] = now
+                    if before is None:
+                        continue      # the first look only sets what "before" was
+                    name = c.get('name') or '传感器'
+                    if self.cfg['alerts'].get('leak') and now['leak'] is True and before['leak'] is not True:
+                        await self._raise_alert(f'{name}检测到漏水', urgent=True)
+                    if (self.cfg['alerts'].get('door_night') and self.sleeping and now['contact'] is False
+                            and before['contact'] is True):
+                        await self._raise_alert(f'{name}被打开了', urgent=False)
+            except Exception:
+                log.exception('mijia alerts')
+
+    async def _raise_alert(self, text, urgent):
+        log.warning('alert: %s', text)
+        self.alert = {'text': text, 'time': time.time(), 'urgent': urgent}
+        self.events.publish('alerts', self.alerts_view())
+        self.screen.poke()
+        self.notes, _ = daily.new_note(self.notes, '家里人', f'⚠ {text}', '小麦')
+        daily.save_notes(self.notes)
+        self.events.publish('notes', self.notes_view())
+        if self.ring is None:
+            self.play('report')
+            await self._say_local(f'注意，{text}。' * (2 if urgent else 1))
+
+    # ---- 翻译模式 (the hub's prompt; the device listens longer) ----
+
+    def translate_view(self):
+        return dict(self.cfg['translate'])
+
+    async def set_translate(self, enabled, a=None, b=None):
+        t = {'enabled': bool(enabled), 'a': str(a or self.cfg['translate'].get('a') or '中文').strip()[:12],
+             'b': str(b or self.cfg['translate'].get('b') or '英文').strip()[:12]}
+        if t['enabled'] and t['a'] == t['b']:
+            raise ValueError('两种语言不能一样')
+        self.cfg['translate'] = t
+        config.save(translate=t)
+        await self._hub_http('/kiosk/prefs', {'device': self.cfg['device_id'], 'translate': t})
+        self.events.publish('translate', self.translate_view())
+        # the prompt is set per connection: reconnect once this reply has been played
+        self.reconnect_after_reply = True
+        if not self.in_turn() and self.state == 'idle':
+            await self.hub.close()
+            self.reconnect_after_reply = False
+        return self.translate_view()
+
+    def follow_up_seconds(self):
+        """How long the mic stays open after a reply: longer in 翻译模式 (two people take turns)."""
+        return 30 if self.cfg.get('translate', {}).get('enabled') else self.cfg['follow_up_seconds']
+
+    async def _after_playback(self, then):
+        give_up = time.monotonic() + 8
+        while self.audio.player.buffered() > 0.02 and time.monotonic() < give_up:
+            await asyncio.sleep(0.05)
+        await then()
+
+    async def _reconnect_for_translate(self):
+        self.reconnect_after_reply = False
+        await self.hub.close()
+        if self.cfg['translate']['enabled']:
+            await asyncio.sleep(0.3)
+            await self.wake('button', chimed=True)   # straight back to listening, on the new prompt
 
     # ---- 电台和助眠声 (media.py) ----
 
@@ -1100,6 +1251,14 @@ class Client:
                 now = datetime.datetime.now()
                 today = now.date().isoformat()
                 self.broadcast_fired = {k for k in self.broadcast_fired if k.startswith(today)}
+                for task, key, at in self._due_tasks(now):
+                    if self._busy_for_broadcast():
+                        if (now - at).total_seconds() >= broadcast.WAIT_MAX - 10:
+                            self.broadcast_fired.add(key)
+                        break
+                    self.broadcast_fired.add(key)
+                    await self._run_task(task)
+                    break
                 for hhmm, key, at in broadcast.due(self.broadcast, now, self.broadcast_fired):
                     if self._busy_for_broadcast():
                         if (now - at).total_seconds() >= broadcast.WAIT_MAX - 10:   # the last tick of the wait
@@ -1148,6 +1307,7 @@ class Client:
         asyncio.create_task(self._kids_loop())
         asyncio.create_task(self._cook_loop())
         asyncio.create_task(self._lists_loop())
+        asyncio.create_task(self._alert_loop())
         await self.bt.start()
         asyncio.create_task(self._bluetooth_loop())
         await self.mijia.start()
@@ -1248,6 +1408,7 @@ class Client:
                 'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),
                 'standby': self.standby_view(), 'cook': self.cook_view(), 'media': self.media_view(),
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
+                'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
                 'thread': {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])}}
 
     def view_entry(self):
@@ -1343,7 +1504,7 @@ class Client:
             return
         await self.start_listening('realtime')
         self.heard = False
-        self.deadline = time.monotonic() + self.cfg['follow_up_seconds']
+        self.deadline = time.monotonic() + self.follow_up_seconds()
 
     async def start_listening(self, mode):
         await self.hub.send({'type': 'listen', 'state': 'start', 'mode': mode})
@@ -1600,11 +1761,15 @@ class Client:
                     self.events.publish('toast', {'kind': 'error', 'text': '网络还没连上，稍后再试' if not has_default_route()
                                                   else '没收到回答，可能是网络或模型服务连不上，稍后再试'})
                 self.bot_msg = self.question = None
-                if self.listen_after_reply:
+                if self.reconnect_after_reply:
+                    # 翻译模式 changed in this turn: the new prompt needs a new connection
+                    self.listen_after_reply = False
+                    asyncio.create_task(self._after_playback(self._reconnect_for_translate))
+                elif self.listen_after_reply:
                     asyncio.create_task(self._listen_after_reply())
                 elif self.uploading:
                     self.heard = True
-                    self.deadline = time.monotonic() + self.cfg['follow_up_seconds']
+                    self.deadline = time.monotonic() + self.follow_up_seconds()
                     self.set_state('listening')
                 else:
                     self.set_state('idle')
@@ -1661,7 +1826,7 @@ class Client:
             self.set_state('thinking')
             return
         self.heard = True
-        self.deadline = time.monotonic() + self.cfg['follow_up_seconds']
+        self.deadline = time.monotonic() + self.follow_up_seconds()
 
     def _on_audio(self, packet):
         if self.mute_audio:
