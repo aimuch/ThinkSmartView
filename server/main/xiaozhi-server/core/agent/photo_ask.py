@@ -397,7 +397,7 @@ WANX_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image-generation
 WANX_TASK_URL = "https://dashscope.aliyuncs.com/api/v1/tasks/{}"
 # 0「原图」：不经过 AI、不用 Key，照片原样当形象（拍孩子自己的公仔，设计画布第 26 块）；其余是通义万相的画风
 ORIGINAL_STYLE = 0
-AVATAR_POSES = 4   # 「原图」形象最多几张：待机、在听、在想、在说，按上传顺序
+AVATAR_POSES = 5   # 「原图」形象最多几张：待机、在听、在想、在说、睡觉（睡眠时段），按上传顺序
 AVATAR_STYLES = {ORIGINAL_STYLE: "原图", 1: "3D童话", 2: "二次元", 7: "炫彩卡通", 3: "小清新", 30: "童话世界", 31: "黏土世界"}
 AVATAR_SECONDS = 90
 

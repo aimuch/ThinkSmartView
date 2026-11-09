@@ -71,8 +71,31 @@ async def test_sleep_hours_keep_the_users_screen_off(hint, monkeypatch, changes,
     monkeypatch.setattr(app.sleep, 'active', lambda setting, now=None: True)
     c._apply_sleep()
     await c.set_screen_off(**changes)
-    assert hint()['dim'] and hint()['idle'] == idle
+    assert c.screen.dimmed and hint()['brightness'] == app.sleep.BRIGHTNESS and hint()['idle'] == idle   # 睡眠亮度（第 29 块）
     seq = hint()['seq']
     c._on_new_report()                    # a report in the sleep hours only lights the screen
-    assert hint()['seq'] == seq + 1 and hint()['dim'] and hint()['idle'] == idle
+    assert hint()['seq'] == seq + 1 and hint()['brightness'] == app.sleep.BRIGHTNESS and hint()['idle'] == idle
     assert hint().get('after') == (idle or None)
+
+
+def test_sleep_setting_has_brightness_and_volume():
+    """睡眠时段可以设亮度和音量（设计画布第 29 块）；超出范围的截到 0–100，写错的用默认值。"""
+    from thinksmart_client import sleep
+    s = sleep.normalize({'enabled': True}, {'brightness': 150, 'volume': 'x'})
+    assert s['brightness'] == 100 and s['volume'] == sleep.VOLUME
+    assert sleep.normalize(None)['brightness'] == sleep.BRIGHTNESS
+
+
+def test_sleep_brightness_goes_to_the_blanker(tmp_path, monkeypatch):
+    """调暗时把睡眠亮度当亮度发给熄屏程序（不用它固定的暗亮度）。"""
+    import json
+    from thinksmart_client import device
+    monkeypatch.setattr(device, 'HINT_PATH', tmp_path / 'hint.json')
+    s = device.Screen()
+    s.sleep_level = 25
+    s.dim(True)
+    h = json.loads((tmp_path / 'hint.json').read_text())
+    assert h['dim'] is False and h['brightness'] == 25
+    s.dim(False)
+    h = json.loads((tmp_path / 'hint.json').read_text())
+    assert h['dim'] is False and h['brightness'] == 100

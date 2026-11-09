@@ -2248,10 +2248,40 @@ class Client:
     # ---- sleep hours ----
 
     def _apply_sleep(self):
+        was = getattr(self, 'sleeping', False)
         self.sleeping = sleep.active(self.sleep)
         if not self.sleeping:
             self.bright_in_sleep = False
+        self.screen.sleep_level = self.sleep.get('brightness', sleep.BRIGHTNESS)
         self.screen.dim(self.sleeping and not self.bright_in_sleep)
+        self.screen._write(activity=False)   # the sleep brightness may have changed while dimmed
+        saved = getattr(self, 'cfg', {}).get('sleep_saved_volume')
+        # 进出睡眠时段时；客户端在时段里重启（还没记音量）或跨过结束时间重启（记的音量还没还）时也要补上
+        if self.sleeping != was or (self.sleeping and saved is None) or (not self.sleeping and saved is not None):
+            try:
+                asyncio.get_running_loop().create_task(self._sleep_volume(self.sleeping))
+            except RuntimeError:
+                pass   # no loop yet (start() applies it again)
+
+    async def _sleep_volume(self, entering):
+        """睡眠时段开始：记下现在的音量，调到睡眠音量；结束：恢复记下的（客户端中途重启也记得，存在设置里）。"""
+        saved = self.cfg.get('sleep_saved_volume')
+        try:
+            if entering:
+                if saved is None:
+                    now = await self.device_volume()
+                    if now is not None:
+                        self.cfg['sleep_saved_volume'] = now
+                        config.save(sleep_saved_volume=now)
+                await self.set_volume(self.sleep.get('volume', sleep.VOLUME), source='sleep')
+                log.info('sleep hours: volume %s (was %s)', self.sleep.get('volume'), self.cfg.get('sleep_saved_volume'))
+            elif saved is not None:
+                await self.set_volume(saved, source='sleep')
+                self.cfg.pop('sleep_saved_volume', None)
+                config.unset('sleep_saved_volume')
+                log.info('sleep hours over: volume back to %s', saved)
+        except Exception as e:  # noqa: BLE001
+            log.warning('sleep volume: %s', e)
 
     async def set_sleep(self, **changes):
         """Change the sleep setting (page or voice); raises ValueError for a bad time."""
@@ -2259,6 +2289,8 @@ class Client:
         config.save(sleep=self.sleep)
         log.info('sleep setting: %s', self.sleep)
         self._apply_sleep()
+        if self.sleeping and changes.get('volume') is not None:
+            await self.set_volume(self.sleep['volume'], source='sleep')   # 正在睡眠时段里改了睡眠音量：马上用上
         self.set_state(self.state)
         await self.poll_reports()     # tell the hub now, not at the next poll
         return {**self.sleep, 'active': self.sleeping}

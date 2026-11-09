@@ -43,7 +43,7 @@
     <input type="text" id="q" maxlength="100"></div>
     <p class="box" id="albumTip" hidden>选几张家里的照片（一次最多 30 张），小麦待机的时候会轮播。照片只存在小麦上。</p>
     <p class="box" id="avatarTip" hidden>拍一张<b>正脸</b>照，或者拍你的<b>公仔</b>：放在画面中间、别太小，背景干净、光线亮一点。拍好后在小麦上选「原图」直接用，或者选一种画风生成卡通形象。<br>
-      从相册可以一次选 <b>最多 4 张</b>，按顺序当小麦的 待机、在听、在想、在说 四个样子（要在小麦上选「原图」）。</p>
+      从相册可以一次选 <b>最多 5 张</b>，按顺序当小麦的 待机、在听、在想、在说、睡觉 五个样子（要在小麦上选「原图」；睡觉那张在睡眠时段显示）。</p>
     <label class="box" id="cutBox" hidden style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cut" checked style="width:22px;height:22px">
       <span>去掉白底（白底的图片用；实拍的照片不用勾）</span></label>
     <div style="height:14px"></div>
@@ -75,7 +75,7 @@ fetch(`/photo/${token}/status`).then(r => r.json()).then(s => {
   $('q').value = s.question || '这是什么';
   purpose = s.purpose || 'ask';
   if (purpose === 'avatar') { show('askBox', false); show('avatarTip', true); show('cutBox', true); $('lib').multiple = true;
-    $('album').textContent = '从相册选（最多 4 张）'; document.title = '小麦 · 生成形象'; }
+    $('album').textContent = '从相册选（最多 5 张）'; document.title = '小麦 · 生成形象'; }
   if (purpose === 'album') { show('askBox', false); show('albumTip', true); show('shoot', false); $('album').textContent = '选照片（可以多选）';
     $('album').classList.add('big'); $('lib').multiple = true; document.title = '小麦 · 家庭相册'; }
   if (s.state !== 'waiting') fatal(s.error || '这个链接已经用过了，在小麦上重新说一次');
@@ -173,7 +173,7 @@ function cutout(file, max = 800) {
 
 async function sendPoses(files) {
   show('pick', false); show('sent', true);
-  const names = ['待机', '在听', '在想', '在说'], list = files.slice(0, 4);
+  const names = ['待机', '在听', '在想', '在说', '睡觉'], list = files.slice(0, 5);
   try {
     for (const [i, file] of list.entries()) {
       $('status').textContent = `正在处理第 ${i + 1} / ${list.length} 张（${names[i]}）…`;

@@ -86,6 +86,7 @@
             <span class="mouth" id="mouth"></span>
           </div>
           <b class="gloss"></b>
+          <span class="zzz" aria-hidden="true"><i>Z</i><i>z</i><i>z</i></span>
           <img class="av-photo" id="avPhoto" alt="">
         </div>
       </div>
@@ -326,7 +327,7 @@
     <div class="opt">
       <div class="opt-text">
         <b>睡眠时段</b>
-        <span>时段内后台任务做完的汇报不念出来，只在屏幕上提示，点一下或唤醒后再念；屏幕调暗。叫它的话照常回答，音量不变。</span>
+        <span>时段内后台任务做完的汇报不念出来，只在屏幕上提示，点一下或唤醒后再念。到点调到下面的亮度和音量，形象去睡觉；结束时恢复原来的。叫它的话照常回答。</span>
       </div>
       <button class="switch" id="sleepSwitch" role="switch" aria-checked="false" aria-label="睡眠时段"><i></i></button>
     </div>
@@ -335,6 +336,10 @@
         <div class="stepper"><button data-k="start" data-d="-30" aria-label="提前半小时">−</button><b id="sleepStart">22:00</b><button data-k="start" data-d="30" aria-label="推后半小时">+</button></div></div>
       <div class="time"><small>结束</small>
         <div class="stepper"><button data-k="end" data-d="-30" aria-label="提前半小时">−</button><b id="sleepEnd">07:00</b><button data-k="end" data-d="30" aria-label="推后半小时">+</button></div></div>
+    </div>
+    <div class="sleep-sliders" id="sleepSliders">
+      <label class="sleep-slider"><span>睡眠时亮度</span><input type="range" min="0" max="100" step="5" id="sleepBright"><b id="sleepBrightV">10</b></label>
+      <label class="sleep-slider"><span>睡眠时音量</span><input type="range" min="0" max="100" step="5" id="sleepVol"><b id="sleepVolV">30</b></label>
     </div>
     <p class="opt-note" id="sleepNote"></p>
     <p class="opt-note">也可以直接说：「<span class="ww-name">小麦小麦</span>，晚上十点到早上七点别念了」「关掉睡眠模式」</p>

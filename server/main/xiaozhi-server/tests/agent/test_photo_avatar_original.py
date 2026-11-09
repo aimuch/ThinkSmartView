@@ -40,9 +40,9 @@ def test_original_style_keeps_up_to_four_poses(tmp_path, monkeypatch):
         assert False, "第 5 张应该被拒"
     except LookupError:
         pass
-    assert photo_ask.view(s["token"])["poses"] == 4
+    assert photo_ask.view(s["token"])["poses"] == photo_ask.AVATAR_POSES
     photo_ask.begin_avatar(s["token"], photo_ask.ORIGINAL_STYLE)
     photo_ask.generate_avatar(s["token"], photo_ask.ORIGINAL_STYLE, {})
     paths = [photo_ask.avatar_path(s["token"], i) for i in range(4)]
-    assert all(p and p.endswith(".png") for p in paths) and photo_ask.avatar_path(s["token"], 4) is None
+    assert all(p and p.endswith(".png") for p in paths) and photo_ask.avatar_path(s["token"], photo_ask.AVATAR_POSES) is None
     assert [open(p, "rb").read()[-1] for p in paths] == [0, 1, 2, 3]

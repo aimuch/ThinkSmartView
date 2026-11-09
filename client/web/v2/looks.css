@@ -316,3 +316,28 @@ body.both-bars .now-bar { top: 288px; }
 .cam-btns { position: absolute; left: 0; right: 0; bottom: 34px; display: flex; gap: 16px; justify-content: center; padding: 0 24px; }
 .cam-ov.shooting .cam-btns button:not(#camCancel) { opacity: .4; pointer-events: none; }
 @media (orientation: portrait) { .cam-btns { flex-wrap: wrap; } .cam-btns .ctl-big { padding: 0 26px; } }
+
+/* ---- 免打扰（睡眠时段）：形象去睡觉（设计画布第 29 块）；只用 transform/opacity ---- */
+.sleep-sliders { display: flex; flex-direction: column; gap: 14px; margin: 6px 0 4px; }
+.sleep-sliders.off { opacity: .4; pointer-events: none; }
+.sleep-slider { display: flex; align-items: center; gap: 16px; font-size: 19px; color: var(--ink2); }
+.sleep-slider span { width: 120px; flex: none; }
+.sleep-slider input { flex: 1; height: 44px; accent-color: var(--accent2); }
+.sleep-slider b { width: 48px; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+.zzz { position: absolute; right: 18px; top: 4px; display: none; pointer-events: none; }
+.zzz i { position: absolute; font-style: normal; font-weight: 700; color: #b9ccff; opacity: 0; animation: zzz 3.6s ease-in-out infinite; }
+.zzz i:nth-child(1) { font-size: 34px; right: 0; top: 30px; }
+.zzz i:nth-child(2) { font-size: 26px; right: -22px; top: 0; animation-delay: 1.2s; }
+.zzz i:nth-child(3) { font-size: 20px; right: -40px; top: -26px; animation-delay: 2.4s; }
+@keyframes zzz { 0% { opacity: 0; transform: translateY(14px) scale(.7); } 30% { opacity: .9; } 100% { opacity: 0; transform: translateY(-26px) scale(1.1); } }
+body.sleeping .zzz { display: block; }
+body.sleeping .core { animation: breathe 6s ease-in-out infinite !important; }
+body.sleeping .eye { animation: none !important; transform: scaleY(.12) !important; }
+body.sleeping .mouth { transform: scale(.6); }
+body.sleeping .face { animation: none !important; transform: translateY(4px); }
+body.sleeping .glows i, body.sleeping .corona { opacity: .35; }
+/* 照片形象：有第 5 张「睡觉」就换成它；没有就把待机那张调暗 */
+body.av-photo-on.sleeping .av-photo { animation: av-bob 6s ease-in-out infinite !important; transform: none; }
+body.av-photo-on.sleeping:not(.av-has-sleep) .av-photo { opacity: .55; }
+body.av-photo-on .zzz { z-index: 2; }
+@media (prefers-reduced-motion: reduce) { .zzz i { animation: none; opacity: .7; } }

@@ -81,7 +81,7 @@ def make_app(client: Client):
     async def sleep_setting(request):
         body = await request.json()
         try:
-            value = await client.set_sleep(**{k: body.get(k) for k in ('enabled', 'start', 'end')})
+            value = await client.set_sleep(**{k: body.get(k) for k in ('enabled', 'start', 'end', 'brightness', 'volume')})
         except ValueError as e:
             return web.json_response({'ok': False, 'error': str(e)}, status=400)
         return web.json_response({'ok': True, 'sleep': value})

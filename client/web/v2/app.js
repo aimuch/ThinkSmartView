@@ -195,6 +195,8 @@ function renderStatus() {
   const { state, connected } = ui.status;
   const shown = shownState();
   document.body.dataset.state = shown;
+  // 睡眠时段里没在对话：形象去睡觉（设计画布第 29 块）
+  document.body.classList.toggle('sleeping', !!(ui.status.sleep && ui.status.sleep.active) && shown === 'idle');
   if (typeof showAvPose === 'function') showAvPose();
   // 叫醒时家居页、设备详情自动收起，屏幕让给对话（上游 client issue #1 网友的建议）
   if (shown === 'listening' && window.miAutoClose) window.miAutoClose();
@@ -302,6 +304,12 @@ function renderSettings() {
   $('sleepTimes').classList.toggle('off', !s.enabled);
   $('sleepStart').textContent = s.start;
   $('sleepEnd').textContent = s.end;
+  $('sleepSliders').classList.toggle('off', !s.enabled);
+  for (const [id, k, d] of [['sleepBright', 'brightness', 10], ['sleepVol', 'volume', 30]]) {
+    const v = s[k] === undefined ? d : s[k];
+    if (document.activeElement !== $(id)) $(id).value = v;
+    $(id + 'V').textContent = v;
+  }
   $('sleepNote').textContent = !s.enabled ? '睡眠时段已关闭：补报一到就念，音量和亮度照常'
     : s.active ? `现在是睡眠时段，到 ${s.end} 结束` : `每天 ${s.start} 到 ${s.end} 是睡眠时段，现在不在`;
 }
@@ -329,6 +337,8 @@ function stepTime(hhmm, minutes) {
   return pad(Math.floor(t / 60)) + ':' + pad(t % 60);
 }
 $('sleepSwitch').addEventListener('click', () => sendSleep({ enabled: !sleepSetting().enabled }, 0));
+$('sleepBright').addEventListener('input', e => sendSleep({ brightness: +e.target.value }, 500));
+$('sleepVol').addEventListener('input', e => sendSleep({ volume: +e.target.value }, 500));
 for (const b of document.querySelectorAll('.stepper button')) {
   b.addEventListener('click', () => sendSleep({ [b.dataset.k]: stepTime(sleepSetting()[b.dataset.k], Number(b.dataset.d)) }, 600));
 }
@@ -923,7 +933,9 @@ let avPoses = null;
 const POSE_OF = { idle: 0, connecting: 0, listening: 1, thinking: 2, speaking: 3 };
 function showAvPose() {
   if (!avPoses) return;
-  const url = avPoses[POSE_OF[document.body.dataset.state] || 0] || avPoses[0];
+  const pose = document.body.classList.contains('sleeping') ? 4 : POSE_OF[document.body.dataset.state] || 0;
+  const url = avPoses[pose] || avPoses[0];
+  document.body.classList.toggle('av-has-sleep', !!avPoses[4]);
   if ($('avPhoto').getAttribute('src') !== url) $('avPhoto').src = url;
 }
 function renderLooks() {

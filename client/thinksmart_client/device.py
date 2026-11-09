@@ -55,6 +55,7 @@ class Screen:
         self.showing = False         # a photo slideshow is open (photos.py): on until it closes
         self.dimmed = False
         self.level = 100             # the user's 0-100
+        self.sleep_level = None      # the sleep hours' brightness (0-100) while dimmed; None: the blanker's own dim level
         self.idle = 300              # the user's screen-off in seconds, 0: never
         self._seq = time.time_ns()   # unique across client restarts
 
@@ -105,6 +106,9 @@ class Screen:
             self._seq += 1
         hint = {'hold': bool(self.held or self.ringing or self.showing), 'dim': self.dimmed, 'seq': self._seq,
                 'brightness': self.level, 'idle': self.idle}
+        if self.dimmed and self.sleep_level is not None:
+            # the user's sleep brightness instead of the blanker's fixed dim level (设计画布第 29 块)
+            hint['dim'], hint['brightness'] = False, self.sleep_level
         if not hint['hold'] and self.idle:
             hint['after'] = self.idle   # for a blanker older than "idle": the time after a conversation
         try:

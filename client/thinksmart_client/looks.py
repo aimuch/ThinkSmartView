@@ -13,7 +13,7 @@ BLOCKS = {'clock': '问候和时钟', 'date': '日期和农历', 'weather': '天
           'suggest': '试试这样问我', 'devices': '常用设备（米家）'}
 PHOTO_DIR = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'avatars'
 PHOTO_MAX = 6
-POSES = 4                   # 一个照片形象最多几张：待机、在听、在想、在说（设计画布第 26 块）
+POSES = 5                   # 一个照片形象最多几张：待机、在听、在想、在说、睡觉（设计画布第 26、29 块）
 POSE_DIR = PHOTO_DIR / 'poses'
 PHOTO_NAME = re.compile(r'^[0-9A-Za-z_-]{1,40}$')
 
