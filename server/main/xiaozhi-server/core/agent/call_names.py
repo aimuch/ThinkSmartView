@@ -323,8 +323,10 @@ async def handle_call_name(conn: "ConnectionHandler", text: str):
         conn.logger.bind(tag=TAG).error(f"呼名 {model}：切换模型失败: {e}")
         ok = False
     if not ok:
-        conn.logger.bind(tag=TAG).warning(f"呼名 {model}：这个模型没有配置好或加载失败，不切换")
-        if await _speak(conn, text, f"{llm_router.model_label(model)} 还没配置好，请到管理后台检查"):
+        missing = llm_router.cli_missing(llm_router._server_config(conn), model)
+        conn.logger.bind(tag=TAG).warning(f"呼名 {model}：{'网关上没装 ' + missing if missing else '这个模型没有配置好或加载失败'}，不切换")
+        say = f"网关上没装 {missing}，请到管理后台检查" if missing else f"{llm_router.model_label(model)} 还没配置好，请到管理后台检查"
+        if await _speak(conn, text, say):
             return None
         return rest or text
     if rest:

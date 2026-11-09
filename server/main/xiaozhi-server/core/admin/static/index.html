@@ -567,6 +567,14 @@
   /* ---------- [xiaozhi-hub] 费用分析（设计画布第 20 块，参考 CPA Manager Plus） ---------- */
   .c-tabs { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); width: max-content; margin-bottom: 12px; }
   .c-tabs button { border: 0; background: none; color: var(--muted); padding: 6px 14px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 13px; }
+  .cn-say { display: grid; grid-template-columns: 1fr 20px 1fr 20px 1.2fr; align-items: stretch; gap: 6px; padding: 12px !important; margin-bottom: 16px; }
+  .cn-say > i { font-style: normal; display: grid; place-items: center; color: var(--muted); }
+  .cn-say .seg { border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); background: var(--soft); }
+  .cn-say .seg b { font-size: 15px; } .cn-say .seg small { color: var(--muted); font-size: 11px; line-height: 1.55; }
+  .cn-say .tag { font-size: 11px; font-weight: 600; letter-spacing: .5px; color: var(--muted); }
+  .cn-say .ww { border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent); } .cn-say .ww .tag { color: var(--warn); }
+  .cn-say .cn { border-color: var(--accent-line); background: var(--accent-soft); } .cn-say .cn .tag { color: var(--accent); }
+  @media (max-width: 900px) { .cn-say { grid-template-columns: 1fr; } .cn-say > i { transform: rotate(90deg); } }
   .c-tabs button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
   .c-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
   .c-bar .seg { margin: 0; } .c-bar .seg button { padding: 4px 11px; font-size: 12px; }
@@ -624,7 +632,7 @@
       <button data-page="devices"><span class="ico">▣</span>设备</button>
       <button data-page="how"><span class="ico">⇄</span>工作原理</button>
       <button data-page="llm"><span class="ico">✦</span>大模型</button>
-      <button data-page="calls"><span class="ico">☎</span>呼名</button>
+      <button data-page="calls"><span class="ico">☎</span>称呼</button>
       <button data-page="agents"><span class="ico">◈</span>智能体</button>
       <button data-page="memory"><span class="ico">✎</span>记忆</button>
       <button data-page="cost"><span class="ico">¥</span>费用</button>
@@ -723,7 +731,7 @@ function applyBrand(b) {
   document.title = brandInfo.name + (title ? " · " + title : " · 管理后台");
   $("favicon").href = "/admin/favicon?v=" + encodeURIComponent(brandInfo.icon.kind + (brandInfo.icon.value || "").length + brandInfo.icon.value.slice(-12));
 }
-const PAGE_TITLES = { status: "状态", how: "工作原理", llm: "大模型", calls: "呼名", grokbot: "Grok Bot", agents: "智能体", devices: "设备", memory: "记忆", cost: "费用",
+const PAGE_TITLES = { status: "状态", how: "工作原理", llm: "大模型", calls: "称呼", grokbot: "Grok Bot", agents: "智能体", devices: "设备", memory: "记忆", cost: "费用",
   asr: "语音识别", tts: "语音合成", intent: "意图识别", update: "更新网关" };
 
 let authMode = "login";
@@ -1251,7 +1259,7 @@ async function renderLLM(root) {
   const grokAliases = d.grok.bots.flatMap((g) => (d.callable[g.entry] || []).slice(0, 1));
 
   root.innerHTML = `
-    <div class="page-head"><div><h1>大模型</h1><p class="sub">设备刚连上时用默认模型。给模型配了称呼后，句子开头说“嗨 + 称呼”就换成它，几个模型可以同时用（称呼在<a href="#calls">呼名</a>页配）。</p></div>
+    <div class="page-head"><div><h1>大模型</h1><p class="sub">设备刚连上时用默认模型。给模型配了称呼后，句子开头说“嗨 + 称呼”就换成它，几个模型可以同时用（称呼在<a href="#calls">称呼</a>页配）。</p></div>
       <span class="pill ${d.kind === "other" ? "warn" : "ok"}">默认：${esc(current)}</span></div>
     ${d.kind === "other" ? `<div class="banner warn">当前默认的 ${esc(d.selected)} 不在后台管理范围内（可能是手动改了配置文件）。在下面选择一种并点"保存并设为默认"即可切换。</div>` : ""}
     ${d.running && d.running !== d.selected ? `<div class="banner warn">配置里的默认模型是 ${esc(d.selected)}，但服务仍在用 ${esc(d.running)}。</div>` : ""}
@@ -1396,7 +1404,7 @@ async function renderLLM(root) {
     const x = d.vendors.find((y) => y.id === llmVendor), using = d.vendor === x.id;
     const box = $("api-form");
     box.innerHTML = `
-      ${using ? "" : `<div class="banner info">${esc(x.label)} 不是默认模型${active ? `（默认是 ${esc(active.label)}）` : ""}${d.callable[x.entry] ? `，但配了称呼“${esc(d.callable[x.entry][0])}”，叫名字就能用它` : "。填好保存后到呼名页配上称呼，就能叫名字用它"}；想让它当默认模型就点"保存并设为默认"。</div>`}
+      ${using ? "" : `<div class="banner info">${esc(x.label)} 不是默认模型${active ? `（默认是 ${esc(active.label)}）` : ""}${d.callable[x.entry] ? `，但配了称呼“${esc(d.callable[x.entry][0])}”，叫名字就能用它` : "。填好保存后到称呼页配上称呼，就能叫名字用它"}；想让它当默认模型就点"保存并设为默认"。</div>`}
       ${x.conflict ? `<div class="banner err">配置里已有一个叫 ${esc(x.entry)} 的条目，但不是 OpenAI 兼容类型，请在配置文件里改名或删掉它。</div>` : ""}
       ${x.hint ? `<div class="banner info">${esc(x.hint)}</div>` : ""}
       <div class="grid2">
@@ -1732,8 +1740,8 @@ function hotwordsCard(h) {
         <p style="margin:0">容易认错的专有名词，识别时优先考虑，比如 GitHub、StackChan。只能把发音接近的词救回来；发音完全一样的（Claude 总被听成 cloud），用下面的“识别后纠错”。
           写原本的大小写，一个词一项，不要太多（几十个以内），太多反而容易误认。</p>
         <div class="chips" id="hw-chips"></div>
-        ${h.auto.length ? `<p class="muted small" style="margin:10px 0 0">虚线的来自<a href="#calls">呼名</a>里的模型名字，自动带上，在呼名页修改。</p>` : ""}
-        ${h.dropped.length ? `<div class="banner warn" style="margin:10px 0 0">豆包一次最多带约 100 个 token 的热词，超出了，这 ${h.dropped.length} 个不会带上：${esc(h.dropped.join("、"))}。呼名里的模型名字会优先带上。</div>` : ""}
+        ${h.auto.length ? `<p class="muted small" style="margin:10px 0 0">虚线的来自<a href="#calls">称呼</a>里的模型名字，自动带上，在称呼页修改。</p>` : ""}
+        ${h.dropped.length ? `<div class="banner warn" style="margin:10px 0 0">豆包一次最多带约 100 个 token 的热词，超出了，这 ${h.dropped.length} 个不会带上：${esc(h.dropped.join("、"))}。称呼页里的模型名字会优先带上。</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:12px;max-width:440px">
           <input class="in" id="hw-new" placeholder="添加热词，回车确认" ${h.supported ? "" : "disabled"}><button class="btn sm" id="hw-add" ${h.supported ? "" : "disabled"}>添加</button></div>
         <div class="actions"><span class="result muted">${h.supported ? "保存后重新加载语音识别：新连接马上生效，在线设备重新连接后生效。" : "当前语音识别不支持热词，支持的有本地 X-ASR、豆包。"}</span>
@@ -1748,7 +1756,7 @@ function bindHotwords(h) {
   const draw = () => {
     $("hw-chips").innerHTML = words.map((w, i) => `<span class="chip on">${esc(w)}
         <button class="chip-x" data-del="${i}" title="删除" aria-label="删除 ${esc(w)}">×</button></span>`).join("")
-      + h.auto.map((w) => `<span class="chip risky" title="来自呼名">${esc(w)}</span>`).join("")
+      + h.auto.map((w) => `<span class="chip risky" title="来自称呼页">${esc(w)}</span>`).join("")
       || '<span class="muted small">还没有热词</span>';
     $("hw-chips").querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => { words.splice(+b.dataset.del, 1); draw(); }));
   };
@@ -2229,7 +2237,7 @@ async function renderAgents(root) {
     <div class="card panel ag-form ${agentEdit ? "" : "hidden"}" id="ag-form"></div>
     <div class="section-title">智能体和流水线</div>
     <div class="card panel small muted" style="line-height:1.8">
-      <b style="color:var(--text)">智能体</b>（DSH、Hermes、Grok Bot、Claude Code）：给它目标，它自己决定用哪些工具、做几步。<b style="color:var(--text)">流水线</b>（Dify 工作流）：步骤是你在 Dify 里事先连好的。两种都是「叫名字派活、等结果」，所以放在一起；称呼在<a href="#calls">呼名</a>页也能改。
+      <b style="color:var(--text)">智能体</b>（DSH、Hermes、Grok Bot、Claude Code）：给它目标，它自己决定用哪些工具、做几步。<b style="color:var(--text)">流水线</b>（Dify 工作流）：步骤是你在 Dify 里事先连好的。两种都是「叫名字派活、等结果」，所以放在一起；称呼在<a href="#calls">称呼</a>页也能改。
     </div>`;
   root.querySelectorAll("[data-go-llm]").forEach((b) => (b.onclick = () => { agentView = b.dataset.goLlm; openPage("llm"); }));
   $("ag-grok").onclick = () => openPage("grokbot");
@@ -2331,7 +2339,7 @@ async function renderGrokBot(root) {
     <div class="card panel">
       ${!acc.logged_in ? '<p class="muted" style="margin:0">登录后再读取 Bot 列表。</p>' : `
       ${d.bots_error ? `<div class="banner err">读取 Bot 列表失败：${esc(d.bots_error)}</div>` : ""}
-      <p class="muted small" style="margin:0 0 4px">${bots ? `列表读取于 ${esc(fmt(d.bots_at))}。` : "还没从云端读取 Bot 列表（会唤醒休眠的云端电脑，要几秒）。"}勾选保存后自动用 Bot 的名字做称呼；想改写法、或按你的发音录入，到<a href="#calls">呼名</a>页。名字含空格标点、或已被别的模型占用时不会自动配，要到呼名页手动加。</p>
+      <p class="muted small" style="margin:0 0 4px">${bots ? `列表读取于 ${esc(fmt(d.bots_at))}。` : "还没从云端读取 Bot 列表（会唤醒休眠的云端电脑，要几秒）。"}勾选保存后自动用 Bot 的名字做称呼；想改写法、或按你的发音录入，到<a href="#calls">称呼</a>页。名字含空格标点、或已被别的模型占用时不会自动配，要到称呼页手动加。</p>
       ${list.length ? list.map((b) => `<label class="switch" style="margin-top:8px"><input type="checkbox" data-bot="${esc(b.id)}" data-name="${esc(b.name)}" ${checked.has(b.id) ? "checked" : ""}>
           <span>${esc(b.name)}${b.busy ? ' <span class="pill">忙</span>' : ""}${checked.has(b.id) ? (aliasesOf(b.id).length ? ` <span class="pill ok">称呼：${esc(aliasesOf(b.id).join("、"))}</span>` : ' <span class="pill warn">还没配称呼</span>') : ""}</span>
           <small>${esc(b.preview || "")}</small></label>`).join("") : '<p class="muted" style="margin:8px 0 0">没有 Bot。先在 Grok Bot App 里创建，再点“重新读取”。</p>'}
@@ -2708,11 +2716,18 @@ async function renderCallNames(root) {
   const labelOf = (entry) => (d.targets.find((t) => t.entry === entry) || models.find((m) => m.entry === entry) || { label: entry }).label;
   setOnline(devices);
   root.innerHTML = `
-    <div class="page-head"><div><h1>呼名</h1><p class="sub">唤醒设备后，句子开头说“嗨 + 称呼”，就换成对应的模型回答；之后直接说话也交给它，直到叫别的称呼。每个模型只记得跟自己的对话。
-      只说称呼时只切换模型、回一声“${esc(d.reply)}”，不启动 Claude；说出第一句话时才启动，并判断要不要接上次的对话。完整经过见<a href="#how">工作原理</a>。</p></div>
+    <div class="page-head"><div><h1>称呼</h1><p class="sub">设备醒了以后，句子开头说“嗨 + 称呼”，就换成对应的模型或智能体回答；之后直接说话也交给它，直到叫别的称呼。每个模型只记得跟自己的对话。
+      只说称呼时只切换、回一声“${esc(d.reply)}”，不启动模型；说出第一句话时才启动。完整经过见<a href="#how">工作原理</a>。</p></div>
       <span class="pill ${d.enabled ? "ok" : ""}">${d.enabled ? "已开启" : "已关闭"}</span></div>
+    <div class="card panel cn-say">
+      <div class="seg ww"><span class="tag">唤醒词 · 在设备上改</span><b>小麦小麦</b><small>叫醒设备、开始听；设备本地识别。在设备屏幕「设置 → 唤醒词」改，每台设备各自的</small></div>
+      <i aria-hidden="true">→</i>
+      <div class="seg cn"><span class="tag">称呼 · 在这页改</span><b>嗨 ${esc((d.models.find((m) => m.ready && m.aliases.length) || { aliases: ["DSH"] }).aliases[0])}，</b><small>点名谁来回答，可以不说；网关识别后去掉。所有设备共用这张称呼表</small></div>
+      <i aria-hidden="true">→</i>
+      <div class="seg rest"><span class="tag">要说的话</span><b>帮我看看明天要不要带伞</b><small>交给叫到的模型回答</small></div>
+    </div>
     <div class="card panel">
-      <label class="switch" style="margin-top:0"><input type="checkbox" id="cn-enabled" ${d.enabled ? "checked" : ""}><span>开启呼名</span>
+      <label class="switch" style="margin-top:0"><input type="checkbox" id="cn-enabled" ${d.enabled ? "checked" : ""}><span>开启称呼</span>
         <small>关闭后，“嗨 + 称呼”会当作普通的话交给当前模型</small></label>
       <label class="f" style="margin-top:16px">只说称呼时的回复<span class="hint">只说“嗨 + 称呼”时，服务端切换模型后直接回这句，不启动模型。越短越快，中间的标点会去掉、一次播完</span>
         <input class="in" id="cn-reply" value="${esc(d.reply)}" maxlength="40"></label>
@@ -2723,6 +2738,8 @@ async function renderCallNames(root) {
     <div class="actions"><span class="result muted">保存后马上生效，不用重启服务。</span><button class="btn primary" id="cn-save">保存</button></div>`;
 
   const allAliases = () => models.flatMap((m) => m.aliases);
+  // 没装的本机 CLI：称呼可以挪给默认模型（默认模型配好了才行）
+  const moveTo = (m) => { const t = d.targets.find((x) => x.entry === d.default); return t && t.entry !== m.entry ? t : null; };
   const findModel = (entry) => models.find((m) => m.entry === entry);
   const addAlias = (m, a) => {
     a = String(a || "").trim().toLowerCase();
@@ -2769,14 +2786,16 @@ async function renderCallNames(root) {
       <div class="card" data-model="${mi}" style="margin-top:16px">
         <div class="card-head"><h2>${esc(m.label)}</h2><span>
           ${m.entry === d.default ? '<span class="pill">默认模型</span>' : ""}
-          ${m.ready ? "" : '<span class="pill err">还没配置好</span>'}</span></div>
+          ${m.missing ? `<span class="pill err">网关上没装 ${esc(m.missing)}</span>` : m.ready ? "" : '<span class="pill err">还没配置好</span>'}</span></div>
         <div class="panel" style="padding-top:12px">
           <div class="chips">${m.aliases.length ? m.aliases.map((a, i) => `<span class="chip on">${esc(a)}
             <button class="chip-x" data-del="${i}" title="删除" aria-label="删除 ${esc(a)}">×</button></span>`).join("")
             : '<span class="muted small">还没有称呼</span>'}</div>
           <div style="display:flex;gap:8px;margin-top:12px;max-width:440px">
             <input class="in" data-new placeholder="手动添加一种写法"><button class="btn sm" data-add>添加</button></div>
+          ${m.missing ? `<div class="banner err" style="margin:12px 0 0">网关上找不到 ${esc(m.missing)} 的命令：说“嗨 ${esc(m.aliases[0] || "")}”时设备会回“网关上没装 ${esc(m.missing)}”，不切换。${moveTo(m) ? `想用 ${esc(moveTo(m).label)} 回答，把称呼挪过去；` : ""}想用 ${esc(m.missing)}，先在网关上装好。</div>` : ""}
           <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            ${m.missing && moveTo(m) && m.aliases.length ? `<button class="btn sm" data-move>挪给 ${esc(moveTo(m).label)}</button>` : ""}
             <button class="btn sm" data-remove>不再呼叫这个模型</button></div>
           <div data-learnbox>${learnHtml(m)}</div>
         </div>
@@ -2789,6 +2808,13 @@ async function renderCallNames(root) {
       q("[data-add]").onclick = () => { addAlias(m, q("[data-new]").value); draw(); };
       q("[data-new]").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); q("[data-add]").click(); } };
       q("[data-remove]").onclick = () => { models = models.filter((x) => x !== m); draw(); };
+      if (q("[data-move]")) q("[data-move]").onclick = () => {
+        const t = moveTo(m);
+        let target = findModel(t.entry);
+        if (!target) { target = { entry: t.entry, label: t.label, aliases: [], ready: true, missing: "" }; models.push(target); }
+        target.aliases.push(...m.aliases.filter((a) => !target.aliases.includes(a)));
+        models = models.filter((x) => x !== m); draw(); toast(`已挪给 ${t.label}，记得点保存`);
+      };
       if (q("[data-learn]")) q("[data-learn]").onclick = (e) => busy(e.target, async () => {
         try {
           learning = (await api("call-names/learn", { session_id: q("[data-device]") ? q("[data-device]").value : "", target: m.entry })).learning;

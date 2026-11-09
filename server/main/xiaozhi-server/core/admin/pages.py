@@ -1252,8 +1252,9 @@ def describe_call_names(merged: dict) -> dict:
         if any(m["entry"] == entry for m in models):
             continue
         t = targets.get(entry)
+        missing = llm_router.cli_missing(merged, entry) if t else None
         models.append({"entry": entry, "label": t["label"] if t else entry, "aliases": call_names._aliases(value),
-                       "ready": t is not None})
+                       "ready": t is not None and not missing, "missing": missing or ""})
     return {
         "enabled": bool(cfg.get("enabled", True)),
         "reply": str(cfg.get("reply") or call_names.DEFAULT_REPLY),

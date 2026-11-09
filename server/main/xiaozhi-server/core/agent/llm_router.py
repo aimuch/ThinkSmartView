@@ -71,12 +71,36 @@ def _key_optional(name: str) -> bool:
     return bool((catalog.VENDOR_BY_ENTRY.get(name) or {}).get("key_optional"))
 
 
+CLI_TOOLS = {"claude_cli": "Claude Code", "dsh_cli": "DSH"}
+
+
+def cli_missing(config: dict, name: str):
+    """本机 CLI 条目（Claude Code、DSH）在网关上找不到命令时，返回工具名；其他情况返回 None。
+    只查文件在不在（shutil.which），不运行它。"""
+    entry = (config.get("LLM") or {}).get(name)
+    if not isinstance(entry, dict):
+        return None
+    kind = entry.get("type", name)
+    if kind == "claude_cli":
+        from core.providers.llm.claude_cli.claude_cli import find_claude_cli
+
+        return None if find_claude_cli(entry.get("cli_path") or None) else CLI_TOOLS[kind]
+    if kind == "dsh_cli":
+        from core.agent.dsh_session import find_dsh
+
+        return None if find_dsh(entry.get("dsh_path") or None) else CLI_TOOLS[kind]
+    return None
+
+
 def model_ready(config: dict, name: str) -> bool:
-    """配置里有这个条目，而且填好了：API 条目要有模型名和接口地址，有 api_key 字段时不能是占位文字。"""
+    """配置里有这个条目，而且填好了：API 条目要有模型名和接口地址，有 api_key 字段时不能是占位文字；
+    本机 CLI 条目要在网关上找得到命令（没装时切过去每句话都会失败）。"""
     entry = (config.get("LLM") or {}).get(name)
     if not isinstance(entry, dict):
         return False
     kind = entry.get("type", name)
+    if kind in CLI_TOOLS and cli_missing(config, name):
+        return False
     if kind == "openai":
         if _placeholder(entry.get("model_name")) or _placeholder(entry.get("base_url") or entry.get("url")):
             return False

@@ -10,6 +10,14 @@ from core.utils import llm as llm_utils
 from core.utils.dialogue import Dialogue, Message
 
 
+@pytest.fixture(autouse=True)
+def claude_installed(monkeypatch):
+    """测试机上没装 claude：默认当作装了（没装的情况在 test_cli_missing 里单独测）。"""
+    from core.providers.llm.claude_cli import claude_cli
+
+    monkeypatch.setattr(claude_cli, "find_claude_cli", lambda configured=None: "/usr/local/bin/claude")
+
+
 class FakeLLM:
     def __init__(self, name, config=None):
         self.name, self.config = name, config
@@ -73,6 +81,22 @@ def test_model_ready():
     assert llm_router.model_ready(cfg, "DeepSeekLLM")
     assert not llm_router.model_ready(cfg, "KimiLLM")  # Key 还是占位文字
     assert not llm_router.model_ready(cfg, "Nope")
+
+
+def test_cli_missing(monkeypatch):
+    """本机 CLI 没装：不算配好（叫称呼时不切过去），并说出缺的是哪个。"""
+    from core.agent import dsh_session
+    from core.providers.llm.claude_cli import claude_cli
+
+    cfg = server_config()
+    cfg["LLM"]["DshCLI"] = {"type": "dsh_cli"}
+    monkeypatch.setattr(claude_cli, "find_claude_cli", lambda configured=None: None)
+    monkeypatch.setattr(dsh_session, "find_dsh", lambda configured=None: None)
+    assert llm_router.cli_missing(cfg, "ClaudeCLI") == "Claude Code" and not llm_router.model_ready(cfg, "ClaudeCLI")
+    assert llm_router.cli_missing(cfg, "DshCLI") == "DSH" and not llm_router.model_ready(cfg, "DshCLI")
+    assert llm_router.cli_missing(cfg, "DeepSeekLLM") is None and llm_router.model_ready(cfg, "DeepSeekLLM")
+    monkeypatch.setattr(dsh_session, "find_dsh", lambda configured=None: "/home/u/.local/dsh/bin/dsh")
+    assert llm_router.model_ready(cfg, "DshCLI")
 
 
 def test_switch_keeps_separate_dialogues(env):

@@ -126,6 +126,15 @@ async def test_handle_unready_model_tells_user(spoken):
     assert spoken["tts"] == ["Kimi 还没配置好，请到管理后台检查"]
 
 
+async def test_handle_missing_cli_says_not_installed(spoken, monkeypatch):
+    """叫到网关上没装的本机 CLI（比如 Claude Code）：不切换，直接说没装。"""
+    spoken["unready"].add("ClaudeCLI")
+    monkeypatch.setattr(llm_router, "_server_config", lambda conn: {})
+    monkeypatch.setattr(llm_router, "cli_missing", lambda config, name: "Claude Code" if name == "ClaudeCLI" else None)
+    assert await handle_call_name(make_conn({"models": {"ClaudeCLI": ["deepseek"]}}), "嗨 deepseek，你好") is None
+    assert spoken["tts"] == ["网关上没装 Claude Code，请到管理后台检查"]
+
+
 async def test_handle_only_call_name_replies_without_model(spoken):
     c = make_conn()
     assert await handle_call_name(c, "Hi, cloud.") is None

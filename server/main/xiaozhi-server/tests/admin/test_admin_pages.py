@@ -633,11 +633,17 @@ def test_claude_cli_new_fields_can_be_added(cfg_path):
     assert pages.save_claude_cli({"progress_interval_seconds": "0"}, merged(cfg_path), cfg_path)  # 0 表示关闭
 
 
-def test_describe_call_names_defaults(cfg_path):
+def test_describe_call_names_defaults(cfg_path, monkeypatch):
+    from core.providers.llm.claude_cli import claude_cli
+
+    monkeypatch.setattr(claude_cli, "find_claude_cli", lambda configured=None: "/usr/local/bin/claude")
     d = pages.describe_call_names(merged(cfg_path))
     assert d["enabled"] is True and d["default"] == "ClaudeCLI"
     assert [m["entry"] for m in d["models"]] == ["ClaudeCLI"] and "cloud" in d["models"][0]["aliases"]
-    assert d["models"][0]["ready"] is True
+    assert d["models"][0]["ready"] is True and d["models"][0]["missing"] == ""
+    monkeypatch.setattr(claude_cli, "find_claude_cli", lambda configured=None: None)   # 网关上没装：卡片标红
+    m = pages.describe_call_names(merged(cfg_path))["models"][0]
+    assert m["ready"] is False and m["missing"] == "Claude Code"
     assert [t["entry"] for t in d["targets"]] == ["ClaudeCLI"]  # API 厂商都还没填 Key，不能选
 
 
