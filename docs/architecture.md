@@ -319,13 +319,41 @@ sequenceDiagram
 | 网关 `data/` | `device_homes.json`、`device_prefs.json`、`device_lists.json`、`voiceprints.json` | 每台设备的住宅地址、儿童/翻译模式、清单、家人声纹（192 维向量，不存录音） |
 | 网关 `data/photos/` | 拍照问答、形象、相册上传的照片 | 7 天后删，清除聊天记录时一起删 |
 | 网关 `models/voiceprint/` | `3dspeaker_campplus_zh-cn_16k.onnx` | 声纹模型（不在仓库里，手动下载到这里） |
+| 网关 `data/` | `admin_brand.json`、`.admin-sessions-kept.json` | 后台的名称、图标、仓库链接；勾了「保持登录」的会话（只存令牌的 SHA-256，0600） |
+| 网关 `data/dsh/` | `voice.patch.yml`、`home/` | DSH 的模型、思考档位、人设覆盖；DSH 自己的会话记录（DSH_HOME） |
+| 网关 `~/.local/dsh`、`~/.local/node24` | DSH 和它要的 Node 24 | 用户目录里装，不动系统的 Node |
+| 设备 `~/.local/share/thinksmart-client/mijia/settings.json` | `favorites` | 首页常用设备（最多 8 个） |
 | 浏览器 localStorage | `xhub-ui`、`xhub-tables` | 网关后台的界面偏好、每个表格的列宽和顺序 |
 
 ### 设备接口（/kiosk/*，只接受经隧道来的本机请求）
 
 `/kiosk/asr`、`/kiosk/tts`、`/kiosk/llm`、`/kiosk/chat/*`、`/kiosk/reports`、`/kiosk/billing`（原有），
 `/kiosk/geocode`、`/kiosk/home`、`/kiosk/today`、`/kiosk/prefs`、`/kiosk/lists`、`/kiosk/photo/*`、`/kiosk/voiceprint/*`（这一轮加的）。
+后台不用登录就能看的只有 `/admin/api/state`（要不要设密码、名称图标、在线设备数）、`/admin/api/brand` 和 `/admin/favicon`。
 手机用的两个页面 `/photo/<令牌>`、`/lists/<令牌>` 在局域网里谁都能打开，令牌（128 位随机）就是凭证。
+
+## 11. 后台的设备状态和 DSH
+
+设备只在对话时连着 WebSocket，说完就断开，所以后台不能按「连着」算在线。设备每 10 秒查一次待汇报（`/kiosk/reports`），顺便带上客户端版本，网关记下最近一次的时间（`core/admin/presence.py`）：连着 WebSocket 是对话中，35 秒内有心跳是待机，再久是离线。
+
+DSH 没有常驻进程：每句话起一个 `dsh --profile headless`，用 `--session-id` 接着这台设备上一轮的对话。
+
+```mermaid
+sequenceDiagram
+    participant D as 设备
+    participant G as 网关 dsh_cli
+    participant H as dsh 进程
+    participant A as DeepSeek API
+    D->>G: 嗨 DSH，工作目录里有什么
+    G->>G: 呼名切到 DshCLI，写 voice.patch.yml
+    G->>H: dsh --profile headless --patch … --json --session-id 上一轮
+    H->>A: 对话和工具调用（读文件、搜索）
+    A-->>H: 回答
+    H-->>G: NDJSON：session、tool_call、text、final
+    G-->>D: 填充语「好的，我想想」，然后念回答
+```
+
+一轮约 6 秒（启动 node 约 2 秒，加上模型和工具）；Key 用后台「API Key → DeepSeek」的，每轮现读。打断时结束进程，DSH 把这一轮记成中断，下一句照样接着。
 
 ## 硬件限制
 

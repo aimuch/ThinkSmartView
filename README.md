@@ -36,10 +36,19 @@
 | 场景、留言、清单、电台、助眠声 | `daily.py`、`media.py`、`server/…/core/utils/device_lists.py` | 都可以直接说；清单能在手机上看 |
 | 定时任务、主动告警、翻译模式 | `client/thinksmart_client/app.py` | 「每天早上七点告诉我要不要带伞」；米家漏水告警；「帮我们中英互译」 |
 | 家人声音、断网兜底 | `server/…/core/utils/local_voiceprint.py`、`client/thinksmart_client/offline.py` | 设置 →「家人声音」录名字和三句话；网关连不上时也能调音量、报时、开关灯 |
-| 网关后台界面 | `server/…/core/admin/static/index.html` | 侧栏「界面」：主题、宽度、侧栏、菜单顺序；表格可排序、拖列、调列宽、拖行 |
+| 网关后台界面 | `server/…/core/admin/static/index.html` | 侧栏底部账号菜单 →「界面」：主题、宽度、侧栏、菜单顺序；表格可排序、拖列、调列宽、拖行 |
+| 后台登录、状态、工作原理 | `server/…/core/admin/`（`brand.py`、`presence.py`） | 登录页可保持登录 30 天；账号菜单里改密码、退出登录、改名称和图标（麦穗、表情或上传图片，浏览器标签图标跟着换）、填自己的仓库链接；状态页按设备心跳显示待机/对话中/离线，有 24 小时对话量、今天的费用、拓扑；工作原理画成六步路径 |
+| DSH（DeepSeek Harness） | `server/…/core/agent/dsh_session.py`、`core/providers/llm/dsh_cli/` | 后台「大模型 → 本地 CLI 与智能体」选 DSH：用 DeepSeek 的 Key，在网关上读文件、做事；说「嗨 DSH」叫它。网关上要装 `@deepseek-ai/dsh` 和 Node 24 |
+| 看图模型 12 家 | `server/…/core/agent/photo_ask.py` | DeepSeek V4.1 Flash（沿用大模型的 Key）、智谱、千问、豆包、Kimi、阶跃、硅基流动、OpenAI、Gemini、Claude、Ollama、自定义 |
+| 本地和局域网服务 | `server/…/core/admin/` | Ollama、LM Studio 等可「读取模型列表」；语音识别和合成可接局域网里的 OpenAI 兼容服务（Speaches、Kokoro-FastAPI） |
+| 首页常用设备 | `client/web/v2/home.js` | 家居页长按磁贴放到首页，首页轻点开关；叫醒时家居页自动收起 |
+| 没网时换 Wi‑Fi、USB 线直连 | `client/web/v2/app.js`、`system/usbnet/` | 没连上网络时首页顶部提示「换 Wi‑Fi」；USB 线接电脑，电脑自动拿到 172.16.42.x，`ssh ubuntu@172.16.42.1` |
 | 语音识别调优 | 服务器的 `data/.config.yaml` | X-ASR 精度版、整句识别（不按停顿分段）；对比方法和结果见 [scripts/asr-eval/](scripts/asr-eval/README.md) |
 
 ## 第三方
 
 - 米家扫码登录、请求签名、MIoT 规格处理参考 [MenuBarMijia](https://gitlab.com/jryang1997/MenuBarMijia)（MIT，jryang1997）改写；客户端测试用了它的 `Tests/Fixtures/miot_golden.json`。
 - 二维码：qrcode.js（Kazuhiko Arase，MIT），在 `client/web/v2/vendor/`。
+- USB 网络的做法参考 [jethac/lenovo-thinksmart-view](https://github.com/jethac/lenovo-thinksmart-view)（MIT）。
+- 网关后台的动效时长和缓动曲线参考 [Arc Library](https://github.com/kuratlielia/arc-library) 的 motion tokens（MIT）。
+- Grok Bot 改走 Cursor 后台发送的字段定义参考上游 issue #4 里网友的分析和 [grok-bot-cli#166](https://github.com/ScriptedAlchemy/grok-bot-cli/pull/166)。
