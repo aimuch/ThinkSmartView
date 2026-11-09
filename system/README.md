@@ -8,7 +8,8 @@
 
 - 语音客户端 [xiaozhi-thinksmart-client](https://github.com/justhalfbit/xiaozhi-thinksmart-client)：唤醒、对话界面、睡眠时段、亮度、在线更新；
 - 小智网关 [xiaozhi-hub-server](https://github.com/justhalfbit/xiaozhi-hub-server)：本机语音识别，接各家大模型和语音合成，带网页管理后台；
-- 设备修复：两颗麦克风、扬声器、屏幕熄屏和接近唤醒、WiFi 稳定性、GPU 白屏/卡死补丁等。
+- 设备修复：两颗麦克风、扬声器、屏幕熄屏和接近唤醒、WiFi 稳定性、GPU 白屏/卡死补丁等；
+- 前置摄像头：作为普通摄像头 `/dev/video10` 使用，也能用 libcamera 拍照（最高 2600×1960）。来自上游 PR #7（sulaymanyf），见 [camera/README.md](camera/README.md)。
 
 目前界面和唤醒词都是中文。
 
@@ -908,7 +909,7 @@ tar tf userdata.tar | head -20
 已知限制：
 
 - 首次开机不连网也能用屏幕配网；语音识别在本机，大模型和语音合成（默认 Edge TTS）要联网。
-- 摄像头不能用（上游也还在研究）。
+- 摄像头要单独装（`sudo sh image/device-setup.sh camera`，会写 /boot 的设备树，装完重启）；从程序打开到出画面要 1～2 秒；颜色用原厂标定的一组色彩矩阵，不分光源，也没做镜头暗角校正。
 - 刷完后的系统不能用 USB 线登录，只能走 WiFi（见[刷完后的 USB 网络](#刷完后的-usb-网络)）。
 - 为了禁止双指缩放，屏幕只接收第一根手指。用屏幕键盘两指交替快速打字时，第一根手指还没抬起、第二根就按下，第二下会丢掉，少一个字。输 WiFi 密码时慢一点，一次一指。
 - 镜像里带的 GPU 固件、WiFi/蓝牙固件来源和上游相同（照上游做法）。
@@ -936,6 +937,7 @@ tar tf userdata.tar | head -20
 | `update/` | 在线更新（语音客户端和系统层） |
 | `mesa/` | 补丁版 Mesa（GPU 白屏、卡死修复）的构建脚本和补丁 |
 | `codec-dmic/`、`kernel/` | 第二颗麦克风的驱动和设备树补丁，以及构建它用的内核环境 |
+| `camera/` | 前置摄像头（上游 PR #7）：传感器驱动（GPL-2.0）、设备树、libcamera 补丁和调校文件、`/dev/video10` 桥接服务 |
 | `zram/` | zram 压缩内存 |
 
 本仓库以 MIT 许可发布，见 [LICENSE](LICENSE)。

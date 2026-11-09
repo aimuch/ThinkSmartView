@@ -898,7 +898,7 @@ Compared with the upstream image, besides dropping the Plasma desktop and bootin
 Known limitations:
 
 - Wi-Fi can be set up on the screen without a network on first boot; speech recognition runs on the device, while the LLM and text-to-speech (Edge TTS by default) need the internet.
-- The camera doesn't work (upstream is still researching it).
+- The front camera is installed separately (`sudo sh image/device-setup.sh camera`, writes the DTB in /boot, reboot afterwards); see camera/README.md (upstream PR #7).
 - The flashed system can't be reached over a USB cable, only over Wi-Fi (see [USB network after flashing](#usb-network-after-flashing)).
 - To block pinch zoom the screen only takes the first finger. When typing fast on the on-screen keyboard with two alternating fingers, a second finger that lands before the first one lifts is dropped, losing a character. Type Wi-Fi passwords slowly, one finger at a time.
 - The GPU, Wi-Fi and Bluetooth firmware in the image come from the same sources as upstream's (following upstream).
