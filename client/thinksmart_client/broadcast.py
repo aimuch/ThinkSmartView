@@ -22,7 +22,8 @@ STEP_MINUTES = 15
 WAIT_MAX = 30 * 60      # seconds a broadcast waits for the device to be free
 TOMORROW_FROM = 14      # broadcasts from 14:00 on are about tomorrow
 MORNING_UNTIL = 12      # broadcasts before noon may add today's reminders and headlines
-TAG = re.compile(r'^【([^】]{1,20})】')
+# the hub's echo of the text (stt) drops the leading 【, the stored conversation keeps it
+TAG = re.compile(r'^【?([^【】]{1,20})】')
 
 DEFAULT = {'enabled': False, 'times': ['07:30'], 'days': 'daily', 'reminders': True, 'news': False}
 

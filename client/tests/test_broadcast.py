@@ -72,6 +72,7 @@ def test_request_text_and_tag():
     evening = bc.request_text('21:00', s, '青浦区')
     assert evening.startswith('【天气播报 21:00】') and '明天的天气' in evening
     assert bc.tag_of(morning) == '早安播报 07:30' and bc.tag_of(evening) == '天气播报 21:00'
+    assert bc.tag_of(morning[1:]) == '早安播报 07:30'   # as the hub echoes it back
     assert bc.tag_of('【重要】明天开会') is None and bc.tag_of('明天下雨吗') is None
     assert '工作日' in bc.describe({**s, 'days': 'workdays'}) and bc.describe(bc.normalize(None)) == '天气播报关着'
 

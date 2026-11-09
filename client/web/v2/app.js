@@ -1337,8 +1337,12 @@ function fmtTime(t) {
 
 // A reply grows sentence by sentence; the text just shows as it is (no per-sentence highlight)
 // a weather broadcast's request (broadcast.py): shown as a small label, not as something the user said
-const broadcastTag = m => m.role === 'user' && ((/^【([^】]{1,20})】/.exec(m.text || '') || [])[1] || '').includes('播报')
-  ? /^【([^】]{1,20})】/.exec(m.text)[1] : null;
+// (the hub's echo drops the leading 【; the conversation loaded back from the hub keeps it)
+const BROADCAST_TAG = /^【?([^【】]{1,20})】/;
+const broadcastTag = m => {
+  const tag = m.role === 'user' && (BROADCAST_TAG.exec(m.text || '') || [])[1];
+  return tag && tag.includes('播报') ? tag : null;
+};
 function fillMsg(el, m) {
   const tag = broadcastTag(m);
   if (tag) { el.innerHTML = `${tag.startsWith('早安') ? '☀' : '⛅'} ${esc(tag)}`; return; }
