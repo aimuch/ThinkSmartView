@@ -200,6 +200,8 @@ async def test_newer_question_while_reopening_keeps_the_mic_closed():
 
 def test_linear_canceller_removes_echo_and_keeps_the_voice():
     from thinksmart_client.speex_aec import LinearAec
+    if LinearAec is object:
+        pytest.skip('needs libspeexdsp (brew install speexdsp)')
     rng = np.random.default_rng(1)
     rate, n = 16000, 16000 * 12
     far = rng.normal(0, 0.1, n).astype(np.float32)

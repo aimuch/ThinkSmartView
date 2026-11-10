@@ -23,7 +23,7 @@ rsync -a --exclude .venv --exclude data/ --exclude models --exclude tmp/ server/
 ssh andy@10.10.10.224 'cd ~/hub-test/main/xiaozhi-server && PYTHONPATH=$HOME/hub-test-deps ~/xiaozhi-hub-server/main/xiaozhi-server/.venv/bin/python -m pytest -q tests --ignore=tests/core/utils/test_current_time.py'
 ```
 
-已知：`test_missing_packages_real_providers`（测试环境缺 psutil）和 `system/update/test_system_layer.py::test_make_release_carries_the_system_layer`（它把 system/ 当独立仓库克隆）在原作者的代码上也失败。
+已知：`test_missing_packages_real_providers`（测试环境缺 psutil）在原作者的代码上也失败。客户端测试在没装 libspeexdsp 的 Mac 上也能跑（`client/tests/conftest.py` 替身），只跳过回声消除那一个；要跑它先 `brew install speexdsp`。
 
 ## 2. 发布客户端（小麦）和系统层（小麦系统）
 

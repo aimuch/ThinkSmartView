@@ -53,3 +53,25 @@ def test_two_samples(tmp_path, monkeypatch):
 
 def test_levels():
     assert [perf.level(x) for x in (None, 40, 55, 69.9, 70)] == [None, 'ok', 'warn', 'warn', 'hot']
+
+
+def test_brief_remeasures_when_the_last_sample_is_old(tmp_path, monkeypatch):
+    """语音问温度：性能页一小时前关了，上一次读太旧，不拿这一小时的平均，重新量 0.5 秒。"""
+    proc, thermal = fake(tmp_path, 100, 0)
+    monkeypatch.setattr(perf, 'PROC', proc)
+    monkeypatch.setattr(perf, 'THERMAL', thermal)
+    monkeypatch.setattr(perf, 'SYS_CPU', tmp_path / 'nocpu')
+    monkeypatch.setattr(perf, 'GPU', tmp_path / 'nogpu')
+    monkeypatch.setattr(perf.os, 'cpu_count', lambda: 1)
+    now = [10.0]
+    monkeypatch.setattr(perf.time, 'monotonic', lambda: now[0])
+    sleeps = []
+    monkeypatch.setattr(perf.time, 'sleep', lambda s: (sleeps.append(s), now.__setitem__(0, now[0] + s)))
+    p = perf.Perf()
+    p.sample()
+    now[0] += 3600
+    say, s = p.brief()
+    assert sleeps == [0.5] and 'CPU' in say
+    now[0] += 2                                  # 页面开着、刚读过：直接用
+    p.brief()
+    assert sleeps == [0.5]

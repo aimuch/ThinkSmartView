@@ -16,7 +16,7 @@ OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
 [[ -z "$(git -C "$ROOT" status --porcelain -- client system)" ]] \
-  || { echo "commit the client and image changes first" >&2; exit 1; }
+  || { echo "commit the client and system changes first" >&2; exit 1; }
 
 python3 "$ROOT/system/update/make-release.py" "$ROOT/client" "$OUT" \
   --system "$ROOT/system" "$@"

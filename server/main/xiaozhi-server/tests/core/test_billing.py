@@ -92,6 +92,11 @@ def test_record_and_summary(usage_db):
     assert s["unpriced"] == ["unknown-model"]
     assert {r["key"] for r in s["devices"]} == {"dev1", "dev2"}
     assert {r["key"] for r in s["purposes"]} == {"summary", "chat"}
+    # 设备设置页和状态页用的 brief：同样的数，不算整份 summary
+    b = billing.brief({})
+    assert {k: b[k] for k in ("today", "month", "total", "quota", "currencies", "unpriced")} == \
+        {k: s[k] for k in ("today", "month", "total", "quota", "currencies", "unpriced")}
+    assert b["tokens_today"] == s["tokens"]["today"]
 
 
 def test_admin_test_is_not_billed(usage_db):

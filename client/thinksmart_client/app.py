@@ -780,7 +780,11 @@ class Client:
         tasks = list(self.cfg.get('tasks') or [])
         if len(tasks) >= 20:
             raise ValueError('最多 20 个定时任务，先删掉一个')
-        task = {'id': f't{int(time.time() * 1000)}', 'time': hhmm, 'days': days, 'prompt': prompt[:300]}
+        # 毫秒时间戳做 id；同一毫秒加两个（一句话里调两次工具）会重复，删一个就把两个都删了：往后挪到没用过的
+        taken, n = {t['id'] for t in tasks}, int(time.time() * 1000)
+        while f't{n}' in taken:
+            n += 1
+        task = {'id': f't{n}', 'time': hhmm, 'days': days, 'prompt': prompt[:300]}
         self.cfg['tasks'] = tasks + [task]
         config.save(tasks=self.cfg['tasks'])
         self.events.publish('tasks', self.tasks_view())

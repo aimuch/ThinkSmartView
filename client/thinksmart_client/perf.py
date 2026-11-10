@@ -16,6 +16,7 @@ GPU = Path('/sys/class/devfreq/1c00000.gpu')
 NET_IFACE = 'wlan0'
 TOP = 6
 HISTORY = 30                 # 曲线上留几个点（每 2 秒一个：一分钟）
+FRESH_S = 5                  # 语音问温度时，上一次读比这更早就重新量一次（brief）
 CLK = os.sysconf('SC_CLK_TCK') if hasattr(os, 'sysconf') else 100
 PAGE = os.sysconf('SC_PAGE_SIZE') if hasattr(os, 'sysconf') else 4096
 
@@ -200,8 +201,10 @@ class Perf:
 
     def brief(self):
         """一句话（语音用）：CPU、最热温度、内存，都正常或哪里偏高。"""
+        # 上一次读是很久以前（性能页早关了）或从没读过：占用和进程会是这段时间的平均，先读一次、隔一下再读
+        fresh = self.prev is not None and time.monotonic() - self.prev[0] < FRESH_S
         s = self.sample()
-        if not s['cpu']['history']:          # 第一次读没有占用：隔一下再读一次
+        if not fresh:
             time.sleep(0.5)
             s = self.sample()
         mem = s['mem']

@@ -8,6 +8,8 @@ set -e
 name=$1 seconds=$2
 TS="$(cd "$(dirname "$0")/../../.." && pwd)/thinksmart-ubuntu-image/ts.sh"
 [ -x "$TS" ] || TS="$(cd "$(dirname "$0")/../../../.." && pwd)/thinksmart-ubuntu-image/ts.sh"
+# this monorepo: the image repository is system/ next to client/
+[ -x "$TS" ] || TS="$(cd "$(dirname "$0")/../../.." && pwd)/system/ts.sh"
 out="${WAKE_EVAL_DATA:-$HOME/thinksmart-wake-eval}/real"
 mkdir -p "$out"
 "$TS" "sudo systemctl stop thinksmart-client; echo recording $seconds s; \

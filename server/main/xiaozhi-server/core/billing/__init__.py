@@ -235,8 +235,9 @@ def summary(config=None) -> dict:
     q = cfg['quota']
     cur = q.get('currency') or 'CNY'
     since = (datetime.date.fromisoformat(day) - datetime.timedelta(days=29)).isoformat()
+    today, this_month = d.spent(day=day), d.spent(month=month)
     return {
-        'today': d.spent(day=day), 'month': d.spent(month=month), 'total': d.spent(),
+        'today': today, 'month': this_month, 'total': d.spent(),
         'tokens': {'today': d.totals('day = ?', (day,)), 'month': d.totals('month = ?', (month,)), 'total': d.totals()},
         'days': d.by('day', 'day >= ?', (since,), limit=60),
         'months': d.by('month', limit=24),
@@ -244,7 +245,7 @@ def summary(config=None) -> dict:
         'devices': d.by('device', 'month = ?', (month,)),
         'purposes': d.by('purpose', 'month = ?', (month,)),
         'unpriced': d.unpriced_models(),
-        'quota': {**q, 'used_today': d.spent(day=day).get(cur, 0), 'used_month': d.spent(month=month).get(cur, 0)},
+        'quota': {**q, 'used_today': today.get(cur, 0), 'used_month': this_month.get(cur, 0)},
         'this_day': day, 'this_month': month, 'currencies': pricing.CURRENCIES,
         'settings': {k: cfg[k] for k in ('timezone', 'holidays', 'workdays', 'count_claude_code')},
         'prices': pricing.rules(cfg), 'prices_default': not cfg['prices'],
@@ -252,7 +253,15 @@ def summary(config=None) -> dict:
 
 
 def brief(config=None) -> dict:
-    """What the device's settings page shows."""
-    s = summary(config)
-    return {k: s[k] for k in ('today', 'month', 'total', 'quota', 'currencies', 'unpriced')} | \
-        {'tokens_today': s['tokens']['today']}
+    """What the device's settings page (and the admin status page) shows: only these few sums, not the
+    whole summary() with its per-day / model / device breakdowns."""
+    cfg = settings(config)
+    d = db()
+    day, month = _today(cfg)
+    q = cfg['quota']
+    cur = q.get('currency') or 'CNY'
+    today, this_month = d.spent(day=day), d.spent(month=month)
+    return {'today': today, 'month': this_month, 'total': d.spent(),
+            'quota': {**q, 'used_today': today.get(cur, 0), 'used_month': this_month.get(cur, 0)},
+            'currencies': pricing.CURRENCIES, 'unpriced': d.unpriced_models(),
+            'tokens_today': d.totals('day = ?', (day,))}

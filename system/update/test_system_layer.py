@@ -333,13 +333,16 @@ def test_make_release_carries_the_system_layer(tmp_path):
     """make-release.py --system: one manifest with both, the updater bundled for old devices, and a
     VERSION that didn't move with changed files stops it."""
     img = tmp_path / 'img'
-    # without the repository's own system-v* tags: this test makes its own
-    subprocess.run(['git', 'clone', '-q', '--no-tags', str(REPO), str(img)], check=True)
-    # this branch's uncommitted work as it would be committed
-    for f in subprocess.run(['git', '-C', str(REPO), 'ls-files', '-mo', '--exclude-standard'],
-                            capture_output=True, text=True, check=True).stdout.split():
-        (img / f).parent.mkdir(parents=True, exist_ok=True)
-        (img / f).write_bytes((REPO / f).read_bytes())
+    # a fresh repository with this directory's files as they would be committed (tracked plus this
+    # branch's uncommitted work), without the repository's own system-v* tags: this test makes its own.
+    # Copied rather than cloned: in the monorepo this directory is system/, not a repository's root.
+    files = subprocess.run(['git', '-C', str(REPO), 'ls-files', '-co', '--exclude-standard'],
+                           capture_output=True, text=True, check=True).stdout.splitlines()
+    for f in files:
+        if (REPO / f).is_file():
+            (img / f).parent.mkdir(parents=True, exist_ok=True)
+            (img / f).write_bytes((REPO / f).read_bytes())
+    subprocess.run(['git', 'init', '-q', str(img)], check=True)
     git = lambda *a: subprocess.run(['git', '-C', str(img), *a], check=True, capture_output=True)
     git('add', '-A')
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'wip', '--allow-empty')

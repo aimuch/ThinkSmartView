@@ -87,6 +87,20 @@ def test_tasks_add_due_and_run(tmp_path, monkeypatch):
     asyncio.run(run())
 
 
+def test_two_tasks_in_the_same_millisecond_get_their_own_ids(tmp_path, monkeypatch):
+    """一句话里加两个定时任务（同一毫秒）：id 不能一样，否则删掉「一次」的那个会把另一个也删了。"""
+    c = make_client(tmp_path, monkeypatch)
+    monkeypatch.setattr(app.time, 'time', lambda: 1_700_000_000.0)
+
+    async def run():
+        a = await c.task_add('7:00', '查天气', 'workdays')
+        b = await c.task_add('21:30', '提醒我关窗', 'once')
+        assert a['id'] != b['id']
+        await c._run_task(b)
+        assert [x['id'] for x in c.tasks_view()['tasks']] == [a['id']]
+    asyncio.run(run())
+
+
 def test_alert_from_a_leak_sensor(tmp_path, monkeypatch):
     c = make_client(tmp_path, monkeypatch)
     card = {'id': 'k1', 'name': '厨房水浸传感器', 'online': True, 'feats': {'leak': {}}, 'values': {'leak': False}}

@@ -43,12 +43,16 @@ def blanker(tmp_path, monkeypatch):
         DIM = ib.DIM_BRIGHTNESS
 
         def level(self):
-            return int(backlight.read_text())
+            # a plain file stands in for sysfs: the blanker's write_text truncates before it writes,
+            # so a read in between sees '' (the real backlight file never does)
+            while not (text := backlight.read_text().strip()):
+                time.sleep(0.01)
+            return int(text)
 
         def blanked_within(self, seconds):
             end = time.monotonic() + seconds
             while time.monotonic() < end:
-                if int(backlight.read_text()) == ib.BLANK_BRIGHTNESS:
+                if self.level() == ib.BLANK_BRIGHTNESS:
                     return True
                 time.sleep(0.1)
             return False
