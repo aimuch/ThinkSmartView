@@ -85,7 +85,7 @@ function devTile(c) {
   const api = window.miApi, s = c.state || {};
   const sw = c.controls && c.controls.power && c.online ? `<span class="d-sw${api.isOn(c) ? ' on' : ''}"></span>` : '';
   const bars = [];
-  if (s.brightness !== undefined) bars.push(`<div class="d-bar"><i style="transform:scaleX(${(s.brightness || 0) / 100})"></i></div>`);
+  if (s.brightness !== undefined && api.isOn(c)) bars.push(`<div class="d-bar"><i style="transform:scaleX(${(s.brightness || 0) / 100})"></i></div>`);
   // 第一行图标和名字（名字要看得全），第二行状态和开关
   return `<button class="d-dev${api.isOn(c) ? ' on' : ''}${c.online ? '' : ' off'}" data-dev="${esc(c.id)}"><div class="dd-r"><span class="dd-ic">${api.icon(c.kind, 20)}</span>` +
     `<b>${esc(c.name)}</b></div><div class="dd-r"><span class="dm${api.isOn(c) ? ' d-ok' : ''}">${esc(c.online ? c.summary : '离线')}</span>${sw}</div>${bars.join('')}</button>`;
