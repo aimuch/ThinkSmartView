@@ -91,3 +91,23 @@ def apply_voice(tts, device: str):
         tts.voice = KIDS_VOICE_EDGE
         return True
     return False
+
+
+def speaker_voice(conn, speaker: str) -> bool:
+    """家人声音认出是孩子（名字带「（孩子）」）时，这一句的回答换成童声；换回大人说话时恢复原来的声音。
+    只换 Edge TTS（和儿童模式的童声一样）。这台设备的儿童模式里选了「大人的声音」就不换。返回换没换。"""
+    tts = getattr(conn, "tts", None)
+    if tts is None or not type(tts).__module__.endswith(".edge") or not hasattr(tts, "voice"):
+        return False
+    device = getattr(conn, "device_id", None) or ""
+    with _lock:
+        k = (_load().get(device) or {}).get("kids") or {}
+    if k.get("voice") == "adult":
+        return False
+    if getattr(conn, "_base_voice", None) is None:
+        conn._base_voice = tts.voice          # 连接建立时定的声音（儿童模式开着时已经是童声）
+    want = KIDS_VOICE_EDGE if str(speaker or "").endswith("（孩子）") else conn._base_voice
+    if tts.voice == want:
+        return False
+    tts.voice = want
+    return True

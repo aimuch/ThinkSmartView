@@ -368,6 +368,14 @@ async def send_stt_message(conn: "ConnectionHandler", text):
                 # 保存说话人信息到conn对象
                 if "speaker" in parsed_data:
                     conn.current_speaker = parsed_data["speaker"]
+                    # [xiaozhi-hub] 认出是孩子：这一句的回答用童声（core/utils/device_prefs.py）
+                    try:
+                        from core.utils import device_prefs
+
+                        if device_prefs.speaker_voice(conn, conn.current_speaker):
+                            conn.logger.bind(tag=TAG).info(f"说话人 {conn.current_speaker}：换成 {conn.tts.voice}")
+                    except Exception as e:
+                        conn.logger.bind(tag=TAG).warning(f"按说话人换声音没成: {e}")
     except (json.JSONDecodeError, TypeError):
         # 如果不是JSON格式，直接使用原始文本
         display_text = text
