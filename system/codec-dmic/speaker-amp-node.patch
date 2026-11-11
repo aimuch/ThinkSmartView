@@ -1,0 +1,39 @@
+Speaker amplifier node (upstream thinksmart-ubuntu-image issue #3, after jethac/lenovo-thinksmart-view
+0303): the TAS5782M is the codec of the quaternary MI2S link, fed digitally by the ADSP. Drop its
+auxiliary-device entry and the route from the WCD headphone output (not wired to it on this board; with
+it DAPM powers the headphone path whenever the speaker plays). Drop pdn-gpios (GPIO 44: the vendor kernel
+never drives it and the amplifier answers on I2C with it low; this image's driver gets it as optional)
+and the unused mute-gpio / fault-gpio. Applied by camera/build.sh on top of the stock DTS.
+
+--- a/arch/arm64/boot/dts/qcom/apq8053-lenovo-cd-18781y.dts
++++ b/arch/arm64/boot/dts/qcom/apq8053-lenovo-cd-18781y.dts
+@@ -249,14 +249,10 @@
+ &i2c_1 {
+ 	status = "okay";
+ 
+-	speaker_amp: tas5782m@49 {
++	speaker_amp: amplifier@49 {
+ 		compatible = "ti,tas5782m";
+ 		reg = <0x49>;
+ 
+-		pdn-gpios = <&tlmm 44 GPIO_ACTIVE_LOW>;
+-		/* The next two GPIOs are connected but unused by the driver */
+-		mute-gpio = <&tlmm 0 GPIO_ACTIVE_HIGH>;
+-		fault-gpio = <&tlmm 45 GPIO_ACTIVE_HIGH>;
+ 		pvdd-supply = <&speaker_amp_pvdd>;
+ 
+ 		sound-name-prefix = "Speaker Amp";
+@@ -370,13 +366,10 @@
+ 
+ 	audio-routing =
+ 		"Speaker", "Speaker Amp OUT",
+-		"Speaker Amp DAC IN", "HPH_R",
+ 		"DMIC1", "MIC BIAS Internal1",
+ 		"DMIC1", "Digital Mic1",
+ 		"DMIC2", "MIC BIAS Internal1",
+ 		"DMIC2", "Digital Mic2";
+-
+-	aux-devices = <&speaker_amp>;
+ 
+ 	status = "okay";
+ 

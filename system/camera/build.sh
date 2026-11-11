@@ -3,7 +3,8 @@
 # kbuild-src (made by ../kernel/build.sh; mounted read-only, nothing in it changes):
 #   - the S5KC505A sensor driver (s5kc505a/)
 #   - v4l2loopback (pinned upstream release), for the /dev/video10 webcam
-#   - the CD-18781Y DTB: the stock one with the DMIC fix (../codec-dmic) plus the camera nodes
+#   - the CD-18781Y DTB: the stock one with the DMIC fix and the speaker amplifier node fix
+#     (../codec-dmic) plus the camera nodes
 #     (apq8053-lenovo-cd-18781y-camera.dtsi). It replaces codec-dmic's DTB on the device.
 # The modules are built out of tree, so they carry the same vermagic as the running kernel.
 # Output: out/s5kc505a.ko, out/v4l2loopback.ko, out/apq8053-lenovo-cd-18781y.dtb (expected.md5)
@@ -35,6 +36,7 @@ cp $K/sound/soc/codecs/msm8916-wcd-digital.c $T/src/sound/soc/codecs/
 cp $K/arch/arm64/boot/dts/qcom/apq8053-lenovo-cd-18781y.dts $T/src/arch/arm64/boot/dts/qcom/
 cp $K/Documentation/devicetree/bindings/sound/qcom,msm8916-wcd-digital-codec.yaml $T/src/Documentation/devicetree/bindings/sound/
 (cd $T/src && patch -s -p1 < /dmic/msm8916-wcd-digital-dmic-clock.patch)
+(cd $T/src && patch -s -p1 < /dmic/speaker-amp-node.patch)   # amplifier node (upstream image issue #3)
 D=$T/src/arch/arm64/boot/dts/qcom
 cp /w/apq8053-lenovo-cd-18781y-camera.dtsi $D/
 printf "\n#include \"apq8053-lenovo-cd-18781y-camera.dtsi\"\n" >> $D/apq8053-lenovo-cd-18781y.dts
