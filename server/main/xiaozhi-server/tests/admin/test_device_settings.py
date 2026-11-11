@@ -102,6 +102,52 @@ async def test_device_page_endpoints(client):
     assert bad.status == 400
     await client.post("/admin/api/device-settings", json={"device": "aa:bb", "model": None})
     assert llm_router.store().get("aa:bb") is None                            # 跟着全局：忘掉记住的
-    await client.post("/admin/api/device-settings/forget", json={"device": "aa:bb"})
+    await client.post("/admin/api/device-settings/forget", json={"device": "aa:bb", "password": "pass-1234"})   # 在线要密码
     d = await (await client.get("/admin/api/device-settings")).json()
     assert [x["device_id"] for x in d["devices"]] == ["cc:dd"] and ds.get("aa:bb") == {}
+
+
+async def test_delete_device(client, tmp_path, monkeypatch):
+    """删除设备（设计画布第 37 块）：只有聊天记录的测试设备删得掉；在线的要管理员密码。"""
+    from core.utils import device_homes, device_lists, device_prefs, local_voiceprint
+
+    for mod, name in ((device_homes, "homes"), (device_prefs, "prefs"), (device_lists, "lists"), (local_voiceprint, "vp")):
+        monkeypatch.setattr(mod, "_path", lambda n=name: str(tmp_path / f"{n}.json"))
+    db = chat_history.db()
+    for t in ("今天天气", "明天呢"):
+        db.insert("weather-test-01", "DeepSeekLLM", "user", t)
+    db.insert("keep-me", "DeepSeekLLM", "user", "你好")
+    device_homes.put("weather-test-01", {"name": "青浦", "latitude": 31.1, "longitude": 121.1})
+    device_prefs.put_kids("weather-test-01", {"enabled": True, "age": 5})
+    device_lists.change("weather-test-01", "add", "购物", ["牛奶"])
+    assert device_lists.count("weather-test-01") == 1
+    d = await (await client.get("/admin/api/device-settings")).json()
+    assert {x["device_id"] for x in d["devices"]} == {"weather-test-01", "keep-me"}
+    # 离线：不用密码，默认连聊天记录和其它数据一起删，删完列表里没了
+    r = await (await client.post("/admin/api/device-settings/forget", json={"device": "weather-test-01"})).json()
+    assert r["ok"] and r["deleted"] == 2
+    d = await (await client.get("/admin/api/device-settings")).json()
+    assert [x["device_id"] for x in d["devices"]] == ["keep-me"]
+    assert device_homes.get("weather-test-01") is None and device_prefs.kids("weather-test-01") is None
+    assert device_lists.count("weather-test-01") == 0 and db.message_count("keep-me") == 1
+    # 不勾聊天记录：设置删了，记录还在，所以还留在列表里
+    await client.post("/admin/api/device-settings", json={"device": "keep-me", "name": "留着"})
+    await client.post("/admin/api/device-settings/forget", json={"device": "keep-me", "chat": False})
+    assert ds.get("keep-me") == {} and db.message_count("keep-me") == 1
+    # 在线（有新鲜心跳）：没密码、密码错都不删，对了才删；错密码不是 401（页面会当成登录过期）
+    await client.post("/kiosk/reports", json={"device": "aa:bb", "version": "0.1.657"})
+    await client.post("/admin/api/device-settings", json={"device": "aa:bb", "name": "书房"})
+    for body in ({"device": "aa:bb"}, {"device": "aa:bb", "password": "wrong-pass"}):
+        res = await client.post("/admin/api/device-settings/forget", json=body)
+        assert res.status == 403 and ds.name("aa:bb") == "书房"
+    r = await (await client.post("/admin/api/device-settings/forget", json={"device": "aa:bb", "password": "pass-1234"})).json()
+    assert r["ok"] and ds.get("aa:bb") == {}
+
+
+def test_cleared_memory_row_does_not_list_device(tmp_path):
+    db = chat_history.ChatDB(tmp_path / "c.db")
+    db.insert("dev-x", "DeepSeekLLM", "user", "hi")
+    db.set_memory("dev-x", "喜欢猫", "test")
+    assert db.memory_devices() == ["dev-x"]
+    db.clear("dev-x")
+    assert db.memory_devices() == []

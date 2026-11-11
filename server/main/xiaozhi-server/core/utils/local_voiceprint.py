@@ -130,6 +130,14 @@ def remove(device: str, name: str):
         _save(data)
 
 
+def forget(device: str) -> None:
+    """删除设备时用：这台设备录的家人声音全删。"""
+    with _lock:
+        data = _load()
+        if data.pop(device, None) is not None:
+            _save(data)
+
+
 def identify(device: str, samples: np.ndarray):
     """(名字, 相似度) 或 (None, 最高相似度)。"""
     with _lock:

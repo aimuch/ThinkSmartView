@@ -368,6 +368,29 @@
   .bars div { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 1px; opacity: .85; }
   .bars div.peak { background: var(--warn); }
   .btn.danger { color: var(--err); }
+  /* 删除设备确认框（设计画布第 37 块） */
+  .ddlg-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: rgba(2, 6, 23, .55); }
+  .ddlg { width: min(440px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--card); color: var(--text);
+          border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 18px; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); }
+  .ddlg .hd { display: flex; align-items: center; gap: 12px; }
+  .ddlg .hd .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: none;
+                  background: var(--err-soft); color: var(--err); }
+  .ddlg .hd b { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+  .ddlg .did { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); margin: 4px 0 14px 48px; overflow-wrap: anywhere; }
+  .ddlg .list { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .ddlg .row { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border-top: 1px solid var(--line); cursor: pointer; }
+  .ddlg .row:first-child { border-top: 0; cursor: default; }
+  .ddlg .row input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--err); }
+  .ddlg .row .s { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+  .ddlg .keep { font-size: 12.5px; color: var(--muted); margin: 10px 2px 0; line-height: 1.55; }
+  .ddlg .warn { display: flex; gap: 8px; align-items: flex-start; margin-top: 14px; padding: 10px 12px; border-radius: 10px;
+                background: var(--warn-soft); color: var(--warn); font-size: 13px; line-height: 1.55; }
+  .ddlg .pw { margin-top: 12px; } .ddlg .pw label { display: block; font-size: 13px; margin-bottom: 6px; color: var(--muted); }
+  .ddlg .pw .in.bad { border-color: var(--err); } .ddlg .em { font-size: 12.5px; color: var(--err); margin-top: 6px; min-height: 0; }
+  .ddlg .ft { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+  .ddlg .ft .go { background: var(--err); border-color: var(--err); color: #fff; }
+  .ddlg .ft .go:disabled { opacity: .45; cursor: not-allowed; }
+  @media (max-width: 480px) { .ddlg .ft .btn { flex: 1; } }
   .asr-group { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 8px; }
   .dl { margin-top: 8px; } .dl-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-bottom: 4px; }
   .dl-bar i { display: block; height: 100%; background: var(--accent); }
@@ -2278,7 +2301,7 @@ function openDeviceDrawer(id, root) {
       <div class="dv-sec"><div class="t">这台设备的数据</div><div class="body dkv">
         <span>住宅地址</span><b style="font-weight:400">${esc(x.data.home || "没设")}</b><span>儿童模式</span><b style="font-weight:400">${esc(x.data.kids)}</b>
         <span>家人声音</span><b style="font-weight:400">${x.data.voices} 人</b><span>聊天记录</span><b style="font-weight:400">${x.data.messages} 条 · 记忆 ${x.data.memory_chars} 字 <a href="#memory">去看 ›</a></b></div></div>
-      <div class="actions"><span class="result" id="dv-result"></span><button class="btn danger" id="dv-forget">忘掉这台设备</button><button class="btn primary" id="dv-save">保存</button></div>`;
+      <div class="actions"><span class="result" id="dv-result"></span><button class="btn danger" id="dv-forget">删除设备</button><button class="btn primary" id="dv-save">保存</button></div>`;
     const voiceBox = () => {
       const e = engineOf($("dv-engine").value), cur = $("dv-engine").value === ttsSel.entry ? ttsSel.voice : "";
       $("dv-voice-box").innerHTML = e && e.voices.length ? `<select class="in" id="dv-voice">${voiceOptions(e, cur)}</select>`
@@ -2303,12 +2326,54 @@ function openDeviceDrawer(id, root) {
       try { const r = await api("device-settings", payload); toast(r.note); closeDrawer(); await renderDeviceSettings(root); }
       catch (err) { $("dv-result").innerHTML = `<span style="color:var(--err)">${esc(err.message)}</span>`; }
     });
-    $("dv-forget").onclick = (e) => busy(e.target, async () => {
-      if (!confirm("忘掉这台设备？它的名字、单独的设置、记住的模型都删掉（聊天记录不删，在「记忆」页单独清）。设备再连上时会重新出现。")) return;
-      try { await api("device-settings/forget", { device: x.device_id }); toast("已忘掉"); closeDrawer(); await renderDeviceSettings(root); }
-      catch (err) { $("dv-result").innerHTML = `<span style="color:var(--err)">${esc(err.message)}</span>`; }
-    });
+    $("dv-forget").onclick = () => askDeleteDevice(x, async () => { closeDrawer(); await renderDeviceSettings(root); });
   });
+}
+
+// 删除设备确认框（设计画布第 37 块）：逐项列出删什么；在线的要输管理员密码（后端也校验）
+function askDeleteDevice(x, done) {
+  const online = x.state !== "offline", dt = x.data || {};
+  const name = x.name ? `「${x.name}」` : "「没起名字」的设备";
+  const trash = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>';
+  const wrap = document.createElement("div");
+  wrap.className = "ddlg-wrap";
+  wrap.innerHTML = `<div class="ddlg" role="dialog" aria-modal="true" aria-label="删除设备">
+    <div class="hd"><span class="ic">${trash}</span><b>删除${esc(name)}？</b></div>
+    <div class="did">${esc(x.device_id)} · ${{ talking: "对话中", idle: "待机", offline: "离线" }[x.state] || ""}${x.version ? " · 客户端 " + esc(x.version) : ""}</div>
+    <div class="list">
+      <div class="row"><input type="checkbox" checked disabled><div><div>名字、单独设置、记住的模型</div><div class="s">一定会删</div></div></div>
+      <label class="row"><input type="checkbox" id="dd-chat" checked><div><div>聊天记录和记忆</div><div class="s">${dt.messages || 0} 条记录 · 记忆 ${dt.memory_chars || 0} 字 · 拍照问答的照片</div></div></label>
+      <label class="row"><input type="checkbox" id="dd-data" ${online ? "" : "checked"}><div><div>这台设备的其它数据</div><div class="s">住宅地址 ${esc(dt.home || "没设")} · 儿童模式 ${esc(dt.kids || "关")} · 家人声音 ${dt.voices || 0} 人 · 清单 ${dt.lists || 0} 项</div></div></label>
+    </div>
+    <div class="keep" id="dd-keep"></div>
+    ${online ? `<div class="warn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:2px"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><span>这台设备正连着网关。删除后它下一次对话起没有名字，所有设置都跟着全局。</span></div>
+      <div class="pw"><label for="dd-pw">输入管理员密码确认</label><input class="in" id="dd-pw" type="password" autocomplete="current-password"><div class="em" id="dd-err"></div></div>`
+      : '<div class="em" id="dd-err"></div>'}
+    <div class="ft"><button class="btn" id="dd-no">取消</button><button class="btn go" id="dd-go">删除</button></div></div>`;
+  document.body.appendChild(wrap);
+  const q = (id) => wrap.querySelector("#" + id), close = () => { wrap.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  document.addEventListener("keydown", onKey, true);
+  const sync = () => {
+    q("dd-keep").textContent = (q("dd-chat").checked ? "" : "不删聊天记录的话，它还会留在设备列表里。") + "费用统计保留。设备以后再连上，会作为新设备出现。";
+    if (online) q("dd-go").disabled = !q("dd-pw").value;
+  };
+  q("dd-chat").onchange = sync; if (online) { q("dd-pw").oninput = () => { q("dd-pw").classList.remove("bad"); q("dd-err").textContent = ""; sync(); }; }
+  sync();
+  wrap.onclick = (e) => { if (e.target === wrap) close(); };
+  q("dd-no").onclick = close;
+  q("dd-go").onclick = (e) => busy(e.target, async () => {
+    try {
+      const r = await api("device-settings/forget", { device: x.device_id, chat: q("dd-chat").checked, data: q("dd-data").checked,
+                                                       ...(online ? { password: q("dd-pw").value } : {}) });
+      close(); toast(r.deleted ? `已删除设备和 ${r.deleted} 条聊天记录` : "已删除设备"); await done();
+    } catch (err) {
+      q("dd-err").textContent = err.message;
+      if (online) { q("dd-pw").classList.add("bad"); q("dd-pw").select(); }
+    }
+  });
+  if (online) q("dd-pw").onkeydown = (e) => { if (e.key === "Enter" && q("dd-pw").value) q("dd-go").click(); };
+  (online ? q("dd-pw") : q("dd-go")).focus();
 }
 
 // ---------- [xiaozhi-hub] 智能体（设计画布第 18 块）：叫名字派活，做完回来汇报 ----------

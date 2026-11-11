@@ -678,7 +678,7 @@ class AdminHandler:
 
     def _device_summary(self, device: str, merged: dict) -> dict:
         """这台设备在网关上的数据：住宅地址、儿童模式、家人声音、聊天记录。"""
-        from core.utils import device_homes, device_prefs, local_voiceprint
+        from core.utils import device_homes, device_lists, device_prefs, local_voiceprint
 
         home = device_homes.get(device)
         kids = device_prefs.kids(device)
@@ -692,7 +692,8 @@ class AdminHandler:
         except Exception:  # noqa: BLE001
             people = 0
         return {"home": home["name"] if home else "", "kids": f"开 · {kids['age']} 岁" if kids else "关",
-                "voices": people, "messages": count, "memory_chars": memory}
+                "voices": people, "messages": count, "memory_chars": memory,
+                "lists": device_lists.count(device)}
 
     async def handle_device_settings(self, request: web.Request):
         """设备页：见过的每台设备（心跳、连过、存过设置或记录的），各自单独设了什么，以及可选的模型、音色、人设、插件。"""
@@ -771,18 +772,48 @@ class AdminHandler:
         self.logger.bind(tag=TAG).info(f"管理后台改了设备 {device} 的设置：{', '.join(values) or '无'}")
         return self._json({"ok": True, "settings": saved, "note": note})
 
-    async def handle_device_forget(self, request: web.Request):
-        """忘掉这台设备：名字、单独的设置、记住的模型、心跳都删掉（聊天记录在「记忆」页单独清）。"""
-        self._require_login(request)
-        from core.utils import device_settings
+    def _device_online(self, device: str) -> bool:
+        """连着网关，或者心跳还新鲜（设备页显示「待机」「对话中」的那些）。"""
+        connected = self._connected_ids()
+        if device in connected:
+            return True
+        return any(d["device_id"] == device and d["state"] != "offline" for d in presence.snapshot(connected))
 
-        device = str((await self._read_json(request)).get("device") or "")
+    async def handle_device_forget(self, request: web.Request):
+        """删除设备（设计画布第 37 块）：{"device", "chat"?: 默认 true, "data"?: 默认 true, "password"?}。
+        名字、单独设置、记住的模型、心跳一定删；chat 连聊天记录、记忆、拍照问答的照片一起删；
+        data 连住宅地址、儿童/翻译模式和音色偏好、家人声音、清单一起删。费用统计不删。
+        设备在线时必须带管理员密码，这里校验（不只靠页面），错了等 1 秒、什么都不删。"""
+        self._require_login(request)
+        from core.utils import device_homes, device_lists, device_prefs, device_settings, local_voiceprint
+
+        body = await self._read_json(request)
+        device = str(body.get("device") or "")
         if not device:
             return self._error("缺少设备", 400)
+        if self._device_online(device):
+            stored = await self._blocking(config_store.get_password_hash, self.config_path)
+            if not stored or not await self._blocking(auth.verify_password, str(body.get("password") or ""), stored):
+                await asyncio.sleep(1)
+                self.logger.bind(tag=TAG).warning(f"删除在线设备 {device}：管理员密码不对，没有删除")
+                return self._error("密码错误，没有删除", 403)   # 不用 401：页面见 401 会当成登录过期
         await self._blocking(device_settings.forget, device)
         await self._blocking(llm_router.store().forget, device)
         presence.forget(device)
-        return self._json({"ok": True})
+        deleted = 0
+        if body.get("chat", True):
+            online = [c for c in (connections.get(i["session_id"]) for i in connections.snapshot()
+                                  if i["device_id"] == device) if c is not None]
+            merged = await self._blocking(self._merged)
+            deleted = (await self._blocking(chat_history.clear, device, merged, False, online))["deleted"]
+            await self._blocking(photo_ask.clear, device)
+        if body.get("data", True):
+            await self._blocking(device_homes.put, device, None)
+            for mod in (device_prefs, local_voiceprint, device_lists):
+                await self._blocking(mod.forget, device)
+        self.logger.bind(tag=TAG).info(f"管理后台删除了设备 {device}（聊天记录 {deleted} 条"
+                                       f"{'，其它数据' if body.get('data', True) else ''}）")
+        return self._json({"ok": True, "deleted": deleted})
 
     # ---------- [xiaozhi-hub] 智能体页（设计画布第 18 块） ----------
 

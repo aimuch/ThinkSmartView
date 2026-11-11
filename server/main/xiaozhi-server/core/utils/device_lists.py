@@ -57,6 +57,21 @@ def view(device):
         return {"secret": e["secret"], "version": e["version"], "lists": e["lists"]}
 
 
+def count(device) -> int:
+    """这台设备清单里一共几项（只读，不像 view 那样顺手建出默认清单）。"""
+    with _lock:
+        e = _load().get(device) or {}
+    return sum(len(v or []) for v in (e.get("lists") or {}).values())
+
+
+def forget(device) -> None:
+    """删除设备时用：这台设备的清单（连同手机分享链接的密钥）整条删掉。"""
+    with _lock:
+        data = _load()
+        if data.pop(device, None) is not None:
+            _save(data)
+
+
 def by_secret(secret):
     with _lock:
         for device, e in _load().items():

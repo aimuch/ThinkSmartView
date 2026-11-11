@@ -261,7 +261,9 @@ class ChatDB:
         return int(self._exec("SELECT COUNT(*) FROM messages WHERE device=?", (device,)).fetchone()[0])
 
     def memory_devices(self) -> List[str]:
-        rows = self._exec("SELECT device FROM device_memory UNION SELECT DISTINCT device FROM messages").fetchall()
+        # 记忆清空了（只剩防回写的版本号那一行）又没有记录的设备不算：删掉的设备不会因为这一行又冒出来
+        rows = self._exec("SELECT device FROM device_memory WHERE summary != '' "
+                          "UNION SELECT DISTINCT device FROM messages").fetchall()
         return sorted(r[0] for r in rows)
 
     def clear(self, device) -> int:

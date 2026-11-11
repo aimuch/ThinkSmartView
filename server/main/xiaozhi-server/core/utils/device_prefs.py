@@ -84,6 +84,18 @@ def put_translate(device: str, value: dict):
         os.replace(tmp, path)
 
 
+def forget(device: str) -> None:
+    """删除设备时用：这台设备的儿童模式、翻译模式、音色这些偏好整条删掉。"""
+    with _lock:
+        data = _load()
+        if data.pop(device, None) is not None:
+            path = _path()
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+
+
 def apply_voice(tts, device: str):
     """儿童模式要童声时，把这个连接的 Edge TTS 换成童声（其他引擎不动）。"""
     k = kids(device)
