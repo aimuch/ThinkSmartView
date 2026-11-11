@@ -37,24 +37,74 @@ def normalize(setting, changes=None):
     return s
 
 
-def load_usage(today):
+HISTORY_DAYS = 14        # 「最近 7 天」用到 7 天，多留一周
+
+
+def _usage():
     try:
         data = json.loads(USAGE.read_text())
-        if data.get('date') == today:
-            return float(data.get('seconds') or 0)
+        return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
-        pass
+        return {}
+
+
+def load_usage(today):
+    data = _usage()
+    if data.get('date') == today:
+        return float(data.get('seconds') or 0)
     return 0.0
 
 
 def save_usage(today, seconds):
+    """今天的秒数；以前的天数留在 days 里（{日期: 秒}），设置页「最近 7 天」用。"""
+    data = _usage()
+    days = {k: v for k, v in (data.get('days') or {}).items() if isinstance(v, (int, float))}
+    if data.get('date') and data.get('date') != today:
+        days[data['date']] = float(data.get('seconds') or 0)
+    days[today] = round(seconds, 1)
+    days = dict(sorted(days.items())[-HISTORY_DAYS:])
     try:
         USAGE.parent.mkdir(parents=True, exist_ok=True)
         tmp = USAGE.with_suffix('.tmp')
-        tmp.write_text(json.dumps({'date': today, 'seconds': round(seconds, 1)}))
+        tmp.write_text(json.dumps({'date': today, 'seconds': round(seconds, 1), 'days': days}))
         tmp.replace(USAGE)
     except OSError:
         pass
+
+
+def week(today):
+    """最近 7 天（到 today）每天聊了几分钟：[{date, minutes}]，没记录的天是 0。"""
+    data = _usage()
+    days = dict(data.get('days') or {})
+    if data.get('date'):
+        days[data['date']] = float(data.get('seconds') or 0)
+    d = datetime.date.fromisoformat(today)
+    out = []
+    for i in range(6, -1, -1):
+        k = (d - datetime.timedelta(days=i)).isoformat()
+        out.append({'date': k, 'minutes': int(float(days.get(k) or 0) // 60)})
+    return out
+
+
+# 学一学（设计画布第 34 块）：点一个，发一句带标签的文字给模型，模型照着带孩子学。{age} 换成孩子几岁
+LEARN = {
+    'chars': ('认字卡', '和孩子玩认字卡：每次出一个适合{age}岁孩子的常用汉字，调用工具 self_screen_show_card 在屏幕上显示这个大字'
+                        '（标题就是这个字，正文写拼音和一个组词），然后问孩子认不认识、怎么读；孩子说完告诉他对不对，'
+                        '再组一个词，接着出下一个字。一次只出一个字，等孩子回答。'),
+    'poem': ('背古诗', '带孩子背一首适合{age}岁孩子的短古诗：先说诗名和作者，再一句一句念，每念一句让孩子跟着念一遍，'
+                       '等他念完再念下一句；背完夸一句，问他要不要再来一首。'),
+    'math': ('口算', '和孩子玩口算：按{age}岁孩子的水平出一道加减法（小一点的孩子用 10 以内），一次只出一道，等他回答；'
+                     '答对了夸一句再出下一道，答错了用数手指的办法讲一下，再出一道差不多的。'),
+    'why': ('十万个为什么', '给{age}岁的孩子讲一个有意思的科学小知识（比如天为什么是蓝的），三四句讲完，'
+                          '最后问孩子一个简单的问题，等他回答。'),
+}
+
+
+def learn_prompt(kind, age):
+    if kind not in LEARN:
+        raise ValueError('没有这个学习项目')
+    name, text = LEARN[kind]
+    return f'【学习·{name}】' + text.format(age=int(age or 6))
 
 
 def bedtime_now(setting, now):

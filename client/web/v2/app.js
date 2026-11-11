@@ -752,10 +752,25 @@ $('scenesList').addEventListener('click', e => {
 });
 function renderNotes() {
   const notes = (ui.notes && ui.notes.notes) || [];
+  renderNotesCard();
   $('homeNotes').innerHTML = notes.slice(0, 2).map(n => `<div class="sticky" data-read="${esc(n.id)}" role="button"><div class="st-text">` +
     `<b>📝 给${esc(n.to)}的留言</b><p>${esc(n.text)}</p><small>${n.from ? esc(n.from) + ' · ' : ''}${dayText(n.time)} ${hhmm(n.time)} · 点一下念出来</small></div>` +
     `<button class="st-ok" data-done="${esc(n.id)}">知道了</button></div>`).join('');
 }
+// 设置 → 家人 → 留言（设计画布第 34 块）：全部留言，能念、能删
+function renderNotesCard() {
+  const notes = (ui.notes && ui.notes.notes) || [];
+  $('notesCount').textContent = notes.length ? `${notes.length} 条` : '';
+  $('notesList').innerHTML = notes.length ? notes.map(n => `<div class="al"><div class="al-text"><b>${n.from ? esc(n.from) + ' → ' : '→ '}${esc(n.to)}：${esc(n.text)}</b>` +
+    `<span>${dayText(n.time)} ${hhmm(n.time)}</span></div><button class="upd-btn" data-read="${esc(n.id)}">念</button><button class="upd-btn" data-done="${esc(n.id)}">删</button></div>`).join('')
+    : '<p class="opt-note">还没有留言</p>';
+}
+$('notesList').addEventListener('click', e => {
+  const d = e.target.closest('[data-done]');
+  if (d) return dailyPost('notes', { done: d.dataset.done });
+  const r = e.target.closest('[data-read]');
+  if (r) dailyPost('notes', { read: r.dataset.read });
+});
 $('homeNotes').addEventListener('click', e => {
   const d = e.target.closest('[data-done]');
   if (d) { e.stopPropagation(); return dailyPost('notes', { done: d.dataset.done }); }
@@ -895,7 +910,18 @@ function renderKids() {
   $('kidsMin').textContent = k.daily_minutes ? `${k.daily_minutes} 分` : '不限';
   $('kidsBed').textContent = k.bedtime || '不限';
   for (const b of $('kidsVoice').children) b.classList.toggle('on', b.dataset.v === k.voice);
+  const wk = k.week || [], top = Math.max(30, ...wk.map(d => d.minutes));
+  const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  $('weekToday').textContent = `今天 ${k.used_minutes} 分钟`;
+  $('weekBars').innerHTML = wk.map((d, i) => `<div class="wb"><small>${d.minutes || ''}</small><i style="transform:scaleY(${Math.max(.02, d.minutes / top)})"></i>` +
+    `<span>${i === wk.length - 1 ? '今天' : wd[new Date(d.date + 'T12:00').getDay()]}</span></div>`).join('');
 }
+$('learnGrid').addEventListener('click', async e => {
+  const b = e.target.closest('[data-learn]');
+  if (!b || DEMO !== null) return;
+  const r = await postJson('/api/learn', { kind: b.dataset.learn });
+  if (r.ok) $('settings').classList.remove('on'); else toast(r.error || '没开始', 'error');
+});
 async function setKids(body) {
   if (DEMO !== null) return;
   const r = await postJson('/api/kids', body);
@@ -2161,8 +2187,8 @@ const SET_GROUPS = [
             ['net', '网络', '网络', 'WiFi、蓝牙音箱、本机 IP'], ['system', '系统', '系统', '性能、更新、关机']]],
   ['日常', [['alarms', '闹钟和作息', '闹钟作息', '闹钟提醒、睡眠时段、天气播报、定时任务'], ['home', '家居', '家居', '米家、场景口令、主动告警'],
             ['life', '生活', '生活', '清单、电台和助眠声']]],
-  ['家人', [['family', '家人', '家人', '认出是谁，叫得出名字'], ['kids', '孩子和学习', '孩子学习', '儿童模式']]],
-  ['智能', [['voice', '语音', '语音', '唤醒词'], ['agent', '智能体', '智能体', '当前模型、聊天记录和记忆、大模型费用']]],
+  ['家人', [['family', '家人', '家人', '家人声音、留言'], ['kids', '孩子和学习', '孩子学习', '儿童模式、学一学、最近 7 天']]],
+  ['智能', [['voice', '语音', '语音', '唤醒词、回答的声音'], ['agent', '智能体', '智能体', '当前模型、可以叫的、聊天记录、大模型费用']]],
 ];
 const SET_RENAMED = { sleep: 'alarms', cost: 'agent' };
 function setPanes() {
@@ -2196,6 +2222,7 @@ function setPane(name) {
     if (on) b.scrollIntoView({ block: 'nearest' });
   });
   $('setPanel').scrollTop = 0;
+  if (name === 'voice') loadVoice();
   try { localStorage.setItem('setPane', name); } catch (e) {}
   perfMini();
 }
@@ -2221,7 +2248,37 @@ async function loadPerfMini() {
 }
 renderSetNav();
 // 智能体：当前模型，「切换」关掉设置、打开选模型
-function renderAgentModel() { $('agentModel').textContent = ui.models && ui.models.current ? `${modelName()}（新的提问交给它回答）` : '还没连上网关'; }
+// 语音 → 回答的声音：这台设备用哪个音色（网关 /kiosk/voice）；打开「语音」这一类时读一次
+async function loadVoice() {
+  if (DEMO !== null) return;
+  const v = await (await fetch('/api/voice', { cache: 'no-store' })).json().catch(() => ({ ok: false }));
+  if (!v.ok) { $('voiceChips').innerHTML = ''; $('voiceNote').textContent = v.error || '读不到网关的音色'; return; }
+  const name = x => (v.voices.find(o => o.value === x) || {}).name || x;
+  $('voiceNow').textContent = v.current ? name(v.current) : `跟着网关（${name(v.default)}）`;
+  $('voiceChips').innerHTML = `<button data-voice="" class="${v.current ? '' : 'on'}">跟着网关</button>` +
+    v.voices.map(o => `<button data-voice="${esc(o.value)}" class="${o.value === v.current ? 'on' : ''}" title="${esc(o.style)}">${esc(o.name)}${o.value.includes('Yunxia') ? '（童声）' : ''}</button>`).join('');
+  $('voiceNote').textContent = v.voices.length ? '下一次说话起生效。认出是孩子时照样换成童声。' : `现在的语音合成（${v.label}）没有固定的音色表，在网关后台改`;
+}
+$('voiceChips').addEventListener('click', async e => {
+  const b = e.target.closest('[data-voice]');
+  if (!b) return;
+  const r = await postJson('/api/voice', { voice: b.dataset.voice || null });
+  if (r.ok === false) toast(r.error || '没改成', 'error'); else { loadVoice(); toast('下一次说话起换成这个声音'); }
+});
+function renderCalls() {
+  const opts = (ui.models && ui.models.options) || [], cur = ui.models && ui.models.current;
+  $('callsList').innerHTML = opts.map(o => `<div class="al"><div class="al-text"><b>${esc(o.label)}</b>` +
+    `<span>${o.calls && o.calls.length ? '嗨 ' + o.calls.map(esc).join(' / 嗨 ') : '还没有称呼'}</span></div>` +
+    (cur && cur.entry === o.entry ? '<button class="upd-btn pri" disabled>在用</button>' : `<button class="upd-btn" data-use="${esc(o.entry)}">用它</button>`) + '</div>').join('')
+    || '<p class="opt-note">还没连上网关</p>';
+}
+$('callsList').addEventListener('click', e => {
+  const b = e.target.closest('[data-use]');
+  const m = b && ((ui.models && ui.models.options) || []).find(o => o.entry === b.dataset.use);
+  if (m) switchModel(m);
+});
+function renderAgentModel() {
+  renderCalls(); $('agentModel').textContent = ui.models && ui.models.current ? `${modelName()}（新的提问交给它回答）` : '还没连上网关'; }
 $('agentModelBtn').addEventListener('click', () => { $('settings').classList.remove('on'); openSheet(true); });
 // 分类栏：标题左边的按钮收起成只剩图标；横屏时按住中间的竖条左右拖调宽度，拖到 150px 以下收成只剩图标。记在这台设备上
 const SET_MIN = 200, SET_MAX = 360, SET_SNAP = 150;
@@ -2249,6 +2306,10 @@ $('setResize').addEventListener('pointerdown', e => {
 });
 applySetNav(false);
 new MutationObserver(perfMini).observe($('settings'), { attributes: true, attributeFilter: ['class'] });
+new MutationObserver(() => {   // 打开设置时停在「语音」：读一次这台设备的音色
+  const pane = document.querySelector('.set-pane.on');
+  if ($('settings').classList.contains('on') && pane && pane.dataset.pane === 'voice') loadVoice();
+}).observe($('settings'), { attributes: true, attributeFilter: ['class'] });
 setPane((() => { try { return localStorage.getItem('setPane'); } catch (e) { return null; } })() || 'screen');
 $('perfClose').addEventListener('click', () => openPerf(false));
 

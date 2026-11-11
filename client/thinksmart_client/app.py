@@ -1030,6 +1030,25 @@ class Client:
         self.events.publish('notes', self.notes_view())
         return self.notes_view()
 
+    # ---- 孩子和学习：学一学（kids.LEARN，设计画布第 34 块） ----
+
+    async def learn(self, kind):
+        text = kids.learn_prompt(kind, self.kids.get('age'))
+        self.screen.poke()
+        await self.say(text)
+        return {}
+
+    # ---- 语音：这台设备回答用的声音（网关 /kiosk/voice，存在网关的按设备配置里，下一次连接生效） ----
+
+    async def voice_view(self):
+        return await self._hub_http('/kiosk/voice?' + urllib.parse.urlencode({'device': self.cfg['device_id']}))
+
+    async def set_voice(self, voice):
+        data = await self._hub_http('/kiosk/voice', {'device': self.cfg['device_id'], 'voice': voice})
+        if not data.get('ok'):
+            raise ValueError(data.get('error') or '没改成')
+        return await self.voice_view()
+
     async def note_read(self, note_id):
         n = next((x for x in self.notes if x['id'] == note_id), None)
         if not n:
@@ -1237,6 +1256,7 @@ class Client:
 
     def kids_view(self):
         return {**self.kids, 'used_minutes': int(self.kids_seconds // 60),
+                'week': kids.week(datetime.date.today().isoformat()),
                 'blocked': kids.blocked(self.kids, self.kids_seconds)}
 
     def publish_kids(self):

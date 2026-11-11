@@ -466,3 +466,27 @@ body.av-photo-on .zzz { z-index: 2; }
   .cam-ov.multi .cam-frame { right: 12%; bottom: 33%; }
   .cam-ov.multi .cam-shutter { bottom: 262px; }
 }
+
+/* ---- 设置新分类的内容（设计画布第 34 块） ---- */
+.learn-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.learn-grid button { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 18px; border-radius: 20px; text-align: left;
+  background: var(--card2); border: 1px solid var(--line); color: var(--ink); min-width: 0; }
+.learn-grid button:active { transform: scale(.97); }
+.learn-grid i { font-style: normal; width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; font-size: 28px; font-weight: 700;
+  color: #081024; background: linear-gradient(135deg, var(--accent2), var(--accent)); }
+.learn-grid b { font-size: 21px; }
+.learn-grid span { font-size: 15px; line-height: 1.4; color: var(--ink3); }
+.week-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; height: 170px; align-items: end; }
+.week-bars .wb { height: 100%; display: grid; grid-template-rows: auto 1fr auto; justify-items: center; gap: 6px; }
+.week-bars small { font-size: 15px; color: var(--ink2); font-variant-numeric: tabular-nums; min-height: 20px; }
+.week-bars i { width: 100%; max-width: 54px; height: 100%; border-radius: 10px 10px 4px 4px; transform-origin: bottom;
+  background: linear-gradient(var(--accent2), var(--accent)); }
+.week-bars span { font-size: 15px; color: var(--ink3); }
+.voice-chips { grid-template-columns: repeat(4, 1fr); }
+#notesList .al, #callsList .al { gap: 12px; }
+#notesList .al-text b { white-space: normal; }
+@media (orientation: portrait) {
+  .learn-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .voice-chips { grid-template-columns: repeat(3, 1fr); }
+}
+#notesList .upd-btn, #callsList .upd-btn { min-width: 0; width: 104px; height: 56px; padding: 0; font-size: 19px; }

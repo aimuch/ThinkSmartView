@@ -505,6 +505,28 @@ def make_app(client: Client):
         except ValueError as e:
             return web.json_response({'ok': False, 'error': str(e)}, status=400)
 
+    async def learn(request):
+        body = await request.json()
+        try:
+            return web.json_response({'ok': True, **await client.learn(str(body.get('kind') or ''))})
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)})
+
+    async def voice_get(_request):
+        try:
+            return web.json_response(await client.voice_view())
+        except Exception as e:
+            return web.json_response({'ok': False, 'error': f'连不上小麦网关（{type(e).__name__}）'})
+
+    async def voice_set(request):
+        body = await request.json()
+        try:
+            return web.json_response(await client.set_voice(body.get('voice')))
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)})
+        except Exception as e:
+            return web.json_response({'ok': False, 'error': f'连不上小麦网关（{type(e).__name__}）'})
+
     async def camera_done(_request):
         try:
             return web.json_response({'ok': True, **await client.camera_done()})
@@ -638,6 +660,9 @@ def make_app(client: Client):
     app.router.add_post('/api/camera/shoot', camera_shoot)
     app.router.add_post('/api/camera/phone', camera_phone)
     app.router.add_post('/api/camera/done', camera_done)
+    app.router.add_post('/api/learn', learn)
+    app.router.add_get('/api/voice', voice_get)
+    app.router.add_post('/api/voice', voice_set)
     app.router.add_get('/api/avatars/poses/{name}', avatar_pose_file)
     app.router.add_post('/api/photo', photo_start)
     app.router.add_post('/api/photo/cancel', photo_cancel)

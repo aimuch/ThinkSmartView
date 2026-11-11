@@ -413,6 +413,11 @@
       <button class="bt-add ww-hold" id="voicesHold"><span class="ww-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="voicesHoldText">＋ 加一个人：按住说名字</span></button>
       <p class="opt-note">认出是谁以后，回答能叫得出名字、记得各自的事，「有我的留言吗」能找到给自己的；标成孩子的，跟他说话会像儿童模式那样。声纹只存在家里的网关上。</p>
     </div>
+       <div class="alarms-card" id="notesCard">
+      <div class="bright-head"><b>留言</b><span class="bright-num" id="notesCount"></span></div>
+      <div class="alarm-list" id="notesList"></div>
+      <p class="opt-note">直接说「给爸爸留言：记得取快递」；首页便签也能看。</p>
+    </div>
    </section>
    <section class="set-pane" data-pane="kids">
     <div class="alarms-card bt-card kids-card" id="kidsCard">
@@ -429,6 +434,21 @@
       </div>
       <p class="opt-note">打开后：回答用短句和孩子懂的词，故事一次讲一小段，不讲吓人的内容；认东西时屏幕上出大图标卡片。闹钟、提醒和天气播报照常。家长在网关后台「记忆 → 最近对话」能看问了什么。说「关掉儿童模式」不管用，只能在这里关。</p>
     </div>
+       <div class="alarms-card" id="learnCard">
+      <div class="bright-head"><b>学一学</b><span class="bright-num">点一个，小麦带着孩子学</span></div>
+      <div class="learn-grid" id="learnGrid">
+        <button data-learn="chars"><i>字</i><b>认字卡</b><span>屏幕出一个大字，说读音和组词</span></button>
+        <button data-learn="poem"><i>诗</i><b>背古诗</b><span>一句一句跟着念</span></button>
+        <button data-learn="math"><i>算</i><b>口算</b><span>按年龄出题，答对夸一句</span></button>
+        <button data-learn="why"><i>?</i><b>十万个为什么</b><span>讲一个小知识，再问一个问题</span></button>
+      </div>
+      <p class="opt-note">也可以直接说「<span class="ww-name">小麦小麦</span>，我们来背古诗」。儿童模式开着时说话方式跟着孩子的年龄。</p>
+    </div>
+    <div class="alarms-card" id="weekCard">
+      <div class="bright-head"><b>最近 7 天</b><span class="bright-num" id="weekToday"></span></div>
+      <div class="week-bars" id="weekBars"></div>
+      <p class="opt-note">儿童模式开着时记；每天最多聊多久在上面的儿童模式里设。</p>
+    </div>
    </section>
    <section class="set-pane" data-pane="voice">
     <div class="alarms-card ww-card" id="wwCard">
@@ -443,6 +463,11 @@
       <p class="opt-note">四个字、读音少见的词最不容易被电视和聊天误唤醒。也可以直接说「<span class="ww-name">小麦小麦</span>，唤醒词加一个小天小天」。<button class="link-btn" id="wwReset" hidden>恢复默认</button></p>
       <p class="opt-note">唤醒词只负责叫醒。醒了以后想换个模型回答，句子开头说「嗨 + 称呼」（比如「嗨 DSH」），称呼在网关后台的「称呼」页配。</p>
     </div>
+       <div class="alarms-card" id="voiceCard">
+      <div class="bright-head"><b>回答的声音</b><span class="bright-num" id="voiceNow">这台设备</span></div>
+      <div class="minutes voice-chips" id="voiceChips"></div>
+      <p class="opt-note" id="voiceNote">下一次说话起生效。认出是孩子时照样换成童声。</p>
+    </div>
    </section>
    <section class="set-pane" data-pane="agent">
     <div class="opt">
@@ -453,6 +478,11 @@
       <button class="upd-btn" id="agentModelBtn">切换</button>
     </div>
     <p class="opt-note">也可以直接说「嗨 + 称呼」临时换一个模型回答（称呼在网关后台的「称呼」页配）。每个模型各自保留对话。</p>
+    <div class="alarms-card" id="callsCard">
+      <div class="bright-head"><b>可以叫的</b></div>
+      <div class="alarm-list" id="callsList"></div>
+      <p class="opt-note">句子开头说「嗨 + 称呼」临时叫它回答；称呼在网关后台的「称呼」页改。</p>
+    </div>
     <div class="opt">
       <div class="opt-text">
         <b>聊天记录</b>
