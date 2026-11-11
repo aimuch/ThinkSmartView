@@ -8,6 +8,10 @@ from pathlib import Path
 THEMES = {'night': '星夜', 'dawn': '晨光', 'lavender': '薰衣草', 'forest': '森林', 'candy': '童趣', 'black': '纯黑', 'auto': '跟着时间'}
 # 首页布局（设计画布第 35 块）：对话（光球和对话记录）或仪表盘（首页、家居、日程，对话是其中一页）
 LAYOUTS = {'chat': '对话', 'dashboard': '仪表盘'}
+# 仪表盘首页的卡片（设计画布第 36 块）：能开关、能排序。早安小结和常用设备是宽卡片（横屏在中间那一列）
+DASH_CARDS = {'wx': '时钟和天气', 'brief': '早安小结', 'dev': '常用设备', 'todo': '待办', 'alarm': '闹钟和提醒',
+              'scene': '场景', 'media': '电台和助眠', 'nums': '今天的数字'}
+DASH_TABS = {'home': '首页', 'smart': '家居', 'plan': '日程', 'chat': '对话'}   # 打开时先看哪一页
 AUTO_DAY = (7, 19)          # 'auto': 晨光 from 7:00 to 19:00, 星夜 otherwise
 AVATARS = {'orb': '光球', 'cat': '小猫', 'dog': '小狗', 'bear': '小熊', 'rabbit': '兔子', 'panda': '熊猫',
            'wheat': '麦穗宝宝', 'robot': '机器人'}
@@ -79,9 +83,18 @@ def normalize_avatar(value):
     raise ValueError(f"形象只能是 {'、'.join(AVATARS.values())}，或者设置页里用照片生成的")
 
 
-def normalize_blocks(blocks):
+def normalize_dash_tab(value):
+    value = str(value or '').strip()
+    value = {v: k for k, v in DASH_TABS.items()}.get(value, value)
+    if value not in DASH_TABS:
+        raise ValueError(f"默认页只能是 {'、'.join(DASH_TABS.values())}")
+    return value
+
+
+def normalize_blocks(blocks, BLOCKS=None):
     """[[id, on], ...] covering every block once, in the given order (unknown ids dropped, missing ones
-    added at the end, on)."""
+    added at the end, on). BLOCKS: which set (the chat home's blocks, or DASH_CARDS)."""
+    BLOCKS = BLOCKS or globals()['BLOCKS']
     out, seen = [], set()
     for item in blocks or []:
         if isinstance(item, dict):
@@ -114,4 +127,7 @@ def view(cfg, now=None):
             'avatar': cfg['avatar'], 'avatars': [{'id': k, 'name': v} for k, v in AVATARS.items()],
             'photos': photo_avatars(), 'photo_max': PHOTO_MAX,
             'layout': cfg.get('layout', 'chat'), 'layouts': LAYOUTS,
+            'dash_default': cfg.get('dash_default', 'home'), 'dash_tabs': DASH_TABS,
+            'dash_cards': [{'id': b, 'name': DASH_CARDS[b], 'on': on}
+                           for b, on in normalize_blocks(cfg.get('dash_cards'), DASH_CARDS)],
             'blocks': [{'id': b, 'name': BLOCKS[b], 'on': on} for b, on in normalize_blocks(cfg['home_blocks'])]}

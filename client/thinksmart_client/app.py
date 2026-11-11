@@ -292,6 +292,11 @@ class Client:
                 log.warning('invalid %s %r, using the default', key, cfg.get(key))
                 cfg[key] = config.DEFAULTS[key]
         cfg['home_blocks'] = looks.normalize_blocks(cfg.get('home_blocks'))
+        cfg['dash_cards'] = looks.normalize_blocks(cfg.get('dash_cards'), looks.DASH_CARDS)
+        try:
+            cfg['dash_default'] = looks.normalize_dash_tab(cfg.get('dash_default'))
+        except ValueError:
+            cfg['dash_default'] = 'home'
         self.today = None             # the home page's weather and lunar date (/kiosk/today)
         try:
             self.kids = kids.normalize(cfg.get('kids'))
@@ -1337,7 +1342,8 @@ class Client:
     def looks_view(self):
         return looks.view(self.cfg)
 
-    async def set_looks(self, theme=None, avatar=None, blocks=None, move=None, toggle=None, layout=None):
+    async def set_looks(self, theme=None, avatar=None, blocks=None, move=None, toggle=None, layout=None,
+                        dash_default=None, dash_move=None, dash_toggle=None):
         """Change the looks (page or voice). move={'id', 'by': -1|1} reorders a block; toggle=id flips it.
         ValueError for anything invalid."""
         changes = {}
@@ -1347,6 +1353,20 @@ class Client:
             changes['avatar'] = looks.normalize_avatar(avatar)
         if layout is not None:
             changes['layout'] = looks.normalize_layout(layout)
+        if dash_default is not None:
+            changes['dash_default'] = looks.normalize_dash_tab(dash_default)
+        if dash_move or dash_toggle:        # 仪表盘首页的卡片：排序、开关（和首页内容同一套做法）
+            cards = looks.normalize_blocks(self.cfg.get('dash_cards'), looks.DASH_CARDS)
+            ids = [b for b, _ in cards]
+            target = (dash_move or {}).get('id') if dash_move else dash_toggle
+            if target not in ids:
+                raise ValueError('没有这张卡片')
+            i = ids.index(target)
+            if dash_move:
+                cards.insert(max(0, min(len(cards) - 1, i + int(dash_move.get('by') or 0))), cards.pop(i))
+            else:
+                cards[i][1] = not cards[i][1]
+            changes['dash_cards'] = cards
         order = looks.normalize_blocks(blocks if blocks is not None else self.cfg['home_blocks'])
         if move:
             ids = [b for b, _ in order]

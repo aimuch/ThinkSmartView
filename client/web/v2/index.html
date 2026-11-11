@@ -145,36 +145,16 @@
   </main>
   <!-- 仪表盘（dash.js，设计画布第 35 块）：首页、家居、日程三页；「对话」页就是上面的 main -->
   <section class="dash" id="dash">
-    <div class="dash-pane" data-dp="home">
-      <div class="dg dh-col">
-        <div class="dc dc-wx" id="dWx"></div>
-        <div class="dc" id="dTodo"></div>
-        <div class="dc dc-grow" id="dAlarm"></div>
-      </div>
-      <div class="dg dh-mid">
-        <div class="dc dc-brief" id="dBrief"></div>
-        <div class="dc dc-grow" id="dDev"></div>
-      </div>
-      <div class="dg dh-col">
-        <div class="dc" id="dScene"></div>
-        <div class="dc" id="dMedia"></div>
-        <div class="dc dc-grow" id="dNums"></div>
-      </div>
-    </div>
+    <div class="dash-pane" data-dp="home"><div class="dg dh-col" id="dhL"></div><div class="dg dh-mid" id="dhM"></div><div class="dg dh-col" id="dhR"></div></div>
     <div class="dash-pane" data-dp="smart">
-      <div class="dg ds-left">
-        <div class="dc" id="dHomeRooms"></div>
-        <div class="dc dc-grow" id="dScene2"></div>
-      </div>
-      <div class="dg ds-right">
-        <div class="ds-kinds" id="dKinds"></div>
-        <div class="ds-rooms" id="dRooms"></div>
-      </div>
+      <div class="dc ds-left" id="dHomeRooms"></div>
+      <div class="ds-rz" id="dRz" role="separator" aria-orientation="vertical" aria-label="拖动调房间栏宽度"></div>
+      <div class="dg ds-right"><div class="d-chips ds-scenes" id="dSceneBar"></div><div class="ds-kinds" id="dKinds"></div><div class="ds-rooms" id="dRooms"></div></div>
     </div>
     <div class="dash-pane" data-dp="plan">
-      <div class="dc" id="dPlanAlarms"></div>
-      <div class="dc" id="dPlanLists"></div>
-      <div class="dc" id="dPlanTasks"></div>
+      <div class="dg dp-left"><div class="dc" id="dCal"></div><div class="dc dc-grow" id="dTimers"></div></div>
+      <div class="dc dp-mid" id="dNext"></div>
+      <div class="dg dp-right"><div class="dc" id="dPlanLists"></div><div class="dc dc-grow" id="dPlanNotes"></div></div>
     </div>
     <div class="dash-ask" id="dAsk">
       <span class="d-orb"></span>
@@ -291,6 +271,12 @@
       <div class="looks-themes" id="looksThemes"></div>
       <div class="bright-head"><b class="sub">首页布局</b><span class="bright-num">仪表盘：一屏看天气、待办、米家设备和场景</span></div>
       <div class="minutes" id="looksLayouts" style="grid-template-columns:repeat(2,1fr)"></div>
+      <div id="looksDashBox" hidden>
+        <div class="bright-head"><b class="sub">打开时先看哪一页</b></div>
+        <div class="minutes" id="looksDashTabs" style="grid-template-columns:repeat(4,1fr)"></div>
+        <div class="bright-head"><b class="sub">仪表盘首页显示</b><span class="bright-num">用 ↑ ↓ 排顺序</span></div>
+        <div class="alarm-list looks-blocks" id="looksDash"></div>
+      </div>
       <div class="bright-head"><b class="sub">对话形象</b></div>
       <div class="looks-avatars" id="looksAvatars"></div>
       <div class="bright-head"><b class="sub">首页显示</b><span class="bright-num">用 ↑ ↓ 排顺序</span></div>

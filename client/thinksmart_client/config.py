@@ -55,6 +55,8 @@ DEFAULTS = {
     # 外观 (looks.py, 设计画布第 8 块): colour theme, the conversation avatar, what the home page shows
     'theme': 'night',
     'layout': 'chat',
+    'dash_default': 'home',
+    'dash_cards': [[k, True] for k in ('wx', 'brief', 'dev', 'todo', 'alarm', 'scene', 'media', 'nums')],
     'avatar': 'orb',
     'home_blocks': [['clock', True], ['date', True], ['weather', True], ['alarms', True], ['suggest', True]],
     'kids': {'enabled': False, 'age': 3, 'daily_minutes': 30, 'bedtime': '20:30', 'voice': 'child'},   # kids.py

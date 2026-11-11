@@ -3,9 +3,9 @@
 // 每秒看一次要不要重画，内容没变不动 DOM（和 home.js 的磁贴一样），设备上很省。对话一开始（叫醒、在想、在说）
 // 自动切到「对话」，说完 8 秒回到原来那一页。
 (() => {
-const D = { tab: 'home', talk: false, idleAt: 0, room: '全屋', cost: null, costAt: 0, sig: {} };
-try { D.tab = localStorage.getItem('dashTab') || 'home'; } catch (e) { /* private storage */ }
-if (!['home', 'smart', 'plan', 'chat'].includes(D.tab)) D.tab = 'home';
+// tab：现在看的页，页面打开时是「外观」里选的默认页（looks.dash_default），之后点哪页是哪页
+const D = { tab: null, talk: false, idleAt: 0, room: '全屋', cost: null, costAt: 0, sig: {}, day: null, placed: '' };
+const portrait = () => innerHeight > innerWidth;
 
 const on = () => !!(ui.looks && ui.looks.layout === 'dashboard');
 const mi = () => (window.miApi && window.miApi.view()) || null;
@@ -16,14 +16,14 @@ const WD = ['日', '一', '二', '三', '四', '五', '六'];
 
 function setTab(t) {
   D.tab = t;
-  try { localStorage.setItem('dashTab', t); } catch (e) { /* private storage */ }
   apply();
   render(true);
 }
 function apply() {
   const dash = on();
+  if (dash && !D.tab) D.tab = (ui.looks.dash_default in { home: 1, smart: 1, plan: 1, chat: 1 }) ? ui.looks.dash_default : 'home';
   document.body.classList.toggle('dash-on', dash);
-  const shown = D.talk ? 'chat' : D.tab;
+  const shown = D.talk ? 'chat' : (D.tab || 'home');
   document.body.dataset.dash = dash ? shown : '';
   document.querySelectorAll('#dashTabs [data-dt]').forEach(b => b.classList.toggle('on', b.dataset.dt === shown));
   document.querySelectorAll('.dash-pane').forEach(p => p.classList.toggle('on', p.dataset.dp === shown));
@@ -123,50 +123,172 @@ function nums() {
   return head('◷', '今天') + (cells.length ? `<div class="d-nums">${cells.join('')}</div>` : '<div class="dm">还没有数字</div>');
 }
 
-/* ---- 家居 ---- */
+/* ---- 首页的卡片：按「外观」里的顺序和开关摆（looks.dash_cards，设计画布第 36 块） ----
+   横屏三列：早安小结、常用设备这两张宽的在中间，其余按顺序前一半在左、后一半在右；竖屏按顺序往下排，小卡片两张一行 */
+const CARDS = { wx: ['dWx', weather], todo: ['dTodo', todo], alarm: ['dAlarm', alarms], brief: ['dBrief', brief],
+  dev: ['dDev', devices], scene: ['dScene', scenes], media: ['dMedia', media], nums: ['dNums', nums] };
+const WIDE = { brief: 1, dev: 1 };
+for (const [k, [id]] of Object.entries(CARDS)) {
+  const el = document.createElement('div');
+  el.className = 'dc' + (k === 'wx' ? ' dc-wx' : k === 'brief' ? ' dc-brief' : '') + (WIDE[k] ? ' dc-wide' : '');
+  el.id = id; el.hidden = true;
+  $('dhM').appendChild(el);
+}
+function shownCards() {
+  const list = (ui.looks && ui.looks.dash_cards) || Object.keys(CARDS).map(id => ({ id, on: true }));
+  return list.filter(c => c.on && CARDS[c.id]).map(c => c.id);
+}
+function placeHome() {
+  const ids = shownCards(), key = ids.join(',') + (portrait() ? '|p' : '|l');
+  if (key === D.placed) return;
+  D.placed = key;
+  const L = $('dhL'), M = $('dhM'), R = $('dhR');
+  for (const [k, [id]] of Object.entries(CARDS)) { $(id).hidden = !ids.includes(k); $(id).classList.remove('dc-grow', 'dc-span'); }
+  if (portrait()) {       // 竖屏小卡片两张一行：落单的那张（后面是宽卡片，或者是最后一张）占满一行
+    let run = [];
+    const close = () => { if (run.length % 2) $(CARDS[run[run.length - 1]][0]).classList.add('dc-span'); run = []; };
+    for (const k of ids) { if (WIDE[k]) close(); else run.push(k); }
+    close();
+  }
+  let cols;
+  if (portrait()) cols = [[], ids, []];
+  else {
+    const wide = ids.filter(k => WIDE[k]), small = ids.filter(k => !WIDE[k]);
+    if (wide.length) { const h = Math.ceil(small.length / 2); cols = [small.slice(0, h), wide, small.slice(h)]; }
+    else { const t = Math.ceil(small.length / 3); cols = [small.slice(0, t), small.slice(t, 2 * t), small.slice(2 * t)]; }
+  }
+  [L, M, R].forEach((col, i) => {
+    cols[i].forEach(k => col.appendChild($(CARDS[k][0])));
+    col.hidden = !cols[i].length;
+    if (!portrait() && cols[i].length) $(CARDS[cols[i][cols[i].length - 1]][0]).classList.add('dc-grow');
+  });
+  $('dash').querySelector('[data-dp="home"]').dataset.cols = String(cols.filter(c => c.length).length);
+}
+function home() {
+  placeHome();
+  for (const k of shownCards()) set(CARDS[k][0], CARDS[k][1]());
+}
+
+/* ---- 家居：左边房间栏（能上下滑、能拖宽），右边场景一行、分类计数、按房间的设备 ---- */
 function smart() {
   const v = mi();
   if (!v || !v.account) {
     set('dHomeRooms', head('⌂', '我的家') + '<button class="d-empty" data-open="home">还没登录米家：点这里扫码</button>');
-    set('dKinds', ''); set('dRooms', ''); set('dScene2', scenes());
+    set('dKinds', ''); set('dRooms', ''); set('dSceneBar', '');
     return;
   }
   const all = v.rooms.flatMap(r => r.cards), home = (v.homes || []).find(h => h.id === v.home_id);
   const rooms = ['全屋', ...v.rooms.map(r => r.name)];
   if (!rooms.includes(D.room)) D.room = '全屋';
-  set('dHomeRooms', `<div class="dc-h"><b class="dh-name">${esc(home ? home.name : '我的家')}</b></div><span class="dm d-ok">● ${all.length} 个设备 · ${all.filter(c => c.online).length} 个在线</span>` +
-    rooms.map(r => `<button class="d-room${r === D.room ? ' on' : ''}" data-room="${esc(r)}">${esc(r)}</button>`).join(''));
-  set('dScene2', scenes());
-  const kinds = [['light', '灯', c => `${all.filter(x => x.kind === 'light' && window.miApi.isOn(x)).length} 个开着`],
-    ['plug', '插座', () => { const w = all.filter(x => x.state && typeof x.state.power_w === 'number').reduce((a, x) => a + x.state.power_w, 0); return w ? `正在用 ${Math.round(w)} W` : '没在用电'; }],
-    ['sensor', '传感器', () => { const s = all.find(x => x.state && typeof x.state.temp === 'number'); return s ? `${s.state.temp}°${typeof s.state.humidity === 'number' ? ' · ' + s.state.humidity + '%' : ''}` : ''; }],
-    ['cover', '窗帘', () => `${all.filter(x => x.kind === 'cover' && window.miApi.isOn(x)).length} 个开着`],
-    ['climate', '空调暖气', () => `${all.filter(x => x.kind === 'climate' && window.miApi.isOn(x)).length} 个开着`]]
-    .map(([k, name, sub]) => [k, name, all.filter(x => x.kind === k).length, sub]).filter(x => x[2]).slice(0, 4);
+  set('dHomeRooms', `<b class="dh-name">${esc(home ? home.name : '我的家')}</b><span class="dm d-ok">● ${all.filter(c => c.online).length} / ${all.length} 在线</span>` +
+    `<div class="ds-roomlist">${rooms.map(r => `<button class="d-room${r === D.room ? ' on' : ''}" data-room="${esc(r)}">${esc(r)}` +
+      `<small>${r === '全屋' ? all.length : v.rooms.find(x => x.name === r).cards.length}</small></button>`).join('')}</div>`);
+  const sc = (ui.scenes && ui.scenes.scenes) || [];
+  set('dSceneBar', sc.map(x => `<button data-scene="${esc(x.name)}">✦ ${esc(x.name)}</button>`).join(''));
+  $('dSceneBar').hidden = !sc.length;
+  const scope = D.room === '全屋' ? all : v.rooms.find(r => r.name === D.room).cards;
+  const kinds = [['light', '灯', () => `${scope.filter(x => x.kind === 'light' && window.miApi.isOn(x)).length} 个开着`],
+    ['plug', '插座', () => { const w = scope.filter(x => x.kind === 'plug' && x.state && typeof x.state.power_w === 'number').reduce((a, x) => a + x.state.power_w, 0); return w ? `正在用 ${Math.round(w)} W` : `${scope.filter(x => x.kind === 'plug' && window.miApi.isOn(x)).length} 个开着`; }],
+    ['sensor', '传感器', () => { const t = scope.find(x => x.state && typeof x.state.temp === 'number'); return t ? `${t.state.temp}°${typeof t.state.humidity === 'number' ? ' · ' + t.state.humidity + '%' : ''}` : ''; }],
+    ['cover', '窗帘', () => `${scope.filter(x => x.kind === 'cover' && window.miApi.isOn(x)).length} 个开着`],
+    ['climate', '空调暖气', () => `${scope.filter(x => x.kind === 'climate' && window.miApi.isOn(x)).length} 个开着`]]
+    .map(([k, name, sub]) => [k, name, scope.filter(x => x.kind === k).length, sub]).filter(x => x[2]).slice(0, 4);
   set('dKinds', kinds.map(([k, name, count, sub]) => `<div class="dc d-kind"><span class="dd-ic">${window.miApi.icon(k, 22)}</span><b>${name} ${count}</b><span class="dm">${sub()}</span></div>`).join(''));
+  $('dKinds').style.gridTemplateColumns = `repeat(${Math.max(1, kinds.length)}, minmax(0, 1fr))`;
   const shown = D.room === '全屋' ? v.rooms : v.rooms.filter(r => r.name === D.room);
-  set('dRooms', shown.map(r => `<div class="dc d-roomcard"><div class="dc-h"><b>${esc(r.name)}</b><small>${r.cards.length} 个设备</small></div>` +
+  set('dRooms', shown.map(r => `<div class="dc d-roomcard"><div class="dc-h"><b>${esc(r.name)}</b><small>${r.cards.length} 个设备 · ${r.cards.filter(c => window.miApi.isOn(c)).length} 个开着</small></div>` +
     `<div class="d-devs wide">${r.cards.map(devTile).join('')}</div></div>`).join('') || '<div class="dc dm">这个房间没有设备</div>');
 }
+// 房间栏的宽度：按住中间的竖条左右拖，横竖屏各记各的
+const RZ = { min: 110, max: 380 };
+function roomWidth(w) {
+  const key = 'dashRoomW-' + (portrait() ? 'p' : 'l');
+  if (w === undefined) { try { w = Number(localStorage.getItem(key)); } catch (e) { w = 0; } w = w || (portrait() ? 150 : 240); }
+  else try { localStorage.setItem(key, String(w)); } catch (e) { /* private storage */ }
+  $('dash').style.setProperty('--ds-w', Math.min(RZ.max, Math.max(RZ.min, w)) + 'px');
+}
+$('dRz').addEventListener('pointerdown', e => {
+  const bar = e.currentTarget, left = $('dHomeRooms').getBoundingClientRect().left;
+  bar.setPointerCapture(e.pointerId); bar.classList.add('drag');
+  let w = 0;
+  const move = ev => { w = Math.round(Math.min(RZ.max, Math.max(RZ.min, ev.clientX - left - 8))); $('dash').style.setProperty('--ds-w', w + 'px'); };
+  const up = () => { bar.classList.remove('drag'); bar.removeEventListener('pointermove', move); if (w) roomWidth(w); };
+  bar.addEventListener('pointermove', move);
+  bar.addEventListener('pointerup', up, { once: true }); bar.addEventListener('pointercancel', up, { once: true });
+});
+roomWidth();
 
-/* ---- 日程 ---- */
-function plan() {
-  const a = (ui.alarms && ui.alarms.items) || [], byDay = {};
-  for (const v of a) {
-    const d = new Date(v.at * 1000), key = d.toDateString();
-    (byDay[key] = byDay[key] || { d, items: [] }).items.push(v);
+/* ---- 日程：月历、接下来（闹钟、提醒、天气播报、定时任务、作息排成一条时间线）、快捷倒计时、清单、留言 ---- */
+const sameDay = (a, b) => a.toDateString() === b.toDateString();
+const onDay = (days, d) => days === 'workdays' ? d.getDay() >= 1 && d.getDay() <= 5 : days === 'weekend' ? (d.getDay() === 0 || d.getDay() === 6) : true;
+function agenda() {
+  // {at: Date, title, sub, kind}：真的闹钟提醒，加上今天和明天按点会发生的事
+  const out = [], now = new Date();
+  for (const v of (ui.alarms && ui.alarms.items) || []) {
+    if (v.kind === 'timer') continue;
+    out.push({ at: new Date(v.at * 1000), title: v.label || (v.kind === 'alarm' ? '闹钟' : v.kind === 'broadcast' ? '天气播报' : '提醒'),
+      sub: v.repeat || '', kind: { alarm: '闹钟', reminder: '提醒', broadcast: '播报' }[v.kind] || '提醒' });
   }
-  set('dPlanAlarms', head('⏰', '闹钟和提醒', '说一句就加') + (Object.values(byDay).slice(0, 4).map(({ d, items }) =>
-    `<div class="d-day"><div class="dd-date"><span class="dm">${d.getMonth() + 1}月</span><b>${d.getDate()}</b><span class="dm">周${WD[d.getDay()]}</span></div><div>` +
-    items.map(v => `<div class="d-ev"><b>${hhmm(v.at)}</b>${esc(v.label || { alarm: '闹钟', reminder: '提醒', timer: '倒计时', broadcast: '天气播报' }[v.kind] || '')}${v.repeat ? ` <span class="dm">${esc(v.repeat)}</span>` : ''}</div>`).join('') +
-    '</div></div>').join('') || '<div class="dm">没有闹钟和提醒。说「明早 7 点叫我」「10 分钟后提醒我晾衣服」</div>'));
+  const at = (d, hm) => { const [h, m] = String(hm).split(':').map(Number); const x = new Date(d); x.setHours(h, m || 0, 0, 0); return x; };
+  for (let i = 0; i < 2; i++) {
+    const d = new Date(now); d.setDate(d.getDate() + i);
+    const add = (hm, title, sub, kind) => { const t = at(d, hm); if (t > now) out.push({ at: t, title, sub, kind }); };
+    const b = ui.broadcast;
+    if (b && b.enabled && onDay(b.days, d) && !out.some(x => x.kind === '播报' && sameDay(x.at, d))) for (const t of b.times || []) add(t, '天气播报', DAYS_TEXT[b.days] || '', '播报');
+    for (const t of (ui.tasks && ui.tasks.tasks) || []) if (onDay(t.days, d)) add(t.time, t.prompt, DAYS_TEXT[t.days] || '', '定时任务');
+    const sl = ui.status && ui.status.sleep;
+    if (sl && sl.enabled) add(sl.start, '睡眠时段开始', `到 ${sl.end}`, '作息');
+    const k = ui.kids;
+    if (k && k.enabled && k.bedtime) add(k.bedtime, '孩子该睡觉了', '儿童模式', '作息');
+  }
+  return out.sort((a, b) => a.at - b.at);
+}
+function untilText(t) {
+  const m = Math.round((t - Date.now()) / 60000);
+  return m < 1 ? '马上' : m < 60 ? `还有 ${m} 分钟` : m < 24 * 60 ? `还有 ${Math.floor(m / 60)} 小时${m % 60 >= 30 ? '半' : ''}` : '';
+}
+function plan() {
+  const now = new Date(), items = agenda(), lunar = ui.today && ui.today.lunar;
+  // 月历：周一开头，今天高亮，有事的日子带点，点一天只看那天
+  const first = new Date(now.getFullYear(), now.getMonth(), 1), start = new Date(first);
+  start.setDate(1 - ((first.getDay() + 6) % 7));
+  const has = new Set(items.map(x => x.at.toDateString()));
+  let cells = '';
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    if (i >= 35 && d.getMonth() !== now.getMonth()) break;
+    cells += `<button class="${d.getMonth() !== now.getMonth() ? 'o ' : ''}${sameDay(d, now) ? 't ' : ''}${has.has(d.toDateString()) ? 'e ' : ''}${D.day === d.toDateString() ? 'sel' : ''}" data-day="${d.toDateString()}">${d.getDate()}</button>`;
+  }
+  set('dCal', `<div class="dc-h"><b>${now.getFullYear()} 年 ${now.getMonth() + 1} 月</b><small>${lunar && lunar.text ? '农历' + esc(lunar.text) : ''}</small></div>` +
+    `<div class="d-cal">${['一', '二', '三', '四', '五', '六', '日'].map(w => `<span>${w}</span>`).join('')}${cells}</div>` +
+    `<div class="dm">${D.day ? '只看这一天，再点一下看全部' : '带点的那天有安排，点一天只看那天'}</div>`);
+  // 快捷倒计时
+  const timers = ((ui.alarms && ui.alarms.items) || []).filter(v => v.kind === 'timer');
+  set('dTimers', head('◷', '快捷倒计时', '点一下就开始') + `<div class="d-quick">${[3, 5, 10, 15, 30, 60].map(n => `<button data-timer="${n}">${n} 分</button>`).join('')}</div>` +
+    timers.map(v => `<div class="d-tl"><b data-left="${v.at}">${left(v.at)}</b><span>${esc(v.label || '倒计时')}</span><i>${hhmm(v.at)} 响</i></div>`).join(''));
+  // 接下来
+  const list = D.day ? items.filter(x => x.at.toDateString() === D.day) : items.slice(0, 12);
+  let html = head('⏰', '接下来', '说一句就加：「明早 7 点叫我」'), last = '';
+  for (const x of list) {
+    const key = x.at.toDateString();
+    if (key !== last) { last = key; html += `<div class="d-dayh">${dayText(x.at / 1000)} · ${x.at.getMonth() + 1}月${x.at.getDate()}日 周${WD[x.at.getDay()]}</div>`; }
+    html += `<div class="d-tl"><b>${pad(x.at.getHours())}:${pad(x.at.getMinutes())}</b><span>${esc(x.title)}</span><em>${esc([x.sub, untilText(x.at)].filter(Boolean).join(' · '))}</em><i>${x.kind}</i></div>`;
+  }
+  if (!list.length) html += `<div class="d-blank"><b>${D.day ? '这一天没有安排' : '接下来没有安排'}</b><span class="dm">可以说「明早 7 点叫我」「10 分钟后提醒我晾衣服」「每天早上七点半播报天气」</span>` +
+    '<div class="d-chips"><button data-ask="明早七点叫我">明早 7 点叫我</button><button data-ask="每天早上七点半播报天气">每天 7:30 播天气</button><button data-ask="我有哪些闹钟">我有哪些闹钟</button></div></div>';
+  set('dNext', html);
+  // 清单（带进度）
   const l = ui.lists && ui.lists.lists;
-  set('dPlanLists', head('✓', '清单') + (l ? Object.keys(l).map(name => `<div class="dp-list"><b>${esc(name)}</b>` +
-    (l[name].length ? l[name].slice(0, 8).map(x => `<button class="d-todo${x.done ? ' done' : ''}" data-check="${esc(name)}" data-text="${esc(x.text)}" data-done="${x.done ? 1 : 0}"><i></i>${esc(x.text)}</button>`).join('') : '<div class="dm">空的</div>') + '</div>').join('')
-    : '<div class="dm">清单还没取到</div>'));
-  const t = (ui.tasks && ui.tasks.tasks) || [], notes = (ui.notes && ui.notes.notes) || [];
-  set('dPlanTasks', head('↻', '定时任务') + (t.length ? t.map(x => `<div class="d-ev"><b>${esc(x.time)}</b>${esc(x.prompt)}</div>`).join('') : '<div class="dm">说「每天早上七点告诉我要不要带伞」</div>') +
-    head('✉', '留言') + (notes.length ? notes.slice(0, 4).map(n => `<div class="d-ev">${n.from ? esc(n.from) + ' → ' : '→ '}${esc(n.to)}：${esc(n.text)}</div>`).join('') : '<div class="dm">说「给爸爸留言：……」</div>'));
+  const all = l ? Object.values(l).flat() : [], done = all.filter(x => x.done).length;
+  set('dPlanLists', head('✓', '清单', all.length ? `办完 ${done} / ${all.length}` : '') +
+    (all.length ? `<div class="d-bar"><i style="transform:scaleX(${done / all.length})"></i></div>` : '') +
+    (l ? Object.keys(l).map(name => `<div class="dp-list"><b>${esc(name)}</b>` +
+      (l[name].length ? l[name].slice(0, 6).map(x => `<button class="d-todo${x.done ? ' done' : ''}" data-check="${esc(name)}" data-text="${esc(x.text)}" data-done="${x.done ? 1 : 0}"><i></i>${esc(x.text)}</button>`).join('') : '<div class="dm">空的</div>') + '</div>').join('')
+      : '<div class="dm">清单还没取到</div>') + '<div class="d-chips"><button data-phone="1">手机看</button><button data-ask="购物清单里有什么">念一遍</button></div>');
+  const notes = (ui.notes && ui.notes.notes) || [];
+  set('dPlanNotes', head('✉', '留言', notes.length ? `${notes.length} 条` : '') +
+    (notes.length ? notes.slice(0, 5).map(n => `<button class="d-note" data-note="${esc(n.id)}"><b>${n.from ? esc(n.from) + ' → ' : '→ '}${esc(n.to)}</b><span>${esc(n.text)}</span><i>点一下念</i></button>`).join('')
+      : '<div class="dm">说「给爸爸留言：记得取快递」，留言会出现在这里和首页</div>'));
 }
 
 /* ---- 底部一条：随时能说话 ---- */
@@ -183,10 +305,7 @@ function render(force) {
   apply();
   if (!on()) return;
   ask();
-  if (D.tab === 'home' || force) {
-    set('dWx', weather()); set('dTodo', todo()); set('dAlarm', alarms()); set('dBrief', brief());
-    set('dDev', devices()); set('dScene', scenes()); set('dMedia', media()); set('dNums', nums());
-  }
+  if (D.tab === 'home' || force) home();
   if (D.tab === 'smart' || force) smart();
   if (D.tab === 'plan' || force) plan();
 }
@@ -232,6 +351,13 @@ $('dash').addEventListener('click', e => {
   if (ck) return dailyPost('lists', { op: 'check', name: ck.dataset.check, items: [ck.dataset.text], done: ck.dataset.done !== '1' });
   const md = t.closest('[data-media]');
   if (md) return dailyPost('media', md.dataset.media === 'stop' ? { stop: true } : { kind: 'radio', name: md.dataset.media });
+  const dy = t.closest('[data-day]');
+  if (dy) { D.day = D.day === dy.dataset.day ? null : dy.dataset.day; return render(true); }
+  const tm = t.closest('[data-timer]');
+  if (tm) return post('/api/text', { text: `倒计时 ${tm.dataset.timer} 分钟` });
+  const nt = t.closest('[data-note]');
+  if (nt) return dailyPost('notes', { read: nt.dataset.note });
+  if (t.closest('[data-phone]')) return $('listsPhone').click();
   const rm = t.closest('[data-room]');
   if (rm) { D.room = rm.dataset.room; return render(true); }
   const op = t.closest('[data-open]');
@@ -252,5 +378,6 @@ setInterval(() => {
   if (++n % 2 === 0) render(false);
   if (n % 30 === 0) loadCost();
 }, 1000);
-window.dashRender = () => { loadCost(); render(true); };
+window.dashRender = () => { loadCost(); D.placed = ''; render(true); };
+addEventListener('resize', () => { D.placed = ''; roomWidth(); render(true); });
 })();

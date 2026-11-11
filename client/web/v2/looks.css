@@ -620,3 +620,65 @@ body.dash-on[data-state="listening"] .dash-ask .d-orb, body.dash-on[data-state="
   .dash-pane.on > .dg, .dash-pane.on > .dc { flex: none; }
   .dash-pane[data-dp="plan"] { align-items: stretch; }
 }
+
+/* ---- 仪表盘第二版（设计画布第 36 块） ---- */
+/* 首页：卡片按顺序摆；只剩两列或一列时（关掉了一些卡片）列宽跟着变 */
+.dash-pane[data-dp="home"][data-cols="2"] { grid-template-columns: 330px minmax(0, 1fr); }
+.dash-pane[data-dp="home"][data-cols="1"] { grid-template-columns: minmax(0, 1fr); }
+.dash-pane[data-dp="home"] > [hidden] { display: none; }
+/* 家居：房间栏（能上下滑）+ 拖宽的竖条 + 右边 */
+.dash-pane[data-dp="smart"] { grid-template-columns: var(--ds-w, 240px) 16px minmax(0, 1fr); gap: 0 6px; }
+.ds-left { gap: 6px; padding: 16px 12px; }
+.ds-left .dh-name { font-size: 22px; padding: 0 6px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-left > .dm { padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-roomlist { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.d-room { flex: none; display: flex; align-items: center; gap: 8px; height: 50px; padding: 0 14px; font-size: 18px; white-space: nowrap; overflow: hidden; }
+.d-room small { margin-left: auto; font-size: 13px; opacity: .6; }
+.ds-rz { touch-action: none; cursor: col-resize; display: flex; align-items: center; justify-content: center; }
+.ds-rz::before { content: ""; width: 5px; height: 72px; border-radius: 3px; background: var(--accent); opacity: .35; transition: opacity .2s, height .2s; }
+.ds-rz.drag::before { opacity: 1; height: 120px; }
+.ds-scenes { flex: none; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.ds-scenes[hidden] { display: none; }
+.ds-scenes button { flex: none; color: var(--accent); font-weight: 600; background: var(--dcard, var(--card)); border: 1px solid var(--dline, var(--line)); }
+.ds-kinds { flex: none; }
+/* 日程 */
+.dash-pane[data-dp="plan"] { grid-template-columns: 340px minmax(0, 1fr) 320px; align-items: stretch; }
+.dp-mid { overflow-y: auto; scrollbar-width: none; }
+.d-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+.d-cal span { font-size: 13px; color: var(--ink3); padding-bottom: 2px; }
+.d-cal button { position: relative; height: 38px; border-radius: 12px; font-size: 16px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.d-cal .o { opacity: .3; }
+.d-cal .t { background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #fff; font-weight: 700; }
+.d-cal .sel { box-shadow: 0 0 0 2px var(--accent); }
+.d-cal .e::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--accent); }
+.d-cal .t.e::after { background: #fff; }
+.d-quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.d-quick button { height: 46px; border-radius: 14px; background: var(--card2); font-size: 17px; color: var(--ink); }
+.d-quick button:active, .d-cal button:active, .d-note:active { transform: scale(.95); }
+.d-dayh { font-size: 15px; font-weight: 700; color: var(--ink2); margin-top: 4px; }
+.d-tl { flex: none; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 14px; border-radius: 16px; background: var(--card2); font-size: 17px; color: var(--ink); min-width: 0; }
+.d-tl b { font-size: 20px; font-variant-numeric: tabular-nums; min-width: 62px; }
+.d-tl span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.d-tl em { font-style: normal; font-size: 14px; color: var(--ink3); white-space: nowrap; flex: 1; }
+.d-tl i { font-style: normal; margin-left: auto; flex: none; padding: 3px 10px; border-radius: 999px; font-size: 13px; color: var(--accent); background: var(--card); border: 1px solid var(--line); }
+.d-blank { display: flex; flex-direction: column; gap: 10px; padding: 18px 6px; }
+.d-blank b { font-size: 20px; color: var(--ink); }
+.d-note { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 14px; border-radius: 16px; background: var(--card2); color: var(--ink); }
+.d-note b { font-size: 15px; color: var(--ink2); } .d-note span { font-size: 17px; } .d-note i { font-style: normal; font-size: 12px; color: var(--ink3); }
+@media (orientation: portrait) {
+  .dash-pane[data-dp="home"] .dh-mid { display: grid; grid-template-columns: 1fr 1fr; }
+  .dash-pane[data-dp="home"] .dh-mid > .dc-wide { grid-column: 1 / -1; }
+  .dash-pane[data-dp="home"] .dh-col { display: none; }
+  .dash-pane[data-dp="smart"].on { display: grid; overflow: hidden; }
+  .dash-pane[data-dp="smart"] { grid-template-columns: var(--ds-w, 150px) 14px minmax(0, 1fr); gap: 0 4px; }
+  .dash-pane[data-dp="smart"] .ds-right { overflow-y: auto; }
+  .dash-pane[data-dp="smart"] .ds-left { display: flex; }
+  .d-room { height: 46px; padding: 0 10px; font-size: 17px; }
+  .d-devs.wide { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .dash-pane[data-dp="plan"] .dp-left { display: grid; grid-template-columns: 1.3fr 1fr; }
+  .dash-pane[data-dp="plan"] .dp-right { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+  .dp-mid { overflow: visible; }
+  .d-quick { grid-template-columns: repeat(2, 1fr); }
+}
+@media (orientation: portrait) { .dash-pane[data-dp="home"] .dh-mid > .dc-span { grid-column: 1 / -1; } }
+.dc[hidden], .dg[hidden] { display: none !important; }

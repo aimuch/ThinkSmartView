@@ -987,6 +987,13 @@ function renderLooks() {
     `<button data-theme="${k}" class="card2 ${k === l.theme ? 'on' : ''}" style="background:var(--card2)"><i style="background:${THEME_DOT[k]}"></i>${esc(name)}</button>`).join('');
   $('looksLayouts').innerHTML = Object.entries(l.layouts || {}).map(([k, name]) =>
     `<button data-layout="${k}" class="${k === l.layout ? 'on' : ''}">${esc(name)}</button>`).join('');
+  $('looksDashBox').hidden = l.layout !== 'dashboard';
+  $('looksDashTabs').innerHTML = Object.entries(l.dash_tabs || {}).map(([k, name]) =>
+    `<button data-dtab="${k}" class="${k === l.dash_default ? 'on' : ''}">${esc(name)}</button>`).join('');
+  $('looksDash').innerHTML = (l.dash_cards || []).map((b, i, all) => `<div class="al"><div class="al-text"><b>${esc(b.name)}</b></div>` +
+    `<div class="bc-step"><button data-dmove="${b.id}" data-by="-1" ${i ? '' : 'disabled'} aria-label="上移">↑</button>` +
+    `<button data-dmove="${b.id}" data-by="1" ${i < all.length - 1 ? '' : 'disabled'} aria-label="下移">↓</button></div>` +
+    `<button class="switch" data-dtoggle="${b.id}" role="switch" aria-checked="${b.on}" aria-label="${esc(b.name)}"><i></i></button></div>`).join('');
   if (window.dashRender) window.dashRender();
   $('looksAvatars').innerHTML = l.avatars.map(a =>
     `<button data-avatar="${a.id}" class="${a.id === l.avatar ? 'on' : ''}"><span class="dot" style="background:${AVATAR_DOT[a.id]}"></span>${esc(a.name)}</button>`).join('') +
@@ -1006,6 +1013,13 @@ async function setLooks(body) {
 }
 $('looksThemes').addEventListener('click', e => { const b = e.target.closest('[data-theme]'); if (b) setLooks({ theme: b.dataset.theme }); });
 $('looksLayouts').addEventListener('click', e => { const b = e.target.closest('[data-layout]'); if (b) setLooks({ layout: b.dataset.layout }); });
+$('looksDashTabs').addEventListener('click', e => { const b = e.target.closest('[data-dtab]'); if (b) setLooks({ dash_default: b.dataset.dtab }); });
+$('looksDash').addEventListener('click', e => {
+  const m = e.target.closest('[data-dmove]');
+  if (m) return setLooks({ dash_move: { id: m.dataset.dmove, by: Number(m.dataset.by) } });
+  const t = e.target.closest('[data-dtoggle]');
+  if (t) setLooks({ dash_toggle: t.dataset.dtoggle });
+});
 $('looksAvatars').addEventListener('click', e => {
   const del = e.target.closest('[data-del]');
   if (del) {
