@@ -10,7 +10,7 @@
 flowchart TB
   user(("家人"))
 
-  subgraph dev["设备 10.10.10.192"]
+  subgraph dev["设备（客厅 10.10.10.192、书房 10.10.10.115，结构相同）"]
     shell["展示屏外壳<br/>Weston + 全屏 WebKit"]
     ui["对话界面 web/v2<br/>127.0.0.1:8090"]
     subgraph client["小麦客户端"]
