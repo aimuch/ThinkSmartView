@@ -5,7 +5,9 @@ import datetime
 import re
 from pathlib import Path
 
-THEMES = {'night': '星夜', 'dawn': '晨光', 'forest': '森林', 'candy': '童趣', 'black': '纯黑', 'auto': '跟着时间'}
+THEMES = {'night': '星夜', 'dawn': '晨光', 'lavender': '薰衣草', 'forest': '森林', 'candy': '童趣', 'black': '纯黑', 'auto': '跟着时间'}
+# 首页布局（设计画布第 35 块）：对话（光球和对话记录）或仪表盘（首页、家居、日程，对话是其中一页）
+LAYOUTS = {'chat': '对话', 'dashboard': '仪表盘'}
 AUTO_DAY = (7, 19)          # 'auto': 晨光 from 7:00 to 19:00, 星夜 otherwise
 AVATARS = {'orb': '光球', 'cat': '小猫', 'dog': '小狗', 'bear': '小熊', 'rabbit': '兔子', 'panda': '熊猫',
            'wheat': '麦穗宝宝', 'robot': '机器人'}
@@ -58,6 +60,14 @@ def normalize_theme(value):
     return value
 
 
+def normalize_layout(value):
+    value = str(value or '').strip()
+    value = {v: k for k, v in LAYOUTS.items()}.get(value, value)
+    if value not in LAYOUTS:
+        raise ValueError(f"首页布局只能是 {'、'.join(LAYOUTS.values())}")
+    return value
+
+
 def normalize_avatar(value):
     value = str(value or '').strip()
     by_name = {v: k for k, v in AVATARS.items()}
@@ -103,4 +113,5 @@ def view(cfg, now=None):
     return {'theme': cfg['theme'], 'theme_now': theme_now(cfg['theme'], now), 'themes': THEMES,
             'avatar': cfg['avatar'], 'avatars': [{'id': k, 'name': v} for k, v in AVATARS.items()],
             'photos': photo_avatars(), 'photo_max': PHOTO_MAX,
+            'layout': cfg.get('layout', 'chat'), 'layouts': LAYOUTS,
             'blocks': [{'id': b, 'name': BLOCKS[b], 'on': on} for b, on in normalize_blocks(cfg['home_blocks'])]}

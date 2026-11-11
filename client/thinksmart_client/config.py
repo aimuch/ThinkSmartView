@@ -54,6 +54,7 @@ DEFAULTS = {
     'rotation_auto': False,   # follow the accelerometer (rotation.py); the rotation itself lives in the kiosk config
     # 外观 (looks.py, 设计画布第 8 块): colour theme, the conversation avatar, what the home page shows
     'theme': 'night',
+    'layout': 'chat',
     'avatar': 'orb',
     'home_blocks': [['clock', True], ['date', True], ['weather', True], ['alarms', True], ['suggest', True]],
     'kids': {'enabled': False, 'age': 3, 'daily_minutes': 30, 'bedtime': '20:30', 'voice': 'child'},   # kids.py

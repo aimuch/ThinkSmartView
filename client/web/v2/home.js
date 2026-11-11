@@ -496,4 +496,9 @@ longPress($('hRooms'), '.h-tile', t => { const c = findCard(t.dataset.id); if (c
 setInterval(() => quickHome(!document.hidden && !mi.open && !(typeof sb !== 'undefined' && sb.shown)
   && document.body.dataset.state !== 'sleep' && ((mi.view && mi.view.favorites) || []).length > 0), 5000);
 handlers.rotation = r => { rot = r; renderRotation(); };
+// 仪表盘（dash.js）用的家居接口：设备数据、开关、详情、家居页、长按
+window.miApi = {
+  view: () => mi.view, findCard, control, openDetail, openHome, icon, isOn, longPress,
+  visible: on => { if (!DEMO) miFetch('/api/mijia/visible', { visible: on || mi.open, home: !!quickHome.on }); },
+};
 })();

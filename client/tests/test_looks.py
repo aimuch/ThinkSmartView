@@ -183,6 +183,6 @@ def test_appearance_tool(tmp_path, monkeypatch):
         r = asyncio.run(mcp.handle({'id': 1, 'method': 'tools/call',
                                     'params': {'name': 'self.appearance.set', 'arguments': args}}, client=c))
         return json.loads(r['result']['content'][0]['text'])
-    assert call(avatar='小猫', theme='童趣') == {'success': True, 'theme': '童趣', 'avatar': '小猫'}
+    assert call(avatar='小猫', theme='童趣') == {'success': True, 'theme': '童趣', 'avatar': '小猫', 'layout': '对话'}
     assert not call(avatar='photo')['success']
     assert not call(theme='彩虹')['success']

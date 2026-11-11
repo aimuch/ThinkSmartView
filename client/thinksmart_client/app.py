@@ -285,7 +285,7 @@ class Client:
             log.warning('invalid broadcast setting %r, using the default', cfg.get('broadcast'))
             self.broadcast = broadcast.normalize(None)
         self.broadcast_fired = set()
-        for key, fix in (('theme', looks.normalize_theme), ('avatar', looks.normalize_avatar)):
+        for key, fix in (('theme', looks.normalize_theme), ('avatar', looks.normalize_avatar), ('layout', looks.normalize_layout)):
             try:
                 cfg[key] = fix(cfg.get(key))
             except ValueError:
@@ -1337,7 +1337,7 @@ class Client:
     def looks_view(self):
         return looks.view(self.cfg)
 
-    async def set_looks(self, theme=None, avatar=None, blocks=None, move=None, toggle=None):
+    async def set_looks(self, theme=None, avatar=None, blocks=None, move=None, toggle=None, layout=None):
         """Change the looks (page or voice). move={'id', 'by': -1|1} reorders a block; toggle=id flips it.
         ValueError for anything invalid."""
         changes = {}
@@ -1345,6 +1345,8 @@ class Client:
             changes['theme'] = looks.normalize_theme(theme)
         if avatar is not None:
             changes['avatar'] = looks.normalize_avatar(avatar)
+        if layout is not None:
+            changes['layout'] = looks.normalize_layout(layout)
         order = looks.normalize_blocks(blocks if blocks is not None else self.cfg['home_blocks'])
         if move:
             ids = [b for b, _ in order]

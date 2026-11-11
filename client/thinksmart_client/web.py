@@ -455,7 +455,7 @@ def make_app(client: Client):
         async def change():
             if body.get('delete'):
                 return {'looks': await client.delete_avatar(str(body['delete']))}
-            keys = ('theme', 'avatar', 'blocks', 'move', 'toggle')
+            keys = ('theme', 'avatar', 'blocks', 'move', 'toggle', 'layout')
             return {'looks': await client.set_looks(**{k: body[k] for k in keys if k in body})}
         return await wake_call(change)
 

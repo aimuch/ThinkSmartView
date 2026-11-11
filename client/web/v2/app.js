@@ -949,7 +949,7 @@ const AVATAR_DOT = {
   wheat: 'radial-gradient(circle at 34% 28%,#fffbe6,#f5d37a 30%,#d9a22e 72%,#7d5410)',
   robot: 'linear-gradient(160deg,#f2f5fb,#c5cde0 45%,#7d88a6)',
 };
-const THEME_DOT = { night: 'linear-gradient(135deg,#18245a,#050813)', dawn: 'linear-gradient(135deg,#ffe3c4,#f3ecff)',
+const THEME_DOT = { night: 'linear-gradient(135deg,#18245a,#050813)', dawn: 'linear-gradient(135deg,#ffe3c4,#f3ecff)', lavender: 'linear-gradient(135deg,#f3eeff,#a99cff)',
   forest: 'linear-gradient(135deg,#1d4a3a,#06100c)', candy: 'linear-gradient(135deg,#ffd6ec,#c9ecff)', black: '#000',
   auto: 'linear-gradient(90deg,#ffe3c4 50%,#18245a 50%)' };
 const BLOCK_ELS = { clock: ['greet', 'bigTime'], date: ['bigDate'], weather: ['homeWeather'], alarms: ['nextAlarms', 'missedBox', 'homeNotes', 'homeList'],
@@ -985,6 +985,9 @@ function renderLooks() {
   $('looksNow').textContent = `${l.themes[l.theme]} · ${(l.avatars.concat(l.photos).find(a => a.id === l.avatar) || {}).name || ''}`;
   $('looksThemes').innerHTML = Object.entries(l.themes).map(([k, name]) =>
     `<button data-theme="${k}" class="card2 ${k === l.theme ? 'on' : ''}" style="background:var(--card2)"><i style="background:${THEME_DOT[k]}"></i>${esc(name)}</button>`).join('');
+  $('looksLayouts').innerHTML = Object.entries(l.layouts || {}).map(([k, name]) =>
+    `<button data-layout="${k}" class="${k === l.layout ? 'on' : ''}">${esc(name)}</button>`).join('');
+  if (window.dashRender) window.dashRender();
   $('looksAvatars').innerHTML = l.avatars.map(a =>
     `<button data-avatar="${a.id}" class="${a.id === l.avatar ? 'on' : ''}"><span class="dot" style="background:${AVATAR_DOT[a.id]}"></span>${esc(a.name)}</button>`).join('') +
     l.photos.map(p => `<button data-avatar="${p.id}" class="${p.id === l.avatar ? 'on' : ''}"><img src="${esc(p.url)}" alt="">` +
@@ -1002,6 +1005,7 @@ async function setLooks(body) {
   if (r.ok) { ui.looks = r.looks; renderLooks(); } else if (r.error) toast(r.error, 'error');
 }
 $('looksThemes').addEventListener('click', e => { const b = e.target.closest('[data-theme]'); if (b) setLooks({ theme: b.dataset.theme }); });
+$('looksLayouts').addEventListener('click', e => { const b = e.target.closest('[data-layout]'); if (b) setLooks({ layout: b.dataset.layout }); });
 $('looksAvatars').addEventListener('click', e => {
   const del = e.target.closest('[data-del]');
   if (del) {
