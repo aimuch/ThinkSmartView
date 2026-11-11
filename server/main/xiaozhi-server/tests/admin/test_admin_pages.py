@@ -355,6 +355,7 @@ async def test_kiosk_llm_list_and_device_model(kiosk):
     assert [(o["kind"], o["vendor"], o["entry"]) for o in data["options"]] == \
         [("cli", "claude-code", "ClaudeCLI"), ("api", "deepseek", "DeepSeekLLM")]  # 没配好的厂商不列
     assert data["options"][1]["model"] == "deepseek-chat"
+    assert "claude" in data["options"][0]["calls"]            # 称呼：「嗨 + 称呼」临时叫它
     # 设备上次切到的模型（呼名或在屏幕上切换）才是它实际会用的
     llm_router.store().put("dev-1", {"model": "DeepSeekLLM"})
     data = await (await kiosk.get("/kiosk/llm?device=dev-1")).json()
@@ -1283,3 +1284,19 @@ async def test_voiceprint_enroll_and_identify(kiosk, tmp_path, monkeypatch):
     assert lv.for_device("dev-1") is not None and lv.for_device("dev-9") is None
     assert (await (await kiosk.post("/kiosk/voiceprint/remove", json={"device": "dev-1", "name": "妈妈"})).json())["ok"]
     assert [p["name"] for p in lv.people("dev-1")] == ["宝宝"]
+
+
+async def test_kiosk_voice_per_device(kiosk, tmp_path, monkeypatch):
+    from core.utils import device_settings
+
+    monkeypatch.setattr(device_settings, "_path", lambda: str(tmp_path / "device_settings.json"))
+    data = await (await kiosk.get("/kiosk/voice?device=dev-1")).json()
+    assert data["ok"] and data["current"] is None
+    if not data["voices"]:          # 运行中的语音合成没有固定音色表（局域网服务等）：只能跟着网关
+        return
+    v = data["voices"][-1]["value"]
+    assert (await kiosk.post("/kiosk/voice", json={"device": "dev-1", "voice": v})).status == 200
+    assert (await (await kiosk.get("/kiosk/voice?device=dev-1")).json())["current"] == v
+    assert (await kiosk.post("/kiosk/voice", json={"device": "dev-1", "voice": "nope"})).status == 400
+    assert (await kiosk.post("/kiosk/voice", json={"device": "dev-1", "voice": None})).status == 200
+    assert (await (await kiosk.get("/kiosk/voice?device=dev-1")).json())["current"] is None

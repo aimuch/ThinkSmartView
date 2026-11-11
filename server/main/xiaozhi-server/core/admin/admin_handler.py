@@ -172,6 +172,8 @@ class AdminHandler:
                 web.post("/kiosk/reports", self.handle_kiosk_reports),
                 web.post("/kiosk/asr", self.handle_kiosk_asr),
                 web.post("/kiosk/tts", self.handle_kiosk_tts),
+                web.get("/kiosk/voice", self.handle_kiosk_voice),
+                web.post("/kiosk/voice", self.handle_kiosk_voice_set),
                 web.get("/kiosk/chat/history", self.handle_kiosk_chat_history),
                 web.post("/kiosk/chat/clear", self.handle_kiosk_chat_clear),
                 web.get("/kiosk/geocode", self.handle_kiosk_geocode),
@@ -1065,6 +1067,11 @@ class AdminHandler:
                     for a in pages.custom_agents(merged) if a["ready"]]
         options += [{"kind": "grok", "vendor": "grok_bot", "label": b["bot_name"], "entry": b["entry"], "model": "Grok Bot"}
                     for b in data["grok"]["bots"] if llm_router.model_ready(merged, b["entry"])]
+        # 每个能用的模型带上它的称呼（「嗨 + 称呼」临时叫它，设备设置页「智能体 → 可以叫的」显示）
+        from core.agent import call_names
+        names = (merged.get("call_names") or {}).get("models") or call_names.DEFAULT_MODELS
+        for o in options:
+            o["calls"] = [str(a) for a in (names.get(o["entry"]) or [])][:3]
         selected = data["selected"]
         if device:
             name = (llm_router.store().get(device) or {}).get("model")
@@ -1201,6 +1208,42 @@ class AdminHandler:
             return self._error("合成失败，请检查语音合成服务能否访问", 502)
         self.logger.bind(tag=TAG).info(f"/kiosk/tts 合成 {len(text)} 字，用时 {time.monotonic() - started:.1f}s")
         return web.Response(body=_wav(pcm, KIOSK_TTS_RATE), content_type="audio/wav", headers=SECURITY_HEADERS)
+
+    async def handle_kiosk_voice(self, request: web.Request):
+        """?device=：这台设备回答用的声音（设计画布第 34 块）。engine 是运行中选的语音合成，voices 是它的音色，
+        current 是这台设备单独设的（没设是 null，跟着网关的 default）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.admin import catalog
+        from core.utils import device_settings
+
+        merged = await self._blocking(self._merged)
+        entry = (merged.get("selected_module") or {}).get("TTS") or ""
+        engine = next((e for e in catalog.TTS_ENGINES if e["entry"] == entry), None)
+        conf = (merged.get("TTS") or {}).get(entry) or {}
+        own = device_settings.get(request.query.get("device") or "").get("tts") or {}
+        return self._json({"ok": True, "engine": entry, "label": engine["label"] if engine else entry,
+                           "voices": [{"value": v["value"], "name": v["name"], "style": v.get("style", "")}
+                                      for v in (engine or {}).get("voices") or []],
+                           "default": conf.get("voice") or "",
+                           "current": own.get("voice") if own.get("entry") == entry else None})
+
+    async def handle_kiosk_voice_set(self, request: web.Request):
+        """{"device", "voice"}：这台设备回答用这个音色（下一次连接生效）；voice 为 null 时跟着网关。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import device_settings
+
+        body = await self._read_json(request)
+        device, voice = str(body.get("device") or ""), body.get("voice")
+        merged = await self._blocking(self._merged)
+        entry = (merged.get("selected_module") or {}).get("TTS") or ""
+        try:
+            await self._blocking(device_settings.put, device,
+                                 {"tts": None if voice is None else {"entry": entry, "voice": str(voice)}}, merged)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        return self._json({"ok": True})
 
     def _synthesize(self, text: str) -> bytes:
         from core.providers.tts.dto.dto import InterfaceType
