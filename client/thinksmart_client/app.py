@@ -469,7 +469,7 @@ class Client:
         p = self.photo
         return p and {k: p.get(k) for k in ('token', 'url', 'question', 'expires', 'state', 'error', 'image',
                                             'purpose', 'styles', 'style', 'preview', 'avatar_ready', 'received',
-                                            'camera', 'shooting')}
+                                            'camera', 'shooting', 'shots')}
 
     def publish_photo(self):
         self.events.publish('photo', self.photo_view() or {'state': 'closed'})
@@ -489,8 +489,8 @@ class Client:
                       'expires': data['expires'], 'state': 'waiting', 'error': None, 'image': None,
                       'purpose': purpose, 'styles': data.get('styles') or [], 'style': None, 'preview': None,
                       'avatar_ready': data.get('avatar_ready', False),
-                      # 拍照问：有机身摄像头就用它（倒数后自动拍），没有才出二维码
-                      'camera': purpose == 'ask' and camera.available(), 'shooting': False}
+                      # 有机身摄像头就用它（拍照问倒数后自动拍；形象、相册点快门拍，设计画布第 33 块），没有才出二维码
+                      'camera': camera.available(), 'shooting': False, 'shots': []}
         if self.photo_task and not self.photo_task.done():
             self.photo_task.cancel()
         self.photo_task = asyncio.create_task(self._photo_poller(self.photo))
@@ -500,10 +500,18 @@ class Client:
         return {'vision_ready': data.get('vision_ready', True), 'avatar_ready': data.get('avatar_ready', False),
                 'camera': self.photo['camera']}
 
+    def _camera_can_shoot(self, p):
+        if not p or not p.get('camera') or p.get('shooting'):
+            return False
+        if p.get('purpose') == 'avatar':      # 形象：第 1 张以后同一个码接着收姿势，最多 looks.POSES 张
+            return p['state'] in ('waiting', 'received') and len(p.get('shots') or []) < looks.POSES
+        return p['state'] == 'waiting'
+
     async def camera_shoot(self):
-        """拍照问：用机身摄像头拍一张，像手机一样传给网关（/photo/<token>），后面照常（轮询拿答案）。"""
+        """用机身摄像头拍一张，像手机一样传给网关（/photo/<token>），后面照常：拍照问轮询拿答案；
+        形象拍完点「好了」选画风；相册由轮询取回。"""
         p = self.photo
-        if not p or not p.get('camera') or p['state'] != 'waiting' or p.get('shooting'):
+        if not self._camera_can_shoot(p):
             raise ValueError('现在没在等拍照')
         p['shooting'] = True
         self.publish_photo()
@@ -517,13 +525,44 @@ class Client:
                     data = await r.json(content_type=None)
             if not data.get('ok'):
                 raise ValueError(data.get('error') or '没传上去')
-            log.info('photo question: shot with the camera (%d bytes)', len(jpeg))
+            log.info('photo %s: shot with the camera (%d bytes)', p.get('purpose'), len(jpeg))
+            if p.get('purpose') in ('avatar', 'album'):   # 下面一排小图；接着拍下一张
+                PHOTOS.mkdir(parents=True, exist_ok=True)
+                name = f"{int(time.time() * 1000)}-cam{len(p['shots'])}.jpg"
+                (PHOTOS / name).write_bytes(jpeg)
+                p['shots'] = p['shots'] + [f'/api/photos/{name}']
+                p['shooting'] = False
+                if p.get('purpose') == 'avatar' and p['state'] == 'waiting':
+                    p['state'] = 'received'
+                if p.get('purpose') == 'album':
+                    p['received'] = len(p['shots'])
+                if p.get('purpose') == 'avatar' and len(p['shots']) >= looks.POSES:
+                    p['camera'] = False                  # 拍满了：去选画风
+                self.publish_photo()
             return {}
         except Exception as e:
             log.warning('camera shot failed: %s', e)
             p['shooting'] = False
             self.publish_photo()
             raise ValueError(str(e) if isinstance(e, ValueError) else '没拍成，再试一次或者用手机拍')
+
+    async def camera_done(self):
+        """形象、相册用摄像头拍好了：形象去选画风（和手机拍的一样）；相册把还没取回的取回来，然后关上。"""
+        p = self.photo
+        if not p or not p.get('shots'):
+            raise ValueError('还没拍')
+        if p.get('purpose') == 'avatar':
+            p['camera'] = False
+            self.publish_photo()
+            return {}
+        if p.get('purpose') == 'album':
+            try:
+                v = await self._hub_http(f"/kiosk/photo/{p['token']}")
+                await self._fetch_album(p, int(v.get('album_count') or 0))
+            except Exception as e:
+                log.warning('album: cannot fetch the last photos: %s', e)
+            await self.photo_cancel()
+        return {}
 
     async def camera_to_phone(self):
         """不用摄像头了（拍不清楚）：换回二维码，用手机拍。"""
@@ -1170,6 +1209,10 @@ class Client:
 
     async def _fetch_album(self, p, count):
         """Copy the album photos the phone sent so far (p['album_got'] of count) into ALBUM."""
+        async with self.album_lock:     # 轮询和摄像头「完成」可能同时取：不重复取同一张
+            await self._fetch_album_locked(p, count)
+
+    async def _fetch_album_locked(self, p, count):
         got = p.setdefault('album_got', 0)
         while got < count:
             try:

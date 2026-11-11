@@ -505,6 +505,12 @@ def make_app(client: Client):
         except ValueError as e:
             return web.json_response({'ok': False, 'error': str(e)}, status=400)
 
+    async def camera_done(_request):
+        try:
+            return web.json_response({'ok': True, **await client.camera_done()})
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)})
+
     async def camera_phone(_request):
         return web.json_response({'ok': True, **await client.camera_to_phone()})
 
@@ -631,6 +637,7 @@ def make_app(client: Client):
     app.router.add_get('/api/perf', perf_get)
     app.router.add_post('/api/camera/shoot', camera_shoot)
     app.router.add_post('/api/camera/phone', camera_phone)
+    app.router.add_post('/api/camera/done', camera_done)
     app.router.add_get('/api/avatars/poses/{name}', avatar_pose_file)
     app.router.add_post('/api/photo', photo_start)
     app.router.add_post('/api/photo/cancel', photo_cancel)

@@ -316,6 +316,26 @@ body.both-bars .now-bar { top: 288px; }
 .cam-btns { position: absolute; left: 0; right: 0; bottom: 34px; display: flex; gap: 16px; justify-content: center; padding: 0 24px; }
 .cam-ov.shooting .cam-btns button:not(#camCancel) { opacity: .4; pointer-events: none; }
 @media (orientation: portrait) { .cam-btns { flex-wrap: wrap; } .cam-btns .ctl-big { padding: 0 26px; } }
+.cam-shutter, .cam-shots, #camDone { display: none; }
+.cam-ov.multi #camShoot { display: none; }
+.cam-ov.multi #camDone { display: inline-flex; }
+.cam-ov.multi .cam-shutter { display: grid; position: absolute; right: 44px; top: 50%; width: 124px; height: 124px; margin-top: -62px; border-radius: 50%;
+  border: 6px solid #fff; background: #ffffff2e; place-items: center; box-shadow: 0 8px 30px #0008; }
+.cam-shutter i { width: 92px; height: 92px; border-radius: 50%; background: #fff; transition: transform .12s; }
+.cam-shutter:active i { transform: scale(.86); }
+.cam-ov.shooting .cam-shutter { opacity: .4; pointer-events: none; }
+.cam-ov.multi .cam-shots { display: flex; position: absolute; left: 36px; bottom: 34px; gap: 12px; }
+.cam-shots i { width: 84px; height: 84px; border-radius: 18px; border: 2px solid #ffffff66; background: #ffffff1f; display: grid; place-items: center;
+  font-style: normal; font-size: 18px; color: #dfe5ff; overflow: hidden; }
+.cam-shots i.got { border-color: var(--accent2, #8ff0ff); }
+.cam-shots img { width: 100%; height: 100%; object-fit: cover; }
+.cam-ov.multi .cam-btns { left: auto; right: 24px; justify-content: flex-end; }
+#camDone:disabled { opacity: .4; }
+@media (orientation: portrait) {
+  .cam-ov.multi .cam-shutter { right: auto; left: 50%; top: auto; bottom: 290px; margin: 0 0 0 -62px; }
+  .cam-ov.multi .cam-shots { left: 0; right: 0; bottom: 150px; justify-content: center; }
+  .cam-ov.multi .cam-btns { left: 0; right: 0; justify-content: center; }
+}
 
 /* ---- 免打扰（睡眠时段）：形象去睡觉（设计画布第 29 块）；只用 transform/opacity ---- */
 .sleep-sliders { display: flex; flex-direction: column; gap: 14px; margin: 6px 0 4px; }
@@ -439,3 +459,10 @@ body.av-photo-on .zzz { z-index: 2; }
 #settings .sheet-bar { margin-bottom: 16px; }
 /* 横屏高度只有 800：设置标题下的小字不显示，给侧边栏的 4 组 11 类腾地方 */
 @media (orientation: landscape) { #settings .sheet-bar p { display: none; } #settings .set-nav { gap: 1px; } }
+.cam-ov.multi .cam-btns .ctl-big.pri { flex: none; }
+.cam-ov.multi #camDone { align-items: center; justify-content: center; }
+.cam-ov.multi .cam-frame { right: 17%; }
+@media (orientation: portrait) {
+  .cam-ov.multi .cam-frame { right: 12%; bottom: 33%; }
+  .cam-ov.multi .cam-shutter { bottom: 262px; }
+}

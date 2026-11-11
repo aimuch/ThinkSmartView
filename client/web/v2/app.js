@@ -1017,7 +1017,7 @@ let photoQrShown = null, photoTimer = null;
 // 机身摄像头：有摄像头的拍照问先显示实时画面，3 秒后倒数 3、2、1 自动拍（设计画布第 27 块）
 const cam = { on: false, timer: null, token: null };
 function camStop() {
-  clearTimeout(cam.timer); cam.timer = null; cam.on = false;
+  clearTimeout(cam.timer); cam.timer = null; cam.on = false; cam.token = null;
   $('camOv').hidden = true; $('camCount').textContent = '';
   $('camView').removeAttribute('src');   // 断开实时画面：没人看了客户端就关摄像头
 }
@@ -1025,22 +1025,52 @@ function camCountdown(n) {
   $('camCount').textContent = n || '';
   if (n > 0) { cam.timer = setTimeout(() => camCountdown(n - 1), 1000); return; }
   $('camFlash').classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => $('camFlash').classList.remove('on')));
-  postJson('/api/camera/shoot').then(r => { if (r && !r.ok && r.error) { toast(r.error, 'error'); camArm(); } });
+  cam.timer = null;
+  postJson('/api/camera/shoot').then(r => {
+    if (r && !r.ok && r.error) { toast(r.error, 'error'); if (ui.photo && ui.photo.purpose === 'ask') camArm(); }
+  });
 }
 function camArm() { clearTimeout(cam.timer); $('camCount').textContent = ''; cam.timer = setTimeout(() => camCountdown(3), 3000); }
+// 形象、相册也用机身摄像头（设计画布第 33 块）：点圆快门倒数 3、2、1 拍，拍一张下面多一个小图
+const CAM_POSES = ['待机', '在听', '在想', '在说', '睡觉'];
+function camWanted(p) {
+  if (!p || !p.camera) return false;
+  const n = (p.shots || []).length;
+  if (p.purpose === 'avatar') return ['waiting', 'received'].includes(p.state) && n < CAM_POSES.length;
+  return p.state === 'waiting';
+}
 function renderCamera(p) {
-  const want = !!(p && p.camera && p.state === 'waiting' && p.purpose === 'ask');
-  if (!want) { if (cam.on) camStop(); return false; }
+  if (!camWanted(p)) { if (cam.on) camStop(); return false; }
+  const multi = p.purpose !== 'ask', shots = p.shots || [], n = shots.length;
   $('camOv').classList.toggle('shooting', !!p.shooting);
+  $('camOv').classList.toggle('multi', multi);
+  if (p.purpose === 'avatar') {
+    $('camQ').textContent = `拍你的公仔 · 第 ${n + 1} 张`;
+    $('camHint').textContent = n ? `接着拍「${CAM_POSES[n]}」的样子，拍几张都行；拍好了点「好了，选画风」`
+      : '第 1 张是平时的样子，放进框里点圆按钮；接着可以拍在听、在想、在说、睡觉的样子';
+    $('camShots').innerHTML = CAM_POSES.map((name, i) => shots[i] ? `<i class="got"><img src="${esc(shots[i])}" alt=""></i>` : `<i>${name}</i>`).join('');
+    $('camDone').textContent = '好了，选画风';
+  } else if (p.purpose === 'album') {
+    $('camQ').textContent = '拍几张放进相册';
+    $('camHint').textContent = n ? `已经拍了 ${n} 张，接着拍或者点「完成」` : '对着冲洗的老照片、孩子的画拍都行，放进框里点圆按钮';
+    $('camShots').innerHTML = shots.slice(-6).map(u => `<i class="got"><img src="${esc(u)}" alt=""></i>`).join('');
+    $('camDone').textContent = '完成';
+  } else {
+    $('camQ').textContent = `「${p.question}」`;
+    $('camHint').textContent = '把东西对着屏幕上方的摄像头，放进框里';
+  }
+  $('camDone').disabled = !n;
+  $('camPhone').textContent = multi ? '用手机' : '用手机拍';
   if (cam.on && cam.token === p.token) return true;
   cam.on = true; cam.token = p.token;
-  $('camQ').textContent = `「${p.question}」`;
   $('camOv').hidden = false;
   $('camView').src = '/api/camera/preview?t=' + Date.now();
-  camArm();
+  if (!multi) camArm();     // 拍照问 3 秒后自动倒数；形象、相册等点快门
   return true;
 }
 $('camShoot').addEventListener('click', () => { clearTimeout(cam.timer); camCountdown(0); });
+$('camShutter').addEventListener('click', () => { if (!cam.timer && !$('camOv').classList.contains('shooting')) camCountdown(3); });
+$('camDone').addEventListener('click', () => { camStop(); postJson('/api/camera/done').then(r => { if (r && !r.ok && r.error) toast(r.error, 'error'); }); });
 $('camPhone').addEventListener('click', () => { camStop(); postJson('/api/camera/phone'); });
 $('camCancel').addEventListener('click', () => { camStop(); postJson('/api/photo/cancel'); });
 
