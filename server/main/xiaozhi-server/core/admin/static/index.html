@@ -425,23 +425,27 @@
   /* 状态只靠图标（参照 repo-sync）：连上是信号图标，连不上/登录过期换成警告圈；文字不跟着变色 */
   .hb-alert, .hb[data-st="off"] .hb-live, .hb[data-st="expired"] .hb-live { display: none; }
   .hb[data-st="off"] .hb-alert, .hb[data-st="expired"] .hb-alert { display: inline; }
+  /* 连不上、登录过期：带斜线的信号图标就是状态，不再写字（鼠标停留看得到原因） */
+  .hb[data-st="off"] .hb-txt, .hb[data-st="expired"] .hb-txt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .sf-box .hb[data-st="off"] #online-short, .sf-box .hb[data-st="expired"] #online-short { display: none; }
   .sf-box #online-short { color: #cbd5e1; }
-  .hb-w1, .hb-w2 { transform-origin: 12px 12px; transform-box: view-box; }
-  .hb-w2 { opacity: .55; }
-  .hb[data-st="none"] .hb-w1, .hb[data-st="none"] .hb-w2 { opacity: .35; }
-  .hb.beat .hb-w1 { animation: hbWave 1.4s ease-out; } .hb.beat .hb-w2 { animation: hbWave 1.4s ease-out .15s; }
-  .hb[data-st="talk"] .hb-w1 { animation: hbWave 1.2s ease-out infinite; } .hb[data-st="talk"] .hb-w2 { animation: hbWave 1.2s ease-out .2s infinite; }
-  @keyframes hbWave { 0% { transform: scale(.7); opacity: .2; } 35% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); opacity: .55; } }
+  /* 呼吸（参照 repo-sync）：有设备在线时信号图标慢慢明暗，对话中快一倍；没设备时灰着不动 */
+  .hb[data-st="idle"] .hb-ico, .hb[data-st="slow"] .hb-ico { animation: hbBreath 2.4s ease-in-out infinite; }
+  .hb[data-st="talk"] .hb-ico { animation: hbBreath 1.2s ease-in-out infinite; }
+  .hb[data-st="none"] .hb-ico { opacity: .45; }
+  @keyframes hbBreath { 50% { opacity: .45; } }
   .side-foot .sf-out { margin-left: auto; text-decoration: none; background: none; border: 0; padding: 0; color: #7aa2ff; font-size: 12.5px; cursor: pointer; white-space: nowrap; flex: none; }
   .side-foot .sf-out:hover { color: #a9c2ff; text-decoration: underline; }
   .sf-sub { font-size: 11.5px; color: var(--side-text); opacity: .8; padding-left: 27px; margin-top: -5px; white-space: nowrap; overflow: hidden;
             text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
   .sf-box .acct { background: none; padding: 2px 0; gap: 9px; border-radius: 7px; font-size: 12.5px; }
   .sf-box .acct:hover { color: #e2e8f0; }
-  /* 小头像：渐变圆底 + 一个字（设计画布第 31 块） */
-  .sf-box .acct .av { width: 22px; height: 22px; border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff;
-                      background: linear-gradient(135deg, #6c9bff, #9b8cff); box-shadow: 0 0 0 2px rgba(255, 255, 255, .08); }
-  :root[data-side="rail"] .sf-box .acct .av { width: 26px; height: 26px; font-size: 12px; }
+  /* 账号行只有文字，和「1 台在线」左边对齐（设计画布第 31 块）；侧栏收起、窄屏没有文字时才显示小头像，好点开账号菜单 */
+  .sf-box .acct { padding-left: 27px; }
+  .sf-box .acct .av { display: none; width: 26px; height: 26px; border-radius: 50%; font-size: 12px; font-weight: 700; color: #fff;
+                      background: linear-gradient(135deg, #6c9bff, #9b8cff); }
+  :root[data-side="rail"] .sf-box .acct { padding-left: 0; } :root[data-side="rail"] .sf-box .acct .av { display: grid; }
+  @media (max-width: 900px) { .sf-box .acct { padding-left: 0; } .sf-box .acct .av { display: grid; } }
   .sf-theme svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .sf-who { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sf-theme { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; border-radius: 10px; background: rgba(0, 0, 0, .28);
@@ -450,7 +454,7 @@
                      transition: background .15s, color .15s; }
   .sf-theme button:hover { color: #e2e8f0; }
   .sf-theme button[aria-pressed="true"] { background: var(--side-hover); color: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); }
-  @media (prefers-reduced-motion: reduce) { .hb .hb-w1, .hb .hb-w2 { animation: none !important; } }
+  @media (prefers-reduced-motion: reduce) { .hb .hb-ico { animation: none !important; } }
   @media (max-width: 900px) {
     .sf-box { flex-direction: row; align-items: center; padding: 0; border: 0; background: none !important; gap: 8px; }
     .sf-sub, .sf-theme, .sf-who, .sf-box .more { display: none; }
@@ -714,7 +718,7 @@
       <button data-page="update"><span class="ico">⟳</span>更新网关</button>
     </nav>
     <div class="side-foot"><div class="sf-box">
-      <div class="side-status hb" id="hb" data-st="none"><svg class="hb-ico" viewBox="0 0 24 24" aria-hidden="true"><g class="hb-live"><circle class="hb-dot" cx="12" cy="12" r="2.2"/><path class="hb-w1" d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7"/><path class="hb-w2" d="M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></g><g class="hb-alert"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></g></svg>
+      <div class="side-status hb" id="hb" data-st="none"><svg class="hb-ico" viewBox="0 0 24 24" aria-hidden="true"><g class="hb-live"><circle class="hb-dot" cx="12" cy="12" r="2"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.3 5.3a9.5 9.5 0 0 0 0 13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4"/></g><g class="hb-alert"><circle cx="12" cy="12" r="2"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.3 5.3a9.5 9.5 0 0 0 0 13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4M3.5 3.5l17 17"/></g></svg>
         <span class="hb-txt"><b id="online-text">没有设备在线</b></span><span id="online-short">无设备</span>
         <button id="logout" class="sf-out" type="button">退出登录</button></div>
       <small class="sf-sub" id="hb-sub"></small>
