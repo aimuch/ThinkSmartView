@@ -335,7 +335,7 @@
   #toast.err { background: #dc2626; }
 
   @media (max-width: 900px) {
-    .app { grid-template-columns: minmax(0, 1fr); }
+    .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }   /* 顶栏不被拉高（内容短时它会分走半屏） */
     aside { z-index: 10; height: auto; padding: 10px 12px; flex-direction: row; align-items: center; gap: 8px; }
     .brand { padding: 0 6px 0 0; } .brand span { display: none; }
     .nav { display: flex; gap: 2px; overflow-x: auto; flex: 1; min-width: 0; }
