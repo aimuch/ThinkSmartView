@@ -1,0 +1,96 @@
+diff --git a/src/ipa/libipa/agc.cpp b/src/ipa/libipa/agc.cpp
+index 182dd73..275b4bd 100644
+--- a/src/ipa/libipa/agc.cpp
++++ b/src/ipa/libipa/agc.cpp
+@@ -414,10 +414,20 @@ int AgcAlgorithm::configure(agc::Session &session, agc::ActiveState &state,
+ 	 * to know the limits for exposure time and analogue gain. As it depends
+ 	 * on the sensor, update it with the controls.
+ 	 *
+-	 * \todo take VBLANK into account for maximum exposure time
++	 * The sensor's V4L2_CID_EXPOSURE maximum follows VBLANK (frame length
++	 * minus a margin), so the longest exposure is the one at the longest
++	 * frame. Pipelines that write VBLANK (frameContext.vblank) let the AGC
++	 * lower the frame rate in low light, down to the maximum of the
++	 * FrameDurationLimits control.
+ 	 */
++	const int32_t vblankDef = v4l2VBlank.def().get<int32_t>();
++	const int32_t vblankMax = v4l2VBlank.max().get<int32_t>();
++	session.sensor.exposureMargin =
++		std::max<int32_t>(0, static_cast<int32_t>(config.sensorInfo.outputSize.height) + vblankDef - maxExposure);
++	session.sensor.minVblank = v4l2VBlank.min().get<int32_t>();
++	session.sensor.maxVblank = vblankMax;
+ 	session.minExposureTime = minExposure * session.lineDuration;
+-	session.maxExposureTime = maxExposure * session.lineDuration;
++	session.maxExposureTime = (maxExposure + std::max(0, vblankMax - vblankDef)) * session.lineDuration;
+ 	session.minAnalogueGain = minGain;
+ 	session.maxAnalogueGain = maxGain;
+ 	session.defAnalogueGain = defGain;
+@@ -724,7 +734,10 @@ void AgcAlgorithm::process(const agc::Session &session, agc::ActiveState &state,
+ 			   ControlList &metadata)
+ {
+ 	if (!params) {
+-		processFrameDuration(session, frameContext, frameContext.minFrameDuration);
++		/* Keep the frame long enough for the exposure in use */
++		processFrameDuration(session, frameContext,
++				     std::max<utils::Duration>(frameContext.minFrameDuration,
++							       state.automatic.exposure * session.lineDuration));
+ 		fillMetadata(session, frameContext, metadata);
+ 		return;
+ 	}
+@@ -852,8 +865,11 @@ void AgcAlgorithm::processFrameDuration(const agc::Session &session,
+ {
+ 	const utils::Duration &lineDuration = session.lineDuration;
+ 
+-	frameContext.vblank =
+-		(frameDuration / lineDuration) - session.sensor.outputSize.height;
++	/* Leave the sensor's exposure margin below the frame length. */
++	double vblank = frameDuration / lineDuration + session.sensor.exposureMargin -
++			session.sensor.outputSize.height;
++	frameContext.vblank = static_cast<uint32_t>(
++		std::clamp<double>(vblank, session.sensor.minVblank, session.sensor.maxVblank));
+ 
+ 	/* Update frame duration accounting for line length quantization. */
+ 	frameContext.frameDuration =
+diff --git a/src/ipa/libipa/agc.h b/src/ipa/libipa/agc.h
+index a5700d2..bf0993e 100644
+--- a/src/ipa/libipa/agc.h
++++ b/src/ipa/libipa/agc.h
+@@ -47,6 +47,10 @@ struct Session {
+ 
+ 	struct {
+ 		Size outputSize;
++		/* Lines the exposure must stay below the frame length */
++		uint32_t exposureMargin;
++		uint32_t minVblank;
++		uint32_t maxVblank;
+ 	} sensor;
+ 
+ 	bool autoAllowed;
+diff --git a/src/ipa/softisp/softisp.cpp b/src/ipa/softisp/softisp.cpp
+index 00249a3..8faad99 100644
+--- a/src/ipa/softisp/softisp.cpp
++++ b/src/ipa/softisp/softisp.cpp
+@@ -256,6 +256,9 @@ void IPASoftIsp::processStats(const uint32_t frame,
+ 	ControlList ctrls(context_.sensorControls);
+ 	agc::prepareControls(ctrls, context_.camHelper.get(),
+ 			     frameContext.agc.exposure, frameContext.agc.gain);
++	/* Longer frames in low light (see AgcAlgorithm::processFrameDuration) */
++	if (context_.sensorControls.find(V4L2_CID_VBLANK) != context_.sensorControls.end())
++		ctrls.set(V4L2_CID_VBLANK, static_cast<int32_t>(frameContext.agc.vblank));
+ 	setSensorControls.emit(ctrls);
+ }
+ 
+diff --git a/src/libcamera/pipeline/simple/simple.cpp b/src/libcamera/pipeline/simple/simple.cpp
+index 35e0664..3fff6c1 100644
+--- a/src/libcamera/pipeline/simple/simple.cpp
++++ b/src/libcamera/pipeline/simple/simple.cpp
+@@ -573,6 +573,9 @@ SimpleCameraData::SimpleCameraData(SimplePipelineHandler *pipe,
+ 		{ V4L2_CID_ANALOGUE_GAIN, { delays.gainDelay, false } },
+ 		{ V4L2_CID_EXPOSURE, { delays.exposureDelay, false } },
+ 	};
++	/* Written first, so the exposure range already allows a longer exposure */
++	if (sensor_->controls().find(V4L2_CID_VBLANK) != sensor_->controls().end())
++		params[V4L2_CID_VBLANK] = { delays.vblankDelay, true };
+ 	delayedCtrls_ = std::make_unique<DelayedControls>(sensor_->device(), params);
+ 
+ 	LOG(SimplePipeline, Debug)

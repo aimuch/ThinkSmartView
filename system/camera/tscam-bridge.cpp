@@ -48,7 +48,7 @@ public:
 		yuyv_.resize(size_t(w) * h * 2);
 	}
 
-	int start(unsigned fps)
+	int start(unsigned fps, unsigned minFps)
 	{
 		config_ = cam_->generateConfiguration({ StreamRole::VideoRecording });
 		if (!config_)
@@ -106,9 +106,15 @@ public:
 		}
 
 		ControlList ctrls(cam_->controls());
+		/*
+		 * In low light the AGC may lengthen the frame (lower the frame rate
+		 * down to minFps) for a longer exposure; with libcamera-softisp-vblank.patch
+		 * the software ISP writes VBLANK for it. Without the patch it stays at fps.
+		 */
 		int64_t frameUs = 1000000 / fps;
+		int64_t slowUs = 1000000 / std::min(fps, minFps);
 		ctrls.set(controls::FrameDurationLimits,
-			  std::array<int64_t, 2>{ frameUs, frameUs });
+			  std::array<int64_t, 2>{ frameUs, slowUs });
 		if (cam_->controls().count(&controls::AeEnable))
 			ctrls.set(controls::AeEnable, true);
 		if (cam_->controls().count(&controls::AwbEnable))
@@ -120,8 +126,15 @@ public:
 			running_ = false;
 			return -EIO;
 		}
-		for (auto &r : requests_)
+		/*
+		 * The software ISP's AGC reads FrameDurationLimits from requests (not from
+		 * start()): without this it is free to go to the sensor's longest frame (~1 s).
+		 */
+		for (auto &r : requests_) {
+			r->controls().set(controls::FrameDurationLimits,
+					  std::array<int64_t, 2>{ frameUs, slowUs });
 			cam_->queueRequest(r.get());
+		}
 		return 0;
 	}
 
@@ -283,18 +296,20 @@ static int wait_usage(int fd, int timeout_ms)
 int main(int argc, char **argv)
 {
 	std::string dev = "/dev/video10";
-	unsigned w = 1280, h = 720, fps = 30;
+	unsigned w = 1280, h = 720, fps = 30, minFps = 10;
 	bool always = false;
 	int c;
 
-	while ((c = getopt(argc, argv, "d:s:f:ah")) != -1) {
+	while ((c = getopt(argc, argv, "d:s:f:l:ah")) != -1) {
 		switch (c) {
 		case 'd': dev = optarg; break;
 		case 's': sscanf(optarg, "%ux%u", &w, &h); break;
 		case 'f': fps = std::max(1, atoi(optarg)); break;
+		case 'l': minFps = std::max(1, atoi(optarg)); break;
 		case 'a': always = true; break;
 		default:
-			fprintf(stderr, "usage: %s [-d /dev/video10] [-s 1280x720] [-f 30] [-a]\n"
+			fprintf(stderr, "usage: %s [-d /dev/video10] [-s 1280x720] [-f 30] [-l 10] [-a]\n"
+				"  -l  slowest frame rate the exposure may drop to in low light\n"
 				"  -a  keep the camera running (default: only while an app reads)\n",
 				argv[0]);
 			return c == 'h' ? 0 : 1;
@@ -356,7 +371,7 @@ int main(int argc, char **argv)
 				continue;
 			}
 			b = std::make_unique<Bridge>(cam, fd, w, h);
-			int ret = b->start(fps);
+			int ret = b->start(fps, minFps);
 			if (ret) {
 				fprintf(stderr, "start failed: %d\n", ret);
 				b.reset();

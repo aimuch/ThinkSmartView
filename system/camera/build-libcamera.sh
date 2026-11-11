@@ -9,7 +9,7 @@
 set -euo pipefail
 LC_TAG=v0.8.0
 LC_COMMIT=df8e348d64b4932a0676256ed24f0da3ee9438bc
-PKG_VERSION=0.8.0-1
+PKG_VERSION=0.8.0-2
 
 if [ "${1:-}" != --in-container ]; then
     cd "$(dirname "$0")"
@@ -32,6 +32,7 @@ git clone -q --depth 1 --branch $LC_TAG https://github.com/libcamera-org/libcame
 [ "$(git -C /tmp/libcamera rev-parse HEAD)" = $LC_COMMIT ] || { echo "libcamera $LC_TAG is not $LC_COMMIT"; exit 1; }
 cd /tmp/libcamera
 git apply /src/libcamera-s5kc505a.patch
+git apply /src/libcamera-softisp-vblank.patch   # low light: AGC lowers the frame rate for longer exposures
 
 meson setup build --prefix=/usr/local --buildtype=release \
     -Dpipelines=simple -Dipas=softisp -Dsoftisp-gpu=enabled \

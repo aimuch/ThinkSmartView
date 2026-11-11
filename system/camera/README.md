@@ -20,6 +20,7 @@ S5KC505A ──CSI-2, 2 lanes──▶ CSIPHY0 ▶ CSID0 ▶ ISPIF ▶ VFE0 RDI 
 | `apq8053-lenovo-cd-18781y-camera.dtsi` | camss, CCI, the sensor node and its supplies, appended to the stock DTS | `build.sh` |
 | (pinned upstream) | v4l2loopback v0.15.4 | `build.sh` |
 | `libcamera-s5kc505a.patch` | sensor helper (gain model, black level) and properties for libcamera v0.8.0 | `build-libcamera.sh` |
+| `libcamera-softisp-vblank.patch` | low light: the software ISP writes VBLANK, so the AGC can lengthen the frame (down to the bridge's `-l` frame rate, 10 fps) for exposures longer than 33 ms | `build-libcamera.sh` |
 | `s5kc505a.yaml` | software ISP tuning: vendor colour matrix, AE target | `build-libcamera.sh` |
 | `tscam-bridge.cpp` | libcamera → v4l2loopback webcam bridge, camera on only while an application reads | `build-libcamera.sh` |
 | `thinksmart-camera.service`, `70-libcamera-dmabuf.rules`, `v4l2loopback-*.conf` | system files | — |
@@ -97,6 +98,10 @@ The bridge resolution is the `-s` option in `thinksmart-camera.service` (sizes: 
 role=viewfinder -I`); `-a` keeps the camera running instead of starting it on demand.
 
 ## Known limits
+
+- In low light the frame rate drops (to 10 fps by default, `tscam-bridge -l`): the AGC first uses
+  the longest exposure the frame allows (100 ms), then analogue gain. Measured in a dim room at
+  08:40: mean brightness 61 → 104 (0–255) compared with a fixed 30 fps. Moving things blur more.
 
 - One vendor colour matrix is used for every light (the library does not label which illuminant
   each of its matrices is for); there is no per-illuminant interpolation and no lens-shading
