@@ -181,12 +181,12 @@
   .choice .mark { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; flex: none; font-size: 17px; }
   .choice b { font-size: 15px; } .choice small { display: block; color: var(--muted); word-break: break-all; }
   /* 模型图标（设计画布第 42 块）：白底圆角小方块，单色（黑）的图标深色主题下也看得清；Kimi 本身是白的垫深蓝；没有图标用名字第一个字 */
-  .logo { width: 30px; height: 30px; border-radius: 8px; padding: 5px; background: #fff; box-shadow: inset 0 0 0 1px #0000000f;
+  .mlogo { width: 30px; height: 30px; border-radius: 8px; padding: 5px; background: #fff; box-shadow: inset 0 0 0 1px #0000000f;
           flex: none; object-fit: contain; display: grid; place-items: center; font-weight: 700; font-size: 14px; line-height: 1; }
-  .logo.dk { background: #10142a; box-shadow: inset 0 0 0 1px #ffffff24; }
-  .logo.let { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-line); }
-  .logo.lg { width: 40px; height: 40px; border-radius: 10px; padding: 7px; font-size: 17px; }
-  .logo.md { width: 34px; height: 34px; border-radius: 10px; padding: 6px; font-size: 15px; }
+  .mlogo.dk { background: #10142a; box-shadow: inset 0 0 0 1px #ffffff24; }
+  .mlogo.let { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-line); }
+  .mlogo.lg { width: 40px; height: 40px; border-radius: 10px; padding: 7px; font-size: 17px; }
+  .mlogo.md { width: 34px; height: 34px; border-radius: 10px; padding: 6px; font-size: 15px; }
   .vendors { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .vendor { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--card); cursor: pointer;
             position: relative; text-align: left; box-shadow: var(--shadow); display: flex; gap: 10px; align-items: center; min-width: 0; }
@@ -584,6 +584,8 @@
   .tnode .ic { width: 52px; height: 52px; border-radius: 14px; background: var(--soft); border: 1px solid var(--line); display: grid; place-items: center;
                font-size: 22px; position: relative; transition: border-color var(--d-fast) var(--ease-standard); }
   .tnode .ic .logo { width: 34px; height: 34px; border-radius: 10px; }
+  /* 设备节点：线条画的屏幕（原来是 22px 的 📟，在 52px 的方框里太小）；右边模块的图标也放大 */
+  .tnode .ic .dev-ic { width: 32px; height: 32px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .tnode.hub .ic { width: 60px; height: 60px; border-color: var(--accent-line); box-shadow: 0 0 0 4px var(--accent-soft); }
   .tnode .ic .s { position: absolute; right: -3px; top: -3px; width: 11px; height: 11px; border-radius: 50%; background: var(--muted); border: 2px solid var(--card); }
   .tnode .ic .s.ok { background: var(--ok); } .tnode .ic .s.idle { background: var(--warn); } .tnode .ic .s.err { background: var(--err); }
@@ -598,7 +600,8 @@
   .tmod { display: flex; align-items: center; gap: 10px; border: 0; background: none; color: inherit; padding: 4px 6px; border-radius: 10px;
           cursor: pointer; text-align: left; font: inherit; }
   .tmod:hover { background: var(--soft); }
-  .tmod .ic { width: 38px; height: 38px; border-radius: 11px; background: var(--soft); border: 1px solid var(--line); display: grid; place-items: center; position: relative; flex: none; }
+  .tmod .ic { width: 38px; height: 38px; border-radius: 11px; background: var(--soft); border: 1px solid var(--line); display: grid; place-items: center; position: relative; flex: none;
+              font-size: 21px; line-height: 1; }
   .tmod .ic .s { position: absolute; right: -3px; top: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); border: 2px solid var(--card); }
   .tmod .ic .s.warn { background: var(--warn); }
   .tmod b { display: block; font-size: 12px; } .tmod small { display: block; font-size: 11px; color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1188,7 +1191,7 @@ async function renderStatus(root) {
     </div>
     <div class="card u-panel"><div class="h">拓扑<span>点一个节点去改它</span></div>
       <div class="topo">
-        <div class="tnode"><span class="ic">📟<span class="s ${devState === "talking" ? "ok" : devState === "idle" ? "idle" : ""}"></span></span>
+        <div class="tnode"><span class="ic"><svg class="dev-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="12.5" rx="2.5"/><path d="M8.5 20.5h7M12 16v4.5"/></svg><span class="s ${devState === "talking" ? "ok" : devState === "idle" ? "idle" : ""}"></span></span>
           <b>${first ? "小麦" + (live.length > 1 ? ` 等 ${live.length} 台` : "") : "还没有设备"}</b>
           <small>${first ? `${first.version ? first.version + " · " : ""}${devState === "talking" ? "对话中" : devState === "idle" ? "待机 · " + ago(dev.now, first.last_seen) + "心跳" : "离线 · " + ago(dev.now, first.last_seen)}` : "配网时填下面的 OTA 地址"}</small></div>
         <div class="tlink ${live.length ? "" : "off"}"><b>${devState === "talking" ? "WebSocket" : "心跳"}</b><span class="p"></span></div>
@@ -1382,9 +1385,9 @@ let llmVendor = null;  // 正在查看的 API 厂商
 let agentView = null;   // 本地 CLI 与智能体：正在看 claude 还是 dsh
 // 模型图标（设计画布第 42 块）：logo 是 static/logos/ 里的文件名，网关给的；没有就用名字第一个字
 function logoTile(logo, label, size = "") {
-  if (logo) return `<img class="logo ${size} ${logo.startsWith("kimi") ? "dk" : ""}" src="/admin/logos/${esc(logo)}.svg" alt="">`;
+  if (logo) return `<img class="mlogo ${size} ${logo.startsWith("kimi") ? "dk" : ""}" src="/admin/logos/${esc(logo)}.svg" alt="">`;
   const ch = String(label || "?").trim().replace(/^[（(]/, "").slice(0, 1).toUpperCase() || "?";
-  return `<span class="logo let ${size}" aria-hidden="true">${esc(ch)}</span>`;
+  return `<span class="mlogo let ${size}" aria-hidden="true">${esc(ch)}</span>`;
 }
 
 async function renderLLM(root) {
