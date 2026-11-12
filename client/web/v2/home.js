@@ -5,7 +5,25 @@
 (() => {
 
 /* ---------------- 家居 ---------------- */
-const mi = { view: null, open: false, detail: null, region: 'cn', qrShown: null, room: '全屋', scrollTab: true };
+const mi = { view: null, open: false, detail: null, region: 'cn', qrShown: null, room: '全屋', scrollTab: true, src: null };
+// 家居页的两页（设计画布第 45 块）：接入了智能中枢才有「米家 | 智能中枢」切换，记住上次看的那一页（只在这台设备上）
+const SRC_KEY = 'home.src';
+const savedSrc = () => { try { return localStorage.getItem(SRC_KEY); } catch (e) { return null; } };
+function setSrc(src) {
+  mi.src = src;
+  try { localStorage.setItem(SRC_KEY, src); } catch (e) { /* 存不了就只记这一次 */ }
+  renderHome();
+  if (window.dashRender) window.dashRender();
+}
+// 'mi' 或 'hub'：没接入智能中枢就是米家；没选过时米家没登录就先看智能中枢
+function currentSrc() {
+  if (!(window.hubAvailable && window.hubAvailable())) return 'mi';
+  if (mi.src !== 'mi' && mi.src !== 'hub') {
+    const saved = savedSrc(), loggedIn = !!(mi.view && mi.view.account && mi.view.state !== 'expired');
+    mi.src = saved === 'mi' || saved === 'hub' ? saved : (loggedIn ? 'mi' : 'hub');
+  }
+  return mi.src;
+}
 
 async function miFetch(path, body) {
   try {
@@ -21,7 +39,7 @@ async function miFetch(path, body) {
 function openHome(on) {
   mi.open = on;
   $('home').classList.toggle('on', on);
-  if (!on) { closeDetail(); mi.wantLogin = false; }
+  if (!on) closeDetail();
   if (window.hubOpen) window.hubOpen(on);   // 智能中枢的蓝牙灯（work.js）
   if (!DEMO) {
     miFetch('/api/mijia/visible', { visible: on });
@@ -64,33 +82,38 @@ function renderHome() {
   if (!v) return;
   renderMiSettings();
   const loggedIn = !!v.account && v.state !== 'expired';
-  // 智能中枢的蓝牙灯排在米家前面（work.js，设计画布第 38 块）；有它时米家没登录只占一行，点了才出二维码
-  const hub = window.hubRender ? window.hubRender(loggedIn, mi.room === ALL || !loggedIn) : false;
-  const showLogin = !loggedIn && (!hub || mi.wantLogin);
+  // 智能中枢（work.js，设计画布第 38 块）和米家分两页（第 45 块）：没选过时米家没登录就先看智能中枢
+  const hubOn = !!(window.hubAvailable && window.hubAvailable());
+  const onHub = currentSrc() === 'hub';
+  const hub = window.hubRender ? window.hubRender(onHub) : false;
+  $('hSrc').hidden = !hub;
+  $('hSrc').querySelectorAll('[data-src]').forEach(b => b.classList.toggle('on', b.dataset.src === mi.src));
+  $('home').classList.toggle('on-hub', onHub);
+  const showLogin = !loggedIn && !onHub;
   // only one of the two takes the sheet's height: both flex:1, the QR pane overflowed its half and
   // the empty rooms box above it in the stack swallowed taps on 获取二维码
   $('hLogin').style.display = showLogin ? '' : 'none';
-  $('hRooms').style.display = loggedIn ? '' : 'none';
-  $('hRefresh').style.display = loggedIn || hub ? '' : 'none';
-  $('hSub').textContent = loggedIn ? (hub ? '智能中枢 · ' : '') + `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
-    : hub ? '智能中枢 · 米家没登录' : '用米家 App 扫码登录后显示家里的设备';
+  $('hRooms').style.display = loggedIn && !onHub ? '' : 'none';
+  $('hRefresh').style.display = (loggedIn && !onHub) || onHub ? '' : 'none';
+  $('hSub').textContent = onHub ? '智能中枢 · 蓝牙设备' : loggedIn ? `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
+    : '用米家 App 扫码登录后显示家里的设备';
   // the home: its name with ▾, the others in a menu
   const homes = loggedIn ? v.homes : [];
   const current = homes.find(h => h.id === v.home_id) || homes[0];
-  $('hHomeName').textContent = current ? current.name : '家居';
+  $('hHomeName').textContent = !onHub && current ? current.name : '家居';
   $('hHomePick').classList.toggle('many', homes.length > 1);
   $('hHomeMenu').innerHTML = homes.map(h =>
     `<button data-id="${esc(h.id)}" class="${current && h.id === current.id ? 'on' : ''}">${esc(h.name)}${h.shared ? '<small>共享</small>' : ''}</button>`).join('');
   // message line
   const msg = v.state === 'expired' ? '米家登录已过期，请重新扫码' : v.state === 'loading' ? '正在读取米家设备…'
     : v.state === 'error' ? v.error : loggedIn && !v.rooms.length ? '这个家里还没有能显示的设备' : '';
-  $('hMsg').textContent = msg;
+  $('hMsg').textContent = onHub ? '' : msg;
   $('hMsg').classList.toggle('bad', v.state === 'error' || v.state === 'expired');
   if (showLogin) renderLogin(v);
   // rooms as tabs: 全屋 and each room; the summary chips and tiles follow the tab
   const rooms = loggedIn ? v.rooms : [];
   if (mi.room !== ALL && !rooms.some(r => r.name === mi.room)) mi.room = ALL;
-  $('hTabs').style.display = $('hChips').style.display = loggedIn && rooms.length ? '' : 'none';
+  $('hTabs').style.display = $('hChips').style.display = loggedIn && rooms.length && !onHub ? '' : 'none';
   $('hTabs').innerHTML = [ALL, ...rooms.map(r => r.name)].map(n =>
     `<button data-room="${esc(n)}" class="${n === mi.room ? 'on' : ''}">${esc(n)}</button>`).join('');
   const shown = mi.room === ALL ? rooms : rooms.filter(r => r.name === mi.room);
@@ -280,6 +303,7 @@ function fmt(key, v) {
 
 $('btnHome').addEventListener('click', () => openHome(true));
 $('hClose').addEventListener('click', () => openHome(false));
+$('hSrc').addEventListener('click', e => { const b = e.target.closest('[data-src]'); if (b && b.dataset.src !== mi.src) setSrc(b.dataset.src); });
 $('hRefresh').addEventListener('click', () => { miFetch('/api/mijia/refresh'); toast('正在刷新'); });
 $('hQrBtn').addEventListener('click', () => miFetch('/api/mijia/login/start', { region: mi.region }));
 $('hRegions').addEventListener('click', e => {
@@ -505,7 +529,8 @@ handlers.rotation = r => { rot = r; renderRotation(); };
 window.miApi = {
   view: () => mi.view, findCard, control, openDetail, openHome, icon, isOn, longPress, askConfirm,
   isOpen: () => mi.open, rerender: () => renderHome(),
-  showLogin: () => { mi.wantLogin = true; renderHome(); },
+  showLogin: () => setSrc('mi'),
+  src: currentSrc, setSrc,
   visible: on => { if (!DEMO) miFetch('/api/mijia/visible', { visible: on || mi.open, home: !!quickHome.on }); },
 };
 })();

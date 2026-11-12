@@ -191,23 +191,22 @@ function hubTile(x) {
     (power ? `<button class="h-power${on ? ' on' : ''}" data-hpower="${esc(x.id)}" aria-label="开关"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3.5v8M7 6.3a7.5 7.5 0 1 0 10 0"/></svg></button>` : '') +
     `<b>${esc(x.name)}</b><span>${esc(x.summary || '')}${x.via ? ` · 经 ${esc(x.via)}` : ''}</span></div>`;
 }
-// home.js 的 renderHome 调：返回这台设备有没有接入智能中枢（有的话米家没登录时只占一行）
-window.hubRender = (miLoggedIn, showHere) => {
+// home.js 的 renderHome 调：返回这台设备有没有接入智能中枢；shown：家居页现在在「智能中枢」那一页（设计画布第 45 块）
+window.hubAvailable = () => !!A().smart_hub;
+window.hubRender = shown => {
   const box = $('hHub');
   if (!A().smart_hub) { box.hidden = true; return false; }
   const s = ig.data.smart_hub || {};
   const devs = s.devices || [];
-  let html = `<h3>智能中枢 · 蓝牙设备</h3>` + (s.error ? `<p class="h-msg bad">${esc('读不到智能中枢：' + s.error)}</p>`
-    : devs.length ? `<div class="h-tiles">${devs.map(hubTile).join('')}</div>` : '<p class="h-msg">智能中枢里还没有设备</p>');
-  if (!miLoggedIn && !ig.miLogin) html += `<h3>米家</h3><div class="hub-mi"><span>没登录米家。登录后这里显示米家设备。</span><button class="upd-btn" id="hubMiLogin">扫码登录</button></div>`;
-  else if (miLoggedIn) html += '<h3 class="hub-mi-h">米家</h3>';
-  box.hidden = !showHere;
+  const html = s.error ? `<p class="h-msg bad">${esc('读不到智能中枢：' + s.error)}</p>`
+    : devs.length ? `<div class="h-tiles">${devs.map(hubTile).join('')}</div>` : '<p class="h-msg">智能中枢里还没有设备</p>';
+  box.hidden = !shown;
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
   return true;
 };
 window.hubOpen = on => {
   ig.homeOpen = on;
-  if (!on) { ig.miLogin = false; closeLight(); }
+  if (!on) closeLight();
   if (!DEMO) postJson('/api/integrations/visible', { visible: on || ig.open });
   if (on && A().smart_hub) refresh();
 };
@@ -224,7 +223,6 @@ function toggle(x) {
   return hubAct(x.id, x.on ? 'off' : 'on');
 }
 $('hHub').addEventListener('click', e => {
-  if (e.target.closest('#hubMiLogin')) { ig.miLogin = true; return window.miApi.showLogin(); }
   const p = e.target.closest('[data-hpower]');
   const x = p ? findDev(p.dataset.hpower) : null;
   if (x) return toggle(x);
@@ -319,6 +317,12 @@ window.igApi = {
   openWork: () => openWork(true),
   toggleLight: id => { const x = findDev(id); if (x) toggle(x); },
   openLight,
+  // 仪表盘「家居」的智能中枢那一页（设计画布第 45 块）：和家居页同样的设备块
+  hubTiles() {
+    const s = (ig.data && ig.data.smart_hub) || {}, devs = s.devices || [];
+    return s.error ? `<p class="h-msg bad">${esc('读不到智能中枢：' + s.error)}</p>`
+      : devs.length ? `<div class="h-tiles">${devs.map(hubTile).join('')}</div>` : '<p class="h-msg">智能中枢里还没有设备</p>';
+  },
 };
 
 /* ---------------- 设置 › 智能体 › 接入的服务（设计画布第 40 块） ---------------- */

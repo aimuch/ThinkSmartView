@@ -176,15 +176,26 @@ function home() {
 /* ---- 家居：左边房间栏（能上下滑、能拖宽），右边场景一行、分类计数、按房间的设备 ---- */
 function smart() {
   const v = mi();
+  // 接入了智能中枢：房间栏上面「米家 | 智能中枢」，和家居页同一个选择（设计画布第 45 块）
+  const hubOn = !!(window.hubAvailable && window.hubAvailable() && window.miApi && window.miApi.src);
+  const src = hubOn ? window.miApi.src() : 'mi';
+  const sw = hubOn ? `<div class="h-src d-src">${[['mi', '米家'], ['hub', '智能中枢']].map(([k, n]) =>
+    `<button data-src="${k}" class="${k === src ? 'on' : ''}">${n}</button>`).join('')}</div>` : '';
+  if (src === 'hub') {
+    set('dHomeRooms', sw + '<b class="dh-name">智能中枢</b><span class="dm">蓝牙灯和电源</span>');
+    set('dKinds', ''); set('dSceneBar', ''); $('dSceneBar').hidden = true;
+    set('dRooms', `<div class="dc d-roomcard"><div class="dc-h"><b>蓝牙设备</b></div>${window.igApi ? window.igApi.hubTiles() : ''}</div>`);
+    return;
+  }
   if (!v || !v.account) {
-    set('dHomeRooms', head('⌂', '我的家') + '<button class="d-empty" data-open="home">还没登录米家：点这里扫码</button>');
+    set('dHomeRooms', sw + head('⌂', '我的家') + '<button class="d-empty" data-open="home">还没登录米家：点这里扫码</button>');
     set('dKinds', ''); set('dRooms', ''); set('dSceneBar', '');
     return;
   }
   const all = v.rooms.flatMap(r => r.cards), home = (v.homes || []).find(h => h.id === v.home_id);
   const rooms = ['全屋', ...v.rooms.map(r => r.name)];
   if (!rooms.includes(D.room)) D.room = '全屋';
-  set('dHomeRooms', `<b class="dh-name">${esc(home ? home.name : '我的家')}</b><span class="dm d-ok">● ${all.filter(c => c.online).length} / ${all.length} 在线</span>` +
+  set('dHomeRooms', sw + `<b class="dh-name">${esc(home ? home.name : '我的家')}</b><span class="dm d-ok">● ${all.filter(c => c.online).length} / ${all.length} 在线</span>` +
     `<div class="ds-roomlist">${rooms.map(r => `<button class="d-room${r === D.room ? ' on' : ''}" data-room="${esc(r)}">${esc(r)}` +
       `<small>${r === '全屋' ? all.length : v.rooms.find(x => x.name === r).cards.length}</small></button>`).join('')}</div>`);
   const sc = (ui.scenes && ui.scenes.scenes) || [];
@@ -342,6 +353,12 @@ function watchTalk() {
 $('dashTabs').addEventListener('click', e => { const b = e.target.closest('[data-dt]'); if (b) { D.talk = false; setTab(b.dataset.dt); } });
 $('dash').addEventListener('click', e => {
   const t = e.target;
+  const sb = t.closest('.d-src [data-src]');
+  if (sb && window.miApi) return window.miApi.setSrc(sb.dataset.src);
+  const hp = t.closest('[data-hpower]');
+  if (hp && window.igApi) return window.igApi.toggleLight(hp.dataset.hpower);
+  const hb = t.closest('[data-hub]');
+  if (hb && window.igApi) return window.igApi.openLight(hb.dataset.hub);
   if (t.closest('[data-work]') && window.igApi) return window.igApi.openWork();
   const lt = t.closest('[data-light]');
   if (lt && window.igApi) return window.igApi.toggleLight(lt.dataset.light);

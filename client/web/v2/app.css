@@ -40,7 +40,7 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 .link { display: flex; align-items: center; gap: 9px; height: 40px; padding: 0 16px; border-radius: 999px;
         background: var(--card); border: 1px solid var(--line); font-size: 16px; color: var(--ink2); }
 .link i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink3); }
-.link.on { color: #c9f5e6; border-color: #43d39e44; background: #43d39e12; }
+.link.on { color: var(--link-on, #c9f5e6); border-color: #43d39e44; background: #43d39e12; }   /* 浅色主题 --link-on 用深绿 */
 .link.on i { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 .clock { font-size: 32px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
 .gear { width: 52px; height: 52px; border-radius: 17px; display: grid; place-items: center; color: var(--ink2);
@@ -770,10 +770,7 @@ body[data-theme="dawn"] .svc-warn, body[data-theme="candy"] .svc-warn, body[data
 .h-hub[hidden] { display: none; }
 .h-hub h3 { margin: 0 0 0 4px; font-size: 22px; font-weight: 700; color: var(--ink2); }
 .h-hub .h-msg { margin: 0 4px; }
-.hub-mi { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 22px; border: 1.5px dashed var(--line);
-          font-size: 18px; color: var(--ink3); }
-.hub-mi span { flex: 1; }
-.hub-mi-h { margin-top: 6px !important; }
+
 .range.cct-range::-webkit-slider-runnable-track { background: linear-gradient(90deg, #ffb45c, #fff3e0, #a9cfff); }
 
 /* 首页：工作台摘要、蓝牙灯 */

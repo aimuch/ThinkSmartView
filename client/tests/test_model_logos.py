@@ -15,7 +15,7 @@ def test_describe():
     assert o['logo'] == 'siliconcloud-color' and o['calls'] == ['硅基流动']
     # the hub names a logo we have: it wins; one we don't have: keep ours
     assert describe({'kind': 'dsh', 'vendor': 'dsh', 'label': 'DSH', 'entry': 'DshCLI', 'logo': 'deepseek-color'})['logo'] == 'deepseek-color'
-    assert describe({'kind': 'api', 'vendor': 'openai', 'label': 'OpenAI', 'entry': 'OpenAILLM', 'logo': 'brand-new'})['logo'] == 'openai'
+    assert describe({'kind': 'api', 'vendor': 'openai', 'label': 'OpenAI', 'entry': 'OpenAILLM', 'logo': 'brand-new'})['logo'] == 'openai-color'
     # unknown vendor: guessed from the model name, else no logo (the page draws the first letter)
     assert describe({'kind': 'agent', 'vendor': 'agent', 'label': 'x', 'entry': 'Agent_x', 'model': 'ernie-4.0'})['logo'] == 'wenxin-color'
     o = describe({'kind': 'api', 'vendor': 'custom', 'label': '自定义', 'entry': 'CustomOpenAILLM', 'model': 'my-model'})

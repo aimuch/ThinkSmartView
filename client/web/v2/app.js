@@ -255,7 +255,7 @@ function renderModels() {
     const on = cur && cur.entry === m.entry;
     const b = document.createElement('button');
     b.className = 'card' + (on ? ' on' : '');
-    b.innerHTML = `<img class="tile" src="${esc(logoSrc(m))}" alt="">` + (on ? '<span class="badge">在用</span>' : '') +
+    b.innerHTML = `<img class="tile" src="${esc(logoSrc(m))}" alt="">` + (on ? '<span class="badge ai-fill">在用</span>' : '') +
       `<span><b>${esc(m.label)}</b><small>${esc(m.model || '')}</small><small class="co">${esc(m.company || '')}</small></span>`;
     b.addEventListener('click', () => switchModel(m));
     grid.appendChild(b);
@@ -2307,8 +2307,8 @@ $('voiceChips').addEventListener('click', async e => {
 function renderCalls() {
   const opts = (ui.models && ui.models.options) || [], cur = ui.models && ui.models.current;
   $('callsList').innerHTML = opts.map(o => `<div class="al"><img class="tile" src="${esc(logoSrc(o))}" alt=""><div class="al-text"><b>${esc(o.label)}</b>` +
-    `<span>${o.calls && o.calls.length ? '嗨 ' + o.calls.map(esc).join(' / 嗨 ') : '还没有称呼'}</span></div>` +
-    (cur && cur.entry === o.entry ? '<button class="upd-btn pri" disabled>在用</button>' : `<button class="upd-btn" data-use="${esc(o.entry)}">用它</button>`) + '</div>').join('')
+    `<span class="calls">${o.calls && o.calls.length ? o.calls.map(c => `<em class="ai-chip">嗨 ${esc(c)}</em>`).join('') : '还没有称呼'}</span></div>` +
+    (cur && cur.entry === o.entry ? '<button class="upd-btn ai-fill" disabled>在用</button>' : `<button class="upd-btn ai-ring" data-use="${esc(o.entry)}"><span class="ai-ink">用它</span></button>`) + '</div>').join('')
     || '<p class="opt-note">还没连上网关</p>';
 }
 $('callsList').addEventListener('click', e => {
@@ -2584,7 +2584,7 @@ const demo = DEMO === null ? null : (() => {
     M('豆包', 'doubao-1.5-pro', 'doubao-color', '字节豆包', 'doubao'),
     M('Gemini', 'gemini-2.5-flash', 'gemini-color', 'Google', 'gemini'),
     M('Kimi', 'kimi-k2', 'kimi-color', '月之暗面', 'kimi'),
-    M('GPT', 'gpt-4.1', 'openai', 'OpenAI', 'openai'),
+    M('GPT', 'gpt-4.1', 'openai-color', 'OpenAI', 'openai'),
     M('智谱 GLM', 'glm-4.6', 'zhipu-color', '智谱', 'glm'),
   ];
   let seq = 0, bot = null, timer = null, stopped = false;

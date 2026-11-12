@@ -104,16 +104,16 @@ BACKGROUND_DUCKED = 0.2  # a phone's music (Bluetooth speaker) under a conversat
 # covers older hubs, and unknown vendors are guessed from the model name. Files are in web/logos/.
 VENDORS = {
     'claude': ('claude-color', 'Anthropic'), 'claude-code': ('claudecode-color', 'Anthropic'),
-    'claude_cli': ('claudecode-color', 'Anthropic'), 'openai': ('openai', 'OpenAI'),
+    'claude_cli': ('claudecode-color', 'Anthropic'), 'openai': ('openai-color', 'OpenAI'),
     'gemini': ('gemini-color', 'Google'), 'deepseek': ('deepseek-color', 'DeepSeek'), 'dsh': ('deepseek-color', 'DeepSeek'),
     'qwen': ('qwen-color', '阿里通义'), 'doubao': ('doubao-color', '字节豆包'),
     'glm': ('zhipu-color', '智谱'), 'kimi': ('kimi-color', '月之暗面'),
     'siliconflow': ('siliconcloud-color', '硅基流动'), 'qianfan': ('wenxin-color', '百度千帆'),
     'hunyuan': ('hunyuan-color', '腾讯混元'), 'minimax': ('minimax-color', 'MiniMax'),
-    'stepfun': ('stepfun-color', '阶跃星辰'), 'spark': ('spark-color', '讯飞星火'), 'xai': ('xai', 'xAI'),
-    'mistral': ('mistral-color', 'Mistral AI'), 'openrouter': ('openrouter', 'OpenRouter'),
-    'ollama': ('ollama', 'Ollama'), 'lmstudio': ('lmstudio', 'LM Studio'), 'magpie': ('magpie', 'Magpie'),
-    'grok_bot': ('grok', 'Grok Bot'), 'grok': ('grok', 'xAI'),
+    'stepfun': ('stepfun-color', '阶跃星辰'), 'spark': ('spark-color', '讯飞星火'), 'xai': ('xai-color', 'xAI'),
+    'mistral': ('mistral-color', 'Mistral AI'), 'openrouter': ('openrouter-color', 'OpenRouter'),
+    'ollama': ('ollama-color', 'Ollama'), 'lmstudio': ('lmstudio-color', 'LM Studio'), 'magpie': ('magpie-color', 'Magpie'),
+    'grok_bot': ('grok-color', 'Grok Bot'), 'grok': ('grok-color', 'xAI'),
 }
 BY_MODEL = [
     (('claude',), 'claude'), (('deepseek',), 'deepseek'), (('gemini',), 'gemini'),
