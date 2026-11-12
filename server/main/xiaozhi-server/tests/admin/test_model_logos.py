@@ -22,7 +22,7 @@ def test_every_logo_file_exists_here_and_on_the_device():
 
 def test_vendors_have_logos_except_the_nameless_ones():
     missing = {v["id"] for v in catalog.LLM_VENDORS if v["id"] not in catalog.LOGOS}
-    assert missing == {"magpie", "custom"}
+    assert missing == {"custom"}
     missing = {p for p in photo_ask.PROVIDERS if p not in catalog.LOGOS}
     assert missing <= {"custom"}
 
@@ -36,7 +36,8 @@ def test_entry_logo(tmp_path):
     assert pages.entry_logo(merged, pages.CLAUDE_CLI_ENTRY) == "claudecode-color"
     assert pages.entry_logo(merged, pages.DSH_ENTRY) == "deepseek-color"
     assert pages.entry_logo(merged, "SiliconFlowLLM") == "siliconcloud-color"
-    assert pages.entry_logo(merged, "MagpieLLM") == ""
+    assert pages.entry_logo(merged, "MagpieLLM") == "magpie"
+    assert pages.entry_logo(merged, "CustomOpenAILLM") == ""
     assert pages.entry_logo(merged, "GrokBot_小G") == "grok"
     agents = {a["entry"]: a for a in pages.custom_agents(merged)}
     if agents:   # 智能体条目的格式以 custom_agents 认的为准
