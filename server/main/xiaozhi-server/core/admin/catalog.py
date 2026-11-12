@@ -252,6 +252,15 @@ PLUGINS = [
      "config": "home_assistant"},
     {"name": "search_from_ragflow", "label": "查知识库", "desc": "需要在配置文件的 plugins.search_from_ragflow 里填写 RAGFlow 地址和 Key",
      "config": "search_from_ragflow"},
+    # [xiaozhi-hub] 接入家里别的服务（core/integrations，设计画布第 38、39 块）。设备屏幕上的工作台和蓝牙灯也按这里的开关
+    {"name": "smart_hub", "label": "智能中枢（蓝牙灯）", "desc": "开关、调亮度和色温，查蓝牙设备的状态；点「设置」填智能中枢的访问令牌",
+     "config": "smart_hub", "settings": "smart_hub"},
+    {"name": "rack_status", "label": "机柜状态", "desc": "主机在不在线、CPU、温度、Ping 检测（Prometheus，选填 rack-screen 令牌）",
+     "config": "rack_status", "settings": "rack_status"},
+    {"name": "repo_status", "label": "仓库同步", "desc": "repo-manager 的同步结果和需要处理的仓库",
+     "config": "repo_status", "settings": "repo_status"},
+    {"name": "desk_hub", "label": "桌面（DeskHub）", "desc": "切显示器输入源、AI 用量、电脑上的提醒事项；Mac 上的 DeskHub App 连网关",
+     "config": "desk_hub", "settings": "desk_hub"},
 ]
 PLUGIN_NAMES = {p["name"] for p in PLUGINS}
 
@@ -294,6 +303,42 @@ PLUGIN_SETTINGS = {
                        "新版不会使用它。请重新填写 API Key 并保存，旧设置会一起清掉。",
     },
 }
+# [xiaozhi-hub] 四个接入的设置（字段和 core/integrations/common.DEFAULTS 一致）
+PLUGIN_SETTINGS.update({
+    "smart_hub": {
+        "note": "智能中枢（btrouter）的访问令牌在它的 .env 里（BTROUTER_API_TOKEN），或配置文件的 api.token。"
+                "网关只用它读设备、发开关和调光，不改智能中枢的设置。",
+        "fields": [
+            {"key": "url", "label": "地址", "type": "text", "default": "http://127.0.0.1:8780",
+             "hint": "智能中枢和网关在同一台机器上时不用改"},
+            {"key": "token", "label": "访问令牌", "type": "secret", "required": True},
+        ],
+    },
+    "rack_status": {
+        "note": "主机和 Ping 检测从 Prometheus 读，不用令牌。填了 rack-screen 的令牌（它配置文件里的 preview.token），"
+                "还能读到它自己的检测项（HTTP、端口、证书等）。",
+        "fields": [
+            {"key": "prometheus", "label": "Prometheus 地址", "type": "text", "default": "http://127.0.0.1:9090"},
+            {"key": "url", "label": "rack-screen 地址（选填）", "type": "text", "default": "http://127.0.0.1:8088"},
+            {"key": "token", "label": "rack-screen 令牌（选填）", "type": "secret"},
+        ],
+    },
+    "repo_status": {
+        "note": "repo-manager 对本机来的请求不要密码。它不在网关这台机器上时，填它设置页里的局域网访问密码。",
+        "fields": [
+            {"key": "url", "label": "地址", "type": "text", "default": "http://127.0.0.1:8765"},
+            {"key": "password", "label": "局域网密码（选填）", "type": "secret"},
+        ],
+    },
+    "desk_hub": {
+        "note": "Mac 上的 DeskHub App 主动连网关（Mac 不用开端口）：在 App 的 设置 › 小麦网关 里填网关地址"
+                "（http://网关的局域网 IP:16688）和这里的同一串口令。切显示器照样只走 App 菜单里试切过的输入源。",
+        "fields": [
+            {"key": "token", "label": "连接口令", "type": "secret", "required": True,
+             "min_length": 12, "hint": "自己想一串（至少 12 个字符），Mac 上填同一串"},
+        ],
+    },
+})
 INTENT_MODES = ("nointent", "function_call")
 
 # ---------- 情绪（表情测试） ----------

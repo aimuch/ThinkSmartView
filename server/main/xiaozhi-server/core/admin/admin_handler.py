@@ -179,6 +179,13 @@ class AdminHandler:
                 web.get("/kiosk/geocode", self.handle_kiosk_geocode),
                 web.post("/kiosk/home", self.handle_kiosk_home),
                 web.get("/kiosk/today", self.handle_kiosk_today),
+                web.get("/kiosk/integrations", self.handle_kiosk_integrations),
+                web.post("/kiosk/smarthub", self.handle_kiosk_smarthub),
+                web.post("/kiosk/deskhub", self.handle_kiosk_deskhub),
+                # Mac 上的 DeskHub App 连进来：局域网能到，连接口令就是凭证（core/integrations/deskhub.py）
+                web.post("/deskhub/push", self.handle_deskhub_push),
+                web.get("/deskhub/wait", self.handle_deskhub_wait),
+                web.post("/deskhub/result", self.handle_deskhub_result),
                 web.post("/kiosk/prefs", self.handle_kiosk_prefs),
                 web.get("/kiosk/voiceprint", self.handle_kiosk_voiceprint),
                 web.post("/kiosk/voiceprint/enroll", self.handle_kiosk_voiceprint_enroll),
@@ -1493,6 +1500,96 @@ class AdminHandler:
         except open_meteo.WeatherError as e:
             out["weather_error"] = str(e)
         return self._json(out)
+
+    # ---------- 接入家里别的服务（core/integrations，设计画布第 38、39 块） ----------
+
+    async def handle_kiosk_integrations(self, request: web.Request):
+        """?device=&fresh=1：工作台和蓝牙灯要的数据；没接入或这台设备关着插件的不给（available 里是 false）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.integrations import kiosk
+
+        merged = await self._blocking(self._merged)
+        data = await kiosk.overview(merged, request.query.get("device") or "", request.query.get("fresh") == "1")
+        return self._json({"ok": True, **data})
+
+    async def handle_kiosk_smarthub(self, request: web.Request):
+        """{"device", "id", "action", "value"}：设备屏幕上点的灯 -> 动作后的这个设备。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.integrations import common, smarthub
+
+        body = await self._read_json(request)
+        merged = await self._blocking(self._merged)
+        if not (common.saved(merged, "smart_hub") and common.enabled_for(merged, str(body.get("device") or ""), "smart_hub")):
+            return self._error("智能中枢没接入", 400)
+        try:
+            dev = await smarthub.act(common.settings(merged, "smart_hub"), str(body.get("id") or ""),
+                                     str(body.get("action") or ""), body.get("value"))
+        except common.IntegrationError as e:
+            return self._error(str(e), 502)
+        return self._json({"ok": True, "device": dev})
+
+    async def handle_kiosk_deskhub(self, request: web.Request):
+        """{"device", "op": "switch" | "todo_done", "id"}：经 Mac 上的 DeskHub 执行，等它的结果（最多 12 秒）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.integrations import common, deskhub
+
+        body = await self._read_json(request)
+        merged = await self._blocking(self._merged)
+        if not (common.saved(merged, "desk_hub") and common.enabled_for(merged, str(body.get("device") or ""), "desk_hub")):
+            return self._error("DeskHub 没接入", 400)
+        out = await deskhub.hub.command(str(body.get("op") or ""), str(body.get("id") or ""))
+        return self._json({"ok": True, **out, "desk": deskhub.hub.view()})
+
+    def _deskhub_auth(self, request: web.Request):
+        """Mac 来的请求：Authorization: Bearer <连接口令>。不对时返回错误响应。"""
+        from core.integrations import common, deskhub
+
+        ip = request.remote or ""
+        if deskhub.hub.locked(ip):
+            return self._error("口令错太多次，5 分钟后再试", 429)
+        token = common.settings(self.config, "desk_hub")["token"]
+        if not token:
+            return self._error("网关后台还没设 DeskHub 的连接口令", 403)
+        if not deskhub.hub.check(request.headers.get("Authorization", ""), token, ip):
+            return self._error("口令不对", 401)
+        return None
+
+    async def handle_deskhub_push(self, request: web.Request):
+        from core.integrations import deskhub
+
+        bad = self._deskhub_auth(request)
+        if bad:
+            return bad
+        if request.content_length and request.content_length > 64 * 1024:
+            return self._error("太大了", 413)
+        body = await self._read_json(request)
+        if not isinstance(body.get("messages"), list) or len(body["messages"]) > 200:
+            return self._error("messages 要是列表", 400)
+        first = deskhub.hub.state is None or not deskhub.hub.online()
+        deskhub.hub.push(body)
+        if first:
+            self.logger.bind(tag=TAG).info(f"DeskHub 连上了：{deskhub.hub.state['name']}（{request.remote}）")
+        return self._json({"ok": True})
+
+    async def handle_deskhub_wait(self, request: web.Request):
+        from core.integrations import deskhub
+
+        bad = self._deskhub_auth(request)
+        if bad:
+            return bad
+        return self._json({"ok": True, "commands": await deskhub.hub.wait()})
+
+    async def handle_deskhub_result(self, request: web.Request):
+        from core.integrations import deskhub
+
+        bad = self._deskhub_auth(request)
+        if bad:
+            return bad
+        deskhub.hub.result(await self._read_json(request))
+        return self._json({"ok": True})
 
     # ---------- 拍照问答（core/agent/photo_ask.py） ----------
 

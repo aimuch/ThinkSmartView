@@ -5,6 +5,8 @@
 要加「测试」按钮：在 TESTS 里登记 async 函数 (values) -> dict，失败时抛 ValueError（message 给用户看）。
 """
 
+import functools
+import time
 from pathlib import Path
 
 from ruamel.yaml.comments import CommentedMap
@@ -99,6 +101,8 @@ def _values(settings_id: str, payload: dict, merged: dict) -> dict:
         if f["type"] == "secret":
             if any(c.isspace() for c in text):
                 raise ValueError(f"{label} 里不能有空格或换行")
+            if text and len(text) < f.get("min_length", 0):
+                raise ValueError(f"{label} 至少要 {f['min_length']} 个字符")
             values[key] = text or _secret_of(saved, key, legacy)
         elif f["type"] == "number":
             if text == "":
@@ -114,7 +118,7 @@ def _values(settings_id: str, payload: dict, merged: dict) -> dict:
         else:
             if "\n" in text:
                 raise ValueError(f"{label} 不能换行")
-            if key.endswith("url") and text and not text.startswith(("http://", "https://")):
+            if (key.endswith("url") or key == "prometheus") and text and not text.startswith(("http://", "https://")):
                 raise ValueError(f"{label} 要以 http:// 或 https:// 开头")
             values[key] = text
     return values
@@ -182,7 +186,39 @@ async def _test_get_weather(values: dict) -> dict:
     return {"message": "；".join(lines[:3])}
 
 
+async def _test_integration(name: str, values: dict) -> dict:
+    """[xiaozhi-hub] 四个接入的测试：真的去读一次。"""
+    from core.integrations import common, deskhub, rack, repos, smarthub
+
+    s = common.settings({"plugins": {name: values}}, name)
+    try:
+        if name == "smart_hub":
+            devs = await smarthub.devices(s, fresh=True)
+            lights = sum(d["kind"] == "light" and not d["group"] for d in devs)
+            psus = sum(d["kind"] == "psu" for d in devs)
+            return {"message": f"连上了：{len(devs)} 个设备（{lights} 盏灯" + (f"、{psus} 台电源" if psus else "") + "）"}
+        if name == "rack_status":
+            d = await rack.summary(s, fresh=True)
+            text = f"连上了：{d['total']} 台主机（{d['up']} 台在线），{len(d['probes'])} 个 Ping 检测"
+            if s["token"]:
+                text += f"，rack-screen {len(d['monitors'])} 个检测项" if not d["monitor_error"] else f"；{d['monitor_error']}"
+            return {"message": text}
+        if name == "repo_status":
+            d = await repos.summary(s, fresh=True)
+            return {"message": f"连上了：{d['total']} 个仓库，失败 {d['failed']} 个"}
+        v = deskhub.hub.view()
+        if v.get("online"):
+            return {"message": f"{v['name']} 正连着网关：{len(v['sources'])} 个输入源，{len(v['todos'])} 条待办"}
+        if v.get("seen"):
+            return {"message": f"口令已保存。{v['name']} 上次连网关是 {time.strftime('%H:%M', time.localtime(v['seen']))}，现在没连上"}
+        return {"message": "口令已保存。还没有 Mac 连上来：在 DeskHub App 的 设置 › 小麦网关 里填网关地址和这串口令"}
+    except common.IntegrationError as e:
+        raise ValueError(str(e))
+
+
 TESTS = {"web_search": _test_web_search, "get_weather": _test_get_weather}
+for _name in ("smart_hub", "rack_status", "repo_status", "desk_hub"):
+    TESTS[_name] = functools.partial(_test_integration, _name)
 
 
 def _redact(message: str, values: dict, settings_id: str) -> str:
