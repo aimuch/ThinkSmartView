@@ -56,7 +56,7 @@
 
 - 米家扫码登录、请求签名、MIoT 规格处理参考 [MenuBarMijia](https://gitlab.com/jryang1997/MenuBarMijia)（MIT，jryang1997）改写；客户端测试用了它的 `Tests/Fixtures/miot_golden.json`。
 - 二维码：qrcode.js（Kazuhiko Arase，MIT），在 `client/web/v2/vendor/`。
-- 模型厂商图标：[LobeHub icons](https://github.com/lobehub/lobe-icons) 1.95.1（MIT），设备上在 `client/web/logos/`，网关后台在 `server/main/xiaozhi-server/core/admin/static/logos/`；商标归各家所有。
+- 模型厂商图标：[LobeHub icons](https://github.com/lobehub/lobe-icons) 1.95.1（MIT），设备上在 `client/web/logos/`，网关后台在 `server/main/xiaozhi-server/core/admin/static/logos/`；Magpie 的小喜鹊来自 [yetone/magpie](https://github.com/yetone/magpie)（MIT）；商标归各家所有。
 - USB 网络的做法参考 [jethac/lenovo-thinksmart-view](https://github.com/jethac/lenovo-thinksmart-view)（MIT）。
 - 费用页的时间范围、和上一段比、趋势开关、排行、热力图、单价同步顺序参考 [CPA Manager Plus](https://github.com/seakee/CPA-Manager-Plus)（MIT，seakee）的用量分析和模型价格设计，代码是自己写的。
 - 网关后台的动效时长和缓动曲线参考 [Arc Library](https://github.com/kuratlielia/arc-library) 的 motion tokens（MIT）。

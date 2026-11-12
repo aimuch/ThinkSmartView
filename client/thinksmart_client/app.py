@@ -112,7 +112,7 @@ VENDORS = {
     'hunyuan': ('hunyuan-color', '腾讯混元'), 'minimax': ('minimax-color', 'MiniMax'),
     'stepfun': ('stepfun-color', '阶跃星辰'), 'spark': ('spark-color', '讯飞星火'), 'xai': ('xai', 'xAI'),
     'mistral': ('mistral-color', 'Mistral AI'), 'openrouter': ('openrouter', 'OpenRouter'),
-    'ollama': ('ollama', 'Ollama'), 'lmstudio': ('lmstudio', 'LM Studio'), 'magpie': ('', 'Magpie'),
+    'ollama': ('ollama', 'Ollama'), 'lmstudio': ('lmstudio', 'LM Studio'), 'magpie': ('magpie', 'Magpie'),
     'grok_bot': ('grok', 'Grok Bot'), 'grok': ('grok', 'xAI'),
 }
 BY_MODEL = [
