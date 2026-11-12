@@ -12,7 +12,7 @@ KNOWN=${THINKSMART_KNOWN_HOSTS:-$HOME/.ssh/known_hosts_thinksmart}
 [ $# -gt 0 ] || { echo "用法：$0 设备IP ..." >&2; exit 1; }
 for host in "$@"; do
   echo "→ $host"
-  COPYFILE_DISABLE=1 tar -C "$PACK" -cf - catalog.json img | ssh -i "$KEY" -o BatchMode=yes -o UserKnownHostsFile="$KNOWN" "ubuntu@$host" '
+  COPYFILE_DISABLE=1 tar --no-xattrs -C "$PACK" -cf - catalog.json img | ssh -i "$KEY" -o BatchMode=yes -o UserKnownHostsFile="$KNOWN" "ubuntu@$host" '
     set -e
     base=$HOME/.local/share/thinksmart-client
     mkdir -p "$base"
