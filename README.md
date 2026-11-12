@@ -7,7 +7,6 @@
 | `client/` | 小麦：设备上的语音客户端（唤醒、对话界面、家居、设置） | 设备 | [xiaozhi-thinksmart-client](https://github.com/justhalfbit/xiaozhi-thinksmart-client) |
 | `server/` | 小麦网关：语音识别、大模型、语音合成、管理后台 | 服务器 | [xiaozhi-hub-server](https://github.com/justhalfbit/xiaozhi-hub-server) |
 | `system/` | 小麦系统：刷机镜像、系统层（展示屏外壳、音频、熄屏…）、在线更新程序 | 设备 | [thinksmart-ubuntu-image](https://github.com/justhalfbit/thinksmart-ubuntu-image) |
-| `reference/menubar-mijia/` | 只读参考：米家扫码登录、签名、MIoT 规格的原实现（MIT） | — | [MenuBarMijia](https://gitlab.com/jryang1997/MenuBarMijia) |
 | `deploy/` | 设备连网关的 SSH 隧道、服务器上的发布服务、设备配置脚本 | 两边 | 本仓库 |
 | `scripts/` | 同步上游、发布客户端、部署网关、语音识别评测 | 这台 Mac | 本仓库 |
 | `docs/` | [系统架构和流程图](docs/architecture.md) · [部署](docs/deploy.md) · [更新与跟进上游](docs/updates.md) · [刷机记录](docs/flashing.md) · [功能规划](docs/roadmap.md) | — | 本仓库 |

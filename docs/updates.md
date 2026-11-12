@@ -9,7 +9,7 @@ scripts/sync-upstream.sh            # 全部
 scripts/sync-upstream.sh server     # 只看一个目录
 ```
 
-需要工作区干净。脚本按 [`UPSTREAM`](../UPSTREAM) 拉取每个上游，把记录的提交到上游最新之间的改动三方合并进对应目录（`client/`、`server/`、`system/`、`reference/menubar-mijia/`），我们自己的改动会保留。有冲突就停下，由你解决后提交；没冲突就暂存好，`git diff --cached` 看过后提交。之后跑测试：
+需要工作区干净。脚本按 [`UPSTREAM`](../UPSTREAM) 拉取每个上游，把记录的提交到上游最新之间的改动三方合并进对应目录（`client/`、`server/`、`system/`），我们自己的改动会保留。有冲突就停下，由你解决后提交；没冲突就暂存好，`git diff --cached` 看过后提交。之后跑测试：
 
 ```bash
 cd client && DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib uv run --no-project --with numpy --with soxr --with websockets --with aiohttp --with pytest --with pytest-asyncio python -m pytest -q tests
