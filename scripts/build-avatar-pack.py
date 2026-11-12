@@ -25,6 +25,9 @@ BIG, THUMB = 640, 240
 IP_LABEL = {'Twinkle Twinkle / 星星人': '星星人', 'THE MONSTERS / LABUBU': 'LABUBU'}
 PACK_GROUP = {'models': '大模型', 'festivals': '节日', 'disney': '迪士尼'}
 DISNEY = {'Mickey Mouse': '米老鼠', 'Donald Duck': '唐老鸭', 'Duffy': '达菲', 'LinaBell': '玲娜贝儿', 'StellaLou': '星黛露'}
+# 英文款名的中文显示名（scripts/avatar-names-zh.json），英文原名留作语音别名
+ZH = {k: v for k, v in json.loads((Path(__file__).resolve().parent / 'avatar-names-zh.json').read_text(encoding='utf-8')).items()
+      if not k.startswith('_')}
 STATES = (('idle', 'image', 'framing'), ('awake', 'awakeImage', 'awakeFraming'), ('sleep', 'sleepImage', 'sleepFraming'))
 
 
@@ -33,22 +36,25 @@ def clean(s):
 
 
 def describe(a):
-    """-> (分组, 全名, 短名, 标签)。短名在分组里显示，全名在「全部」和语音里用。"""
+    """-> (分组, 全名, 短名, 标签, 别名)。短名在分组里显示，全名在「全部」和语音里用；别名是英文原名（语音也认）。"""
     pack, ip = a.get('packId'), clean(a.get('ip'))
     if pack == 'disney':
         name = DISNEY.get(ip, clean(a.get('name')))
-        return '迪士尼', name, name, ''
+        return '迪士尼', name, name, '', ''
     if pack in ('models', 'festivals'):
         name = clean(a.get('name'))
         short = clean(a.get('variant')) if pack == 'models' else name
-        return PACK_GROUP[pack], name, short, (a.get('holidays') or [''])[0]
+        return PACK_GROUP[pack], name, short, (a.get('holidays') or [''])[0], ''
     group = IP_LABEL.get(ip, ip)
     variant = clean(a.get('variant'))
     secret = '隐藏' in str(a.get('subtitle') or '') or 'secret' in variant.lower()
     variant = variant.replace('(Secret)', '').strip() or variant
+    alias = ''
     if a.get('series') == '助手基础形象':
         variant = '经典'
-    return group, f'{group} · {variant}', variant, '隐藏' if secret else ''
+    elif variant in ZH:
+        alias, variant = variant, ZH[variant]
+    return group, f'{group} · {variant}', variant, '隐藏' if secret else '', alias
 
 
 def save(src, bounds, size, dst):
@@ -78,7 +84,7 @@ def main():
         if not all(a.get(k) for _, k, _ in STATES):
             print(f'跳过 {aid}：三张图不全', file=sys.stderr)
             continue
-        group, name, short, tag = describe(a)
+        group, name, short, tag, alias = describe(a)
         files = {}
         for state, key, frame in STATES:
             src = base / a[key]
@@ -95,7 +101,7 @@ def main():
             files[state] = f'img/{aid}-{state}.webp'
         files['thumb'] = f'img/{aid}-thumb.webp'
         items.append({'id': aid, 'name': name, 'short': short, 'group': group, 'tag': tag,
-                      'series': clean(a.get('series')), 'files': files})
+                      'series': clean(a.get('series')), 'files': files, **({'alias': alias} if alias else {})})
     with concurrent.futures.ProcessPoolExecutor() as pool:     # 一张要好几秒，分给几个核
         for job, fut in [(j, pool.submit(save, *j[:4])) for j in jobs]:
             fut.result()

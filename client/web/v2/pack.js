@@ -24,7 +24,7 @@ function renderPrev() {
   const using = a.id === current();
   const st = (url, name) => `<div class="pk-st"><img src="${esc(url)}" alt="">${name}</div>`;
   $('pkPrev').innerHTML = st(a.poses[0], '待机') + st(a.poses[1], '唤醒') + st(a.poses[4], '睡觉') +
-    `<div class="pk-nm"><b>${esc(a.name)}</b><small>${esc(a.series || a.group)}</small>${a.tag ? `<em>${esc(a.tag)}</em>` : ''}</div>` +
+    `<div class="pk-nm"><b>${esc(a.name)}</b><small>${a.alias ? esc(a.alias) + ' · ' : ''}${esc(a.series || a.group)}</small>${a.tag ? `<em>${esc(a.tag)}</em>` : ''}</div>` +
     `<button class="pk-use ${using ? 'done' : ''}" id="pkUse" ${using ? 'disabled' : ''}>${using ? '在用' : '用这个'}</button>`;
 }
 

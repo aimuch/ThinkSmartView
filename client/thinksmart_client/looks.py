@@ -56,7 +56,7 @@ def pack_entry(a, version=''):
     q = f'?v={version}' if version else ''
     url = {k: f'/api/avatar-pack/{v}{q}' for k, v in a['files'].items()}
     return {'id': 'pack:' + a['id'], 'name': a['name'], 'short': a.get('short') or a['name'], 'group': a.get('group', ''),
-            'tag': a.get('tag', ''), 'series': a.get('series', ''), 'thumb': url['thumb'],
+            'tag': a.get('tag', ''), 'series': a.get('series', ''), 'alias': a.get('alias', ''), 'thumb': url['thumb'],
             # 和照片形象一样的五个样子：待机、在听、在想、在说、睡觉
             'poses': [url['idle'], url['awake'], url['awake'], url['awake'], url['sleep']]}
 
@@ -85,16 +85,16 @@ def find_pack(text):
         return None, []
     avs = p['avatars']
     for a in avs:
-        if want in (_norm(a['name']), _norm(a['id'])):
+        if want in (_norm(a['name']), _norm(a['id']), _norm(a.get('alias'))):
             return a['id'], []
     groups = [a for a in avs if _norm(a.get('group')) == want]
     if groups:
         classic = [a for a in groups if a.get('short') == '经典']
         return (classic or groups)[0]['id'], []
-    hits = [a for a in avs if all(part in _norm(a['name'] + a.get('group', '') + a.get('series', '') + a.get('tag', ''))
+    hits = [a for a in avs if all(part in _norm(a['name'] + a.get('group', '') + a.get('series', '') + a.get('tag', '') + a.get('alias', ''))
                                   for part in re.split(r'\s+', str(text).replace('的', ' ').replace('形象', ' ').lower()) if part)]
     if not hits:
-        hits = [a for a in avs if want in _norm(a['name']) or _norm(a['short']) == want]
+        hits = [a for a in avs if want in _norm(a['name']) or _norm(a['short']) == want or (a.get('alias') and want in _norm(a['alias']))]
     if len(hits) == 1:
         return hits[0]['id'], []
     return None, [a['name'] for a in hits[:6]]

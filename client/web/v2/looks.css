@@ -3,16 +3,16 @@
 
 /* ---- themes (body[data-theme]; 'night' is tokens.css as it is) ---- */
 body[data-theme="dawn"] {
-  --bg0: #f3ecff; --bg1: #fff8ef; --ink: #2b2140; --ink2: #5b4f74; --ink3: #8a7fa3;
+  --bg0: #f3ecff; --bg1: #fff8ef; --ink: #2b2140; --ink2: #5b4f74; --ink3: #6a5f84;
   --line: #2b21401f; --card: #2b21400a; --card2: #2b214012; --track: #2b21401c;
   --glow1: #ffe3c4; --glow2: #dcd3ff; --glow3: #ffd9e6; --time1: #2b2140; --time2: #7a5cff;
-  --sheet1: #fffaf2; --sheet2: #f1eaff; --pop: #ffffff; --scrim: #f3ecffe6; --ts: #2b214066;
+  --sheet1: #fffaf2; --sheet2: #f1eaff; --pop: #ffffff; --scrim: #f3ecffe6; --ts: #2b2140a8;
 }
 body[data-theme="candy"] {
-  --bg0: #e9f6ff; --bg1: #fff4fb; --ink: #3a2350; --ink2: #6a4e86; --ink3: #9a82b3;
+  --bg0: #e9f6ff; --bg1: #fff4fb; --ink: #3a2350; --ink2: #6a4e86; --ink3: #755d90;
   --line: #3a23501f; --card: #3a23500a; --card2: #3a235012; --track: #3a23501c;
   --glow1: #ffd6ec; --glow2: #c9ecff; --glow3: #fff1b8; --time1: #ff5fa2; --time2: #6c8cff;
-  --sheet1: #fff6fb; --sheet2: #eef7ff; --pop: #ffffff; --scrim: #fff4fbe6; --ts: #3a235066;
+  --sheet1: #fff6fb; --sheet2: #eef7ff; --pop: #ffffff; --scrim: #fff4fbe6; --ts: #3a2350a8;
 }
 body[data-theme="forest"] {
   --bg0: #06100c; --bg1: #0d1f1a; --ink: #ecfff6; --ink2: #a9d6c2; --ink3: #6f9c88;
@@ -25,6 +25,9 @@ body[data-theme="black"] {
   --glow1: #000; --glow2: #000; --glow3: #000; --time1: #f0f0f0; --time2: #9aa0b8;
   --sheet1: #050505; --sheet2: #000; --pop: #111; --scrim: #000000ee;
 }
+/* light themes: the few things drawn white-on-dark. 状态色当文字用时浅色底上要深一档（对比度 ≥ 4.5，设计评审 2026-11-12） */
+body[data-theme="dawn"], body[data-theme="candy"], body[data-theme="lavender"]:not(.sleeping) { --ok: #0b7a53; --bad: #c4314f; }
+body[data-theme="dawn"] .pk-t small, body[data-theme="candy"] .pk-t small, body[data-theme="lavender"]:not(.sleeping) .pk-t small { color: #a35f00; }
 /* light themes: the few things drawn white-on-dark */
 body[data-theme="dawn"] .tile, body[data-theme="candy"] .tile { box-shadow: 0 0 0 1px var(--line); }
 body[data-theme="dawn"] .msg.bot .body, body[data-theme="candy"] .msg.bot .body { color: var(--ink); }
@@ -95,9 +98,9 @@ body.net-off .welcome { top: 92px; justify-content: flex-start; padding-top: 12p
   align-items: center; justify-content: center; gap: 12px; }
 .looks-themes button i { width: 34px; height: 34px; border-radius: 50%; }
 .looks-themes button.on { border-color: var(--accent2); }
-.looks-avatars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.looks-avatars { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }   /* minmax(0)：长名字截断，不把别的格子挤扁 */
 .looks-avatars button { position: relative; height: 128px; border-radius: 20px; background: var(--card2); border: 2px solid transparent; display: flex;
-  flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 17px; color: var(--ink2); }
+  flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 17px; color: var(--ink2); min-width: 0; }
 .looks-avatars button.on { border-color: var(--accent2); color: var(--ink); }
 .looks-avatars button.add { border: 1.5px dashed var(--line); background: transparent; }
 .looks-avatars img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; }
@@ -128,10 +131,18 @@ body.net-off .welcome { top: 92px; justify-content: flex-start; padding-top: 12p
 .sb-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 35%, #000c); }
 .standby.plain .sb-shade { background: radial-gradient(760px 560px at 20% 46%, var(--glow1, #18245a) 0%, transparent 70%), linear-gradient(160deg, var(--bg1), var(--bg0) 70%); }
 .standby.plain { color: var(--ink); }
-.sb-time { position: absolute; left: 60px; bottom: 120px; font-size: 200px; font-weight: 200; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -4px; }
-.sb-date { position: absolute; left: 68px; bottom: 70px; font-size: 32px; opacity: .85; }
-.sb-wx { position: absolute; right: 60px; bottom: 76px; display: flex; align-items: center; gap: 16px; font-size: 28px; }
-.sb-wx b { font-size: 84px; font-weight: 200; }
+.sb-time { position: absolute; left: 60px; bottom: 232px; font-size: 190px; font-weight: 200; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -4px; }
+.sb-date { position: absolute; left: 66px; right: 60px; bottom: 176px; font-size: 30px; opacity: .85; }
+.sb-wx { position: absolute; left: 60px; bottom: 46px; display: flex; align-items: center; gap: 16px; padding: 12px 30px 12px 22px; border-radius: 999px;
+  background: #ffffff14; white-space: nowrap; font-size: 26px; }
+.sb-wx b { font-size: 64px; font-weight: 200; }
+/* 没有照片：时钟在视觉中心，日期、天气依次往下（横竖屏一样）。横屏原来天气在右下角，日期带上节日一长就钻到天气底下 */
+.standby.plain .sb-shade { background: radial-gradient(620px 560px at 50% 38%, var(--glow1, #18245a) 0%, transparent 70%),
+                                       linear-gradient(160deg, var(--bg1), var(--bg0) 70%); }
+.standby.plain .sb-time { left: 0; right: 0; bottom: auto; top: 20%; text-align: center; font-size: 200px; }
+.standby.plain .sb-date { left: 0; right: 0; bottom: auto; top: calc(20% + 226px); text-align: center; padding: 0 60px; }
+.standby.plain .sb-wx { left: 50%; bottom: auto; top: calc(20% + 290px); transform: translateX(-50%); }
+.standby.plain .sb-wx { background: var(--card2); }   /* 浅色主题上 #ffffff14 的底看不见 */
 .sb-alarm { position: absolute; right: 56px; top: 46px; height: 58px; padding: 0 26px; border-radius: 999px; background: #ffffff26; display: flex; align-items: center; font-size: 24px; }
 .sb-alarm[hidden] { display: none; }
 .sb-card.off .sb-on { display: none; }
@@ -209,19 +220,14 @@ body.both-bars .now-bar { top: 288px; }
 
 /* ---- 竖屏（设备竖着放，800×1280）：待机页、做菜、拍照和二维码弹窗、横条（设计画布第 24 块） ---- */
 @media (orientation: portrait) {
-  /* 待机页没有照片：时钟在视觉中心，日期、天气依次往下 */
-  .standby.plain .sb-shade { background: radial-gradient(620px 560px at 50% 38%, var(--glow1, #18245a) 0%, transparent 70%),
-                                         linear-gradient(160deg, var(--bg1), var(--bg0) 70%); }
-  .standby.plain .sb-time { left: 0; right: 0; bottom: auto; top: 28%; text-align: center; font-size: 220px; }
-  .standby.plain .sb-date { left: 0; right: 0; bottom: auto; top: calc(28% + 252px); text-align: center; font-size: 30px; }
-  .standby.plain .sb-wx { left: 50%; right: auto; bottom: auto; top: calc(28% + 322px); transform: translateX(-50%); }
-  /* 有照片：三行左对齐叠在底部渐暗处 */
+  /* 待机页（样式在上面，横竖屏一样）：竖屏时钟大一点、整体靠下一点 */
+  .standby.plain .sb-time { top: 28%; font-size: 220px; }
+  .standby.plain .sb-date { top: calc(28% + 252px); }
+  .standby.plain .sb-wx { top: calc(28% + 322px); }
   .standby:not(.plain) .sb-shade { background: linear-gradient(180deg, transparent 40%, #000d); }
-  .standby:not(.plain) .sb-time { left: 52px; bottom: 300px; font-size: 190px; }
-  .standby:not(.plain) .sb-date { left: 58px; bottom: 250px; font-size: 30px; }
-  .standby:not(.plain) .sb-wx { left: 52px; right: auto; bottom: 90px; }
-  .sb-wx { padding: 12px 30px 12px 22px; border-radius: 999px; background: #ffffff14; white-space: nowrap; font-size: 26px; }
-  .sb-wx b { font-size: 64px; }
+  .standby:not(.plain) .sb-time { left: 52px; bottom: 300px; }
+  .standby:not(.plain) .sb-date { left: 58px; bottom: 250px; }
+  .standby:not(.plain) .sb-wx { left: 52px; bottom: 90px; }
   .sb-alarm { right: 36px; top: 36px; }
 
   /* 做菜：四个按钮两行两列 */
@@ -451,10 +457,10 @@ body.av-photo-on .zzz { z-index: 2; }
 
 /* ---- 薰衣草主题（设计画布第 35 块）：浅紫底、半透明白卡片；睡眠时段退回星夜（:not(.sleeping)） ---- */
 body[data-theme="lavender"]:not(.sleeping) {
-  --bg0: #f3eeff; --bg1: #dcdaf8; --ink: #2b2c4a; --ink2: #4f5178; --ink3: #8a8cae;
+  --bg0: #f3eeff; --bg1: #dcdaf8; --ink: #2b2c4a; --ink2: #4f5178; --ink3: #62648a;
   --line: #6a5cf021; --card: #ffffffa6; --card2: #ffffffc8; --track: #d9d6f2;
   --glow1: #e4d9ff; --glow2: #d5ccff; --glow3: #f0e6ff; --time1: #2b2c4a; --time2: #7c6cf2;
-  --sheet1: #f6f2ff; --sheet2: #e6e2fb; --pop: #ffffff; --scrim: #f3eeffe6; --ts: #2b2c4a55;
+  --sheet1: #f6f2ff; --sheet2: #e6e2fb; --pop: #ffffff; --scrim: #f3eeffe6; --ts: #2b2c4aa8;
   --accent: #7c6cf2; --accent2: #a99cff;
   --dcard: #ffffffa6; --dline: #ffffffe0; --dshadow: 0 10px 30px #6a5cf01f; --dok: #20a868;
 }
@@ -690,7 +696,7 @@ body[data-theme="lavender"] .d-chips button.on { color: #fff; background: linear
   .pk-groups { width: auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; }
   .pk-groups button { min-height: 52px; border-radius: 999px; background: var(--card2); white-space: nowrap; }
   .pk-groups button.on { background: var(--accent); color: #fff; }
-  .pk-groups button.on i { color: #ffffffcc; }
+  .pk-groups button.on i { color: #fff; }
   .pk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .pk-prev { flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
   .pk-st img { width: 112px; height: 112px; }

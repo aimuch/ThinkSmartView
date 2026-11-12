@@ -255,7 +255,7 @@ function renderModels() {
     const on = cur && cur.entry === m.entry;
     const b = document.createElement('button');
     b.className = 'card' + (on ? ' on' : '');
-    b.innerHTML = `<img class="tile" src="${esc(logoSrc(m))}" alt="">` + (on ? '<span class="badge">使用中</span>' : '') +
+    b.innerHTML = `<img class="tile" src="${esc(logoSrc(m))}" alt="">` + (on ? '<span class="badge">在用</span>' : '') +
       `<span><b>${esc(m.label)}</b><small>${esc(m.model || '')}</small><small class="co">${esc(m.company || '')}</small></span>`;
     b.addEventListener('click', () => switchModel(m));
     grid.appendChild(b);

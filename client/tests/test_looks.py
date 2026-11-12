@@ -44,7 +44,8 @@ def test_normalize():
 PACK = {'version': 'v1', 'groups': [{'name': '星星人', 'count': 2}, {'name': 'LABUBU', 'count': 1}, {'name': '节日', 'count': 1}],
         'avatars': [
             {'id': 'pop-mart.twinkle-twinkle', 'name': '星星人 · 经典', 'short': '经典', 'group': '星星人', 'tag': '', 'series': '助手基础形象'},
-            {'id': 'pop-mart.box.1448.06', 'name': '星星人 · Magic', 'short': 'Magic', 'group': '星星人', 'tag': '', 'series': 'We are Twinkle Twinkle'},
+            {'id': 'pop-mart.box.1448.06', 'name': '星星人 · 魔法', 'short': '魔法', 'group': '星星人', 'tag': '', 'series': 'We are Twinkle Twinkle',
+             'alias': 'Magic'},
             {'id': 'pop-mart.labubu', 'name': 'LABUBU · 经典', 'short': '经典', 'group': 'LABUBU', 'tag': '', 'series': '助手基础形象'},
             {'id': 'festivals.labubu.spring-festival', 'name': 'LABUBU · 春节', 'short': 'LABUBU · 春节', 'group': '节日', 'tag': '春节',
              'series': '节日适配 · 春节'},
@@ -69,7 +70,9 @@ def test_avatar_pack(tmp_path, monkeypatch):
     assert looks.pack() is None and looks.pack_view() == {'available': False, 'groups': [], 'avatars': []}
     install_pack(tmp_path, monkeypatch)
     assert looks.normalize_avatar('星星人') == 'pack:pop-mart.twinkle-twinkle'     # 说分组名用经典款
-    assert looks.normalize_avatar('星星人 Magic') == 'pack:pop-mart.box.1448.06'
+    assert looks.normalize_avatar('星星人 魔法') == 'pack:pop-mart.box.1448.06'
+    assert looks.normalize_avatar('星星人 Magic') == 'pack:pop-mart.box.1448.06'   # 英文原名（别名）也认
+    assert looks.normalize_avatar('magic') == 'pack:pop-mart.box.1448.06'
     assert looks.normalize_avatar('LABUBU 春节的') == 'pack:festivals.labubu.spring-festival'
     assert looks.normalize_avatar('pack:pop-mart.labubu') == 'pack:pop-mart.labubu'
     with pytest.raises(ValueError, match='好几款'):
