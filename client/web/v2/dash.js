@@ -126,7 +126,9 @@ function nums() {
 /* ---- 首页的卡片：按「外观」里的顺序和开关摆（looks.dash_cards，设计画布第 36 块） ----
    横屏三列：早安小结、常用设备这两张宽的在中间，其余按顺序前一半在左、后一半在右；竖屏按顺序往下排，小卡片两张一行 */
 const CARDS = { wx: ['dWx', weather], todo: ['dTodo', todo], alarm: ['dAlarm', alarms], brief: ['dBrief', brief],
-  dev: ['dDev', devices], scene: ['dScene', scenes], media: ['dMedia', media], nums: ['dNums', nums] };
+  dev: ['dDev', devices], scene: ['dScene', scenes], media: ['dMedia', media], nums: ['dNums', nums],
+  // 工作台、蓝牙灯（work.js，设计画布第 38 块）
+  work: ['dWork', () => window.igApi ? window.igApi.workCard(head) : ''], lights: ['dLights', () => window.igApi ? window.igApi.lightsCard(head) : ''] };
 const WIDE = { brief: 1, dev: 1 };
 for (const [k, [id]] of Object.entries(CARDS)) {
   const el = document.createElement('div');
@@ -338,6 +340,9 @@ function watchTalk() {
 $('dashTabs').addEventListener('click', e => { const b = e.target.closest('[data-dt]'); if (b) { D.talk = false; setTab(b.dataset.dt); } });
 $('dash').addEventListener('click', e => {
   const t = e.target;
+  if (t.closest('[data-work]') && window.igApi) return window.igApi.openWork();
+  const lt = t.closest('[data-light]');
+  if (lt && window.igApi) return window.igApi.toggleLight(lt.dataset.light);
   const dev = t.closest('[data-dev]');
   if (dev && window.miApi) {
     const c = window.miApi.findCard(dev.dataset.dev);
@@ -367,6 +372,7 @@ $('dash').addEventListener('click', e => {
   if (t.closest('#dMic')) return post('/api/wake');
 });
 if (window.miApi) window.miApi.longPress($('dash'), '[data-dev]', el => window.miApi.openDetail(el.dataset.dev));
+if (window.miApi && window.igApi) window.miApi.longPress($('dash'), '[data-light]', el => window.igApi.openLight(el.dataset.light));
 document.addEventListener('visibilitychange', apply);
 
 let n = 0;

@@ -10,13 +10,14 @@ THEMES = {'night': '星夜', 'dawn': '晨光', 'lavender': '薰衣草', 'forest'
 LAYOUTS = {'chat': '对话', 'dashboard': '仪表盘'}
 # 仪表盘首页的卡片（设计画布第 36 块）：能开关、能排序。早安小结和常用设备是宽卡片（横屏在中间那一列）
 DASH_CARDS = {'wx': '时钟和天气', 'brief': '早安小结', 'dev': '常用设备', 'todo': '待办', 'alarm': '闹钟和提醒',
-              'scene': '场景', 'media': '电台和助眠', 'nums': '今天的数字'}
+              'scene': '场景', 'media': '电台和助眠', 'nums': '今天的数字', 'work': '工作台', 'lights': '蓝牙灯'}
 DASH_TABS = {'home': '首页', 'smart': '家居', 'plan': '日程', 'chat': '对话'}   # 打开时先看哪一页
 AUTO_DAY = (7, 19)          # 'auto': 晨光 from 7:00 to 19:00, 星夜 otherwise
 AVATARS = {'orb': '光球', 'cat': '小猫', 'dog': '小狗', 'bear': '小熊', 'rabbit': '兔子', 'panda': '熊猫',
            'wheat': '麦穗宝宝', 'robot': '机器人'}
 BLOCKS = {'clock': '问候和时钟', 'date': '日期和农历', 'weather': '天气', 'alarms': '下一个闹钟和倒计时',
-          'suggest': '试试这样问我', 'devices': '常用设备（米家）'}
+          'suggest': '试试这样问我', 'devices': '常用设备（米家）', 'work': '工作台摘要', 'lights': '蓝牙灯（智能中枢）'}
+OFF_BY_DEFAULT = {'work', 'lights'}   # 接入网关上的服务才有内容（设计画布第 38 块），默认关
 PHOTO_DIR = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'avatars'
 PHOTO_MAX = 6
 POSES = 5                   # 一个照片形象最多几张：待机、在听、在想、在说、睡觉（设计画布第 26、29 块）
@@ -93,7 +94,7 @@ def normalize_dash_tab(value):
 
 def normalize_blocks(blocks, BLOCKS=None):
     """[[id, on], ...] covering every block once, in the given order (unknown ids dropped, missing ones
-    added at the end, on). BLOCKS: which set (the chat home's blocks, or DASH_CARDS)."""
+    added at the end, on unless in OFF_BY_DEFAULT). BLOCKS: which set (the chat home's blocks, or DASH_CARDS)."""
     BLOCKS = BLOCKS or globals()['BLOCKS']
     out, seen = [], set()
     for item in blocks or []:
@@ -110,7 +111,7 @@ def normalize_blocks(blocks, BLOCKS=None):
             continue
         # 后来加的「常用设备」放在天气后面（放最后会被挤出屏幕）；其余缺的加在最后
         at = next((i + 1 for i, (x, _) in enumerate(out) if x == 'weather'), len(out)) if b == 'devices' else len(out)
-        out.insert(at, [b, True])
+        out.insert(at, [b, b not in OFF_BY_DEFAULT])
     return out
 
 

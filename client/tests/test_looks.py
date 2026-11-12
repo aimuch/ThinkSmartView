@@ -34,7 +34,8 @@ def test_normalize():
     with pytest.raises(ValueError):
         looks.normalize_avatar('photo:nope')
     blocks = looks.normalize_blocks([['weather', False], ['nope', True], {'id': 'clock', 'on': True}, ['weather', True]])
-    assert [b for b, _ in blocks] == ['weather', 'devices', 'clock', 'date', 'alarms', 'suggest'] and blocks[0] == ['weather', False]
+    assert [b for b, _ in blocks] == ['weather', 'devices', 'clock', 'date', 'alarms', 'suggest', 'work', 'lights'] and blocks[0] == ['weather', False]
+    assert blocks[-2:] == [['work', False], ['lights', False]]   # 接入网关服务的两块默认关（设计画布第 38 块）
     assert looks.theme_now('auto', datetime.datetime(2026, 11, 9, 8)) == 'dawn'
     assert looks.theme_now('auto', datetime.datetime(2026, 11, 9, 20)) == 'night'
 

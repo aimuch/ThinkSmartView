@@ -21,7 +21,8 @@ async function miFetch(path, body) {
 function openHome(on) {
   mi.open = on;
   $('home').classList.toggle('on', on);
-  if (!on) closeDetail();
+  if (!on) { closeDetail(); mi.wantLogin = false; }
+  if (window.hubOpen) window.hubOpen(on);   // 智能中枢的蓝牙灯（work.js）
   if (!DEMO) {
     miFetch('/api/mijia/visible', { visible: on });
     if (on && mi.view && mi.view.account && mi.view.state !== 'loading') miFetch('/api/mijia/refresh');
@@ -63,13 +64,16 @@ function renderHome() {
   if (!v) return;
   renderMiSettings();
   const loggedIn = !!v.account && v.state !== 'expired';
+  // 智能中枢的蓝牙灯排在米家前面（work.js，设计画布第 38 块）；有它时米家没登录只占一行，点了才出二维码
+  const hub = window.hubRender ? window.hubRender(loggedIn, mi.room === ALL || !loggedIn) : false;
+  const showLogin = !loggedIn && (!hub || mi.wantLogin);
   // only one of the two takes the sheet's height: both flex:1, the QR pane overflowed its half and
   // the empty rooms box above it in the stack swallowed taps on 获取二维码
-  $('hLogin').style.display = loggedIn ? 'none' : '';
+  $('hLogin').style.display = showLogin ? '' : 'none';
   $('hRooms').style.display = loggedIn ? '' : 'none';
-  $('hRefresh').style.display = loggedIn ? '' : 'none';
-  $('hSub').textContent = loggedIn ? `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
-    : '用米家 App 扫码登录后显示家里的设备';
+  $('hRefresh').style.display = loggedIn || hub ? '' : 'none';
+  $('hSub').textContent = loggedIn ? (hub ? '智能中枢 · ' : '') + `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
+    : hub ? '智能中枢 · 米家没登录' : '用米家 App 扫码登录后显示家里的设备';
   // the home: its name with ▾, the others in a menu
   const homes = loggedIn ? v.homes : [];
   const current = homes.find(h => h.id === v.home_id) || homes[0];
@@ -82,7 +86,7 @@ function renderHome() {
     : v.state === 'error' ? v.error : loggedIn && !v.rooms.length ? '这个家里还没有能显示的设备' : '';
   $('hMsg').textContent = msg;
   $('hMsg').classList.toggle('bad', v.state === 'error' || v.state === 'expired');
-  if (!loggedIn) renderLogin(v);
+  if (showLogin) renderLogin(v);
   // rooms as tabs: 全屋 and each room; the summary chips and tiles follow the tab
   const rooms = loggedIn ? v.rooms : [];
   if (mi.room !== ALL && !rooms.some(r => r.name === mi.room)) mi.room = ALL;
@@ -135,6 +139,7 @@ function fitHome() {
   if (w.scrollHeight > w.clientHeight + 2) document.body.classList.add('home-tight');
 }
 window.addEventListener('resize', fitHome);
+window.fitHome = fitHome;   // work.js 的工作台摘要、蓝牙灯也会把首页撑高
 function quickHome(on) {   // 首页显示着才查常用设备的状态（30 秒一次）；待机页、熄屏时不查
   if (DEMO || quickHome.on === on) return;
   quickHome.on = on;
@@ -498,7 +503,9 @@ setInterval(() => quickHome(!document.hidden && !mi.open && !(typeof sb !== 'und
 handlers.rotation = r => { rot = r; renderRotation(); };
 // 仪表盘（dash.js）用的家居接口：设备数据、开关、详情、家居页、长按
 window.miApi = {
-  view: () => mi.view, findCard, control, openDetail, openHome, icon, isOn, longPress,
+  view: () => mi.view, findCard, control, openDetail, openHome, icon, isOn, longPress, askConfirm,
+  isOpen: () => mi.open, rerender: () => renderHome(),
+  showLogin: () => { mi.wantLogin = true; renderHome(); },
   visible: on => { if (!DEMO) miFetch('/api/mijia/visible', { visible: on || mi.open, home: !!quickHome.on }); },
 };
 })();

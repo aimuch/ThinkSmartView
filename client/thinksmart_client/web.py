@@ -209,6 +209,34 @@ def make_app(client: Client):
                                   **({} if r['ok'] or r.get('need_confirm') else {'error': r['text']}),
                                   'text': r['text']})
 
+    # 工作台和蓝牙灯（设计画布第 38 块）：经网关的 /kiosk/integrations、/kiosk/smarthub、/kiosk/deskhub
+    async def integrations_get(request):
+        fresh = request.query.get('fresh') == '1'
+        data = await client.refresh_integrations(fresh) if fresh or client.integrations is None else client.integrations
+        return web.json_response({'ok': data is not None, 'integrations': data,
+                                  **({} if data is not None else {'error': '连不上小麦网关'})})
+
+    async def integrations_visible(request):
+        body = await request.json()
+        return web.json_response({'ok': True, **await client.set_integrations_visible(body.get('visible'))})
+
+    async def _hub_call(fn, *args):
+        try:
+            r = await fn(*args)
+        except Exception as e:
+            log.info('integration action: %s', e)
+            return web.json_response({'ok': False, 'error': '连不上小麦网关'})
+        r = r if isinstance(r, dict) else {'ok': False, 'error': '网关回的不对'}
+        return web.json_response(r)
+
+    async def smarthub_act(request):
+        body = await request.json()
+        return await _hub_call(client.smarthub_act, str(body.get('id') or ''), str(body.get('action') or ''), body.get('value'))
+
+    async def desk_command(request):
+        body = await request.json()
+        return await _hub_call(client.desk_command, str(body.get('op') or ''), str(body.get('id') or ''))
+
     async def billing(_request):
         """The hub's model spending (today, this month, total, quota) for the settings page."""
         try:
@@ -401,6 +429,10 @@ def make_app(client: Client):
     app.router.add_post('/api/mijia/refresh', mijia_refresh)
     app.router.add_post('/api/mijia/control', mijia_control)
     app.router.add_get('/api/billing', billing)
+    app.router.add_get('/api/integrations', integrations_get)
+    app.router.add_post('/api/integrations/visible', integrations_visible)
+    app.router.add_post('/api/integrations/smarthub', smarthub_act)
+    app.router.add_post('/api/integrations/desk', desk_command)
     app.router.add_post('/api/rotation', rotation_set)
     app.router.add_post('/api/wake-words/record/start', wake_record_start)
     app.router.add_post('/api/wake-words/record/stop', wake_record_stop)
@@ -622,7 +654,7 @@ def make_app(client: Client):
             if kind == 'alerts':
                 if body.get('clear'):
                     return {'alerts': await client.clear_alert()}
-                return {'alerts': await client.set_alerts(**{k: body[k] for k in ('leak', 'door_night') if k in body})}
+                return {'alerts': await client.set_alerts(**{k: body[k] for k in ('leak', 'door_night', 'rack') if k in body})}
             return {'translate': await client.set_translate(body.get('enabled'), body.get('a'), body.get('b'))}
         return await wake_call(change)
 

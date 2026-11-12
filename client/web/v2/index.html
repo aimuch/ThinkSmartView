@@ -64,6 +64,10 @@
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
       </button>
+      <button class="gear" id="btnWork" aria-label="工作台" hidden>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+      </button>
       <button class="gear" id="btnHome" aria-label="家居">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 11l8-6.5 8 6.5M6.5 9.5V19h11V9.5"/><path d="M10 19v-5h4v5"/></svg>
@@ -122,6 +126,8 @@
         <div class="big-date" id="bigDate"></div>
         <div class="home-weather" id="homeWeather" hidden></div>
         <div class="home-devices" id="homeDevices" hidden></div>
+        <button class="home-work" id="homeWork" hidden></button>
+        <div class="home-lights" id="homeLights" hidden></div>
         <div class="next-alarms" id="nextAlarms"></div>
         <div class="missed-home" id="missedBox">
           <div class="mh-head"><b>错过的闹钟和提醒</b><button class="mh-ok" id="missedClear">知道了</button></div>
@@ -415,7 +421,9 @@
         <button class="switch" id="alertLeak" role="switch" aria-checked="true" aria-label="漏水告警"><i></i></button></div>
       <div class="opt rot-auto"><div class="opt-text"><b>门窗打开（睡眠时段）</b><span>夜里门窗传感器被打开时提醒</span></div>
         <button class="switch" id="alertDoor" role="switch" aria-checked="false" aria-label="门窗打开告警"><i></i></button></div>
-      <p class="opt-note">要先在「家居」里登录米家。每分钟查一次这些传感器。</p>
+      <div class="opt rot-auto" id="alertRackRow" hidden><div class="opt-text"><b>机柜</b><span>主机掉线、Ping 不通、检测失败时念一遍并留一条便条（连续两次才算，恢复前不重复）</span></div>
+        <button class="switch" id="alertRack" role="switch" aria-checked="false" aria-label="机柜告警"><i></i></button></div>
+      <p class="opt-note">漏水和门窗要先在「家居」里登录米家，每分钟查一次这些传感器。机柜要在网关后台打开「机柜状态」插件。</p>
     </div>
    </section>
    <section class="set-pane" data-pane="life">
@@ -589,6 +597,8 @@
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
   </div>
+  <div class="h-scroll">
+  <div class="h-hub" id="hHub" hidden></div>
   <div class="h-tabs" id="hTabs"></div>
   <div class="h-chips" id="hChips"></div>
   <section class="h-login" id="hLogin">
@@ -606,6 +616,30 @@
   </section>
   <div class="h-msg" id="hMsg"></div>
   <div class="h-rooms" id="hRooms"></div>
+  </div>
+</div>
+<!-- 智能中枢的灯和电源（work.js，设计画布第 38 块） -->
+<div class="h-detail" id="lDetail">
+  <div class="h-detail-card">
+    <div class="h-detail-head"><div><b id="ldName"></b><span id="ldSum"></span></div>
+      <button class="close" id="ldClose" aria-label="关闭"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="h-controls" id="ldControls"></div>
+  </div>
+</div>
+<!-- 工作台（work.js，设计画布第 38 块）：桌面（DeskHub）、机柜、仓库同步，数据经网关的 /kiosk/integrations -->
+<div class="sheet work" id="work">
+  <div class="sheet-bar">
+    <div><h2>工作台</h2><p id="wkSub">经小麦网关</p></div>
+    <div class="w-btns">
+      <button class="close" id="wkRefresh" aria-label="刷新"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
+      <button class="close" id="wkClose" aria-label="关闭"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </div>
+  <div class="wk-cols" id="wkCols">
+    <section class="wk-sec" id="wkDesk"></section>
+    <section class="wk-sec" id="wkRack"></section>
+    <section class="wk-sec" id="wkRepo"></section>
+  </div>
 </div>
 <div class="h-detail" id="hDetail">
   <div class="h-detail-card">
@@ -711,6 +745,7 @@
 <script src="/static/v2/vendor/qrcode.js"></script>
 <script src="/static/v2/app.js"></script>
 <script src="/static/v2/home.js"></script>
+<script src="/static/v2/work.js"></script>
 <script src="/static/v2/dash.js"></script>
 </body>
 </html>

@@ -64,7 +64,7 @@ DEFAULTS = {
     'standby': {'enabled': True, 'minutes': 2, 'album': True},
     'scenes': [],         # 场景口令 (daily.py): [{'name': '我出门了', 'steps': '…'}]
     'tasks': [],          # 定时任务: [{'id', 'time': 'HH:MM', 'days': 'daily'|'workdays'|'weekend'|'once', 'prompt'}]
-    'alerts': {'leak': True, 'door_night': False},   # 米家传感器的主动告警
+    'alerts': {'leak': True, 'door_night': False, 'rack': False},   # 主动告警：米家传感器、机柜（接入网关的 rack_status）
     'translate': {'enabled': False, 'a': '中文', 'b': '英文'},   # 翻译模式 (the hub's prompt)
 }
 

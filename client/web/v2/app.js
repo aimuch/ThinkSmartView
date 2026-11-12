@@ -682,6 +682,7 @@ function renderAlertsUi() {
   if (!a) return;
   $('alertLeak').setAttribute('aria-checked', String(!!a.leak));
   $('alertDoor').setAttribute('aria-checked', String(!!a.door_night));
+  $('alertRack').setAttribute('aria-checked', String(!!a.rack));
   $('alertsNow').textContent = a.sensors ? `米家 ${a.sensors} 个传感器` : '';
   $('alertBar').hidden = !a.alert;
   if (a.alert) { $('alertText').textContent = a.alert.text; $('alertTime').textContent = hhmm(a.alert.time); }
@@ -690,6 +691,7 @@ function renderAlertsUi() {
 $('alertLeak').addEventListener('click', () => proPost('alerts', { leak: !(ui.alerts && ui.alerts.leak) }));
 $('alertDoor').addEventListener('click', () => proPost('alerts', { door_night: !(ui.alerts && ui.alerts.door_night) }));
 $('alertOk').addEventListener('click', () => proPost('alerts', { clear: true }));
+$('alertRack').addEventListener('click', () => proPost('alerts', { rack: !(ui.alerts && ui.alerts.rack) }));
 function renderTranslate() {
   const t = ui.translate;
   $('trBar').hidden = !(t && t.enabled);
@@ -953,7 +955,7 @@ const THEME_DOT = { night: 'linear-gradient(135deg,#18245a,#050813)', dawn: 'lin
   forest: 'linear-gradient(135deg,#1d4a3a,#06100c)', candy: 'linear-gradient(135deg,#ffd6ec,#c9ecff)', black: '#000',
   auto: 'linear-gradient(90deg,#ffe3c4 50%,#18245a 50%)' };
 const BLOCK_ELS = { clock: ['greet', 'bigTime'], date: ['bigDate'], weather: ['homeWeather'], alarms: ['nextAlarms', 'missedBox', 'homeNotes', 'homeList'],
-  suggest: ['tryLabel', 'chips'], devices: ['homeDevices'] };
+  suggest: ['tryLabel', 'chips'], devices: ['homeDevices'], work: ['homeWork'], lights: ['homeLights'] };
 let looksArmed = null;
 // 照片形象的几个样子（设计画布第 26 块）：待机、在听、在想、在说；没传的状态用待机那张
 let avPoses = null;

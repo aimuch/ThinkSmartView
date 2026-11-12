@@ -298,6 +298,12 @@ class Client:
         except ValueError:
             cfg['dash_default'] = 'home'
         self.today = None             # the home page's weather and lunar date (/kiosk/today)
+        # 接入网关上的服务（设计画布第 38 块）：工作台（DeskHub、机柜、仓库）和智能中枢的蓝牙灯，/kiosk/integrations
+        self.integrations = None
+        self.integ_visible = False    # 工作台或家居页开着：15 秒刷新一次，否则 60 秒
+        self._integ_wake = asyncio.Event()
+        self._rack_seen = {}          # 告警键 -> 连续看到几次（连续两次才提醒）
+        self._rack_told = set()       # 已经提醒过、还没恢复的
         try:
             self.kids = kids.normalize(cfg.get('kids'))
         except ValueError:
@@ -870,7 +876,7 @@ class Client:
         return {**self.cfg['alerts'], 'sensors': len(sensors), 'alert': self.alert}
 
     async def set_alerts(self, **changes):
-        a = {**self.cfg['alerts'], **{k: bool(v) for k, v in changes.items() if k in ('leak', 'door_night')}}
+        a = {**self.cfg['alerts'], **{k: bool(v) for k, v in changes.items() if k in ('leak', 'door_night', 'rack')}}
         self.cfg['alerts'] = a
         if a == config.DEFAULTS['alerts']:
             config.unset('alerts')
@@ -923,6 +929,70 @@ class Client:
         if self.ring is None:
             self.play('report')
             await self._say_local(f'注意，{text}。' * (2 if urgent else 1))
+
+    # ---- 接入网关上的服务：工作台和蓝牙灯（设计画布第 38 块；网关 core/integrations） ----
+
+    async def refresh_integrations(self, fresh=False):
+        q = {'device': self.cfg['device_id']}
+        if fresh:
+            q['fresh'] = '1'
+        try:
+            data = await self._hub_http('/kiosk/integrations?' + urllib.parse.urlencode(q))
+        except Exception as e:
+            log.info('integrations: %s', e)
+            return self.integrations
+        if data and data.get('ok'):
+            data.pop('ok', None)
+            data['at'] = time.time()
+            self.integrations = data
+            self.events.publish('integrations', data)
+            await self._rack_alerts(data)
+        return self.integrations
+
+    async def set_integrations_visible(self, on):
+        self.integ_visible = bool(on)
+        if on:
+            self._integ_wake.set()
+        return {'visible': self.integ_visible}
+
+    async def _integrations_loop(self):
+        await asyncio.sleep(8)
+        while True:
+            await self.refresh_integrations()
+            self._integ_wake.clear()
+            try:
+                await asyncio.wait_for(self._integ_wake.wait(), 15 if self.integ_visible else 60)
+            except asyncio.TimeoutError:
+                pass
+
+    async def _rack_alerts(self, data):
+        rack = data.get('rack_status')
+        if not isinstance(rack, dict) or 'alerts' not in rack:
+            return
+        now = rack['alerts']
+        self._rack_seen = {k: self._rack_seen.get(k, 0) + 1 for k in now}
+        self._rack_told &= set(now)
+        if not self.cfg['alerts'].get('rack'):
+            return
+        for key, text in now.items():
+            if self._rack_seen[key] >= 2 and key not in self._rack_told:
+                self._rack_told.add(key)
+                await self._raise_alert(text, urgent=False)
+
+    async def smarthub_act(self, ident, action, value=None):
+        r = await self._hub_http('/kiosk/smarthub', {'device': self.cfg['device_id'], 'id': ident, 'action': action, 'value': value})
+        if r and r.get('ok') and self.integrations and isinstance(self.integrations.get('smart_hub'), dict):
+            devs = self.integrations['smart_hub'].get('devices') or []
+            self.integrations['smart_hub']['devices'] = [r['device'] if d.get('id') == ident else d for d in devs]
+            self.events.publish('integrations', self.integrations)
+        return r
+
+    async def desk_command(self, op, ident):
+        r = await self._hub_http('/kiosk/deskhub', {'device': self.cfg['device_id'], 'op': op, 'id': ident})
+        if r and r.get('desk') is not None and self.integrations:
+            self.integrations['desk_hub'] = r['desk']
+            self.events.publish('integrations', self.integrations)
+        return r
 
     # ---- 翻译模式 (the hub's prompt; the device listens longer) ----
 
@@ -1609,6 +1679,7 @@ class Client:
         asyncio.create_task(self._cook_loop())
         asyncio.create_task(self._lists_loop())
         asyncio.create_task(self._alert_loop())
+        asyncio.create_task(self._integrations_loop())
         asyncio.create_task(self._offline_clips_loop())
         await self.bt.start()
         asyncio.create_task(self._bluetooth_loop())
@@ -1711,6 +1782,7 @@ class Client:
                 'standby': self.standby_view(), 'cook': self.cook_view(), 'media': self.media_view(),
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
+                'integrations': self.integrations,
                 'thread': {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])}}
 
     def view_entry(self):

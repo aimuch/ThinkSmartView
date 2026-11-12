@@ -682,3 +682,9 @@ body.dash-on[data-state="listening"] .dash-ask .d-orb, body.dash-on[data-state="
 }
 @media (orientation: portrait) { .dash-pane[data-dp="home"] .dh-mid > .dc-span { grid-column: 1 / -1; } }
 .dc[hidden], .dg[hidden] { display: none !important; }
+
+/* 仪表盘：工作台、蓝牙灯（work.js，设计画布第 38 块） */
+.d-bad { color: var(--bad) !important; }
+.d-work { width: 100%; text-align: left; }
+.d-chips button.on { color: #2a1800; background: linear-gradient(135deg, #ffe2a8, var(--warn)); }
+body[data-theme="lavender"] .d-chips button.on { color: #fff; background: linear-gradient(135deg, #9d8fff, #7c6cf2); }
