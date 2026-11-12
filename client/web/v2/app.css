@@ -569,6 +569,12 @@ body:not([data-state="idle"]) .slide-dot { animation: slide-dot 1.1s ease-in-out
 /* ---- 屏幕方向 ---- */
 #rotChoices { grid-template-columns: repeat(4, 1fr); }
 .rot-auto { padding: 0; border: 0; background: none; }
+/* 设置 › 智能体 › 接入的服务（设计画布第 40 块） */
+.svc-row .switch.dim { opacity: .5; }
+.svc-row .switch:disabled { opacity: .3; }
+.svc-row .opt-text span .link-btn { font-size: inherit; }
+.svc-warn { font-style: normal; color: var(--warn, #ffb547); }
+body[data-theme="dawn"] .svc-warn, body[data-theme="candy"] .svc-warn, body[data-theme="lavender"] .svc-warn { color: #a35f00; }
 
 /* ---- portrait (屏幕方向 = 竖屏): 800×1280 ---- */
 @media (orientation: portrait) {

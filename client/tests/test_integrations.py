@@ -80,3 +80,31 @@ async def _test_smarthub_act_updates_view(tmp_path, monkeypatch):
     r = await c.smarthub_act('v', 'on')
     assert r['ok'] and sent[0][0] == '/kiosk/smarthub' and sent[0][1]['id'] == 'v' and sent[0][1]['device'] == c.cfg['device_id']
     assert c.integrations['smart_hub']['devices'] == [{'id': 'v', 'on': True}, {'id': 'w', 'on': False}]
+
+
+def test_set_plugin_asks_hub_then_refreshes(tmp_path, monkeypatch):
+    asyncio.run(_test_set_plugin_asks_hub_then_refreshes(tmp_path, monkeypatch))
+
+
+async def _test_set_plugin_asks_hub_then_refreshes(tmp_path, monkeypatch):
+    """设置里「接入的服务」的开关（设计画布第 40 块）：改网关上这台设备的插件，改完马上重新拉工作台的数据。"""
+    c = make_client(tmp_path, monkeypatch)
+    sent = []
+    states = {'rack_status': {'on': True, 'global': False, 'own': True, 'ready': True}}
+
+    async def hub_http(path, body=None):
+        sent.append((path, body))
+        if path == '/kiosk/plugin':
+            return {'ok': True, 'plugins': states}
+        return {'ok': True, 'available': {'rack_status': True}, 'plugins': states}
+    monkeypatch.setattr(c, '_hub_http', hub_http)
+    r = await c.set_plugin('rack_status', True)
+    assert r['ok'] and sent[0] == ('/kiosk/plugin', {'device': c.cfg['device_id'], 'name': 'rack_status', 'on': True})
+    assert sent[1][0].startswith('/kiosk/integrations?') and c.integrations['plugins'] == states
+
+    async def refused(path, body=None):
+        sent.append((path, body))
+        return {'ok': False, 'error': '参数不对'}
+    monkeypatch.setattr(c, '_hub_http', refused)
+    n = len(sent)
+    assert (await c.set_plugin('rack_status', False))['ok'] is False and len(sent) == n + 1   # 没改成就不重新拉

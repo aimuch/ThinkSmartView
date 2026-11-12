@@ -229,6 +229,13 @@ def make_app(client: Client):
         r = r if isinstance(r, dict) else {'ok': False, 'error': '网关回的不对'}
         return web.json_response(r)
 
+    async def integrations_plugin(request):
+        body = await request.json()
+        name, on = str(body.get('name') or ''), body.get('on')
+        if name not in ('smart_hub', 'rack_status', 'repo_status', 'desk_hub') or not isinstance(on, bool):
+            return web.json_response({'ok': False, 'error': '参数不对'}, status=400)
+        return await _hub_call(client.set_plugin, name, on)
+
     async def smarthub_act(request):
         body = await request.json()
         return await _hub_call(client.smarthub_act, str(body.get('id') or ''), str(body.get('action') or ''), body.get('value'))
@@ -432,6 +439,7 @@ def make_app(client: Client):
     app.router.add_get('/api/integrations', integrations_get)
     app.router.add_post('/api/integrations/visible', integrations_visible)
     app.router.add_post('/api/integrations/smarthub', smarthub_act)
+    app.router.add_post('/api/integrations/plugin', integrations_plugin)
     app.router.add_post('/api/integrations/desk', desk_command)
     app.router.add_post('/api/rotation', rotation_set)
     app.router.add_post('/api/wake-words/record/start', wake_record_start)

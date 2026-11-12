@@ -321,6 +321,38 @@ window.igApi = {
   openLight,
 };
 
+/* ---------------- 设置 › 智能体 › 接入的服务（设计画布第 40 块） ---------------- */
+const SVC = [['desk_hub', '桌面（DeskHub）', '连接口令'], ['rack_status', '机柜', ''], ['repo_status', '仓库同步', ''], ['smart_hub', '蓝牙灯（智能中枢）', '访问令牌']];
+function renderSvc() {
+  const P = ig.data && ig.data.plugins;
+  set('svcList', SVC.map(([k, label, need]) => {
+    const s = P && P[k], g = s && (s.global ? '开' : '关');
+    const sub = !s ? '—'
+      : !s.ready && need ? `<em class="svc-warn">网关后台还没填${need}</em>`
+      : s.own == null ? `跟着网关（${g}）`
+      : `这台单独${s.own ? '开着' : '关了'}<button class="link-btn" data-svc-reset="${k}">改回跟着网关（${g}）</button>`;
+    return `<div class="opt rot-auto svc-row"><div class="opt-text"><b>${esc(label)}</b><span>${sub}</span></div>`
+      + `<button class="switch${s && !s.ready && need ? ' dim' : ''}" role="switch" data-svc="${k}" aria-checked="${!!(s && s.on)}" aria-label="${esc(label)}"${s && !ig.busy['svc:' + k] ? '' : ' disabled'}><i></i></button></div>`;
+  }).join(''));
+  $('svcNote').textContent = P ? '关掉后，顶栏的工作台按钮、首页和仪表盘上的那一块、语音命令都一起没有。只影响这台设备；别的插件在网关后台的「设备」页改。'
+    : '连不上小麦网关，过一会儿再试。';
+}
+async function setSvc(k, on) {
+  if (ig.busy['svc:' + k]) return;
+  ig.busy['svc:' + k] = true; renderSvc();
+  const r = await postJson('/api/integrations/plugin', { name: k, on });
+  ig.busy['svc:' + k] = false;
+  if (r.ok && r.plugins && ig.data) ig.data.plugins = r.plugins;
+  if (!r.ok) toast(r.error || '没改成', 'error');
+  renderAll();
+}
+$('svcList').addEventListener('click', e => {
+  const sw = e.target.closest('[data-svc]'), reset = e.target.closest('[data-svc-reset]');
+  const P = ig.data && ig.data.plugins;
+  if (sw && !sw.disabled) setSvc(sw.dataset.svc, sw.getAttribute('aria-checked') !== 'true');
+  else if (reset && P && P[reset.dataset.svcReset]) setSvc(reset.dataset.svcReset, !!P[reset.dataset.svcReset].global);
+});
+
 /* ---------------- 事件 ---------------- */
 function renderAll() {
   $('btnWork').hidden = !hasWork();
@@ -328,6 +360,7 @@ function renderAll() {
   renderBlocks();
   renderWork();
   renderLight(false);
+  renderSvc();
   if (window.miApi && window.miApi.isOpen()) window.miApi.rerender();   // 仪表盘每 2 秒自己重画，不用通知
 }
 const baseSnapshot = handlers.snapshot;

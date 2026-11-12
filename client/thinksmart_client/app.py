@@ -987,6 +987,13 @@ class Client:
             self.events.publish('integrations', self.integrations)
         return r
 
+    async def set_plugin(self, name, on):
+        """设备设置里「接入的服务」的开关（设计画布第 40 块）：改网关上这台设备的插件，只改这台；改完重新拉一次。"""
+        r = await self._hub_http('/kiosk/plugin', {'device': self.cfg['device_id'], 'name': name, 'on': bool(on)})
+        if r and r.get('ok'):
+            await self.refresh_integrations()
+        return r
+
     async def desk_command(self, op, ident):
         r = await self._hub_http('/kiosk/deskhub', {'device': self.cfg['device_id'], 'op': op, 'id': ident})
         if r and r.get('desk') is not None and self.integrations:
