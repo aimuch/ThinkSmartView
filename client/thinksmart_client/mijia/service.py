@@ -15,6 +15,7 @@ import time
 
 import aiohttp
 
+from .. import bg
 from . import devices as dv
 from .cloud import REGIONS, MiCloud, MiCloudError, QRLogin, normalize_region
 from .policy import needs_confirm
@@ -68,10 +69,10 @@ class MijiaService:
         self.settings = read_json(self.dir / 'settings.json') or {}
         self.session = read_json(self.dir / 'session.json')
         if self.session and self.session.get('service_token'):
-            asyncio.create_task(self.reload())
+            bg.spawn(self.reload())
         else:
             self.session = None
-        asyncio.create_task(self._poll_loop())
+        bg.spawn(self._poll_loop())
 
     def _client(self):
         return MiCloud(self.http, self.session)
@@ -339,7 +340,7 @@ class MijiaService:
         for k, v in writes:
             c['values'][k] = v
         self._changed()
-        asyncio.create_task(self._refresh_soon(c))
+        bg.spawn(self._refresh_soon(c))
         return {'ok': True, 'text': done_text(c, op, value)}
 
     async def _refresh_soon(self, card):

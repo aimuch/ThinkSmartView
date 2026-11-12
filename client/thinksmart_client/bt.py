@@ -29,6 +29,8 @@ import numpy as np
 
 from .audio import OUT_RATE
 
+from . import bg
+
 log = logging.getLogger(__name__)
 
 HELPER = pathlib.Path(__file__).with_name('bt_helper.py')
@@ -82,8 +84,8 @@ class Bluetooth:
         if not shutil.which(SYSTEM_PYTHON) or not HELPER.exists():
             log.warning('bluetooth: no %s, no speaker mode', SYSTEM_PYTHON)
             return
-        asyncio.create_task(self._run_helper())
-        asyncio.create_task(self._capture_loop())
+        bg.spawn(self._run_helper())
+        bg.spawn(self._capture_loop())
 
     async def _run_helper(self):
         while True:

@@ -7,6 +7,7 @@ import time
 
 from aiohttp import web
 
+from . import bg
 from . import __version__, camera, kiosk_watch, looks, photos, update
 from .app import ALBUM, PHOTOS, ROOT, Client, local_ip
 
@@ -65,13 +66,13 @@ def make_app(client: Client):
 
     def action(coro_fn):
         async def handler(_request):
-            asyncio.create_task(coro_fn())
+            bg.spawn(coro_fn())
             return web.json_response({'ok': True})
         return handler
 
     async def text(request):
         body = await request.json()
-        asyncio.create_task(client.say(body.get('text', '')))
+        bg.spawn(client.say(body.get('text', '')))
         return web.json_response({'ok': True})
 
     async def model(request):
@@ -181,7 +182,7 @@ def make_app(client: Client):
 
     async def mijia_home(request):
         body = await request.json()
-        asyncio.create_task(client.mijia.set_home(str(body.get('id') or '')))
+        bg.spawn(client.mijia.set_home(str(body.get('id') or '')))
         return web.json_response({'ok': True})
 
     async def mijia_visible(request):
@@ -198,7 +199,7 @@ def make_app(client: Client):
         return web.json_response({'ok': True, 'favorites': favs})
 
     async def mijia_refresh(_request):
-        asyncio.create_task(client.mijia.reload())
+        bg.spawn(client.mijia.reload())
         return web.json_response({'ok': True})
 
     async def mijia_control(request):
@@ -451,7 +452,7 @@ def make_app(client: Client):
     async def broadcast_set(request):
         body = await request.json()
         if body.get('test'):
-            asyncio.create_task(client.play_broadcast())
+            bg.spawn(client.play_broadcast())
             return web.json_response({'ok': True})
 
         async def change():

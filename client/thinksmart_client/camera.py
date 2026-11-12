@@ -14,6 +14,8 @@ import shutil
 import time
 from pathlib import Path
 
+from . import bg
+
 log = logging.getLogger(__name__)
 
 DEVICE = Path('/dev/video10')
@@ -78,7 +80,7 @@ class Camera:
         self.proc = await asyncio.create_subprocess_exec(*ffmpeg_args(self.rotation()), stdout=asyncio.subprocess.PIPE,
                                                          stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.DEVNULL)
         log.info('camera on (ffmpeg %s, rotation %s)', self.proc.pid, self.rotation())
-        asyncio.create_task(self._read(self.proc))
+        bg.spawn(self._read(self.proc))
 
     async def _read(self, proc):
         buf = b''

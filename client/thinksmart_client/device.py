@@ -15,6 +15,8 @@ import struct
 import time
 from pathlib import Path
 
+from . import bg
+
 log = logging.getLogger(__name__)
 
 HINT_PATH = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/1000')) / 'thinksmart-screen.json'
@@ -179,7 +181,7 @@ class Keys:
         for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
             _sec, _usec, etype, code, value = EVENT.unpack_from(data, i)
             if etype == EV_KEY and code in (KEY_VOLUMEUP, KEY_VOLUMEDOWN) and value in (1, 2):
-                asyncio.create_task(self.on_step(VOLUME_STEP if code == KEY_VOLUMEUP else -VOLUME_STEP))
+                bg.spawn(self.on_step(VOLUME_STEP if code == KEY_VOLUMEUP else -VOLUME_STEP))
             elif etype == EV_SW and code == SW_MIC:
                 self.mic_on = bool(value)
                 self.on_mic(self.mic_on)

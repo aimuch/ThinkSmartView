@@ -49,6 +49,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
+from . import bg
 from . import alarms, broadcast, bt, camera, config, cook, perf, daily, kids, looks, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
@@ -1601,7 +1602,7 @@ class Client:
         log.info('home address: %s', place and place['name'])
         self.publish_broadcast()
         await self._sync_home()
-        asyncio.create_task(self.refresh_today())
+        bg.spawn(self.refresh_today())
         return self.broadcast_view()
 
     async def _sync_home(self):
@@ -1694,21 +1695,21 @@ class Client:
         self.screen.release()   # a hold left by a previous run must not keep the screen on
         self.slides.clear_all()
         self._apply_sleep()
-        asyncio.create_task(self._sender())
-        asyncio.create_task(self._ticker())
-        asyncio.create_task(self._model_poller())
-        asyncio.create_task(self._report_poller())
-        asyncio.create_task(self._alarm_loop())
-        asyncio.create_task(self._broadcast_loop())
-        asyncio.create_task(self._today_loop())
-        asyncio.create_task(self._kids_loop())
-        asyncio.create_task(self._cook_loop())
-        asyncio.create_task(self._lists_loop())
-        asyncio.create_task(self._alert_loop())
-        asyncio.create_task(self._integrations_loop())
-        asyncio.create_task(self._offline_clips_loop())
+        bg.spawn(self._sender())
+        bg.spawn(self._ticker())
+        bg.spawn(self._model_poller())
+        bg.spawn(self._report_poller())
+        bg.spawn(self._alarm_loop())
+        bg.spawn(self._broadcast_loop())
+        bg.spawn(self._today_loop())
+        bg.spawn(self._kids_loop())
+        bg.spawn(self._cook_loop())
+        bg.spawn(self._lists_loop())
+        bg.spawn(self._alert_loop())
+        bg.spawn(self._integrations_loop())
+        bg.spawn(self._offline_clips_loop())
         await self.bt.start()
-        asyncio.create_task(self._bluetooth_loop())
+        bg.spawn(self._bluetooth_loop())
         await self.mijia.start()
         self.rotation.start()
 
@@ -1791,7 +1792,7 @@ class Client:
         log.info('mic switch: %s', 'on' if on else 'off')
         self.events.publish('toast', {'kind': 'info', 'text': '麦克风已打开' if on else '麦克风已关'})
         if not on and self.uploading:
-            asyncio.create_task(self.stop_uploading())
+            bg.spawn(self.stop_uploading())
         else:
             self.set_state(self.state)
 
@@ -2079,7 +2080,7 @@ class Client:
                     self.photo_card = None
                     self.show_card(title, answer, images)
                 self.set_state('thinking')
-                asyncio.create_task(self._refresh_after_question(m))
+                bg.spawn(self._refresh_after_question(m))
         elif kind == 'vad':
             # VAD events, a feature asked for in our hello. end: the hub decided the user finished and
             # is recognising; empty: it recognised nothing (a cough, too short, only echo)
@@ -2169,14 +2170,14 @@ class Client:
                 if self.reconnect_after_reply:
                     # 翻译模式 changed in this turn: the new prompt needs a new connection
                     self.listen_after_reply = False
-                    asyncio.create_task(self._after_playback(self._reconnect_for_translate))
+                    bg.spawn(self._after_playback(self._reconnect_for_translate))
                 elif self.listen_after_reply and not msg.get('interrupted') and not self.wants_follow_up(said):
                     # an answer that asks nothing back: what is said next isn't for us unless the wake
                     # word comes first. The connection stays, so waking again keeps the conversation
                     self.listen_after_reply = False
                     self.set_state('idle')
                 elif self.listen_after_reply:
-                    asyncio.create_task(self._listen_after_reply())
+                    bg.spawn(self._listen_after_reply())
                 elif self.uploading:
                     self.heard = True
                     self.deadline = time.monotonic() + self.follow_up_seconds()
@@ -2283,7 +2284,7 @@ class Client:
         self.set_state('idle')
         self.events.publish('thread', {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), [])})
         # the hub's copy has interrupted replies cut to what was heard: show that one
-        asyncio.create_task(self.load_history())
+        bg.spawn(self.load_history())
 
     # ---- conversation threads (one per model, like the hub keeps them) ----
 
@@ -2335,7 +2336,7 @@ class Client:
         self.events.publish('power', {'state': 'off'})   # cover the page before ending a conversation (up to 3 s)
         if self.hub.connected:
             await self.end()
-        asyncio.create_task(self._halt())
+        bg.spawn(self._halt())
         return {'ok': True}
 
     async def _update_running(self):
@@ -2577,7 +2578,7 @@ class Client:
         elif self.state == 'idle' and not self.hub.connected and not self.ring:
             # connected and idle, the hub reads it by itself
             self.play('report')
-            asyncio.create_task(self.play_reports())
+            bg.spawn(self.play_reports())
 
     async def play_reports(self):
         """Have the hub read the pending reports now (also in the sleep hours: the user asked)."""
@@ -2823,7 +2824,7 @@ class Client:
             raise ValueError('设备时间还没和网络对上（刚开机或没联网），现在设不准，请过一会儿再试')
         item = self.alarms.create(kind, label, say, repeat, **when)
         if kind == 'reminder':
-            asyncio.create_task(self._make_clip(item))
+            bg.spawn(self._make_clip(item))
         self.publish_alarms()
         return self.alarms.view(item)
 

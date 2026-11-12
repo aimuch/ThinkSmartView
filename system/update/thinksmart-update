@@ -1071,13 +1071,23 @@ def run(conf):
         f.unlink(missing_ok=True)
     if 'install' in actions:
         body = actions['install']
-        st = load_status()
-        avail = st.get('available') or {}
-        savail = (st.get('system') or {}).get('available') or {}
-        # only what we checked ourselves; the request can't name an arbitrary version
-        client_v = avail.get('version') if avail.get('version') == str(body.get('version', '')) else None
-        system_v = (savail.get('version') if savail.get('version') == str(body.get('system', ''))
-                    and not savail.get('missing') else None)
+
+        def wanted():
+            # only what we checked ourselves; the request can't name an arbitrary version
+            st = load_status()
+            avail = st.get('available') or {}
+            savail = (st.get('system') or {}).get('available') or {}
+            client_v = avail.get('version') if avail.get('version') == str(body.get('version', '')) else None
+            system_v = (savail.get('version') if savail.get('version') == str(body.get('system', ''))
+                        and not savail.get('missing') else None)
+            return client_v, system_v, avail, savail
+        client_v, system_v, avail, savail = wanted()
+        if not (client_v or system_v):
+            # published after our last check (the page asked for a version it heard of elsewhere):
+            # check now, and if that turns up exactly what was asked for, install it in this same run
+            # instead of making the page ask twice
+            check(conf)
+            client_v, system_v, avail, savail = wanted()
         if client_v or system_v:
             if system_v:
                 rc = install_system(conf, system_v)
@@ -1094,7 +1104,7 @@ def run(conf):
                 set_job(st, 'done', client_v, msg)
             return rc
         log('install request ignored:', body, avail, savail)
-        return check(conf)
+        return 0
     if 'check' in actions:
         return check(conf)
     return 0

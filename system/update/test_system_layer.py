@@ -521,3 +521,24 @@ def test_one_tap_for_both_reports_both(sysu, release):
     (sysu.REQUESTS / 'install').write_text(json.dumps({'action': 'install', 'version': '1.2.0'}))
     sysu.run_main('run')
     assert sysu.load_status()['job']['message'] == '已更新到 1.2.0'
+
+
+def test_install_request_for_a_version_not_checked_yet_checks_then_installs(sysu):
+    """Asking for a version published after the last check: check, and install it in the same run
+    (it used to only check, so the page had to ask twice). Still only what the check found."""
+    def fake_check(conf):
+        st = sysu.load_status()
+        st['available'] = {'version': '1.2.0'}
+        sysu.save_status(st)
+        return 0
+    sysu.check = fake_check
+    got = []
+    sysu.install = lambda conf, v: (got.append(v), 0)[1]
+    sysu.REQUESTS.mkdir(parents=True, exist_ok=True)
+    (sysu.REQUESTS / 'install').write_text(json.dumps({'action': 'install', 'version': '1.2.0'}))
+    assert sysu.run_main('run') == 0
+    assert got == ['1.2.0']
+    # a version the check didn't find is still refused
+    (sysu.REQUESTS / 'install').write_text(json.dumps({'action': 'install', 'version': '9.9.9'}))
+    assert sysu.run_main('run') == 0
+    assert got == ['1.2.0']
