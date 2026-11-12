@@ -697,7 +697,7 @@ class AdminHandler:
 
     def _device_summary(self, device: str, merged: dict) -> dict:
         """这台设备在网关上的数据：住宅地址、儿童模式、家人声音、聊天记录。"""
-        from core.utils import device_homes, device_lists, device_prefs, local_voiceprint
+        from core.utils import device_homes, device_lists, device_prefs
 
         home = device_homes.get(device)
         kids = device_prefs.kids(device)
@@ -807,7 +807,7 @@ class AdminHandler:
         data 连住宅地址、儿童/翻译模式和音色偏好、家人声音、清单一起删。费用统计不删。
         设备在线时必须带管理员密码，这里校验（不只靠页面），错了等 1 秒、什么都不删。"""
         self._require_login(request)
-        from core.utils import device_homes, device_lists, device_prefs, device_settings, local_voiceprint
+        from core.utils import device_homes, device_lists, device_prefs, device_settings
 
         body = await self._read_json(request)
         device = str(body.get("device") or "")

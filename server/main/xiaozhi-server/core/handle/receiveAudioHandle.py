@@ -1,7 +1,6 @@
 import time
 import json
 import uuid
-import asyncio
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

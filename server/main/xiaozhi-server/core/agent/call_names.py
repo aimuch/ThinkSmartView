@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING
 
 from config.config_loader import get_project_dir
 
+_TASKS = set()   # [xiaozhi-hub] 后台任务的引用
+
 if TYPE_CHECKING:
     from core.connection import ConnectionHandler
 
@@ -283,7 +285,9 @@ async def _speak(conn: "ConnectionHandler", heard: str, reply: str, cache: bool 
         return True
     speak_txt(conn, reply)
     if cache:
-        asyncio.create_task(_fill_cache(conn, reply))
+        task = asyncio.create_task(_fill_cache(conn, reply))
+        _TASKS.add(task)   # asyncio 只弱引用任务，留着引用免得半路被回收
+        task.add_done_callback(_TASKS.discard)
     return True
 
 

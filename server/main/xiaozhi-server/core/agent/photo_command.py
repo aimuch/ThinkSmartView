@@ -13,6 +13,8 @@ import json
 import re
 from typing import TYPE_CHECKING
 
+_TASKS = set()   # [xiaozhi-hub] 后台任务的引用
+
 if TYPE_CHECKING:
     from core.connection import ConnectionHandler
 
@@ -50,7 +52,9 @@ async def handle(conn: "ConnectionHandler", text: str):
     # 返回才收得到，原地等只会超时（2026-11-10 实测）。所以接手后放到后台：设备刚连上、工具清单还没到时
     # 最多等 3 秒，到了就让设备拍照，没到就照常把这句话交给模型
     q = question_of(text)
-    asyncio.create_task(_ask_device(conn, text, q))
+    task = asyncio.create_task(_ask_device(conn, text, q))
+    _TASKS.add(task)   # asyncio 只弱引用任务，留着引用免得半路被回收
+    task.add_done_callback(_TASKS.discard)
     return None
 
 

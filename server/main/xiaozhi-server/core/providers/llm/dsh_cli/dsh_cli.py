@@ -20,7 +20,7 @@ from pathlib import Path
 from config.config_loader import get_project_dir
 from config.logger import setup_logging
 from core.agent.agent_session import AgentSessionError, Done, ErrorKind, TextDelta
-from core.agent.dsh_session import (PERMISSION_PRESETS, DshSession, DshSessionConfig, dsh_version, find_dsh,
+from core.agent.dsh_session import (PERMISSION_PRESETS, DshSession, DshSessionConfig, find_dsh,
                                     find_node_dir, voice_for, write_patch)
 from core.agent.session_store import SessionStore, choose_resume
 from core.agent.voice_commands import match_resume

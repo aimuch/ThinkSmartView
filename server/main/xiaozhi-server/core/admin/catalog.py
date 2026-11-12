@@ -213,7 +213,6 @@ QWEN3_TTS_VOICES = [
     {"value": "Ethan", "name": "晨煦", "gender": "男", "style": "阳光温暖", "group": "普通话"},
     {"value": "Chelsie", "name": "千雪", "gender": "女", "style": "二次元", "group": "普通话"},
 ]
-QWEN3_TTS_VOICE_VALUES = {v["value"] for v in QWEN3_TTS_VOICES}
 
 # 后台「语音合成」能选的引擎：id → 配置条目、类型、音色表
 TTS_ENGINES = [

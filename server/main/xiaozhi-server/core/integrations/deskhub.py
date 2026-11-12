@@ -20,7 +20,6 @@ COMMAND_SECONDS = 12         # 指令等结果最多这么久（和触摸屏一�
 WAIT_SECONDS = 25
 FAILS, FAIL_WINDOW = 5, 300  # 口令错 5 次锁 5 分钟（按来源地址）
 PORTS = {"dp1": "DP 1", "dp2": "DP 2", "hdmi1": "HDMI 1", "hdmi2": "HDMI 2", "usbc": "USB-C", "other": "其他"}
-WEEK = "一二三四五六日"
 
 
 def _parse(messages) -> dict:

@@ -15,7 +15,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from config.logger import setup_logging
 from core.agent.grokbot_client import _sleep
