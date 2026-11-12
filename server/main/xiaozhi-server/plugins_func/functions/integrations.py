@@ -50,7 +50,7 @@ DESK_DESC = _fn(
 
 def _not_ready(conn, name: str):
     s = common.settings(conn.config, name)
-    if not common.saved(conn.config, name):
+    if not common.ready(conn.config, name):
         return ActionResponse(Action.REQLLM, f"{common.LABELS[name]}还没接入：请用一句话告诉用户，要在网关后台的插件里点「设置」填好。", None), s
     return None, s
 

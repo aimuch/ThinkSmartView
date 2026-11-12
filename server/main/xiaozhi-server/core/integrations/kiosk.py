@@ -16,7 +16,7 @@ async def _safe(coro):
 
 
 async def overview(merged: dict, device: str, fresh: bool = False) -> dict:
-    available = {n: common.saved(merged, n) and common.enabled_for(merged, device, n) for n in common.PLUGINS}
+    available = {n: common.ready(merged, n) and common.enabled_for(merged, device, n) for n in common.PLUGINS}
     jobs = {}
     if available["smart_hub"]:
         async def lights():

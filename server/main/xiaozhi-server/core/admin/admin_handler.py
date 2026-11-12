@@ -1521,7 +1521,7 @@ class AdminHandler:
 
         body = await self._read_json(request)
         merged = await self._blocking(self._merged)
-        if not (common.saved(merged, "smart_hub") and common.enabled_for(merged, str(body.get("device") or ""), "smart_hub")):
+        if not (common.ready(merged, "smart_hub") and common.enabled_for(merged, str(body.get("device") or ""), "smart_hub")):
             return self._error("智能中枢没接入", 400)
         try:
             dev = await smarthub.act(common.settings(merged, "smart_hub"), str(body.get("id") or ""),
@@ -1538,7 +1538,7 @@ class AdminHandler:
 
         body = await self._read_json(request)
         merged = await self._blocking(self._merged)
-        if not (common.saved(merged, "desk_hub") and common.enabled_for(merged, str(body.get("device") or ""), "desk_hub")):
+        if not (common.ready(merged, "desk_hub") and common.enabled_for(merged, str(body.get("device") or ""), "desk_hub")):
             return self._error("DeskHub 没接入", 400)
         out = await deskhub.hub.command(str(body.get("op") or ""), str(body.get("id") or ""))
         return self._json({"ok": True, **out, "desk": deskhub.hub.view()})

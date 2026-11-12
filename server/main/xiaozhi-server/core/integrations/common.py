@@ -41,9 +41,11 @@ def settings(config: dict, name: str) -> dict:
     return out
 
 
-def saved(config: dict, name: str) -> bool:
-    """在后台保存过这个插件的设置（哪怕都用默认值）。"""
-    return isinstance((config.get("plugins") or {}).get(name), dict)
+def ready(config: dict, name: str) -> bool:
+    """必填的设置都填了（智能中枢的令牌、DeskHub 的口令）；机柜和仓库同步没有必填项，用默认地址就行。"""
+    from core.admin import plugin_settings
+
+    return plugin_settings.configured(config, name)
 
 
 def enabled_for(config: dict, device: str, name: str) -> bool:
