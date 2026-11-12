@@ -484,7 +484,7 @@ class Client:
             text = await asyncio.get_running_loop().run_in_executor(None, checker.text, wake_verify.prepare(audio))
         except Exception as e:
             log.warning('recognising %s failed: %s', what, e)
-            raise ValueError('连不上小麦网关，没法识别，稍后再试')
+            raise ValueError('连不上小麦网关，没法识别，稍后再试') from e
         log.info('%s heard as %r', what, text)
         return text
 
@@ -511,7 +511,7 @@ class Client:
                                                                'purpose': purpose})
         except Exception as e:
             log.warning('cannot start a photo question: %s', e)
-            raise ValueError('连不上小麦网关')
+            raise ValueError('连不上小麦网关') from e
         if not data.get('ok'):
             raise ValueError(data.get('error') or '没开成')
         self.photo = {'token': data['token'], 'url': data['url'], 'question': data['question'],
@@ -573,7 +573,7 @@ class Client:
             log.warning('camera shot failed: %s', e)
             p['shooting'] = False
             self.publish_photo()
-            raise ValueError(str(e) if isinstance(e, ValueError) else '没拍成，再试一次或者用手机拍')
+            raise ValueError(str(e) if isinstance(e, ValueError) else '没拍成，再试一次或者用手机拍') from e
 
     async def camera_done(self):
         """形象、相册用摄像头拍好了：形象去选画风（和手机拍的一样）；相册把还没取回的取回来，然后关上。"""
@@ -874,7 +874,7 @@ class Client:
         out = []
         for t in self.cfg.get('tasks') or []:
             days = 'daily' if t['days'] == 'once' else t['days']
-            for hhmm, key, at in broadcast.due({'enabled': True, 'times': [t['time']], 'days': days}, now, self.broadcast_fired):
+            for _hhmm, key, at in broadcast.due({'enabled': True, 'times': [t['time']], 'days': days}, now, self.broadcast_fired):
                 out.append((t, f"{key} {t['id']}", at))
         return [(t, k, at) for t, k, at in out if k not in self.broadcast_fired]
 
@@ -1581,7 +1581,7 @@ class Client:
             data = await self._hub_http('/kiosk/geocode?' + urllib.parse.urlencode({'q': text}))
         except Exception as e:
             log.warning('looking up %r failed: %s', text, e)
-            raise ValueError('连不上小麦网关，查不了地名，稍后再试')
+            raise ValueError('连不上小麦网关，查不了地名，稍后再试') from e
         if not data or not data.get('ok'):
             return {'heard': text, 'error': (data or {}).get('error') or f'没找到「{text}」这个地方'}
         return {'heard': text, 'place': data['place']}

@@ -10,7 +10,7 @@ vad = [int(re.search(r'有声 (\d+) ms', l).group(1)) for l in hub if '判定说
 asr = [int(re.search(r'识别 (\d+) ms', l).group(1)) for l in hub if '] 识别 ' in l]
 post = [int(re.search(r'发出文字 (\d+) ms', l).group(1)) for l in hub if '发出文字' in l]
 rows = []
-for i, (f, t0, t1, dur) in enumerate(runs):
+for i, (f, _t0, t1, dur) in enumerate(runs):
     t1 = float(t1)
     nxt = float(runs[i + 1][1]) if i + 1 < len(runs) else 1e12
     rec = next(t for t, m in cl if t1 < t < nxt and m.startswith('recognised'))

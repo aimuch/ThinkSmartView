@@ -426,7 +426,7 @@ def _num(value, lo, hi):
     try:
         x = float(value)
     except (TypeError, ValueError):
-        raise ControlError('缺少数值')
+        raise ControlError('缺少数值') from None
     if not math.isfinite(x):
         raise ControlError('数值不对')
     return min(max(x, lo), hi)

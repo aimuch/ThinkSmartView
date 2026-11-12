@@ -8,10 +8,8 @@ Independent from vp5 - runs as separate systemd service
 import subprocess
 import time
 import sys
-import os
 import signal
 import logging
-from pathlib import Path
 
 # Configuration
 I2C_BUS = 0

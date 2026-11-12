@@ -54,7 +54,7 @@ def morning_waltz():
         ev += [(3 * i, midi(b), 2.5, 60)] + chord(3 * i + 1, ch, 0.8, 42) + chord(3 * i + 2, ch, 0.8, 40)
     mel = 'C5 F5 A5 G5 - E5 F5 A5 C6 Bb5 - F5 D5 G5 Bb5 A5 F5 C5 E5 G5 C6 Bb5 G5 E5 F5 - -'
     pos = [0, 1, 2, 3, 4, 4.5, 6, 7, 8, 9, 10, 10.5, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 22.5, 24]
-    for n, b in zip([x for x in mel.split() if x != '-'], pos):
+    for n, b in zip([x for x in mel.split() if x != '-'], pos, strict=False):
         ev.append((b, midi(n), 1, 76 if b % 3 == 0 else 66))
     ev += chord(24, 'F4 A4 C5 F5', 3, 70)
     return 138, ev, 27

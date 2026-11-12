@@ -1015,8 +1015,10 @@ function renderLooks() {
       `<span class="nm">${esc(p.name)}</span></button>`).join('') +
     l.photos.map(p => `<button data-avatar="${p.id}" class="${p.id === l.avatar ? 'on' : ''}"><img src="${esc(p.url)}" alt="">` +
       `${looksArmed === p.id ? '确定删除？' : '照片形象'}<span class="x" data-del="${p.id}">×</span></button>`).join('') +
-    `<button class="add" id="looksAdd"><span style="font-size:34px">＋</span>用照片生成</button>` +
-    (l.pack && l.pack.available ? `<button class="more" id="looksMore"><b>${l.pack.count}</b>更多形象 ›</button>` : '');
+    `<button class="add" id="looksAdd"><span style="font-size:34px">＋</span>用照片生成</button>`;
+  // 「更多形象」放在标题这一行（设计评审：放在格子里时常常一个人占一行）
+  $('looksMore').hidden = !(l.pack && l.pack.available);
+  $('looksMoreN').textContent = l.pack && l.pack.available ? ` ${l.pack.count} 款` : '';
   if (window.packRender) window.packRender();
   $('looksBlocks').innerHTML = l.blocks.map((b, i) =>
     `<div class="al ${b.on ? '' : 'off'}"><div class="al-text"><b>${esc(b.name)}</b></div>` +
@@ -1038,6 +1040,7 @@ $('looksDash').addEventListener('click', e => {
   const t = e.target.closest('[data-dtoggle]');
   if (t) setLooks({ dash_toggle: t.dataset.dtoggle });
 });
+$('looksMore').addEventListener('click', () => window.packOpen && window.packOpen());
 $('looksAvatars').addEventListener('click', e => {
   const del = e.target.closest('[data-del]');
   if (del) {
@@ -1047,7 +1050,6 @@ $('looksAvatars').addEventListener('click', e => {
     return setLooks({ delete: del.dataset.del });
   }
   if (e.target.closest('#looksAdd')) return startAvatarPhoto();
-  if (e.target.closest('#looksMore')) return window.packOpen && window.packOpen();
   const b = e.target.closest('[data-avatar]');
   if (b) setLooks({ avatar: b.dataset.avatar });
 });

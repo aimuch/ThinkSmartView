@@ -264,7 +264,7 @@ class Helper:
             return {'available': False, 'powered': False, 'window': 0, 'name': '', 'devices': []}
         a = objs[adapter][ADAPTER]
         streaming, players = set(), {}
-        for path, ifaces in objs.items():
+        for _path, ifaces in objs.items():
             # pending: the phone is starting (its source is being made): count it, it must be recorded now
             if TRANSPORT in ifaces and ifaces[TRANSPORT].get('State') in ('pending', 'active'):
                 streaming.add(str(ifaces[TRANSPORT].get('Device')))

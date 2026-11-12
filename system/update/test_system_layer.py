@@ -24,7 +24,7 @@ REPO = SCRIPT.parent.parent
 
 
 @pytest.fixture
-def sysu(tu, tmp_path, monkeypatch):
+def sysu(tu, tmp_path, monkeypatch):   # noqa: F811  (pytest fixture)
     """tu with the system layer pointed into tmp_path and nothing restarted for real."""
     m = tu
     m.ROOT = tmp_path / 'root'
@@ -367,7 +367,7 @@ def test_make_release_carries_the_system_layer(tmp_path):
     assert m['version'] == '1.2.0' and m['system']['version'] == version
     assert m['system']['file']['path'] == f'{tag}/thinksmart-system-{version}.tar.gz'
     assert load_module().valid_system(m['system']) and load_module().valid_manifest(m)
-    with tarfile.open(out / 'download' / tag / f'thinksmart-client-1.2.0.tar.gz') as t:
+    with tarfile.open(out / 'download' / tag / 'thinksmart-client-1.2.0.tar.gz') as t:
         assert 'deploy/updater/thinksmart-update' in t.getnames()
     with tarfile.open(out / 'download' / tag / f'thinksmart-system-{version}.tar.gz') as t:
         names = t.getnames()
@@ -438,7 +438,7 @@ def test_a_damaged_backup_copy_is_not_restored(sysu, release):
     assert sysu.load_status()['job']['state'] == 'rolled_back'
 
 
-def test_client_switch_waits_for_its_files_on_disk(tu, source, monkeypatch):
+def test_client_switch_waits_for_its_files_on_disk(tu, source, monkeypatch):   # noqa: F811  (pytest fixtures)
     tu.run_main('check')
     events = []
     monkeypatch.setattr(tu.os, 'sync', lambda: events.append('sync'))

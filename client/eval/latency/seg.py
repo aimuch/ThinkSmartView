@@ -48,7 +48,7 @@ def segments(x):
         if run * 20 >= PAUSE > (run - 1) * 20:
             cuts.append((i + 1) * 320)
     bounds = [0] + cuts + [len(x)]
-    return [x[a:b] for a, b in zip(bounds, bounds[1:]) if b - a > 320 * 10]
+    return [x[a:b] for a, b in zip(bounds, bounds[1:], strict=False) if b - a > 320 * 10]
 
 
 def join(parts):

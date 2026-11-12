@@ -4,7 +4,6 @@ buffer doesn't grow without end meanwhile.
 Run like test_barge_in.py (it stubs the audio stack; importing it first does that here too).
 """
 import asyncio
-import types
 
 import numpy as np
 import pytest

@@ -643,7 +643,7 @@ async def test_reminder_rings_for_its_time_then_is_noted_missed(tmp_path, monkey
 def test_tone_choices():
     assert alarms.DEFAULT_TONE == 'coffee'
     assert list(alarms.TONES) == ['coffee', 'morning', 'bright', 'hop', 'marimba']
-    for name, f in alarms.FILE_TONES.items():
+    for _name, f in alarms.FILE_TONES.items():
         assert (alarms.SOUNDS / f).exists(), f
     assert len(alarms.reminder_chime()) / OUT_RATE < 4
 

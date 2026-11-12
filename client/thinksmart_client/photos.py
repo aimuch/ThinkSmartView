@@ -51,7 +51,7 @@ def _whole(value, name, lo, hi, default):
     try:
         n = int(str(value).strip())
     except ValueError:
-        raise ValueError(f'{name} must be a whole number from {lo} to {hi}, got {value!r}')
+        raise ValueError(f'{name} must be a whole number from {lo} to {hi}, got {value!r}') from None
     if not lo <= n <= hi:
         raise ValueError(f'{name} must be from {lo} to {hi}, got {n}')
     return n

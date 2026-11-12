@@ -191,7 +191,6 @@ def test_standby_setting_and_album(tmp_path, monkeypatch):
 
 def test_cooking_and_offline_keep_each_others_words(tmp_path, monkeypatch):
     """做菜模式和断网口令可能同时开着：重建唤醒词模型时两边的词都要在（以前各自重建，会把对方的丢掉）。"""
-    from thinksmart_client import offline
 
     c = make_client(tmp_path, monkeypatch)
     c.cards = [{'id': 'c1', 'role': 'card', 'text': '番茄炒蛋', 'card': {'markdown': RECIPE}}]

@@ -3,36 +3,41 @@
 
 /* ---- themes (body[data-theme]; 'night' is tokens.css as it is) ---- */
 body[data-theme="dawn"] {
-  --bg0: #f3ecff; --bg1: #fff8ef; --ink: #2b2140; --ink2: #5b4f74; --ink3: #6a5f84;
+  --bg0: #f3ecff; --bg1: #fff8ef; --ink: #2b2140; --ink2: #5b4f74; --ink3: #5e5378;
   --line: #2b21401f; --card: #2b21400a; --card2: #2b214012; --track: #2b21401c;
   --glow1: #ffe3c4; --glow2: #dcd3ff; --glow3: #ffd9e6; --time1: #2b2140; --time2: #7a5cff;
   --sheet1: #fffaf2; --sheet2: #f1eaff; --pop: #ffffff; --scrim: #f3ecffe6; --ts: #2b2140a8;
 }
 body[data-theme="candy"] {
-  --bg0: #e9f6ff; --bg1: #fff4fb; --ink: #3a2350; --ink2: #6a4e86; --ink3: #755d90;
+  --bg0: #e9f6ff; --bg1: #fff4fb; --ink: #3a2350; --ink2: #6a4e86; --ink3: #6a5285;
   --line: #3a23501f; --card: #3a23500a; --card2: #3a235012; --track: #3a23501c;
   --glow1: #ffd6ec; --glow2: #c9ecff; --glow3: #fff1b8; --time1: #ff5fa2; --time2: #6c8cff;
   --sheet1: #fff6fb; --sheet2: #eef7ff; --pop: #ffffff; --scrim: #fff4fbe6; --ts: #3a2350a8;
 }
 body[data-theme="forest"] {
-  --bg0: #06100c; --bg1: #0d1f1a; --ink: #ecfff6; --ink2: #a9d6c2; --ink3: #6f9c88;
+  --bg0: #06100c; --bg1: #0d1f1a; --ink: #ecfff6; --ink2: #a9d6c2; --ink3: #93c1ad;
   --glow1: #1d4a3a; --glow2: #0f3a3f; --glow3: #2a3d16; --time1: #ffffff; --time2: #9fe3c1;
   --sheet1: #0f241d; --sheet2: #06100c; --pop: #12291f; --scrim: #06100ce6;
   --accent: #43c98f; --accent2: #7be3c0;
+  --on-accent: #06100c;   /* 浅绿主题色上白字只有 2.1:1，用深色字 */
+  --bad: #ff8a9b;
 }
 body[data-theme="black"] {
-  --bg0: #000; --bg1: #000; --ink: #e8e8e8; --ink2: #a8a8b0; --ink3: #6c6c78; --card: #ffffff08; --card2: #ffffff10;
+  --bg0: #000; --bg1: #000; --ink: #e8e8e8; --ink2: #a8a8b0; --ink3: #8a8a96; --card: #ffffff08; --card2: #ffffff10;
   --glow1: #000; --glow2: #000; --glow3: #000; --time1: #f0f0f0; --time2: #9aa0b8;
   --sheet1: #050505; --sheet2: #000; --pop: #111; --scrim: #000000ee;
 }
 /* light themes: the few things drawn white-on-dark. 状态色当文字用时浅色底上要深一档（对比度 ≥ 4.5，设计评审 2026-11-12） */
-body[data-theme="dawn"], body[data-theme="candy"], body[data-theme="lavender"]:not(.sleeping) { --ok: #0b7a53; --bad: #c4314f; }
-body[data-theme="dawn"] .pk-t small, body[data-theme="candy"] .pk-t small, body[data-theme="lavender"]:not(.sleeping) .pk-t small { color: #a35f00; }
+body[data-theme="dawn"], body[data-theme="candy"], body[data-theme="lavender"]:not(.sleeping) { --ok: #0b7a53; --bad: #b02a46; --warn-text: #8f5300; --dok: #0b7a53; }
+/* 主题色当文字用（链接、「改回跟着网关」）时浅色底上也要深一档 */
+body[data-theme="dawn"] { --accent-text: #4353d9; } body[data-theme="candy"] { --accent-text: #a32a6b; }
+body[data-theme="lavender"]:not(.sleeping) { --accent-text: #5a48d6; }
+body[data-theme="dawn"] .pk-t small, body[data-theme="candy"] .pk-t small, body[data-theme="lavender"]:not(.sleeping) .pk-t small { color: #8f5300; }
 /* light themes: the few things drawn white-on-dark */
 body[data-theme="dawn"] .tile, body[data-theme="candy"] .tile { box-shadow: 0 0 0 1px var(--line); }
 body[data-theme="dawn"] .msg.bot .body, body[data-theme="candy"] .msg.bot .body { color: var(--ink); }
 body[data-theme="dawn"] .gloss, body[data-theme="candy"] .gloss { opacity: .7; }
-body[data-theme="dawn"] .title em, body[data-theme="candy"] .title em { background: none; -webkit-text-fill-color: currentColor; color: var(--accent); }
+body[data-theme="dawn"] .title em, body[data-theme="candy"] .title em { background: none; -webkit-text-fill-color: currentColor; color: var(--accent-text, var(--accent)); }
 body[data-theme="dawn"] { --accent: #5b6cff; } body[data-theme="candy"] { --accent: #e0559b; }
 
 /* ---- 对话形象：光球（默认），或一张图（照片生成的、形象库的，设计画布第 26、41 块） ---- */
@@ -107,8 +112,10 @@ body.net-off .welcome { top: 92px; justify-content: flex-start; padding-top: 12p
 .looks-avatars .dot { width: 70px; height: 70px; border-radius: 50%; position: relative; }
 .looks-avatars img.pk { border-radius: 0; object-fit: contain; filter: drop-shadow(0 4px 6px #0005); }
 .looks-avatars .nm { max-width: 100%; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.looks-avatars button.more { background: linear-gradient(150deg, #6c8cff2e, #5ee0ff12); border-color: #6c8cff55; color: var(--ink); gap: 4px; }
-.looks-avatars button.more b { font-size: 30px; font-weight: 700; }
+.looks-more { margin-left: auto; min-width: 0; height: 56px; padding: 0 22px; font-size: 19px; background: linear-gradient(150deg, #6c8cff2e, #5ee0ff12);
+  border: 1.5px solid #6c8cff55; color: var(--ink); }
+.looks-more[hidden] { display: none; }
+.looks-more span { color: var(--ink3); font-weight: 600; }
 .looks-avatars .x { position: absolute; top: 6px; right: 6px; width: 34px; height: 34px; border-radius: 50%; background: var(--pop, #141c42);
   border: 1px solid var(--line); font-size: 18px; line-height: 32px; color: var(--ink2); }
 .looks-blocks .al .al-text b { font-size: 22px; }
@@ -403,7 +410,7 @@ body.av-photo-on .zzz { z-index: 2; }
 .pf-mini div { min-width: 0; padding: 14px 18px; border-radius: 18px; background: var(--card2); }
 .pf-mini small { display: block; font-size: 16px; color: var(--ink3); }
 .pf-mini b { display: block; margin-top: 4px; font-size: 32px; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pf-mini b.ok { color: #3ecf74; } .pf-mini b.warn { color: #f5a524; } .pf-mini b.hot { color: #ff6b81; }
+.pf-mini b.ok { color: var(--ok); } .pf-mini b.warn { color: var(--warn-text, var(--warn)); } .pf-mini b.hot { color: var(--bad); }
 #pmTop { font-size: 20px; line-height: 38px; }
 @media (orientation: portrait) {
   .set-body { grid-template-columns: var(--set-wp, 150px) 0 minmax(0, 1fr); gap: 0 8px; }
@@ -457,17 +464,17 @@ body.av-photo-on .zzz { z-index: 2; }
 
 /* ---- 薰衣草主题（设计画布第 35 块）：浅紫底、半透明白卡片；睡眠时段退回星夜（:not(.sleeping)） ---- */
 body[data-theme="lavender"]:not(.sleeping) {
-  --bg0: #f3eeff; --bg1: #dcdaf8; --ink: #2b2c4a; --ink2: #4f5178; --ink3: #62648a;
+  --bg0: #f3eeff; --bg1: #dcdaf8; --ink: #2b2c4a; --ink2: #4f5178; --ink3: #575980;
   --line: #6a5cf021; --card: #ffffffa6; --card2: #ffffffc8; --track: #d9d6f2;
   --glow1: #e4d9ff; --glow2: #d5ccff; --glow3: #f0e6ff; --time1: #2b2c4a; --time2: #7c6cf2;
   --sheet1: #f6f2ff; --sheet2: #e6e2fb; --pop: #ffffff; --scrim: #f3eeffe6; --ts: #2b2c4aa8;
   --accent: #7c6cf2; --accent2: #a99cff;
-  --dcard: #ffffffa6; --dline: #ffffffe0; --dshadow: 0 10px 30px #6a5cf01f; --dok: #20a868;
+  --dcard: #ffffffa6; --dline: #ffffffe0; --dshadow: 0 10px 30px #6a5cf01f;
 }
 body[data-theme="lavender"]:not(.sleeping) .tile { box-shadow: 0 0 0 1px var(--line); }
 body[data-theme="lavender"]:not(.sleeping) .msg.bot .body { color: var(--ink); }
 body[data-theme="lavender"]:not(.sleeping) .gloss { opacity: .7; }
-body[data-theme="lavender"]:not(.sleeping) .title em { background: none; -webkit-text-fill-color: currentColor; color: var(--accent); }
+body[data-theme="lavender"]:not(.sleeping) .title em { background: none; -webkit-text-fill-color: currentColor; color: var(--accent-text); }
 
 /* ---- 仪表盘布局（dash.js） ---- */
 .dash-tabs, .dash { display: none; }
@@ -490,10 +497,12 @@ body.dash-on:not([data-dash="chat"]) .dash { display: grid; grid-template-rows: 
 .dc-h { display: flex; align-items: center; gap: 10px; font-size: 19px; }
 .dc-h b { font-weight: 700; color: var(--ink); white-space: nowrap; }
 .dc-h small { margin-left: auto; font-size: 14px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dc-ic { width: 32px; height: 32px; flex: none; border-radius: 11px; display: grid; place-items: center; font-size: 16px; color: #fff;
-  background: linear-gradient(135deg, var(--accent2), var(--accent)); }
+.dc-ic { width: 32px; height: 32px; flex: none; border-radius: 11px; display: grid; place-items: center; font-size: 16px; color: var(--on-accent, #fff);
+  background: var(--accent); }   /* 星夜的青色渐变上白字只有 2.2:1；纯主题色 ≥ 3:1 */
+body[data-theme="lavender"]:not(.sleeping) .dc-ic { background: linear-gradient(135deg, #8f7ff7, var(--accent-text)); }
 .dm { font-size: 15px; color: var(--ink3); line-height: 1.45; }
 .d-ok { color: var(--dok, #3ecf74) !important; }
+.d-warn { color: var(--warn-text, var(--warn)) !important; } .d-bad { color: var(--bad) !important; }
 .dw-top { display: flex; align-items: flex-start; gap: 10px; }
 .dw-time { font-size: 60px; font-weight: 300; letter-spacing: -2px; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
 .dw-now { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; }
@@ -543,7 +552,7 @@ body.dash-on[data-state="listening"] .dash-ask .d-orb, body.dash-on[data-state="
 .dm-cover { width: 54px; height: 54px; border-radius: 14px; flex: none; background: linear-gradient(135deg, #4c5fd8, var(--accent2)); }
 .d-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; }
 .d-nums b { font-size: 26px; color: var(--ink); font-variant-numeric: tabular-nums; } .d-nums small { font-size: 15px; color: var(--ink3); }
-.d-empty { text-align: left; font-size: 16px; color: var(--accent); padding: 12px 0; }
+.d-empty { text-align: left; font-size: 16px; color: var(--accent-text, var(--accent)); padding: 12px 0; }
 .dh-name { font-size: 24px; }
 .d-room { height: 52px; border-radius: 16px; font-size: 19px; color: var(--ink2); text-align: left; padding: 0 18px; }
 .d-room.on { background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #fff; font-weight: 700; }
@@ -663,7 +672,7 @@ body[data-theme="lavender"] .d-chips button.on { color: #fff; background: linear
 .sheet.pack .sheet-bar { margin-bottom: 18px; }
 .pk-prev { display: flex; align-items: center; gap: 18px; padding: 12px 20px; margin-bottom: 16px; border-radius: 26px;
            background: var(--card); border: 1.5px solid var(--line); flex: none; }
-.pk-st { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 15px; color: var(--ink3); }
+.pk-st { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 15px; color: var(--ink2); }
 .pk-st img { width: 128px; height: 128px; object-fit: contain; filter: drop-shadow(0 6px 10px #0006); }
 .pk-nm { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin-left: 8px; }
 .pk-nm b { font-size: 26px; font-weight: 700; }
@@ -695,8 +704,8 @@ body[data-theme="lavender"] .d-chips button.on { color: #fff; background: linear
   .pk-body { flex-direction: column; gap: 12px; }
   .pk-groups { width: auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; }
   .pk-groups button { min-height: 52px; border-radius: 999px; background: var(--card2); white-space: nowrap; }
-  .pk-groups button.on { background: var(--accent); color: #fff; }
-  .pk-groups button.on i { color: #fff; }
+  .pk-groups button.on { background: var(--accent-strong, var(--accent-text, var(--accent))); color: var(--on-accent, #fff); }
+  .pk-groups button.on i { color: var(--on-accent, #fff); }
   .pk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .pk-prev { flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
   .pk-st img { width: 112px; height: 112px; }

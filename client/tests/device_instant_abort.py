@@ -116,7 +116,7 @@ def report(name, ok, detail):
 
 async def recognising(url, q1, q2):
     async with Hub(url) as h:
-        t0 = await h.say(q1, until='vad:end')
+        await h.say(q1, until='vad:end')
         ta = await h.abort()
         ack = await h.wait('tts:stop(interrupted)', ta, 5)
         await asyncio.sleep(3)                       # the old sentence would be recognised by now
@@ -130,7 +130,7 @@ async def recognising(url, q1, q2):
 
 async def thinking(url, q1, q3):
     async with Hub(url) as h:
-        t0 = await h.say(q1, until='stt')
+        await h.say(q1, until='stt')
         ta = await h.abort()
         ack = await h.wait('tts:stop(interrupted)', ta, 5)
         await asyncio.sleep(4)                       # the old reply would be streaming by now
@@ -145,7 +145,7 @@ async def thinking(url, q1, q3):
 async def speaking(url, q1, q2):
     async with Hub(url) as h:
         t0 = await h.say(q1, until='tts:sentence_start')
-        first = await h.wait('tts:sentence_start', t0)
+        await h.wait('tts:sentence_start', t0)
         await asyncio.sleep(2)
         played = max(len([a for a in h.audio if a >= t0]) * 60 - 600, 0)
         ta = await h.abort(played)

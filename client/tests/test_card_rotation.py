@@ -109,7 +109,7 @@ def test_rotation_set_validates(monkeypatch):
     r.value = '90'
     try:
         asyncio.run(r.set(value='sideways'))
-        assert False
+        raise AssertionError()
     except ValueError:
         pass
     asyncio.run(r.set(auto=True))

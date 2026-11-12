@@ -30,7 +30,7 @@ def to_wav(src, dst):
 async def edge(sem, text, voice, rate, out):
     import edge_tts
     async with sem:
-        for attempt in range(3):
+        for _attempt in range(3):
             try:
                 await edge_tts.Communicate(text, voice, rate=rate).save(str(out) + '.mp3')
                 await asyncio.to_thread(to_wav, str(out) + '.mp3', str(out))

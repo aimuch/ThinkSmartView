@@ -3,9 +3,10 @@
    开着的设备、亮着的灯用 --warn（暖色），在线、正常用 --ok，错误、超额用 --bad：明度也不同，色弱也分得开。 */
 :root {
   --bg0: #050813; --bg1: #0b1128;                       /* 底色、卡片底 */
-  --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #7883ab;     /* 文字：主、次、弱 */
+  --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #939ec7;     /* 文字：主、次、弱（弱字在卡片上也要 ≥ 4.5:1） */
   --line: #ffffff17; --card: #ffffff0b; --card2: #ffffff14;
   --accent: #6c8cff; --accent2: #5ee0ff;                /* 品牌蓝、青 */
+  --accent-strong: #4a66e8;                             /* 主题色底上放白色小字时用（≥ 4.5:1） */
   --ok: #43d39e; --warn: #ffb547; --bad: #ff6b81;       /* 状态 */
   --c1: #aab4e6; --c2: #5a66a8;                         /* 光球（随状态变，见 app.css） */
 }

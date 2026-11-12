@@ -28,7 +28,7 @@ def morning_walk():
     ev = []
     bass = ['G2', 'F#2', 'E2', 'C2', 'G2', 'F#2', 'E2', 'D2']
     up = ['D3 G3 B3', 'D3 A3 D4', 'E3 G3 B3', 'C3 G3 E4', 'D3 G3 B3', 'D3 A3 D4', 'E3 G3 B3', 'D3 A3 C4']
-    for i, (b, u) in enumerate(zip(bass, up)):
+    for i, (b, u) in enumerate(zip(bass, up, strict=False)):
         s = 4 * i
         ev.append((s, midi(b), 3.5, 60))
         ev += seq(s + 0.5, u + ' ' + u.split()[1], 0.5, 46, beats=1.5)
@@ -76,7 +76,7 @@ def canon():
     bass = ['D2', 'A1', 'B1', 'F#1', 'G1', 'D1', 'G1', 'A1']
     chords = ['F#3 A3 D4', 'E3 A3 C#4', 'F#3 B3 D4', 'F#3 A3 C#4', 'G3 B3 D4', 'F#3 A3 D4', 'G3 B3 D4', 'E3 A3 C#4']
     for rnd in range(2):
-        for i, (b, ch) in enumerate(zip(bass, chords)):
+        for i, (b, ch) in enumerate(zip(bass, chords, strict=False)):
             s = 16 * rnd + 2 * i
             ev.append((s, midi(b) + 12, 2, 60))
             ev += seq(s, ch, 0.5, 44, beats=1.6) + [(s + 1.5, midi(ch.split()[1]), 0.5, 42)]

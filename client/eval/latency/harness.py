@@ -4,7 +4,7 @@ Run on the device with the client's venv:
   ~/thinksmart-client/.venv/bin/python harness.py s1.wav l5.wav ... [--rounds N] [--device ID]
 Times are ms after the last speech sample was sent.
 """
-import asyncio, json, sys, time, wave, argparse, random
+import asyncio, json, sys, time, wave, argparse
 import numpy as np
 sys.path.insert(0, '/home/ubuntu/thinksmart-client')
 from thinksmart_client.opus import Encoder
@@ -110,7 +110,7 @@ async def main():
     ap.add_argument('--token', default='')
     ap.add_argument('--gap', type=float, default=3)
     a = ap.parse_args()
-    for r in range(a.rounds):
+    for _r in range(a.rounds):
         for f in a.files:
             res = await one(f, a.device, a.token)
             print(json.dumps(res, ensure_ascii=False), flush=True)

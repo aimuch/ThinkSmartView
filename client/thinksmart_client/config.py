@@ -4,7 +4,9 @@ The file holds only what belongs to this device or its user (ids, settings chang
 by voice), never copies of the defaults, so a client update can change a default."""
 import json
 import logging
+import os
 import pathlib
+import time
 import uuid
 
 log = logging.getLogger(__name__)
@@ -79,14 +81,30 @@ def _mac():
     return ''
 
 
+def _read():
+    """The user file as a dict ({} when there is none). A file that isn't valid JSON (cut off by a power
+    loss, edited by hand) is moved aside to config.json.bad-<time> first: the next save would otherwise
+    overwrite it with only the keys being saved, and every other setting would be gone for good."""
+    try:
+        data = json.loads(PATH.read_text())
+        if isinstance(data, dict):
+            return data
+        raise ValueError('not an object')
+    except FileNotFoundError:
+        return {}
+    except (ValueError, UnicodeDecodeError) as e:
+        bad = PATH.with_name(f'{PATH.name}.bad-{time.strftime("%Y%m%d-%H%M%S")}')
+        try:
+            PATH.replace(bad)
+            log.error('%s is not valid JSON (%s): kept it as %s, using defaults', PATH, e, bad.name)
+        except OSError:
+            log.error('%s is not valid JSON (%s), using defaults', PATH, e)
+        return {}
+
+
 def load():
     cfg = dict(DEFAULTS)
-    try:
-        cfg.update(json.loads(PATH.read_text()))
-    except FileNotFoundError:
-        pass
-    except ValueError:
-        log.error('%s is not valid JSON, using defaults', PATH)
+    cfg.update(_read())
     changed = False
     if not cfg['device_id']:
         cfg['device_id'], changed = _mac() or uuid.uuid4().hex[:12], True
@@ -99,10 +117,7 @@ def load():
 
 def save(**values):
     """Store these keys in the user file, keeping whatever else it has."""
-    try:
-        data = json.loads(PATH.read_text())
-    except (FileNotFoundError, ValueError):
-        data = {}
+    data = _read()
     data.update(values)
     save_all(data)
 
@@ -110,16 +125,16 @@ def save(**values):
 def save_all(data):
     PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = PATH.with_suffix('.tmp')
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(json.dumps(data, ensure_ascii=False, indent=2))
+        f.flush()
+        os.fsync(f.fileno())   # on disk before the rename: a power cut never leaves an empty config.json
     tmp.replace(PATH)
 
 
 def unset(*keys):
     """Drop these keys from the user file: back to the defaults."""
-    try:
-        data = json.loads(PATH.read_text())
-    except (FileNotFoundError, ValueError):
-        return
+    data = _read()
     if any(k in data for k in keys):
         for k in keys:
             data.pop(k, None)

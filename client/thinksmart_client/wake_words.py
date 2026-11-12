@@ -81,7 +81,7 @@ def _same_sound(a, b):
     pa, pb = wake_verify.pinyin(a), wake_verify.pinyin(b)
     if len(pa) != len(pb):
         return False
-    return sum(wake_verify._distance(x, y) for x, y in zip(pa, pb)) <= 0.5
+    return sum(wake_verify._distance(x, y) for x, y in zip(pa, pb, strict=True)) <= 0.5
 
 
 def analyse(text, existing=()):

@@ -198,7 +198,7 @@ def decode_response(body: str, status: int, signed: str):
     try:
         j = json.loads(crypto.decrypt(body, signed))
     except (ValueError, UnicodeDecodeError):
-        raise MiCloudError('bad', '米家云响应无法解密')
+        raise MiCloudError('bad', '米家云响应无法解密') from None
     if not isinstance(j, dict):
         raise MiCloudError('bad', '米家云解密后不是 JSON')
     return unwrap(j)
@@ -275,9 +275,9 @@ class MiCloud:
                 body = await r.text()
                 status = r.status
         except asyncio.TimeoutError:
-            raise MiCloudError('http', '米家云没有响应')
+            raise MiCloudError('http', '米家云没有响应') from None
         except aiohttp.ClientError as e:
-            raise MiCloudError('http', f'连不上米家云：{e.__class__.__name__}')
+            raise MiCloudError('http', f'连不上米家云：{e.__class__.__name__}') from e
         return decode_response(body, status, signed)
 
     async def homes(self) -> list:
