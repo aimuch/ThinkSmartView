@@ -823,7 +823,7 @@ class ConnectionHandler:
             )
             self.need_bind = False
             self.bind_completed_event.set()
-        except DeviceNotFoundException as e:
+        except DeviceNotFoundException:
             self.need_bind = True
             private_config = {}
         except DeviceBindException as e:
@@ -1355,7 +1355,7 @@ class ConnectionHandler:
                                 ),
                             }
                         )
-                    except Exception as e:
+                    except Exception:
                         bHasError = True
                         response_message.append(a)
                 else:
@@ -1373,7 +1373,7 @@ class ConnectionHandler:
 
                 if direct_answer_calls:
                     self.logger.bind(tag=TAG).debug(
-                        f"模型选择 direct_answer，流式已播报，写入对话历史"
+                        "模型选择 direct_answer，流式已播报，写入对话历史"
                     )
                     for tc in direct_answer_calls:
                         da_response = self._extract_direct_answer_response(tc.get("arguments", "{}"))
@@ -1647,7 +1647,7 @@ class ConnectionHandler:
 
     def clearSpeakStatus(self):
         self.client_is_speaking = False
-        self.logger.bind(tag=TAG).debug(f"清除服务端讲话状态")
+        self.logger.bind(tag=TAG).debug("清除服务端讲话状态")
 
     async def close(self, ws=None):
         """资源清理方法"""

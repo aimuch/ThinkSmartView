@@ -73,7 +73,7 @@ def get_local_ip():
         local_ip = s.getsockname()[0]
         s.close()
         return local_ip
-    except Exception as e:
+    except Exception:
         return "127.0.0.1"
 
 

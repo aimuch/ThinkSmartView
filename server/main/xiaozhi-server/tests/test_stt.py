@@ -45,7 +45,10 @@ def _build_provider():
         pytest.skip(f"ASR '{name}' 的 type 字段缺失")
     from core.utils.asr import create_instance
 
-    return create_instance(ptype, cfg, True)
+    try:
+        return create_instance(ptype, cfg, True)
+    except FileNotFoundError as e:   # [xiaozhi-hub] 本地模型没下载（只拷了代码跑测试时）：照文件头说的 skip
+        pytest.skip(f"ASR '{name}' 的模型文件不在：{e}")
 
 
 def _find_test_audio() -> Path:

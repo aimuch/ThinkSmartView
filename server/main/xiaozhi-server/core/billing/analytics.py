@@ -20,7 +20,9 @@ def _local(ts, zone):
 
 
 def resolve(range_id: str, now_ts: float, zone, start: str = "", end: str = ""):
-    """(开始, 结束, 上一段的开始, 上一段的结束, 说明)，都是时间戳。"""
+    """(开始, 结束, 上一段的开始, 上一段的结束, 说明)，都是时间戳。range_id 是 RANGES 里的一个。"""
+    if range_id not in RANGES:
+        raise ValueError("不支持这个时间范围")
     now = _local(now_ts, zone)
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
     day = datetime.timedelta(days=1)
@@ -45,12 +47,12 @@ def resolve(range_id: str, now_ts: float, zone, start: str = "", end: str = ""):
             a = datetime.datetime.fromisoformat(start).replace(tzinfo=zone)
             b = datetime.datetime.fromisoformat(end).replace(tzinfo=zone) + day
         except (TypeError, ValueError):
-            raise ValueError("自定义范围要写成 YYYY-MM-DD")
+            raise ValueError("自定义范围要写成 YYYY-MM-DD") from None
         if b <= a or (b - a).days > 400:
             raise ValueError("自定义范围不对（最多 400 天）")
         span = b - a
         return a.timestamp(), b.timestamp(), (a - span).timestamp(), a.timestamp(), "和前面同样长的一段比"
-    raise ValueError("不支持这个时间范围")
+    raise AssertionError(range_id)   # RANGES 里加了新的，上面要跟着加
 
 
 def _p(values, q):

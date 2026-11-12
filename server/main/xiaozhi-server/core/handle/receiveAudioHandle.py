@@ -220,7 +220,7 @@ async def check_bind_device(conn: "ConnectionHandler"):
     else:
         # 播放未绑定提示
         conn.client_abort = False
-        text = f"没有找到该设备的版本信息，请正确配置 OTA地址，然后重新编译固件。"
+        text = "没有找到该设备的版本信息，请正确配置 OTA地址，然后重新编译固件。"
         await send_stt_message(conn, text)
         music_path = "config/assets/bind_not_found.wav"
         opus_packets = await audio_to_data(music_path)

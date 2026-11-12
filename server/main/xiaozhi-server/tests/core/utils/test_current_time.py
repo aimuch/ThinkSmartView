@@ -6,7 +6,8 @@ around midnight, and to verify the weekday/lunar mapping logic.
 from datetime import datetime
 
 import pytest
-from freezegun import freeze_time
+
+freeze_time = pytest.importorskip("freezegun").freeze_time   # [xiaozhi-hub] 没装 freezegun 就跳过整个文件
 
 from core.utils import current_time
 

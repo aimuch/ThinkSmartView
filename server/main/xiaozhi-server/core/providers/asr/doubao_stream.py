@@ -233,7 +233,7 @@ class ASRProvider(ASRProviderBase):
                                 and not payload["result"].get("text")
                                 and conn.client_listen_mode != "manual"
                             ):
-                                logger.bind(tag=TAG).error(f"识别文本：空")
+                                logger.bind(tag=TAG).error("识别文本：空")
                                 self.text = ""
                                 if len(audio_data) > 15:  # 确保有足够音频数据
                                     await self.handle_voice_stop(conn, audio_data)

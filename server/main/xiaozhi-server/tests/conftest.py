@@ -223,7 +223,8 @@ _MOCKED_MODULES: tuple[str, ...] = (
     "elevenlabs",
     "mem0",
     "mem0ai",
-    "freezegun",
+    # [xiaozhi-hub] freezegun 不能假：假的冻不住时间，还让 anyio 的 pytest 插件在收集时报错；
+    # 没装就由 test_current_time 自己 skip
 )
 
 # 这些包即使装了也强制 shim — 它们要么本地模型链 import 时炸
@@ -332,25 +333,20 @@ def _install_mock_layer() -> None:
         try:
             import httpx as _httpx  # noqa: F401
 
-            class _FakeAsyncClient:
+            # [xiaozhi-hub] 继承真的 Client，只把传输层换成一律拒绝连接：openai 2.x 会调 build_request 等
+            # 别的方法，只有 send/close 的空壳会报 AttributeError（不是要测的「连不上」）
+            def _refuse(request):
+                raise _httpx.ConnectError("MOCK: connect refused", request=request)
+
+            class _FakeAsyncClient(_httpx.AsyncClient):
                 def __init__(self, *args, **kwargs):
-                    pass
+                    kwargs["transport"] = _httpx.MockTransport(_refuse)
+                    super().__init__(*args, **kwargs)
 
-                async def send(self, *args, **kwargs):
-                    raise _httpx.ConnectError("MOCK: connect refused")
-
-                async def aclose(self):
-                    return None
-
-            class _FakeClient:
+            class _FakeClient(_httpx.Client):
                 def __init__(self, *args, **kwargs):
-                    pass
-
-                def send(self, *args, **kwargs):
-                    raise _httpx.ConnectError("MOCK: connect refused")
-
-                def close(self):
-                    return None
+                    kwargs["transport"] = _httpx.MockTransport(_refuse)
+                    super().__init__(*args, **kwargs)
 
             _httpx.AsyncClient = _FakeAsyncClient  # type: ignore[misc]
             _httpx.Client = _FakeClient  # type: ignore[misc]

@@ -77,9 +77,17 @@ def _collect_with_timeout(provider, session_id: str, dialogue, timeout: float = 
         return future.result(timeout=timeout)
 
 
+def _live_only() -> None:
+    """[xiaozhi-hub] 「回答非空」只能真发请求才测得了：mock 模式下 conftest 让网络一律拒绝连接，
+    这里构造完 provider（验证配置能用）就 skip，不把「连不上」当成失败。"""
+    if not LIVE_API_TESTS:
+        pytest.skip("mock 模式不发真请求；回答内容在 RUN_LIVE_API_TESTS=1 下测")
+
+
 def test_llm_response_streams_non_empty() -> None:
     """response(session_id, dialogue) 应产生非空 token 流。"""
     provider = _build_provider()
+    _live_only()
     dialogue = [
         {"role": "system", "content": "你是助手"},
         {"role": "user", "content": "用一句话说 hi"},
@@ -94,6 +102,7 @@ def test_llm_response_streams_non_empty() -> None:
 def test_llm_response_no_stream_returns_string() -> None:
     """response_no_stream 应返回非空字符串。"""
     provider = _build_provider()
+    _live_only()
     text = provider.response_no_stream("你是助手", "介绍一下北京").strip()
 
     assert isinstance(text, str), f"response_no_stream 应返回 str，得到 {type(text).__name__}"
@@ -103,6 +112,7 @@ def test_llm_response_no_stream_returns_string() -> None:
 def test_llm_dialogue_min_length_one_user() -> None:
     """至少一条 user 消息的 dialogue 应能跑通。"""
     provider = _build_provider()
+    _live_only()
     dialogue = [{"role": "user", "content": "ping"}]
     chunks = _collect_with_timeout(provider, "s1", dialogue, timeout=10.0)
 

@@ -387,8 +387,9 @@ def test_missing_packages_real_providers(monkeypatch):
         assert deps.missing_packages("ASR", "sherpa_onnx_local") == ()  # 默认 ASR，精简安装也必须齐全
         assert deps.missing_packages("TTS", "edge") == ()
         assert deps.missing_packages("LLM", "claude_cli") == ()
-        has_funasr = importlib.machinery.PathFinder.find_spec("funasr") is not None
-        assert deps.missing_packages("ASR", "fun_local") == (() if has_funasr else ("funasr",))
+        # 按这台机器实际装了什么算（FunASR 还要 psutil，精简安装两个都可能没有）
+        absent = tuple(p for p in ("funasr", "psutil") if importlib.machinery.PathFinder.find_spec(p) is None)
+        assert deps.missing_packages("ASR", "fun_local") == absent
         assert deps.missing_packages("ASR", "no_such_provider") == ()  # 找不到源文件交给原项目报错
     finally:
         clear_deps_cache(deps)

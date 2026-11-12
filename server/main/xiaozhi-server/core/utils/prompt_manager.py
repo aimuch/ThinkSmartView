@@ -245,7 +245,7 @@ class PromptManager:
                 else:
                     self.context_data = ""
 
-            self.logger.bind(tag=TAG).debug(f"上下文信息更新完成")
+            self.logger.bind(tag=TAG).debug("上下文信息更新完成")
 
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"更新上下文信息失败: {e}")
