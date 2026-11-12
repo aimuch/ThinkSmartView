@@ -63,7 +63,7 @@
 
 - `thinksmart_client/webrtc_apm/`：py-xiaozhi 的 WebRTC APM ctypes 封装和 arm64 库，MIT（`LICENSE-py-xiaozhi`）
 - `models/kws-zh/`：sherpa-onnx 中文唤醒词模型（wenetspeech），Apache-2.0
-- `web/logos/`：LobeHub icons 1.95.1，MIT
+- `web/logos/`：LobeHub icons 1.95.1，MIT（网关后台用同一套，在 `server/…/core/admin/static/logos/`）
 - `thinksmart_client/mijia/`：米家登录、签名、MIoT 规格处理参考 [MenuBarMijia](https://gitlab.com/jryang1997/MenuBarMijia)（MIT，jryang1997）改写；`tests/fixtures/miot_golden.json` 来自它的测试
 - `web/v2/vendor/qrcode.js`：QR Code Generator（Kazuhiko Arase），MIT
 - `web/sounds/alarm-*.ogg`（Ogg Opus 64 kbit/s，客户端用系统 libopus 解码）：闹钟铃声（原创曲「咖啡时光」「晨曦」「元气早晨」「阳光小跳跃」和提醒用的短和弦），用 [Salamander Grand Piano V3](https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html) 的采样渲染（Alexander Holm，CC BY 3.0）；渲染脚本在 `tools/ringtone/`

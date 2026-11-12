@@ -237,7 +237,11 @@ function renderStatus() {
 }
 
 /* ---- models ---- */
-const logoSrc = m => (m && m.logo ? `/static/logos/${m.logo}.svg` : '');
+// 模型图标（设计画布第 42 块）：web/logos/ 里的；没有图标的（Magpie、自定义…）用名字第一个字，主题蓝
+const letterLogo = label => 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+  `<text x="12" y="18.5" text-anchor="middle" font-family="sans-serif" font-size="19" font-weight="700" fill="#4f6bed">${
+  esc(String(label || '?').trim().slice(0, 1).toUpperCase() || '?')}</text></svg>`);
+const logoSrc = m => (!m ? '' : m.logo ? `/static/logos/${m.logo}.svg` : letterLogo(m.label));
 
 function renderModels() {
   if ($('agentModel')) renderAgentModel();   // 设置 → 智能体 → 当前模型
@@ -2286,7 +2290,7 @@ $('voiceChips').addEventListener('click', async e => {
 });
 function renderCalls() {
   const opts = (ui.models && ui.models.options) || [], cur = ui.models && ui.models.current;
-  $('callsList').innerHTML = opts.map(o => `<div class="al"><div class="al-text"><b>${esc(o.label)}</b>` +
+  $('callsList').innerHTML = opts.map(o => `<div class="al"><img class="tile" src="${esc(logoSrc(o))}" alt=""><div class="al-text"><b>${esc(o.label)}</b>` +
     `<span>${o.calls && o.calls.length ? '嗨 ' + o.calls.map(esc).join(' / 嗨 ') : '还没有称呼'}</span></div>` +
     (cur && cur.entry === o.entry ? '<button class="upd-btn pri" disabled>在用</button>' : `<button class="upd-btn" data-use="${esc(o.entry)}">用它</button>`) + '</div>').join('')
     || '<p class="opt-note">还没连上网关</p>';
@@ -2297,7 +2301,7 @@ $('callsList').addEventListener('click', e => {
   if (m) switchModel(m);
 });
 function renderAgentModel() {
-  renderCalls(); $('agentModel').textContent = ui.models && ui.models.current ? `${modelName()}（新的提问交给它回答）` : '还没连上网关'; }
+  renderCalls(); $('agentLogo').src = logoSrc(ui.models && ui.models.current); $('agentModel').textContent = ui.models && ui.models.current ? `${modelName()}（新的提问交给它回答）` : '还没连上网关'; }
 $('agentModelBtn').addEventListener('click', () => { $('settings').classList.remove('on'); openSheet(true); });
 // 分类栏：标题左边的按钮收起成只剩图标；横屏时按住中间的竖条左右拖调宽度，拖到 150px 以下收成只剩图标。记在这台设备上
 const SET_MIN = 200, SET_MAX = 360, SET_SNAP = 150;

@@ -99,20 +99,29 @@ PREVIEW_SECONDS = 8      # the settings' 试听 plays at most this much of a ton
 CLIP_GAP = 0.8           # seconds of silence after each spoken reminder in a ring
 BACKGROUND_DUCKED = 0.2  # a phone's music (Bluetooth speaker) under a conversation
 
-# Hub vendor id -> (logo file, company). Unknown vendors are guessed from the model name.
+# Hub vendor id -> (logo file, company). A newer hub names the logo itself (design board 42); this table
+# covers older hubs, and unknown vendors are guessed from the model name. Files are in web/logos/.
 VENDORS = {
-    'claude': ('claude-color', 'Anthropic'), 'claude-code': ('claude-color', 'Anthropic'),
-    'claude_cli': ('claude-color', 'Anthropic'), 'openai': ('openai', 'OpenAI'),
-    'gemini': ('gemini-color', 'Google'), 'deepseek': ('deepseek-color', 'DeepSeek'),
+    'claude': ('claude-color', 'Anthropic'), 'claude-code': ('claudecode-color', 'Anthropic'),
+    'claude_cli': ('claudecode-color', 'Anthropic'), 'openai': ('openai', 'OpenAI'),
+    'gemini': ('gemini-color', 'Google'), 'deepseek': ('deepseek-color', 'DeepSeek'), 'dsh': ('deepseek-color', 'DeepSeek'),
     'qwen': ('qwen-color', '阿里通义'), 'doubao': ('doubao-color', '字节豆包'),
     'glm': ('zhipu-color', '智谱'), 'kimi': ('kimi-color', '月之暗面'),
+    'siliconflow': ('siliconcloud-color', '硅基流动'), 'qianfan': ('wenxin-color', '百度千帆'),
+    'hunyuan': ('hunyuan-color', '腾讯混元'), 'minimax': ('minimax-color', 'MiniMax'),
+    'stepfun': ('stepfun-color', '阶跃星辰'), 'spark': ('spark-color', '讯飞星火'), 'xai': ('xai', 'xAI'),
+    'mistral': ('mistral-color', 'Mistral AI'), 'openrouter': ('openrouter', 'OpenRouter'),
+    'ollama': ('ollama', 'Ollama'), 'lmstudio': ('lmstudio', 'LM Studio'), 'magpie': ('', 'Magpie'),
     'grok_bot': ('grok', 'Grok Bot'), 'grok': ('grok', 'xAI'),
 }
 BY_MODEL = [
     (('claude',), 'claude'), (('deepseek',), 'deepseek'), (('gemini',), 'gemini'),
     (('qwen', 'qwq'), 'qwen'), (('doubao',), 'doubao'), (('glm',), 'glm'),
     (('kimi', 'moonshot'), 'kimi'), (('grok',), 'grok'), (('gpt', 'o1-', 'o3', 'o4-'), 'openai'),
+    (('ernie',), 'qianfan'), (('hunyuan',), 'hunyuan'), (('minimax',), 'minimax'), (('step-',), 'stepfun'),
+    (('mistral',), 'mistral'),
 ]
+LOGO_DIR = Path(__file__).resolve().parent.parent / 'web' / 'logos'
 
 
 def describe(option):
@@ -121,8 +130,13 @@ def describe(option):
         low = (option.get('model') or '').lower()
         vendor = next((v for keys, v in BY_MODEL if any(k in low for k in keys)), vendor)
     logo, company = VENDORS.get(vendor, ('', option.get('label', '')))
+    hub_logo = str(option.get('logo') or '')
+    if hub_logo and (LOGO_DIR / f'{hub_logo}.svg').is_file():
+        logo = hub_logo   # the hub knows its own vendors best, but only use a file this client has
+    # calls: the names that summon it (「嗨 + 称呼」), shown in 设置 → 智能体 → 可以叫的
     return {'kind': option['kind'], 'vendor': option['vendor'], 'label': option['label'],
-            'entry': option['entry'], 'model': option.get('model', ''), 'logo': logo, 'company': company}
+            'entry': option['entry'], 'model': option.get('model', ''), 'logo': logo, 'company': company,
+            'calls': [str(c) for c in option.get('calls') or []]}
 
 
 def marimba(notes, gap=0.1, peak=0.2):
