@@ -10,7 +10,6 @@ import base64
 import json
 import os
 import time
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -51,6 +50,9 @@ class FakeCloud:
             web.post("/oauth/token", self.oauth_token),
             web.post("/aiserver.v1.GrokBotService/EnsureSandBox", self.ensure),
             web.post("/aiserver.v1.GrokBotService/SendGrokBotUserMessage", self.backend_send),
+            web.post("/aiserver.v1.GrokBotService/GetGrokBotSendStatus", self.backend_status),
+            web.post("/aiserver.v1.GrokBotService/ListGrokBotAgentStatuses", self.backend_agent_statuses),
+            web.post("/aiserver.v1.GrokBotService/ListGrokBotTranscriptEntries", self.backend_transcript),
             web.post("/api/listAgents", self.list_agents),
             web.post("/api/sendPrompt", self.send_prompt),
             web.post("/api/promptAcceptanceStatus", self.acceptance_status),
@@ -91,6 +93,14 @@ class FakeCloud:
         self.sand_refuse = False   # 网关的 sendPrompt / promptAcceptanceStatus 返回 502 Sand box（上游 issue #4）
         self.backend_got = []      # 经 Cursor 后台发来的消息：(content-type, 解出来的字段)
         self.backend_reply = b""   # SendGrokBotUserMessage 的回执（空 = 收下了）
+        # [xiaozhi-hub] issue #10：Temporal Harness 的新说法和 api2 上的 Connect JSON 接口
+        self.sand_text = "A Sand box session is not permitted on this endpoint."
+        self.backend_json = True        # SendGrokBotUserMessage 收 JSON；False = 只认 protobuf（JSON 返回 404）
+        self.backend_dispatch = {"dispatched": True, "mode": "GROK_BOT_TEMPORAL_HARNESS_MODE_LIVE",
+                                 "delivery": "GROK_BOT_USER_MESSAGE_DELIVERY_ACCEPTED_TEMPORAL"}
+        self.send_status = True         # GetGrokBotSendStatus 存在；False = 404
+        self.agent_statuses = None      # ListGrokBotAgentStatuses 返回的 statuses；None = 404
+        self.backend_entries = None     # ListGrokBotTranscriptEntries 的 entries；None = 404
 
     async def start(self):
         self.server = TestServer(self.app)
@@ -150,6 +160,15 @@ class FakeCloud:
         return self._check(request) or web.json_response(self.agents)
 
     async def backend_send(self, request):
+        if request.content_type == "application/json":
+            if not self.backend_json:
+                return web.Response(status=404)
+            body = await request.json()
+            self.backend_got.append(("application/json", body))
+            if self.backend_dispatch.get("dispatched"):
+                self.entries.append({"id": "e9", "kind": "message", "role": "user", "content": body["text"],
+                                     "clientNonce": body["messageId"]})
+            return web.json_response(self.backend_dispatch)
         fields = gc.decode_fields(await request.read())
         self.backend_got.append((request.headers.get("content-type"), fields))
         if not self.backend_reply:
@@ -157,9 +176,27 @@ class FakeCloud:
                                  "clientNonce": fields[2].decode()})
         return web.Response(body=self.backend_reply, content_type="application/proto")
 
+    async def backend_status(self, request):
+        if not self.send_status:
+            return web.Response(status=404)
+        body = await request.json()
+        hit = next((e for e in self.entries if e.get("clientNonce") == body.get("messageId")), None)
+        return web.json_response({"status": "GROK_BOT_SEND_STATUS_ACCEPTED", "echoEntryId": hit["id"], "acceptedAtMs": "1"}
+                                 if hit else {"status": "GROK_BOT_SEND_STATUS_NOT_FOUND"})
+
+    async def backend_agent_statuses(self, request):
+        if self.agent_statuses is None:
+            return web.Response(status=404)
+        return web.json_response({"statuses": self.agent_statuses})
+
+    async def backend_transcript(self, request):
+        if self.backend_entries is None:
+            return web.Response(status=404)
+        return web.json_response({"entries": self.backend_entries})
+
     async def send_prompt(self, request):
         if self.sand_refuse:
-            return web.json_response({"error": "A Sand box session is not permitted on this endpoint."}, status=502)
+            return web.json_response({"error": self.sand_text}, status=502)
         body = await request.json()
         self.sent.append(body)
         if self.send_hold:
@@ -171,7 +208,7 @@ class FakeCloud:
 
     async def acceptance_status(self, request):
         if self.sand_refuse:
-            return web.json_response({"error": "A Sand box session is not permitted on this endpoint."}, status=502)
+            return web.json_response({"error": self.sand_text}, status=502)
         if self.acceptance_fail:
             return web.Response(status=500, text="status boom")
         return web.json_response(self.acceptance)
@@ -1684,13 +1721,56 @@ def test_send_request_protobuf_roundtrip():
 
 async def test_sand_refusal_falls_back_to_backend_send(cloud, client):
     cloud.sand_refuse = True
+    cloud.backend_json = False      # 后台只认 protobuf（旧版）：JSON 返回 404 就用 protobuf
+    cloud.send_status = False       # 也没有 GetGrokBotSendStatus：按 clientNonce 在对话记录里找
     res = await client.send_prompt("bot-1", "帮我查一下", "nonce-7")
     assert res == {"accepted": True, "via": "backend"}
     ctype, fields = cloud.backend_got[0]
     assert ctype == "application/proto" and fields[1] == b"bot-1" and fields[2] == b"nonce-7" and fields[3].decode() == "帮我查一下"
-    # 送达确认也被拒：按 clientNonce 在对话记录里找
     assert (await client.acceptance_status("bot-1", "nonce-7")) == {"status": "accepted", "messageId": "e9"}
     assert (await client.acceptance_status("bot-1", "nonce-x"))["status"] == "not-found"
+
+
+async def test_temporal_harness_refusal_uses_api2_json(cloud, client):
+    """上游 issue #10：0.79.4 的拒绝说法是 may not make this request；api2 上的 Connect JSON 发送、查送达。"""
+    cloud.sand_refuse = True
+    cloud.sand_text = "A Sand box session may not make this request on this endpoint."
+    ensures = cloud.ensure_calls
+    res = await client.send_prompt("bot-1", "明天天气", "nonce-8")
+    assert res == {"accepted": True, "via": "backend"}
+    ctype, body = cloud.backend_got[0]
+    assert ctype == "application/json" and body["agentId"] == "bot-1" and body["messageId"] == "nonce-8" and body["text"] == "明天天气"
+    assert cloud.ensure_calls - ensures <= 1   # 被拒不再重新 EnsureSandBox 白等
+    assert (await client.acceptance_status("bot-1", "nonce-8")) == {"status": "accepted", "messageId": "e9", "via": "backend"}
+    assert (await client.acceptance_status("bot-1", "nonce-y")) == {"status": "not-found", "via": "backend"}
+    cloud.backend_dispatch = {"dispatched": False, "delivery": "GROK_BOT_USER_MESSAGE_DELIVERY_REJECTED"}
+    with pytest.raises(GrokBotError) as e:
+        await client.send_prompt("bot-1", "x", "nonce-9")
+    assert e.value.kind == ErrorKind.SEND_FAILED and "REJECTED" in e.value.detail
+
+
+def test_sand_refused_wordings():
+    assert gc.sand_refused("{'error': 'A Sand box session is not permitted on this endpoint.'}")
+    assert gc.sand_refused("sendPrompt HTTP 502 {'error': 'A Sand box session may not make this request on this endpoint.'}")
+    assert not gc.sand_refused("HTTP 502 bad gateway") and not gc.sand_refused(None)
+
+
+async def test_list_agents_merges_backend_running_state(cloud, client):
+    assert (await client.list_agents())[0]["isRunning"] is False          # 后台没有这个接口：原样
+    cloud.agent_statuses = [{"agentId": "bot-1", "isRunning": False, "live": {"isRunning": True, "isComposingMessage": True}}]
+    a = (await client.list_agents())[0]
+    assert a["isRunning"] is True and a["isComposingMessage"] is True
+
+
+async def test_transcript_falls_back_to_backend_entries(cloud, client):
+    import base64 as b64
+    cloud.tail_fail = cloud.window_fail = cloud.transcript_fail = 9
+    enc = lambda d: b64.b64encode(json.dumps(d, ensure_ascii=False).encode()).decode()
+    cloud.backend_entries = [{"seq": "12", "body": enc({"id": "e12", "role": "assistant", "content": "好"})},
+                             {"seq": "11", "body": enc({"id": "e11", "role": "user", "content": "嗨"})},
+                             {"seq": "x", "body": "坏的"}]
+    got = await client.transcript_tail("bot-1", 10)
+    assert [e["id"] for e in got] == ["e11", "e12"] and got[0]["seq"] == 11
 
 
 async def test_gateway_send_still_used_when_it_works(cloud, client):
@@ -1699,6 +1779,7 @@ async def test_gateway_send_still_used_when_it_works(cloud, client):
 
 
 async def test_backend_refusal_is_send_failed(cloud, client):
+    cloud.backend_json = False   # protobuf 回执里的拒收（后台不认 JSON 时走 protobuf）
     reason = gc._pb_str(2, "rate limited")
     cloud.backend_reply = gc._pb_int(4, 4) + gc._varint((5 << 3) | 2) + gc._varint(len(reason)) + reason
     with pytest.raises(GrokBotError) as e:

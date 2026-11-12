@@ -39,9 +39,18 @@ CLIENT_ID = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB"  # 桌面 App 的公开 OAuth cli
 # [xiaozhi-hub] 上游 xiaozhi-hub-server issue #4：2026-11-05 起网关的 sendPrompt、promptAcceptanceStatus 对云端电脑会话
 # 一律返回 502「A Sand box session is not permitted on this endpoint」，桌面 App 改走 Cursor 后台的
 # GrokBotService/SendGrokBotUserMessage（Connect，application/proto）。原作者说新接口风险更高，所以只在旧接口被这样拒绝时才用它
-SAND_REFUSED = "sand box session is not permitted"
+# 上游 issue #10（2026-11-11，Grok Bot 0.79.4 换成 Temporal Harness）：sendPrompt 的拒绝说法变成了
+# 「A Sand box session may not make this request on this endpoint」，两种说法都要认；新的接口在 api2 上用 Connect JSON
+# 就能调（SendGrokBotUserMessage、GetGrokBotSendStatus、ListGrokBotAgentStatuses、ListGrokBotTranscriptEntries）
+SAND_REFUSED = "sand box session"
 MACHINE_ID = str(uuid.uuid4())   # SendGrokBotUserMessage 的 machine_id：和桌面 App 一样每个进程一个
-CLIENT_VERSION = "0.75.3"  # 发给服务端的客户端版本号，跟着本机桌面 App 的版本走；实测服务端不校验客户端身份
+CLIENT_VERSION = "0.79.4"  # 发给服务端的客户端版本号，跟着本机桌面 App 的版本走；实测服务端不校验客户端身份
+
+
+def sand_refused(detail) -> bool:
+    """[xiaozhi-hub] 网关拒绝云端电脑会话调这个接口（issue #4 / #10 的两种说法）。"""
+    t = str(detail or "").lower()
+    return SAND_REFUSED in t and ("not permitted" in t or "may not" in t)
 GATEWAY_SUFFIXES = (".cursor.sh", ".cursor.com", ".cursorvm.com")
 REFRESH_AHEAD = 300  # access token 到期前这么多秒就续期
 WAKE_TIMEOUT = 180  # 云端电脑休眠时最多等多久醒来
@@ -469,6 +478,9 @@ class GrokBotClient:
             await self.ensure_box(wake=True)
             return await self.call(method, args, retry=False, timeout=timeout)
         asleep = status == 417 or (hdrs is not None and (hdrs.get("x-anyrun-failure-reason") or "").startswith("pod_hibernated"))
+        if status == 502 and sand_refused(body):
+            # 网关就是不让云端电脑会话调这个接口：重新 EnsureSandBox 也一样，别白等（调用方改走 api2）
+            raise GrokBotError(ErrorKind.SERVER, f"{method} HTTP {status} {str(body)[:200]}")
         if retry and (status in (401, 403) or asleep or status >= 500):
             self._log("info", f"{method} 返回 {status}，重新获取网关连接")
             self.conn = None
@@ -479,9 +491,47 @@ class GrokBotClient:
         self.woke_at = None  # 网关响应了：刚叫醒的也不用再确认
         return body
 
+    async def _backend_call(self, rpc: str, args: dict = None, timeout: float = 30) -> Optional[dict]:
+        """[xiaozhi-hub] POST {backend}/aiserver.v1.GrokBotService/<rpc>，Connect JSON（issue #10 实测可用）。
+        后台没有这个接口（404）返回 None，调用方用旧办法；401 续期一次再试。"""
+        url = f"{self.backend}/aiserver.v1.GrokBotService/{rpc}"
+        for refreshed in (False, True):
+            status, _, body = await self._request("POST", url, args or {}, await self._backend_headers(), timeout=timeout)
+            if status == 404:
+                return None
+            if status == 401 and not refreshed:
+                await self.refresh(force=True)
+                continue
+            if status in (401, 403):
+                raise GrokBotError(ErrorKind.AUTH, f"{rpc} HTTP {status}")
+            if not 200 <= status < 300:
+                raise GrokBotError(ErrorKind.SERVER, f"{rpc} HTTP {status} {str(body)[:200]}")
+            return body if isinstance(body, dict) else {"raw": body}
+        return None
+
     async def list_agents(self) -> List[dict]:
         agents = await self.call("listAgents")
-        return [a for a in agents if isinstance(a, dict)] if isinstance(agents, list) else []
+        out = [a for a in agents if isinstance(a, dict)] if isinstance(agents, list) else []
+        # Temporal Harness 下网关的 isRunning 可能一直是 False（issue #10）：用后台的状态补上，拿不到就算了
+        ids = [str(a["id"]) for a in out if a.get("id")]
+        if ids:
+            try:
+                st = await self._backend_call("ListGrokBotAgentStatuses", {"agentIds": ids}, timeout=10)
+            except GrokBotError as e:
+                if e.kind == ErrorKind.AUTH:
+                    raise
+                st = None
+            by_id = {x.get("agentId"): x for x in (st or {}).get("statuses") or [] if isinstance(x, dict)}
+            for a in out:
+                x = by_id.get(a.get("id"))
+                if not x:
+                    continue
+                live = x.get("live") if isinstance(x.get("live"), dict) else {}
+                if x.get("isRunning") or live.get("isRunning"):
+                    a["isRunning"] = True
+                if live.get("isComposingMessage"):
+                    a["isComposingMessage"] = True
+        return out
 
     async def send_prompt(self, agent_id: str, text: str, nonce: str, timeout: float = 60) -> dict:
         try:
@@ -491,14 +541,27 @@ class GrokBotClient:
                 "initiator": "user", "composedAtMs": int(time.time() * 1000),
             }, retry=False, timeout=timeout)
         except GrokBotError as e:
-            if SAND_REFUSED not in e.detail.lower():
+            if not sand_refused(e.detail):
                 raise
-            self._log("info", "网关的 sendPrompt 不收云端电脑会话的消息（issue #4），改走 Cursor 后台发送")
+            self._log("info", "网关的 sendPrompt 不收云端电脑会话的消息（issue #4 / #10），改走 Cursor 后台发送")
             return await self.backend_send(agent_id, text, nonce, timeout=timeout)
         return res if isinstance(res, dict) else {"raw": res}
 
     async def backend_send(self, agent_id: str, text: str, nonce: str, timeout: float = 60) -> dict:
-        """经 Cursor 后台发一句话（SendGrokBotUserMessage）。被拒绝抛 GrokBotError(SEND_FAILED)，其他失败抛 SERVER。"""
+        """经 Cursor 后台发一句话（SendGrokBotUserMessage）。先用 Connect JSON（issue #10 真机实测），后台不认 JSON 时
+        用 protobuf。被拒绝抛 GrokBotError(SEND_FAILED)，其他失败抛 SERVER。"""
+        now = str(int(time.time() * 1000))
+        res = await self._backend_call("SendGrokBotUserMessage", {
+            "agentId": agent_id, "messageId": nonce, "text": text, "sentAtMs": now, "composedAtMs": now,
+            "isFork": False, "source": 1, "initiator": 1, "sendSource": 1}, timeout=timeout)
+        if res is not None:
+            delivery = str(res.get("delivery") or "")
+            if res.get("dispatched") is False or any(w in delivery.upper() for w in ("REJECT", "REFUS", "DENIED")):
+                raise GrokBotError(ErrorKind.SEND_FAILED, f"SendGrokBotUserMessage 被拒绝：{delivery or res}")
+            return {"accepted": True, "via": "backend"}
+        return await self._backend_send_proto(agent_id, text, nonce, timeout)
+
+    async def _backend_send_proto(self, agent_id: str, text: str, nonce: str, timeout: float = 60) -> dict:
         headers = {**await self._backend_headers(), "content-type": "application/proto",
                    "x-cursor-client-source": "sand-desktop", "x-cursor-client-os": "linux"}
         body = encode_send_request(agent_id, nonce, text, int(time.time() * 1000))
@@ -524,9 +587,17 @@ class GrokBotClient:
             res = await self.call("promptAcceptanceStatus", {"accountSlot": "host", "agentId": agent_id, "clientNonce": nonce},
                                   timeout=timeout)
         except GrokBotError as e:
-            if SAND_REFUSED not in e.detail.lower():
+            if not sand_refused(e.detail):
                 raise
-            # 这个接口也不收了：按 clientNonce 在对话记录里找这句话（和 issue #4 里网友的做法一样）
+            # 这个接口也不收了：先问后台的 GetGrokBotSendStatus（issue #10），没有这个接口再按 clientNonce 在对话记录里找
+            st = await self._backend_call("GetGrokBotSendStatus", {"agentId": agent_id, "messageId": nonce}, timeout=timeout)
+            if st is not None:
+                text = str(st.get("status") or "").upper()
+                if text.endswith("ACCEPTED"):
+                    return {"status": "accepted", "messageId": st.get("echoEntryId"), "via": "backend"}
+                if text.endswith("NOT_FOUND"):
+                    return {"status": "not-found", "via": "backend"}
+                return {"status": text.lower() or "unknown", "via": "backend"}
             entries = await self.transcript_tail(agent_id, 20)
             hit = next((x for x in entries if x.get("clientNonce") == nonce), None)
             return {"status": "accepted", "messageId": hit.get("id")} if hit else {"status": "not-found", "via": "transcript"}
@@ -550,6 +621,24 @@ class GrokBotClient:
             entries = res.get("entries") if isinstance(res, dict) else res
             if isinstance(entries, list):
                 return [e for e in entries if isinstance(e, dict)][-limit:]
+        # 网关三个都不行：后台的 ListGrokBotTranscriptEntries（issue #10）。按 seq 倒序，body 是 base64 的 JSON
+        try:
+            res = await self._backend_call("ListGrokBotTranscriptEntries", {"agentId": agent_id, "limit": limit})
+        except GrokBotError as e:
+            if e.kind == ErrorKind.AUTH:
+                raise
+            res = None
+        if res is not None:
+            out = []
+            for item in res.get("entries") or []:
+                try:
+                    entry = json.loads(base64.b64decode(item["body"]).decode("utf-8"))
+                    entry["seq"] = int(item["seq"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if isinstance(entry, dict):
+                    out.append(entry)
+            return sorted(out, key=lambda x: x["seq"])[-limit:]
         raise last or GrokBotError(ErrorKind.SERVER, "读不到对话记录")
 
     async def read_events(self, on_event: Callable[[str, dict], None], on_connected: Callable[[], None] = None) -> None:
