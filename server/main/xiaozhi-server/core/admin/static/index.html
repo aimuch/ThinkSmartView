@@ -101,6 +101,7 @@
   .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 22px;
                border-bottom: 1px solid var(--line); }
   .card-head h2 { font-size: 15px; margin: 0; }
+  .card-head h2.with-logo { display: flex; align-items: center; gap: 10px; }
   .muted { color: var(--muted); }
   .small { font-size: 12px; }
   .banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 13px; }
@@ -170,12 +171,20 @@
   .choice.off { opacity: .55; cursor: not-allowed; }
   .choice .mark { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; flex: none; font-size: 17px; }
   .choice b { font-size: 15px; } .choice small { display: block; color: var(--muted); word-break: break-all; }
-  .vendors { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+  /* 模型图标（设计画布第 42 块）：白底圆角小方块，单色（黑）的图标深色主题下也看得清；Kimi 本身是白的垫深蓝；没有图标用名字第一个字 */
+  .logo { width: 30px; height: 30px; border-radius: 8px; padding: 5px; background: #fff; box-shadow: inset 0 0 0 1px #0000000f;
+          flex: none; object-fit: contain; display: grid; place-items: center; font-weight: 700; font-size: 14px; line-height: 1; }
+  .logo.dk { background: #10142a; box-shadow: inset 0 0 0 1px #ffffff24; }
+  .logo.let { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-line); }
+  .logo.lg { width: 40px; height: 40px; border-radius: 10px; padding: 7px; font-size: 17px; }
+  .logo.md { width: 34px; height: 34px; border-radius: 10px; padding: 6px; font-size: 15px; }
+  .vendors { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .vendor { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--card); cursor: pointer;
-            position: relative; text-align: left; box-shadow: var(--shadow); }
+            position: relative; text-align: left; box-shadow: var(--shadow); display: flex; gap: 10px; align-items: center; min-width: 0; }
+  .vendor > span { min-width: 0; }
   .vendor.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  .vendor b { display: block; font-size: 14px; }
-  .vendor small { color: var(--muted); font-size: 12px; }
+  .vendor b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
+  .vendor small { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .vendor i { position: absolute; top: 12px; right: 12px; width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
   .vendor i.set { background: var(--ok); }
   .vendor.using { border-color: var(--ok); background: var(--ok-soft); }
@@ -338,6 +347,7 @@
     .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }   /* 顶栏不被拉高（内容短时它会分走半屏） */
     aside { z-index: 10; height: auto; padding: 10px 12px; flex-direction: row; align-items: center; gap: 8px; }
     .brand { padding: 0 6px 0 0; } .brand span { display: none; }
+    .side-resize { display: none; }   /* 窄屏侧栏变顶栏，没得拖；不藏会把页面撑宽 4 像素 */
     .nav { display: flex; gap: 2px; overflow-x: auto; flex: 1; min-width: 0; }
     .nav button { width: auto; white-space: nowrap; margin: 0; padding: 7px 10px; }
     .nav button.active { box-shadow: inset 0 -2px 0 #818cf8; }
@@ -1358,6 +1368,13 @@ async function renderHow(root) {
 
 let llmVendor = null;  // 正在查看的 API 厂商
 let agentView = null;   // 本地 CLI 与智能体：正在看 claude 还是 dsh
+// 模型图标（设计画布第 42 块）：logo 是 static/logos/ 里的文件名，网关给的；没有就用名字第一个字
+function logoTile(logo, label, size = "") {
+  if (logo) return `<img class="logo ${size} ${logo.startsWith("kimi") ? "dk" : ""}" src="/admin/logos/${esc(logo)}.svg" alt="">`;
+  const ch = String(label || "?").trim().replace(/^[（(]/, "").slice(0, 1).toUpperCase() || "?";
+  return `<span class="logo let ${size}" aria-hidden="true">${esc(ch)}</span>`;
+}
+
 async function renderLLM(root) {
   const d = await api("llm");
   const dsh = d.dsh || { exists: false, values: {}, options: { model: [], effort: [], permission: [] } };
@@ -1426,21 +1443,21 @@ async function renderLLM(root) {
     <div class="section-title">本地 CLI 与智能体 · 用你自己的账号，不走下面的 API Key</div>
     <div class="choices three">
       <div class="choice ${agentView === "claude" ? "on" : ""}" data-agent="claude" style="cursor:pointer">
-        <div class="mark" style="background:#fef3c7;color:#b45309">C</div>
+        ${logoTile(d.logos.claude_cli, "C", "lg")}
         <div><b>Claude Code CLI</b> ${defaultPill(usingCli)} ${callPill("ClaudeCLI")}
           <small>${inst.installed ? esc(`${inst.version} · ${inst.path}`) : '<span style="color:var(--err)">没有找到 Claude Code，请先安装并登录</span>'}</small></div>
       </div>
       <div class="choice ${agentView === "dsh" ? "on" : ""}" data-agent="dsh" style="cursor:pointer">
-        <div class="mark" style="background:#1f3a8a;color:#cfe0ff">D</div>
+        ${logoTile(d.logos.dsh, "D", "lg")}
         <div><b>DeepSeek Harness</b> ${defaultPill(d.kind === "dsh")} ${callPill("DshCLI")}
           <small>${dsh.install && dsh.install.installed ? esc(`${dsh.install.version || "已安装"} · 用 DeepSeek 的 Key${dsh.install.node ? "" : " · 没找到 Node 24"}`) : '<span style="color:var(--err)">网关上没有找到 dsh</span>'}</small></div>
       </div>
       <div class="choice off" title="即将支持">
-        <div class="mark" style="background:var(--soft);color:var(--muted)">X</div>
+        ${logoTile(d.logos.codex, "X", "lg")}
         <div><b>Codex CLI</b> <span class="pill">即将支持</span><small>OpenAI 的本地编程助手</small></div>
       </div>
       <div class="choice ${d.kind === "grok" ? "on" : ""}" id="grok-choice" style="cursor:pointer" title="打开 Grok Bot 页">
-        <div class="mark" style="background:#e0f2fe;color:#0369a1">G</div>
+        ${logoTile(d.logos.grok, "G", "lg")}
         <div><b>Grok Bot</b> ${defaultPill(d.kind === "grok")} ${grokAliases.length ? `<span class="pill">称呼：${esc(grokAliases.slice(0, 3).join("、"))}${grokAliases.length > 3 ? "…" : ""}</span>` : ""}
           <small>${d.grok.bots.length ? `已勾选 ${d.grok.bots.length} 个 Bot${grokAliases.length < d.grok.bots.length ? "，有的还没配称呼" : ""}，叫名字就能派活` : "xAI 的云端 AI 同事：登录、勾选 Bot，叫名字派活，回复念给你听"}</small></div>
       </div>
@@ -1498,8 +1515,8 @@ async function renderLLM(root) {
 
     <div class="section-title">API Key · 云端模型，统一走 OpenAI 协议</div>
     <div class="vendors">${d.vendors.map((x) => `<button class="vendor ${x.id === llmVendor ? "on" : ""} ${d.vendor === x.id ? "using" : ""}" data-vendor="${x.id}">
-      <i class="${x.configured ? "set" : ""}"></i><b>${esc(x.label)}</b>
-      <small>${d.vendor === x.id ? "✓ 默认" : x.configured ? (d.callable[x.entry] ? `称呼：${esc(d.callable[x.entry][0])}` : "已配置") : "未配置"}</small></button>`).join("")}</div>
+      <i class="${x.configured ? "set" : ""}"></i>${logoTile(x.logo, x.label)}<span><b>${esc(x.label)}</b>
+      <small>${d.vendor === x.id ? "✓ 默认" : x.configured ? (d.callable[x.entry] ? `称呼：${esc(d.callable[x.entry][0])}` : "已配置") : "未配置"}</small></span></button>`).join("")}</div>
     <div class="card panel" id="api-form"></div>`;
 
   $("grok-choice").onclick = () => openPage("grokbot");
@@ -1638,7 +1655,7 @@ async function renderVision(box) {
       <p class="muted small" style="margin:0 0 14px">设备上说“帮我看下这是什么”，手机扫码拍照，照片交给这里选的模型。「大模型」里填过 Key 的同一家直接沿用（标「已有 Key」）。DeepSeek 只有 V4.1 Flash 能看图。</p>
       <div class="choices three vgrid">${d.providers.map((x) => `
         <button class="choice ${x.id === visionPick ? "on" : ""}" data-vision="${esc(x.id)}">
-          <div class="mark" style="background:var(--accent-soft);color:var(--accent)">${VISION_MARK[x.id] || "·"}</div>
+          ${logoTile(x.logo, VISION_MARK[x.id] || x.label, "lg")}
           <div><b>${esc(x.label)}</b> ${state(x)}<small>${esc(x.note)}</small></div></button>`).join("")}</div>
       <div class="grid2" style="margin-top:14px">
         <label class="f">模型<span class="hint">可以选，也可以手填</span>
@@ -2473,28 +2490,27 @@ async function renderAgents(root) {
   const aliases = (a) => (a && a.length ? "称呼 " + a.slice(0, 2).join("、") : "还没配称呼");
   const isDefault = (entry) => (entry === d.default ? '<span class="pill ok" style="margin-left:6px">默认</span>' : "");
   const MARK = { dsh: ["D", "#1f3a8a", "#cfe0ff"], claude: ["C", "#fef3c7", "#b45309"] };
-  const KIND_MARK = { openai: ["#2a1f3d", "#d7b8ff"], dify: ["#1d3a2c", "#9be8c1"], coze: ["#1e2b4a", "#9fc0ff"] };
   const grok = d.cloud;
   root.innerHTML = `
     <div class="page-head"><div><h1>智能体</h1><p class="sub">叫名字把事交给它：回答慢的转到后台接着做，做完在设备上汇报。「大模型」页管平时聊天用哪个模型，这一页管能派活的。</p></div></div>
     <div class="ag-grp">本机<span>跑在网关这台电脑上</span></div>
     <div class="ag-cards">
-      ${d.local.map((a) => `<button class="ag-card" data-go-llm="${a.id}"><div class="ag-top"><div class="ag-m" style="background:${MARK[a.id][1]};color:${MARK[a.id][2]}">${MARK[a.id][0]}</div>
+      ${d.local.map((a) => `<button class="ag-card" data-go-llm="${a.id}"><div class="ag-top">${logoTile(a.logo, MARK[a.id][0], "md")}
         <div><b>${esc(a.name)}${isDefault(a.entry)}</b><small>${esc(a.sub)} · ${esc(aliases(a.aliases))}</small></div>${pill(a.state)}</div>
         <div class="ag-tags">${a.id === "dsh" ? '<span class="b">读写工作目录</span><span>联网搜索</span><span>用 DeepSeek 的 Key</span>' : '<span class="b">读写工作目录</span><span>要 Claude 账号</span>'}${a.version ? `<span>${esc(a.version)}</span>` : ""}</div></button>`).join("")}
-      <div class="ag-card off"><div class="ag-top"><div class="ag-m" style="background:var(--soft);color:var(--muted)">X</div><div><b>Codex CLI</b><small>即将支持</small></div></div></div>
+      <div class="ag-card off"><div class="ag-top">${logoTile(d.logos.codex, "X", "md")}<div><b>Codex CLI</b><small>即将支持</small></div></div></div>
     </div>
     <div class="ag-grp">云端同事</div>
     <div class="ag-cards">
-      <button class="ag-card" id="ag-grok"><div class="ag-top"><div class="ag-m" style="background:#e0f2fe;color:#0369a1">G</div>
+      <button class="ag-card" id="ag-grok"><div class="ag-top">${logoTile(d.logos.grok, "G", "md")}
         <div><b>Grok Bot</b><small>xAI · ${grok.bots.length ? `${grok.bots.length} 个 Bot：${esc(grok.bots.slice(0, 2).map((b) => b.bot_name).join("、"))}` : "叫 Bot 的名字派活"}</small></div>
         ${pill(grok.logged_in ? (grok.bots.length ? "ready" : "setup") : "setup").replace("没设置", grok.logged_in ? "没勾选 Bot" : "没登录")}</div>
         <div class="ag-tags"><span class="b">云端电脑</span><span>网关关机也在做</span><span>有浏览器</span></div></button>
     </div>
     <div class="ag-grp">自己加的<span>OpenAI 兼容接口（Hermes Agent 等）、Dify、Coze</span></div>
     <div class="ag-cards">
-      ${d.custom.map((a) => { const m = KIND_MARK[a.kind]; const k = d.kinds.find((x) => x.id === a.kind); return `<button class="ag-card ${agentEdit === a.entry ? "on" : ""}" data-agent-edit="${esc(a.entry)}">
-        <div class="ag-top"><div class="ag-m" style="background:${m[0]};color:${m[1]}">${esc(a.name.slice(0, 1).toUpperCase())}</div>
+      ${d.custom.map((a) => { const k = d.kinds.find((x) => x.id === a.kind); return `<button class="ag-card ${agentEdit === a.entry ? "on" : ""}" data-agent-edit="${esc(a.entry)}">
+        <div class="ag-top">${logoTile(a.logo, a.name, "md")}
         <div><b>${esc(a.name)}${isDefault(a.entry)}</b><small>${esc(k ? k.label : a.kind)} · ${esc(aliases(a.aliases))}</small></div>${pill(a.ready ? "ready" : "setup")}</div>
         <div class="ag-tags">${a.kind === "dify" ? `<span class="b">${a.mode === "workflows/run" ? "流水线（工作流）" : "Dify 应用"}</span>` : a.kind === "coze" ? '<span class="b">Coze</span>' : `<span class="b">${a.background ? "慢了转后台" : "一直等着"}</span>`}
           ${a.base_url ? `<span class="mono">${esc(a.base_url.replace(/^https?:\/\//, "").slice(0, 28))}</span>` : ""}</div></button>`; }).join("")}
@@ -3050,7 +3066,7 @@ async function renderCallNames(root) {
   const draw = () => {
     $("cn-models").innerHTML = models.map((m, mi) => `
       <div class="card" data-model="${mi}" style="margin-top:16px">
-        <div class="card-head"><h2>${esc(m.label)}</h2><span>
+        <div class="card-head"><h2 class="with-logo">${logoTile(m.logo, m.label, "md")}${esc(m.label)}</h2><span>
           ${m.entry === d.default ? '<span class="pill">默认模型</span>' : ""}
           ${m.missing ? `<span class="pill err">网关上没装 ${esc(m.missing)}</span>` : m.ready ? "" : '<span class="pill err">还没配置好</span>'}</span></div>
         <div class="panel" style="padding-top:12px">

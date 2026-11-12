@@ -51,6 +51,7 @@ def describe_vendor(vendor: dict, merged: dict) -> dict:
     return {
         "id": vendor["id"],
         "label": vendor["label"],
+        "logo": catalog.LOGOS.get(vendor["id"], ""),
         "entry": vendor["entry"],
         "base_url": base_url,
         "model": model,
@@ -1211,6 +1212,29 @@ def remember_api_intent(mode: str, path: Path = None) -> None:
 ALIAS_BAD = re.compile(r"[\s,，.。!！?？、~～;；:：\"'“”‘’]")
 
 
+def agent_logo(agent: dict) -> str:
+    """自己加的智能体的图标：Dify、Coze 按种类；OpenAI 兼容的只有名字里带 Hermes 才用 Hermes 的，别的用名字第一个字。"""
+    if agent.get("kind") in ("dify", "coze"):
+        return catalog.LOGOS[agent["kind"]]
+    return catalog.LOGOS["hermes"] if "hermes" in str(agent.get("name") or "").lower() else ""
+
+
+def entry_logo(merged: dict, entry: str) -> str:
+    """[xiaozhi-hub] LLM 条目名 -> 图标文件名（设计画布第 42 块），认不出返回空串。"""
+    if entry == CLAUDE_CLI_ENTRY:
+        return catalog.LOGOS["claude_cli"]
+    if entry == DSH_ENTRY:
+        return catalog.LOGOS["dsh"]
+    vendor = catalog.VENDOR_BY_ENTRY.get(entry)
+    if vendor:
+        return catalog.LOGOS.get(vendor["id"], "")
+    if entry.startswith(AGENT_PREFIX):
+        return next((agent_logo(a) for a in custom_agents(merged) if a["entry"] == entry), "")
+    if entry.startswith(GROK_BOT_PREFIX):
+        return catalog.LOGOS["grok"]
+    return ""
+
+
 def call_targets(merged: dict) -> list:
     """可以配称呼的模型：本机 Claude Code，以及已经填好的 API 厂商。
 
@@ -1253,7 +1277,8 @@ def describe_call_names(merged: dict) -> dict:
             continue
         t = targets.get(entry)
         missing = llm_router.cli_missing(merged, entry) if t else None
-        models.append({"entry": entry, "label": t["label"] if t else entry, "aliases": call_names._aliases(value),
+        models.append({"entry": entry, "label": t["label"] if t else entry, "logo": entry_logo(merged, entry),
+                       "aliases": call_names._aliases(value),
                        "ready": t is not None and not missing, "missing": missing or ""})
     return {
         "enabled": bool(cfg.get("enabled", True)),

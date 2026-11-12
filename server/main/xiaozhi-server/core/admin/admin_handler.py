@@ -17,6 +17,7 @@ import functools
 import io
 import json
 import os
+import re
 import time
 import wave
 from concurrent.futures import ThreadPoolExecutor
@@ -50,6 +51,7 @@ TEST_TIMEOUT = {"connect": 10.0, "read": 60.0, "write": 5.0, "pool": 2.0}
 logger = setup_logging()
 COOKIE_NAME = "xz_admin"
 STATIC_DIR = Path(__file__).parent / "static"
+LOGO_NAME = re.compile(r"[a-z0-9-]+\.svg")
 SECURITY_HEADERS = {
     "Cache-Control": "no-store",
     "X-Frame-Options": "DENY",
@@ -106,6 +108,7 @@ class AdminHandler:
                 web.post("/admin/api/logout", self.handle_logout),
                 web.post("/admin/api/password", self.handle_password),
                 web.get("/admin/favicon", self.handle_favicon),
+                web.get("/admin/logos/{name}", self.handle_logo),
                 web.get("/admin/api/brand", self.handle_brand),
                 web.post("/admin/api/brand", self.handle_brand_save),
                 web.get("/admin/api/status", self.handle_status),
@@ -290,6 +293,14 @@ class AdminHandler:
     async def handle_favicon(self, request: web.Request):
         body, ctype = await self._blocking(brand.favicon, self.data_dir)
         return web.Response(body=body, content_type=ctype, headers={"Cache-Control": "no-cache"})
+
+    async def handle_logo(self, request: web.Request):
+        """[xiaozhi-hub] 模型厂商图标（LobeHub icons，MIT；设计画布第 42 块）。公开的静态图，不用登录。"""
+        name = request.match_info["name"]
+        path = STATIC_DIR / "logos" / name
+        if not LOGO_NAME.fullmatch(name) or not path.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(path, headers={"Content-Type": "image/svg+xml", "Cache-Control": "max-age=86400"})
 
     async def handle_brand(self, request: web.Request):
         return self._json({"ok": True, **await self._blocking(brand.load, self.data_dir)})
@@ -840,16 +851,18 @@ class AdminHandler:
         return self._json({
             "ok": True, "default": llm["selected"],
             "local": [
-                {"id": "dsh", "name": "DSH", "sub": "DeepSeek Harness", "entry": pages.DSH_ENTRY,
+                {"id": "dsh", "name": "DSH", "sub": "DeepSeek Harness", "entry": pages.DSH_ENTRY, "logo": catalog.LOGOS["dsh"],
                  "state": "ready" if llm["dsh"]["exists"] and dsh_inst["installed"] else "missing" if not dsh_inst["installed"] else "setup",
                  "version": dsh_inst.get("version", ""), "aliases": calls.get(pages.DSH_ENTRY, [])},
                 {"id": "claude", "name": "Claude Code", "sub": "Anthropic", "entry": pages.CLAUDE_CLI_ENTRY,
+                 "logo": catalog.LOGOS["claude_cli"],
                  "state": "ready" if claude_inst["installed"] and llm["claude"]["exists"] else "missing",
                  "aliases": calls.get(pages.CLAUDE_CLI_ENTRY, [])},
             ],
             "cloud": {"bots": [{**b, "aliases": calls.get(b["entry"], [])} for b in llm["grok"]["bots"]],
                       "logged_in": bool(grok.get("logged_in")), "needs_login": bool(grok.get("needs_login"))},
-            "custom": pages.custom_agents(merged),
+            "custom": [{**a, "logo": pages.agent_logo(a)} for a in pages.custom_agents(merged)],
+            "logos": {k: catalog.LOGOS[k] for k in ("codex", "grok")},
             "kinds": catalog.AGENT_KINDS, "dify_modes": catalog.DIFY_MODES,
         })
 
@@ -931,6 +944,7 @@ class AdminHandler:
         data["claude"]["install"] = await self._blocking(self._claude_install, merged)
         data["dsh"]["install"] = await self._blocking(self._dsh_install, merged)
         data["running"] = self._running("LLM")
+        data["logos"] = catalog.LOGOS   # 设计画布第 42 块：本机 CLI、Grok Bot 的图标
         return self._json({"ok": True, **data})
 
     async def handle_llm_claude(self, request: web.Request):
@@ -1114,6 +1128,7 @@ class AdminHandler:
         names = (merged.get("call_names") or {}).get("models") or call_names.DEFAULT_MODELS
         for o in options:
             o["calls"] = [str(a) for a in (names.get(o["entry"]) or [])][:3]
+            o["logo"] = pages.entry_logo(merged, o["entry"])   # 设计画布第 42 块：设备上没有的图标会用自己猜的
         selected = data["selected"]
         if device:
             name = (llm_router.store().get(device) or {}).get("model")
@@ -1750,7 +1765,10 @@ class AdminHandler:
 
     async def handle_vision(self, request: web.Request):
         self._require_login(request)
-        return self._json({"ok": True, **photo_ask.vision_settings(await self._blocking(self._merged))})
+        d = photo_ask.vision_settings(await self._blocking(self._merged))
+        for p in d["providers"]:
+            p["logo"] = catalog.LOGOS.get(p["id"], "")
+        return self._json({"ok": True, **d})
 
     async def handle_vision_save(self, request: web.Request):
         """{"provider", "api_key"?, "model"?, "url"?}：选用看图模型（Key 留空表示不改，或用「大模型」页同一家的）。"""
