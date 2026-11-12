@@ -955,7 +955,21 @@ let looksArmed = null;
 // 照片形象的几个样子（设计画布第 26 块）：待机、在听、在想、在说；没传的状态用待机那张
 let avPoses = null;
 const POSE_OF = { idle: 0, connecting: 0, listening: 1, thinking: 2, speaking: 3 };
+// 仪表盘的两处形象（设计画布第 43 块）：首页卡片用待机那张，底栏跟着状态；睡觉时都用睡觉那张。光球时不放图
+function dashAvSrc(live) {
+  if (!avPoses) return '';
+  const pose = document.body.classList.contains('sleeping') ? 4 : live ? POSE_OF[document.body.dataset.state] || 0 : 0;
+  return avPoses[pose] || avPoses[0];
+}
+window.dashAvSrc = dashAvSrc;
+function showDashAv() {
+  document.querySelectorAll('.d-orb img').forEach(img => {
+    const url = dashAvSrc(!!img.closest('.dash-ask'));
+    if ((img.getAttribute('src') || '') !== url) { if (url) img.src = url; else img.removeAttribute('src'); }
+  });
+}
 function showAvPose() {
+  showDashAv();
   if (!avPoses) return;
   const pose = document.body.classList.contains('sleeping') ? 4 : POSE_OF[document.body.dataset.state] || 0;
   const url = avPoses[pose] || avPoses[0];

@@ -76,7 +76,7 @@ function brief() {
   const tip = !w ? '问我「明天下雨吗」' : t.rain >= 50 ? '下雨概率高，带把伞' : (t.max - t.min >= 8) ? `早晚温差 ${n0(t.max - t.min)}°，加件外套`
     : w.air && /差|污染/.test(w.air) ? '空气不太好，少开窗' : '天气不错，适合出去走走';
   const today = (ui.alarms && ui.alarms.items || []).filter(v => v.kind !== 'timer' && new Date(v.at * 1000).toDateString() === new Date().toDateString());
-  return `<div class="db-top"><span class="d-orb big"></span><div><div class="db-hi">${hi}！</div><div class="dm db-say">${said.join('')}</div></div></div>` +
+  return `<div class="db-top"><span class="d-orb big"><img alt=""${window.dashAvSrc && window.dashAvSrc(false) ? ` src="${esc(window.dashAvSrc(false))}"` : ''}></span><div><div class="db-hi">${hi}！</div><div class="dm db-say">${said.join('')}</div></div></div>` +
     `<div class="db-boxes"><div><b>今天要做</b><span class="dm">${today.length ? today.slice(0, 2).map(v => `· ${hhmm(v.at)} ${esc(v.label || '')}`).join('<br>') : '· 没有提醒'}</span></div>` +
     `<div><b>生活建议</b><span class="dm">${tip}</span></div>` +
     `<div><b>清单</b><span class="dm">${todos ? todoItems(2).map(x => '· ' + esc(x.text)).join('<br>') : '· 都办完了'}</span></div></div>`;

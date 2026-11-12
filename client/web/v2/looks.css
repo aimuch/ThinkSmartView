@@ -503,6 +503,11 @@ body.dash-on:not([data-dash="chat"]) .dash { display: grid; grid-template-rows: 
 .d-orb { width: 46px; height: 46px; flex: none; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #c9bdff 35%, #8d7cf6 70%, #6a5cf0);
   box-shadow: 0 0 0 6px #ffffff55, 0 10px 30px #7c6cf255; }
 .d-orb.big { width: 76px; height: 76px; }
+/* 选了形象库公仔或照片形象时放图（设计画布第 43 块）：照片裁圆加白边，透明的公仔原样放、只加投影；光球时图藏起来 */
+.d-orb img { display: none; width: 100%; height: 100%; }
+body.av-photo-on .d-orb { background: none; box-shadow: none; }
+body.av-photo-on .d-orb img[src] { display: block; object-fit: cover; border-radius: 50%; box-shadow: 0 0 0 4px #ffffffaa, 0 8px 24px #7c6cf233; }
+body.av-cutout .d-orb img[src] { object-fit: contain; border-radius: 0; box-shadow: none; filter: drop-shadow(0 6px 14px #0000002e); }
 body.dash-on[data-state="listening"] .dash-ask .d-orb, body.dash-on[data-state="speaking"] .dash-ask .d-orb { animation: dOrb 1.2s ease-in-out infinite; }
 @keyframes dOrb { 50% { transform: scale(1.12); } }
 .db-top { display: flex; gap: 18px; align-items: center; }
