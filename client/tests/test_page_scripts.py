@@ -23,7 +23,7 @@ def page_scripts():
 @pytest.mark.skipif(not shutil.which('node'), reason='node not installed')
 def test_scripts_parse_together(tmp_path):
     files = page_scripts()
-    assert [f.name for f in files] == ['app.js', 'home.js', 'work.js', 'dash.js']
+    assert [f.name for f in files] == ['app.js', 'home.js', 'work.js', 'pack.js', 'dash.js']
     both = tmp_path / 'page.js'
     both.write_text('\n;\n'.join(f.read_text() for f in files))
     r = subprocess.run(['node', '--check', str(both)], capture_output=True, text=True)

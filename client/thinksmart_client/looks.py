@@ -1,7 +1,11 @@
 """外观 (设置页「外观」, 设计画布第 8 块): the colour theme, the conversation avatar and which blocks the
 home page shows in which order. The page applies them (body[data-theme], body[data-avatar], CSS order);
-this only keeps them valid. Avatars made from a photo live in AVATARS as PNGs ('photo:<name>')."""
+this only keeps them valid. Avatars made from a photo live in AVATARS as PNGs ('photo:<name>').
+
+形象库（设计画布第 41 块）：光球之外的形象来自 Virtual-Assistant-Avatar，scripts/build-avatar-pack.py 做成小图包，
+装在 PACK_DIR（catalog.json + img/*.webp），id 是 'pack:<款的 id>'。每款三张：待机、唤醒（在听、在想、在说）、睡觉。"""
 import datetime
+import json
 import re
 from pathlib import Path
 
@@ -13,8 +17,8 @@ DASH_CARDS = {'wx': '时钟和天气', 'brief': '早安小结', 'dev': '常用�
               'scene': '场景', 'media': '电台和助眠', 'nums': '今天的数字', 'work': '工作台', 'lights': '蓝牙灯'}
 DASH_TABS = {'home': '首页', 'smart': '家居', 'plan': '日程', 'chat': '对话'}   # 打开时先看哪一页
 AUTO_DAY = (7, 19)          # 'auto': 晨光 from 7:00 to 19:00, 星夜 otherwise
-AVATARS = {'orb': '光球', 'cat': '小猫', 'dog': '小狗', 'bear': '小熊', 'rabbit': '兔子', 'panda': '熊猫',
-           'wheat': '麦穗宝宝', 'robot': '机器人'}
+AVATARS = {'orb': '光球'}
+RETIRED = {'cat', 'dog', 'bear', 'rabbit', 'panda', 'wheat', 'robot'}   # 以前画出来的小动物，选过的回到光球
 BLOCKS = {'clock': '问候和时钟', 'date': '日期和农历', 'weather': '天气', 'alarms': '下一个闹钟和倒计时',
           'suggest': '试试这样问我', 'devices': '常用设备（米家）', 'work': '工作台摘要', 'lights': '蓝牙灯（智能中枢）'}
 OFF_BY_DEFAULT = {'work', 'lights'}   # 接入网关上的服务才有内容（设计画布第 38 块），默认关
@@ -23,6 +27,77 @@ PHOTO_MAX = 6
 POSES = 5                   # 一个照片形象最多几张：待机、在听、在想、在说、睡觉（设计画布第 26、29 块）
 POSE_DIR = PHOTO_DIR / 'poses'
 PHOTO_NAME = re.compile(r'^[0-9A-Za-z_-]{1,40}$')
+PACK_DIR = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'avatar-pack'
+PACK_FILE = re.compile(r'^[0-9A-Za-z._-]{1,120}\.webp$')
+RECENT_MAX = 5              # 外观里光球后面列最近用过的几款
+_pack_cache = {'mtime': None, 'data': None}
+
+
+def pack():
+    """形象库的 catalog（没装就是 None）：{'version', 'groups': [{name, count}], 'avatars': [{id, name, short, group, tag, series, files}]}，
+    多一个 'by_id'。文件改了才重读。"""
+    path = PACK_DIR / 'catalog.json'
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return None
+    if _pack_cache['mtime'] != mtime:
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+            data['by_id'] = {a['id']: a for a in data.get('avatars') or []}
+        except (OSError, ValueError, KeyError, TypeError):
+            data = None
+        _pack_cache.update(mtime=mtime, data=data)
+    return _pack_cache['data']
+
+
+def pack_entry(a, version=''):
+    """给页面的一款：id 带 'pack:'，四个地址（/api/avatar-pack/…）。"""
+    q = f'?v={version}' if version else ''
+    url = {k: f'/api/avatar-pack/{v}{q}' for k, v in a['files'].items()}
+    return {'id': 'pack:' + a['id'], 'name': a['name'], 'short': a.get('short') or a['name'], 'group': a.get('group', ''),
+            'tag': a.get('tag', ''), 'series': a.get('series', ''), 'thumb': url['thumb'],
+            # 和照片形象一样的五个样子：待机、在听、在想、在说、睡觉
+            'poses': [url['idle'], url['awake'], url['awake'], url['awake'], url['sleep']]}
+
+
+def pack_view():
+    """形象库给页面的全部（形象库那一页用）。"""
+    p = pack()
+    if not p:
+        return {'available': False, 'groups': [], 'avatars': []}
+    return {'available': True, 'version': p.get('version', ''), 'groups': p.get('groups') or [],
+            'avatars': [pack_entry(a, p.get('version', '')) for a in p['avatars']]}
+
+
+def _norm(text):
+    return re.sub(r'[\s·・.()（）_-]+', '', str(text or '')).lower()
+
+
+def find_pack(text):
+    """按名字找形象库里的一款（语音「换成星星人」「换成 LABUBU 春节的」）-> (款的 id 或 None, [候选的全名])。
+    说的是分组名就用这一组的经典款（没有经典款用第一款）。"""
+    p = pack()
+    if not p:
+        return None, []
+    want = _norm(text).replace('形象', '').replace('的', '')
+    if not want:
+        return None, []
+    avs = p['avatars']
+    for a in avs:
+        if want in (_norm(a['name']), _norm(a['id'])):
+            return a['id'], []
+    groups = [a for a in avs if _norm(a.get('group')) == want]
+    if groups:
+        classic = [a for a in groups if a.get('short') == '经典']
+        return (classic or groups)[0]['id'], []
+    hits = [a for a in avs if all(part in _norm(a['name'] + a.get('group', '') + a.get('series', '') + a.get('tag', ''))
+                                  for part in re.split(r'\s+', str(text).replace('的', ' ').replace('形象', ' ').lower()) if part)]
+    if not hits:
+        hits = [a for a in avs if want in _norm(a['name']) or _norm(a['short']) == want]
+    if len(hits) == 1:
+        return hits[0]['id'], []
+    return None, [a['name'] for a in hits[:6]]
 
 
 def photo_avatars():
@@ -81,7 +156,34 @@ def normalize_avatar(value):
         return value
     if value.startswith('photo:') and any(a['id'] == value for a in photo_avatars()):
         return value
-    raise ValueError(f"形象只能是 {'、'.join(AVATARS.values())}，或者设置页里用照片生成的")
+    if value.startswith('pack:'):
+        p = pack()
+        if p and value[5:] in p['by_id']:
+            return value
+        raise ValueError('形象库里没有这一款')
+    found, cands = find_pack(value)
+    if found:
+        return 'pack:' + found
+    if cands:
+        raise ValueError(f"有好几款：{'、'.join(cands)}，要哪一个？")
+    raise ValueError('没找到这个形象：可以说光球、形象库里的名字（比如星星人、LABUBU），或者设置页里用照片生成的')
+
+
+def remember_recent(recent, avatar):
+    """最近用过的形象库款式，新的在前，最多 RECENT_MAX 款。"""
+    out = [x for x in (recent or []) if isinstance(x, str) and x.startswith('pack:') and x != avatar]
+    if avatar.startswith('pack:'):
+        out.insert(0, avatar)
+    return out[:RECENT_MAX]
+
+
+def current_pack(avatar):
+    """在用的是形象库的一款时给它的样子（页面显示用），否则 None。"""
+    if not str(avatar).startswith('pack:'):
+        return None
+    p = pack()
+    a = p and p['by_id'].get(avatar[5:])
+    return pack_entry(a, p.get('version', '')) if a else None
 
 
 def normalize_dash_tab(value):
@@ -124,9 +226,14 @@ def theme_now(theme, now=None):
 
 
 def view(cfg, now=None):
+    p = pack()
+    recent = [current_pack(x) for x in remember_recent(cfg.get('avatar_recent'), cfg['avatar'])]
     return {'theme': cfg['theme'], 'theme_now': theme_now(cfg['theme'], now), 'themes': THEMES,
             'avatar': cfg['avatar'], 'avatars': [{'id': k, 'name': v} for k, v in AVATARS.items()],
             'photos': photo_avatars(), 'photo_max': PHOTO_MAX,
+            # 形象库：在用的和最近用过的（新的在前）；全部的在 /api/avatar-pack
+            'pack': {'available': bool(p), 'count': len(p['avatars']) if p else 0, 'version': (p or {}).get('version', ''),
+                     'recent': [x for x in recent if x]},
             'layout': cfg.get('layout', 'chat'), 'layouts': LAYOUTS,
             'dash_default': cfg.get('dash_default', 'home'), 'dash_tabs': DASH_TABS,
             'dash_cards': [{'id': b, 'name': DASH_CARDS[b], 'on': on}

@@ -506,6 +506,17 @@ def make_app(client: Client):
             raise web.HTTPNotFound()
         return web.FileResponse(path, headers={'Cache-Control': 'max-age=31536000'})
 
+    async def avatar_pack(_request):
+        """形象库的全部款式（设计画布第 41 块）。"""
+        return web.json_response(looks.pack_view())
+
+    async def avatar_pack_file(request):
+        name = request.match_info['name']
+        path = looks.PACK_DIR / 'img' / name
+        if not looks.PACK_FILE.match(name) or '..' in name or not path.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(path, headers={'Cache-Control': 'max-age=31536000', 'Content-Type': 'image/webp'})
+
     async def avatar_pose_file(request):
         name = request.match_info['name']
         path = looks.POSE_DIR / name
@@ -695,6 +706,8 @@ def make_app(client: Client):
     app.router.add_post('/api/kids', kids_set)
     app.router.add_post('/api/looks', looks_set)
     app.router.add_get('/api/avatars/{name}', avatar_file)
+    app.router.add_get('/api/avatar-pack', avatar_pack)
+    app.router.add_get('/api/avatar-pack/img/{name}', avatar_pack_file)
     app.router.add_get('/api/camera/preview', camera_preview)
     app.router.add_get('/api/perf', perf_get)
     app.router.add_post('/api/camera/shoot', camera_shoot)

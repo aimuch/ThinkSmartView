@@ -57,7 +57,8 @@ DEFAULTS = {
     'layout': 'chat',
     'dash_default': 'home',
     'dash_cards': [[k, True] for k in ('wx', 'brief', 'dev', 'todo', 'alarm', 'scene', 'media', 'nums')],
-    'avatar': 'orb',
+    'avatar': 'orb',      # 光球、'photo:<名字>'（照片生成的）或 'pack:<款>'（形象库，looks.PACK_DIR）
+    'avatar_recent': [],  # 最近用过的形象库款式，新的在前
     'home_blocks': [['clock', True], ['date', True], ['weather', True], ['alarms', True], ['suggest', True]],
     'kids': {'enabled': False, 'age': 3, 'daily_minutes': 30, 'bedtime': '20:30', 'voice': 'child'},   # kids.py
     # 待机页 (设计画布第 10 块): after this long idle, a big clock, the weather and the family album

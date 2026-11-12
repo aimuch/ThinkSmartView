@@ -30,9 +30,10 @@ def test_normalize():
     assert looks.normalize_theme('晨光') == 'dawn' and looks.normalize_theme('auto') == 'auto'
     with pytest.raises(ValueError):
         looks.normalize_theme('彩虹')
-    assert looks.normalize_avatar('小猫') == 'cat'
-    with pytest.raises(ValueError):
-        looks.normalize_avatar('photo:nope')
+    assert looks.normalize_avatar('光球') == 'orb'
+    for gone in ('小猫', 'cat', 'photo:nope', 'pack:nope'):   # 小动物去掉了（设计画布第 41 块）
+        with pytest.raises(ValueError):
+            looks.normalize_avatar(gone)
     blocks = looks.normalize_blocks([['weather', False], ['nope', True], {'id': 'clock', 'on': True}, ['weather', True]])
     assert [b for b, _ in blocks] == ['weather', 'devices', 'clock', 'date', 'alarms', 'suggest', 'work', 'lights'] and blocks[0] == ['weather', False]
     assert blocks[-2:] == [['work', False], ['lights', False]]   # 接入网关服务的两块默认关（设计画布第 38 块）
@@ -40,9 +41,51 @@ def test_normalize():
     assert looks.theme_now('auto', datetime.datetime(2026, 11, 9, 20)) == 'night'
 
 
+PACK = {'version': 'v1', 'groups': [{'name': '星星人', 'count': 2}, {'name': 'LABUBU', 'count': 1}, {'name': '节日', 'count': 1}],
+        'avatars': [
+            {'id': 'pop-mart.twinkle-twinkle', 'name': '星星人 · 经典', 'short': '经典', 'group': '星星人', 'tag': '', 'series': '助手基础形象'},
+            {'id': 'pop-mart.box.1448.06', 'name': '星星人 · Magic', 'short': 'Magic', 'group': '星星人', 'tag': '', 'series': 'We are Twinkle Twinkle'},
+            {'id': 'pop-mart.labubu', 'name': 'LABUBU · 经典', 'short': '经典', 'group': 'LABUBU', 'tag': '', 'series': '助手基础形象'},
+            {'id': 'festivals.labubu.spring-festival', 'name': 'LABUBU · 春节', 'short': 'LABUBU · 春节', 'group': '节日', 'tag': '春节',
+             'series': '节日适配 · 春节'},
+        ]}
+
+
+def install_pack(tmp_path, monkeypatch):
+    d = tmp_path / 'avatar-pack'
+    (d / 'img').mkdir(parents=True)
+    for a in PACK['avatars']:
+        a['files'] = {k: f"img/{a['id']}-{k}.webp" for k in ('idle', 'awake', 'sleep', 'thumb')}
+        for f in a['files'].values():
+            (d / f).write_bytes(b'RIFF')
+    (d / 'catalog.json').write_text(json.dumps(PACK, ensure_ascii=False))
+    monkeypatch.setattr(looks, 'PACK_DIR', d)
+    return d
+
+
+def test_avatar_pack(tmp_path, monkeypatch):
+    """形象库（设计画布第 41 块）：按名字找、五个样子、最近用过的。"""
+    monkeypatch.setattr(looks, 'PACK_DIR', tmp_path / 'none')
+    assert looks.pack() is None and looks.pack_view() == {'available': False, 'groups': [], 'avatars': []}
+    install_pack(tmp_path, monkeypatch)
+    assert looks.normalize_avatar('星星人') == 'pack:pop-mart.twinkle-twinkle'     # 说分组名用经典款
+    assert looks.normalize_avatar('星星人 Magic') == 'pack:pop-mart.box.1448.06'
+    assert looks.normalize_avatar('LABUBU 春节的') == 'pack:festivals.labubu.spring-festival'
+    assert looks.normalize_avatar('pack:pop-mart.labubu') == 'pack:pop-mart.labubu'
+    with pytest.raises(ValueError, match='好几款'):
+        looks.normalize_avatar('经典的')
+    v = looks.pack_view()
+    a = v['avatars'][0]
+    assert v['available'] and a['id'] == 'pack:pop-mart.twinkle-twinkle' and a['thumb'] == '/api/avatar-pack/img/pop-mart.twinkle-twinkle-thumb.webp?v=v1'
+    assert a['poses'][1] == a['poses'][3] and a['poses'][4].endswith('-sleep.webp?v=v1') and len(a['poses']) == 5
+    r = looks.remember_recent(['pack:a', 'cat', 'pack:b'], 'pack:b')
+    assert r == ['pack:b', 'pack:a'] and len(looks.remember_recent([f'pack:{i}' for i in range(9)], 'pack:x')) == looks.RECENT_MAX
+
+
 def make_client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'PATH', tmp_path / 'config.json')
     monkeypatch.setattr(looks, 'PHOTO_DIR', tmp_path / 'avatars')
+    install_pack(tmp_path, monkeypatch)
     monkeypatch.setattr(app, 'PHOTOS', tmp_path / 'photos')
     c = app.Client.__new__(app.Client)
     c.events = app.Events()
@@ -56,14 +99,16 @@ def test_set_looks_persist_and_reorder(tmp_path, monkeypatch):
     c = make_client(tmp_path, monkeypatch)
 
     async def run():
-        v = await c.set_looks(theme='森林', avatar='小狗')
-        assert v['theme'] == 'forest' and v['avatar'] == 'dog'
+        v = await c.set_looks(theme='森林', avatar='LABUBU')
+        assert v['theme'] == 'forest' and v['avatar'] == 'pack:pop-mart.labubu'
+        v = await c.set_looks(avatar='星星人')
+        assert [x['id'] for x in v['pack']['recent']] == ['pack:pop-mart.twinkle-twinkle', 'pack:pop-mart.labubu']
         v = await c.set_looks(move={'id': 'weather', 'by': -2})
         assert [b['id'] for b in v['blocks']][:3] == ['weather', 'clock', 'date']
         v = await c.set_looks(toggle='suggest')
         assert [b for b in v['blocks'] if b['id'] == 'suggest'][0]['on'] is False
         saved = json.loads(config.PATH.read_text())
-        assert saved['theme'] == 'forest' and saved['avatar'] == 'dog' and saved['home_blocks'][0] == ['weather', True]
+        assert saved['theme'] == 'forest' and saved['avatar'] == 'pack:pop-mart.twinkle-twinkle' and saved['home_blocks'][0] == ['weather', True]
         await c.set_looks(theme='night', avatar='orb')
         saved = json.loads(config.PATH.read_text())
         assert 'theme' not in saved and 'avatar' not in saved    # back to the defaults: not stored
@@ -184,6 +229,11 @@ def test_appearance_tool(tmp_path, monkeypatch):
         r = asyncio.run(mcp.handle({'id': 1, 'method': 'tools/call',
                                     'params': {'name': 'self.appearance.set', 'arguments': args}}, client=c))
         return json.loads(r['result']['content'][0]['text'])
-    assert call(avatar='小猫', theme='童趣') == {'success': True, 'theme': '童趣', 'avatar': '小猫', 'layout': '对话'}
+    assert call(avatar='星星人', theme='童趣') == {'success': True, 'theme': '童趣', 'avatar': '星星人 · 经典', 'layout': '对话'}
+    r = call(avatar='LABUBU')
+    assert r['avatar'] == 'LABUBU · 经典'
+    r = call(avatar='小猫')                       # 去掉的小动物：说清楚能选什么
+    assert not r['success'] and '星星人' in r['reason']
+    assert call(avatar='光球')['avatar'] == '光球'
     assert not call(avatar='photo')['success']
     assert not call(theme='彩虹')['success']

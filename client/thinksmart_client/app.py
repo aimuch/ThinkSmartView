@@ -285,6 +285,9 @@ class Client:
             log.warning('invalid broadcast setting %r, using the default', cfg.get('broadcast'))
             self.broadcast = broadcast.normalize(None)
         self.broadcast_fired = set()
+        if cfg.get('avatar') in looks.RETIRED:       # 去掉的小动物形象（设计画布第 41 块）：回到光球
+            cfg['avatar'] = 'orb'
+            config.unset('avatar')
         for key, fix in (('theme', looks.normalize_theme), ('avatar', looks.normalize_avatar), ('layout', looks.normalize_layout)):
             try:
                 cfg[key] = fix(cfg.get(key))
@@ -1428,6 +1431,8 @@ class Client:
             changes['theme'] = looks.normalize_theme(theme)
         if avatar is not None:
             changes['avatar'] = looks.normalize_avatar(avatar)
+            if changes['avatar'].startswith('pack:'):      # 外观里光球后面列最近用过的形象库款式
+                changes['avatar_recent'] = looks.remember_recent(self.cfg.get('avatar_recent'), changes['avatar'])
         if layout is not None:
             changes['layout'] = looks.normalize_layout(layout)
         if dash_default is not None:

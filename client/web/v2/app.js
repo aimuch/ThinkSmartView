@@ -941,16 +941,7 @@ $('kidsCard').addEventListener('click', e => {
 });
 
 /* ---- 外观: theme, avatar, home blocks (looks.py, 设计画布第 8 块) ---- */
-const AVATAR_DOT = {
-  orb: 'radial-gradient(circle at 34% 28%,#f2f4ff,#b4bde8 20%,#5b65a8 58%,#191d45)',
-  cat: 'radial-gradient(circle at 34% 28%,#fff1df,#f6b16b 28%,#e0782f 72%,#8a3d10)',
-  dog: 'radial-gradient(circle at 34% 28%,#fff4e6,#e9c79c 30%,#c48f5a 74%,#6b4224)',
-  bear: 'radial-gradient(circle at 34% 28%,#ecd2b6,#c08a5e 30%,#8a5a37 72%,#4a2c18)',
-  rabbit: 'radial-gradient(circle at 34% 28%,#fff,#fff0f5 34%,#f2c6d6 78%,#b97f97)',
-  panda: 'radial-gradient(circle at 34% 28%,#fff,#f4f4f7 40%,#cfd0d8 82%,#8c8e9c)',
-  wheat: 'radial-gradient(circle at 34% 28%,#fffbe6,#f5d37a 30%,#d9a22e 72%,#7d5410)',
-  robot: 'linear-gradient(160deg,#f2f5fb,#c5cde0 45%,#7d88a6)',
-};
+const AVATAR_DOT = { orb: 'radial-gradient(circle at 34% 28%,#f2f4ff,#b4bde8 20%,#5b65a8 58%,#191d45)' };
 const THEME_DOT = { night: 'linear-gradient(135deg,#18245a,#050813)', dawn: 'linear-gradient(135deg,#ffe3c4,#f3ecff)', lavender: 'linear-gradient(135deg,#f3eeff,#a99cff)',
   forest: 'linear-gradient(135deg,#1d4a3a,#06100c)', candy: 'linear-gradient(135deg,#ffd6ec,#c9ecff)', black: '#000',
   auto: 'linear-gradient(90deg,#ffe3c4 50%,#18245a 50%)' };
@@ -972,10 +963,12 @@ function renderLooks() {
   if (!l) return;
   document.body.dataset.theme = l.theme_now;
   const photo = l.avatar.startsWith('photo:') && l.photos.find(p => p.id === l.avatar);
-  document.body.dataset.avatar = photo ? 'photo' : l.avatar;
-  document.body.classList.toggle('av-photo-on', !!photo);
-  document.body.classList.toggle('av-cutout', !!(photo && photo.cutout));   // 去了白底的公仔：全身显示
-  avPoses = photo ? (photo.poses && photo.poses.length ? photo.poses : [photo.url]) : null;
+  const recent = (l.pack && l.pack.recent) || [];
+  const pk = l.avatar.startsWith('pack:') && recent.find(p => p.id === l.avatar);   // 形象库（设计画布第 41 块）
+  document.body.dataset.avatar = photo ? 'photo' : pk ? 'pack' : l.avatar;
+  document.body.classList.toggle('av-photo-on', !!(photo || pk));
+  document.body.classList.toggle('av-cutout', !!(pk || (photo && photo.cutout)));   // 透明的全身公仔：不裁圆
+  avPoses = pk ? pk.poses : photo ? (photo.poses && photo.poses.length ? photo.poses : [photo.url]) : null;
   showAvPose();
   // home blocks: CSS order inside the welcome column; missed alarms always show with the alarms
   l.blocks.forEach((b, i) => (BLOCK_ELS[b.id] || []).forEach((id, k) => {
@@ -984,7 +977,7 @@ function renderLooks() {
     el.style.order = String(i * 10 + k);
     el.classList.toggle('hidden-block', !b.on && id !== 'missedBox' && id !== 'homeNotes');   // missed alarms and notes always show
   }));
-  $('looksNow').textContent = `${l.themes[l.theme]} · ${(l.avatars.concat(l.photos).find(a => a.id === l.avatar) || {}).name || ''}`;
+  $('looksNow').textContent = `${l.themes[l.theme]} · ${(l.avatars.concat(l.photos, recent).find(a => a.id === l.avatar) || {}).name || ''}`;
   $('looksThemes').innerHTML = Object.entries(l.themes).map(([k, name]) =>
     `<button data-theme="${k}" class="card2 ${k === l.theme ? 'on' : ''}" style="background:var(--card2)"><i style="background:${THEME_DOT[k]}"></i>${esc(name)}</button>`).join('');
   $('looksLayouts').innerHTML = Object.entries(l.layouts || {}).map(([k, name]) =>
@@ -997,11 +990,16 @@ function renderLooks() {
     `<button data-dmove="${b.id}" data-by="1" ${i < all.length - 1 ? '' : 'disabled'} aria-label="下移">↓</button></div>` +
     `<button class="switch" data-dtoggle="${b.id}" role="switch" aria-checked="${b.on}" aria-label="${esc(b.name)}"><i></i></button></div>`).join('');
   if (window.dashRender) window.dashRender();
+  // 光球、最近用过的形象库款式（新的在前）、照片形象、用照片生成、更多形象（打开形象库，pack.js）
   $('looksAvatars').innerHTML = l.avatars.map(a =>
     `<button data-avatar="${a.id}" class="${a.id === l.avatar ? 'on' : ''}"><span class="dot" style="background:${AVATAR_DOT[a.id]}"></span>${esc(a.name)}</button>`).join('') +
+    recent.map(p => `<button data-avatar="${p.id}" class="${p.id === l.avatar ? 'on' : ''}"><img class="pk" src="${esc(p.thumb)}" alt="">` +
+      `<span class="nm">${esc(p.name)}</span></button>`).join('') +
     l.photos.map(p => `<button data-avatar="${p.id}" class="${p.id === l.avatar ? 'on' : ''}"><img src="${esc(p.url)}" alt="">` +
       `${looksArmed === p.id ? '确定删除？' : '照片形象'}<span class="x" data-del="${p.id}">×</span></button>`).join('') +
-    `<button class="add" id="looksAdd"><span style="font-size:34px">＋</span>用照片生成</button>`;
+    `<button class="add" id="looksAdd"><span style="font-size:34px">＋</span>用照片生成</button>` +
+    (l.pack && l.pack.available ? `<button class="more" id="looksMore"><b>${l.pack.count}</b>更多形象 ›</button>` : '');
+  if (window.packRender) window.packRender();
   $('looksBlocks').innerHTML = l.blocks.map((b, i) =>
     `<div class="al ${b.on ? '' : 'off'}"><div class="al-text"><b>${esc(b.name)}</b></div>` +
     `<div class="bc-step"><button data-move="${b.id}" data-by="-1" ${i ? '' : 'disabled'} aria-label="上移">↑</button>` +
@@ -1031,6 +1029,7 @@ $('looksAvatars').addEventListener('click', e => {
     return setLooks({ delete: del.dataset.del });
   }
   if (e.target.closest('#looksAdd')) return startAvatarPhoto();
+  if (e.target.closest('#looksMore')) return window.packOpen && window.packOpen();
   const b = e.target.closest('[data-avatar]');
   if (b) setLooks({ avatar: b.dataset.avatar });
 });

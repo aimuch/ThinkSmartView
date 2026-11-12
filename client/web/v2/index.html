@@ -88,7 +88,6 @@
         </div>
         <div class="corona" id="corona"></div>
         <div class="core" id="core">
-          <div class="deco" aria-hidden="true"><span class="ear ear-l"></span><span class="ear ear-r"></span><span class="sprout"></span><span class="antenna"></span></div>
           <i class="c-idle"></i><i class="c-connecting"></i><i class="c-listening"></i><i class="c-thinking"></i><i class="c-speaking"></i>
           <!-- the orb's face: eyes, cheeks and mouth; expressions follow body[data-state] -->
           <div class="face" id="face" aria-hidden="true">
@@ -287,7 +286,7 @@
       <div class="looks-avatars" id="looksAvatars"></div>
       <div class="bright-head"><b class="sub">首页显示</b><span class="bright-num">用 ↑ ↓ 排顺序</span></div>
       <div class="alarm-list looks-blocks" id="looksBlocks"></div>
-      <p class="opt-note">也可以直接说「<span class="ww-name">小麦小麦</span>，换成小猫」「换个亮一点的主题」。错过的闹钟提醒总会显示。</p>
+      <p class="opt-note">也可以直接说「<span class="ww-name">小麦小麦</span>，换成星星人」「换回光球」「换个亮一点的主题」。错过的闹钟提醒总会显示。</p>
     </div>
     <div class="alarms-card bt-card sb-card" id="sbCard">
       <div class="bright-head"><b>待机页</b><span class="bright-num" id="sbNow"></span>
@@ -632,6 +631,15 @@
     <div class="h-controls" id="ldControls"></div>
   </div>
 </div>
+<!-- 形象库（pack.js，设计画布第 41 块）：点一下先看待机、唤醒、睡觉三个样子，再点「用这个」 -->
+<div class="sheet pack" id="avPack" role="dialog" aria-modal="true" aria-labelledby="pkTitle">
+  <div class="sheet-bar">
+    <div><h2 id="pkTitle">形象库</h2><p id="pkSub">点一下先看三个样子，再点「用这个」</p></div>
+    <button class="close" id="pkClose" aria-label="关闭"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="pk-prev" id="pkPrev" hidden></div>
+  <div class="pk-body"><nav class="pk-groups" id="pkGroups" aria-label="分组"></nav><div class="pk-grid" id="pkGrid"></div></div>
+</div>
 <!-- 工作台（work.js，设计画布第 38 块）：桌面（DeskHub）、机柜、仓库同步，数据经网关的 /kiosk/integrations -->
 <div class="sheet work" id="work">
   <div class="sheet-bar">
@@ -752,6 +760,7 @@
 <script src="/static/v2/app.js"></script>
 <script src="/static/v2/home.js"></script>
 <script src="/static/v2/work.js"></script>
+<script src="/static/v2/pack.js"></script>
 <script src="/static/v2/dash.js"></script>
 </body>
 </html>

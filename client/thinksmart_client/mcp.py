@@ -219,9 +219,10 @@ LOOKS_TOOLS = [
     {
         'name': 'self.appearance.set',
         'description': '换设备首页的主题、布局或对话形象。主题：星夜（默认深蓝）、晨光（浅色）、薰衣草（浅紫）、森林（深绿）、童趣（粉蓝）、'
-                       '纯黑（最暗）、跟着时间（白天晨光、晚上星夜）。形象：光球、小猫、小狗、小熊、兔子、熊猫、麦穗宝宝、机器人；'
-                       '「换成宝宝的形象」这类用照片生成的，传 avatar="photo"（用最新生成的那个）。'
-                       '「换成小猫」avatar="小猫"；「换个亮一点的主题」theme="晨光"。布局 layout：对话（光球和对话记录）、'
+                       '纯黑（最暗）、跟着时间（白天晨光、晚上星夜）。形象：光球（默认），或形象库里的角色，按用户说的名字原样传，'
+                       '例如「换成星星人」avatar="星星人"、「换成 LABUBU 春节的」avatar="LABUBU 春节"、「换成 Claude 的形象」avatar="Claude"；'
+                       '有好几款对得上时会返回候选，念给用户挑。「换成宝宝的形象」这类用照片生成的，传 avatar="photo"（用最新生成的那个）。'
+                       '「换回光球」avatar="光球"；「换个亮一点的主题」theme="晨光"。布局 layout：对话（光球和对话记录）、'
                        '仪表盘（一屏看天气、待办、米家设备、场景；「换成仪表盘」layout="仪表盘"）。只查看就什么都不传。',
         'inputSchema': {'type': 'object',
                         'properties': {'theme': {'type': 'string'}, 'avatar': {'type': 'string'}, 'layout': {'type': 'string'}}},
@@ -386,7 +387,7 @@ async def _appearance(client, theme, avatar, layout=''):
         view = await client.set_looks(theme=theme or None, avatar=avatar or None, layout=layout or None)
     except ValueError as e:
         return {'success': False, 'reason': str(e)}
-    names = {a['id']: a['name'] for a in view['avatars'] + view['photos']}
+    names = {a['id']: a['name'] for a in view['avatars'] + view['photos'] + view['pack']['recent']}
     return {'success': True, 'theme': view['themes'][view['theme']], 'avatar': names.get(view['avatar'], view['avatar']),
             'layout': view['layouts'][view['layout']]}
 
