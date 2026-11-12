@@ -32,7 +32,15 @@ flowchart TB
       vad["VAD<br/>Silero"] --> asr["语音识别<br/>X-ASR 本地"] --> llm["大模型路由<br/>function_call"] --> tts["语音合成"]
     end
     plugins["网关插件<br/>天气、搜索、新闻…"]
+    integ["接入家里的服务<br/>core/integrations"]
     db[("chat.db 记录和记忆<br/>usage.db 费用")]
+  end
+
+  subgraph lan["家里别的服务（局域网）"]
+    smarthub["智能中枢 SmartHub<br/>蓝牙灯 :8780"]
+    prom["Prometheus / rack-screen<br/>:9090 / :8088"]
+    repomgr["repo-manager<br/>:8765"]
+    deskhub["Mac 上的 DeskHub App<br/>显示器、Magpie、提醒事项"]
   end
 
   subgraph cloud["云服务"]
@@ -54,6 +62,11 @@ flowchart TB
   ws --> pipe
   llm <--> db
   llm --> plugins --> meteo
+  llm --> integ
+  http --> integ
+  integ -- "Bearer 令牌" --> smarthub
+  integ --> prom & repomgr
+  deskhub -- "推送 + 长轮询 /deskhub/*<br/>连接口令" --> http
   llm -- HTTPS --> deepseek
   tts -- HTTPS --> ttsc
   mijia -- HTTPS 直连 --> mi
@@ -63,7 +76,7 @@ flowchart TB
 | --- | --- | --- |
 | 设备 · 客户端 | 唤醒词、回声消除、录音上传、播放回复、对话界面、闹钟提醒（本机响）、米家（直连小米云）、蓝牙音箱、本机设备工具 | 不识别整句话，不调大模型，不存大模型 Key |
 | 设备 · 系统层 | 全屏外壳、屏幕键盘、熄屏和接近传感器、麦克风服务、音频配置、在线更新和自动退回 | — |
-| 网关 | 断句（VAD）、语音识别、大模型（按称呼切换模型）、插件、语音合成、聊天记录、记忆总结、费用统计、管理后台、唤醒二次确认、给设备发版本 | 不碰米家账号（米家令牌只在设备上） |
+| 网关 | 断句（VAD）、语音识别、大模型（按称呼切换模型）、插件、语音合成、聊天记录、记忆总结、费用统计、管理后台、唤醒二次确认、给设备发版本、接入家里别的服务（智能中枢、机柜、仓库同步、DeskHub，令牌只存在网关上） | 不碰米家账号（米家令牌只在设备上） |
 | 云 | 大模型、语音合成（Edge TTS 是微软的免费接口，千问 TTS 要百炼 Key）、天气、搜索 | — |
 
 **为什么用 SSH 隧道**：网关的 `/kiosk/*` 接口不认证，只接受网关本机的请求。走隧道后，设备在网关看来就是 127.0.0.1，这些接口也不会暴露给局域网。隧道密钥只能转发这三个端口，拿不到 shell（见[部署](deploy.md)）。

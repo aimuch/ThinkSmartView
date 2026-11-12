@@ -48,6 +48,7 @@
 | 本地和局域网服务 | `server/…/core/admin/` | Ollama、LM Studio 等可「读取模型列表」；语音识别和合成可接局域网里的 OpenAI 兼容服务（Speaches、Kokoro-FastAPI） |
 | 首页常用设备 | `client/web/v2/home.js` | 家居页长按磁贴放到首页，首页轻点开关；叫醒时家居页自动收起 |
 | 没网时换 Wi‑Fi、USB 线直连 | `client/web/v2/app.js`、`system/usbnet/` | 没连上网络时首页顶部提示「换 Wi‑Fi」；USB 线接电脑，电脑自动拿到 172.16.42.x，`ssh ubuntu@172.16.42.1` |
+| 工作台、智能中枢蓝牙灯 | `server/…/core/integrations/`、`plugins_func/functions/integrations.py`，`client/web/v2/work.js` | 接家里另外几个项目（设计画布第 38、39 块），都是后台「意图识别 › 插件」里的插件，能按设备开关：**智能中枢**（[SmartHub](https://github.com/aimuch/SmartHub) 的蓝牙灯和可调电源，填它的访问令牌）、**机柜状态**（rack-screen 用的 Prometheus，选填 rack-screen 令牌）、**仓库同步**（repo-manager）、**桌面**（Mac 上的 [DeskHub](https://github.com/aimuch/DeskHub) App 0.4.4 起，设置 › 小麦网关 里填网关地址和同一串连接口令）。设备顶栏的工作台按钮：切显示器输入源、AI 用量、电脑上的提醒事项、主机状态、同步结果；家居页最上面是蓝牙灯；首页和仪表盘可加摘要；主动告警可加机柜。语音：「补光灯调到 4300K」「服务器都正常吗」「仓库同步怎么样」「显示器切到 Windows」「Claude 额度还剩多少」 |
 | 语音识别调优 | 服务器的 `data/.config.yaml` | X-ASR 精度版、整句识别（不按停顿分段）；对比方法和结果见 [scripts/asr-eval/](scripts/asr-eval/README.md) |
 
 ## 第三方
