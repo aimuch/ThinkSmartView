@@ -1,7 +1,10 @@
 """[xiaozhi-hub] 每台设备在网关后台「设备」页单独设的东西（设计画布第 19 块）：名字、默认模型、音色、人设、插件。
 
-存在 data/device_settings.json：{设备 ID: {"name", "model", "tts": {"entry", "voice"}, "prompt", "plugins": [...]}}。
+存在 data/device_settings.json：{设备 ID: {"name", "model", "tts": {"entry", "voice"}, "prompt", "plugins": {插件: true/false}}}。
 某一项没有（或是 None）就是「跟着全局」。
+
+插件（设计画布第 40 块）：只记这台改过的那几个，true 是这台开、false 是这台关，没记的跟着全局。
+旧版存的是整份清单（list），读的时候按当时的全局算出差异，下次保存换成新格式。
 
 生效：设备每次叫醒都重连网关。连接建立时 apply(conn) 改这个连接自己的那份配置（conn.config 是复制出来的）：
 人设 → prompt；音色 → selected_module.TTS 和那个条目的 voice；插件 → Intent.function_call.functions。
@@ -73,6 +76,36 @@ def name(device: str) -> str:
     return str(get(device).get("name") or "")
 
 
+def global_plugins(config: dict) -> list:
+    """全局的插件列表（意图识别 function_call 的 functions，含后台不管的）。"""
+    return [str(f) for f in (((config.get("Intent") or {}).get("function_call") or {}).get("functions") or [])]
+
+
+def overrides(own, global_list) -> dict:
+    """这台设备改过的插件 {插件: 开/关}，按后台的插件顺序。own 是存的值（None、新格式 dict、旧格式 list）。"""
+    from core.admin import catalog
+
+    names = [p["name"] for p in catalog.PLUGINS]
+    if isinstance(own, dict):
+        return {n: bool(own[n]) for n in names if n in own}
+    if isinstance(own, list):
+        glob = set(global_list or [])
+        return {n: n in own for n in names if (n in own) != (n in glob)}
+    return {}
+
+
+def effective(global_list, ov: dict) -> list:
+    """全局列表套上这台的改动：关掉的去掉，开着的补在后面。"""
+    out = [f for f in global_list or [] if ov.get(f, True)]
+    return out + [n for n, on in ov.items() if on and n not in out]
+
+
+def plugins_for(config: dict, device: str) -> list:
+    """这台设备实际用的插件。"""
+    glob = global_plugins(config)
+    return effective(glob, overrides(get(device).get("plugins"), glob)) if device else glob
+
+
 def put(device: str, values: dict, merged: dict) -> dict:
     """校验并保存这台设备的设置（values 里给了的项才改；值为 None 表示改回「跟着全局」）。返回保存后的。"""
     from core.admin import catalog
@@ -118,13 +151,29 @@ def put(device: str, values: dict, merged: dict) -> dict:
                 if len(p) > PROMPT_MAX:
                     raise ValueError(f"人设最多 {PROMPT_MAX} 个字")
             cur["prompt"] = p
+        glob = global_plugins(merged)
         if "plugins" in v:
             pl = v.get("plugins")
-            if pl is not None:
-                if not isinstance(pl, list):
+            if isinstance(pl, list):        # 旧格式：整份清单，换成和全局的差异
+                pl = overrides([str(x) for x in pl], glob)
+            elif isinstance(pl, dict):
+                if any(not isinstance(x, bool) for x in pl.values()):
                     raise ValueError("插件格式不对")
-                pl = [str(x) for x in pl if str(x) in catalog.PLUGIN_NAMES]
-            cur["plugins"] = pl
+                pl = overrides(pl, glob)
+            elif pl is not None:
+                raise ValueError("插件格式不对")
+            cur["plugins"] = pl or None
+        if "plugin" in v:                   # 只改一个：{"name", "state": "on" | "off" | null（跟着全局）}
+            one = v.get("plugin") or {}
+            pname, state = str(one.get("name") or ""), one.get("state")
+            if pname not in catalog.PLUGIN_NAMES or state not in ("on", "off", None):
+                raise ValueError("插件格式不对")
+            ov = overrides(cur.get("plugins"), glob)
+            if state is None:
+                ov.pop(pname, None)
+            else:
+                ov[pname] = state == "on"
+            cur["plugins"] = overrides(ov, glob) or None
         cur = {k: x for k, x in cur.items() if x not in (None, "")}
         cur["updated"] = time.time()
         if set(cur) == {"updated"}:
@@ -157,10 +206,16 @@ def apply(conn) -> list:
         cfg["TTS"][t["entry"]] = {**cfg["TTS"][t["entry"]], "voice": t["voice"]}
         done.append(f"音色 {t['voice']}")
     if s.get("plugins") is not None and isinstance((cfg.get("Intent") or {}).get("function_call"), dict):
-        from core.admin import catalog
-
         fc = cfg["Intent"]["function_call"]
-        extra = [f for f in fc.get("functions") or [] if f not in catalog.PLUGIN_NAMES]   # 后台不管的插件照旧留着
-        cfg["Intent"]["function_call"] = {**fc, "functions": list(s["plugins"]) + extra}
-        done.append(f"插件 {len(s['plugins'])} 个")
+        glob = [str(f) for f in fc.get("functions") or []]
+        ov = overrides(s["plugins"], glob)
+        if ov:
+            cfg["Intent"]["function_call"] = {**fc, "functions": effective(glob, ov)}   # 后台不管的插件照旧留着
+            done.append(describe(ov))
     return done
+
+
+def describe(ov: dict) -> str:
+    """「插件 开 4 个 · 关 1 个」（日志、设备页的插件列）。"""
+    on, off = sum(1 for x in ov.values() if x), sum(1 for x in ov.values() if not x)
+    return "插件 " + " · ".join(t for t in (f"开 {on} 个" if on else "", f"关 {off} 个" if off else "") if t)

@@ -1,6 +1,6 @@
 """设备屏幕用的：一次拿齐工作台和蓝牙灯要的数据（GET /kiosk/integrations?device=…）。
 
-一个接入要「在后台保存过设置」并且「这台设备开着这个插件」才给，客厅那台关掉插件就看不到工作台。
+一个接入要「必填的设置填了」并且「这台设备开着这个插件」才给（plugins 里是每个接入在这台的开关状态，设计画布第 40 块），客厅那台关掉插件就看不到工作台。
 """
 
 import asyncio
@@ -27,7 +27,7 @@ async def overview(merged: dict, device: str, fresh: bool = False) -> dict:
     if available["repo_status"]:
         jobs["repo_status"] = _safe(repos.summary(common.settings(merged, "repo_status"), fresh))
     results = dict(zip(jobs, await asyncio.gather(*jobs.values()))) if jobs else {}
-    out = {"available": available, **results}
+    out = {"available": available, "plugins": common.plugin_states(merged, device), **results}
     if available["desk_hub"]:
         out["desk_hub"] = deskhub.hub.view()
     return out

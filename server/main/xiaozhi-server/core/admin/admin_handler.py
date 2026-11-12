@@ -182,6 +182,7 @@ class AdminHandler:
                 web.get("/kiosk/integrations", self.handle_kiosk_integrations),
                 web.post("/kiosk/smarthub", self.handle_kiosk_smarthub),
                 web.post("/kiosk/deskhub", self.handle_kiosk_deskhub),
+                web.post("/kiosk/plugin", self.handle_kiosk_plugin),
                 # Mac 上的 DeskHub App 连进来：局域网能到，连接口令就是凭证（core/integrations/deskhub.py）
                 web.post("/deskhub/push", self.handle_deskhub_push),
                 web.get("/deskhub/wait", self.handle_deskhub_wait),
@@ -721,6 +722,7 @@ class AdminHandler:
         tts = pages.describe_tts(merged)
         intent = pages.describe_intent(merged)
         global_voice = next((v["name"] for v in tts["voices"] if v["value"] == tts["voice"]), tts["voice"])
+        glob = device_settings.global_plugins(merged)
         out = []
         for d in ids:
             s = settings.get(d, {})
@@ -729,7 +731,8 @@ class AdminHandler:
             out.append({"device_id": d, "name": s.get("name", ""), "state": p["state"], "last_seen": p["last_seen"],
                         "version": p.get("version", ""), "model": s.get("model"), "remembered": remembered,
                         "remembered_label": llm_router.model_label(remembered) if remembered else "",
-                        "tts": s.get("tts"), "prompt": s.get("prompt"), "plugins": s.get("plugins"),
+                        "tts": s.get("tts"), "prompt": s.get("prompt"),
+                        "plugins": device_settings.overrides(s.get("plugins"), glob) or None,
                         "data": await self._blocking(self._device_summary, d, merged)})
         engines = [{"entry": e["entry"], "label": e["label"], "custom": bool(e.get("custom")),
                     "voices": [{"value": v["value"], "name": v["name"], "group": v.get("group", "")} for v in
@@ -742,11 +745,12 @@ class AdminHandler:
                        "plugins": [p["name"] for p in intent["plugins"] if p["enabled"]], "prompt": str(merged.get("prompt") or "")},
             "options": {"models": [{"entry": o["entry"], "label": label_of[o["entry"]]} for o in models],
                         "tts": engines, "personas": device_settings.PERSONAS,
-                        "plugins": [{"name": p["name"], "label": p["label"]} for p in catalog.PLUGINS]},
+                        "plugins": [{"name": p["name"], "label": p["label"], "needs_config": p["needs_config"]} for p in intent["plugins"]]},
         })
 
     async def handle_device_settings_save(self, request: web.Request):
-        """{"device", "name"?, "model"?, "tts"?, "prompt"?, "plugins"?}：给了的项才改，null 是改回跟着全局。
+        """{"device", "name"?, "model"?, "tts"?, "prompt"?, "plugins"?, "plugin"?}：给了的项才改，null 是改回跟着全局。
+        plugins 是这台改过的插件 {插件: true/false}；plugin 只改一个 {"name", "state": "on"|"off"|null}（意图识别页的小框）。
         默认模型：写进这台设备记住的模型，在线的连接马上换过去（和叫名字换模型同一个机制）。"""
         self._require_login(request)
         from core.utils import device_settings
@@ -754,7 +758,7 @@ class AdminHandler:
         body = await self._read_json(request)
         device = str(body.get("device") or "")
         merged = await self._blocking(self._merged)
-        values = {k: body[k] for k in ("name", "model", "tts", "prompt", "plugins") if k in body}
+        values = {k: body[k] for k in ("name", "model", "tts", "prompt", "plugins", "plugin") if k in body}
         try:
             saved = await self._blocking(device_settings.put, device, values, merged)
         except ValueError as e:
@@ -1513,6 +1517,28 @@ class AdminHandler:
         data = await kiosk.overview(merged, request.query.get("device") or "", request.query.get("fresh") == "1")
         return self._json({"ok": True, **data})
 
+    async def handle_kiosk_plugin(self, request: web.Request):
+        """{"device", "name", "on"}：设备设置里「接入的服务」的开关（设计画布第 40 块），只改这台设备、只能改四个接入。
+        拨到和全局一样就记成跟着全局。返回四个接入在这台设备上的状态。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.integrations import common
+        from core.utils import device_settings
+
+        body = await self._read_json(request)
+        device, name = str(body.get("device") or ""), str(body.get("name") or "")
+        if not device or name not in common.PLUGINS or not isinstance(body.get("on"), bool):
+            return self._error("参数不对", 400)
+        merged = await self._blocking(self._merged)
+        on = body["on"]
+        state = None if on == (name in device_settings.global_plugins(merged)) else ("on" if on else "off")
+        try:
+            await self._blocking(device_settings.put, device, {"plugin": {"name": name, "state": state}}, merged)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        self.logger.bind(tag=TAG).info(f"设备 {device} 在屏上把 {name} {'打开' if on else '关掉'}了")
+        return self._json({"ok": True, "plugins": common.plugin_states(merged, device)})
+
     async def handle_kiosk_smarthub(self, request: web.Request):
         """{"device", "id", "action", "value"}：设备屏幕上点的灯 -> 动作后的这个设备。"""
         if not self._from_this_machine(request):
@@ -2139,7 +2165,23 @@ class AdminHandler:
     async def handle_intent(self, request: web.Request):
         self._require_login(request)
         merged = await self._blocking(self._merged)
-        return self._json({"ok": True, **pages.describe_intent(merged), "running": self._running("Intent")})
+        return self._json({"ok": True, **pages.describe_intent(merged), "running": self._running("Intent"),
+                           "devices": self._device_plugins(merged)})
+
+    def _device_plugins(self, merged: dict) -> list:
+        """意图识别页按设备的小标签和小框（设计画布第 40 块）：认识的每台设备，和它单独开、关的插件。"""
+        from core.utils import device_settings
+
+        connected = self._connected_ids()
+        seen = {d["device_id"]: d for d in presence.snapshot(connected)}
+        settings = device_settings.all_devices()
+        glob = device_settings.global_plugins(merged)
+        out = []
+        for d in list(seen) + [x for x in settings if x not in seen]:
+            s, p = settings.get(d, {}), seen.get(d) or {"state": "offline", "version": ""}
+            out.append({"device_id": d, "name": s.get("name", ""), "state": p["state"], "version": p.get("version", ""),
+                        "plugins": device_settings.overrides(s.get("plugins"), glob)})
+        return out
 
     async def handle_intent_save(self, request: web.Request):
         self._require_login(request)

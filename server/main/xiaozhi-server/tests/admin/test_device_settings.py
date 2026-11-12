@@ -56,7 +56,8 @@ def test_put_validate_and_apply(cfg_path):
     ds.put("dev-1", {"name": "  儿童房 ", "prompt": ds.PERSONAS[0]["text"], "plugins": ["get_weather", "nope"],
                      "tts": {"entry": "EdgeTTS", "voice": "zh-CN-YunxiaNeural"}, "model": "KimiLLM"}, m)
     s = ds.get("dev-1")
-    assert s["name"] == "儿童房" and s["plugins"] == ["get_weather"] and s["model"] == "KimiLLM"
+    # 旧格式的整份清单存成和全局的差异
+    assert s["name"] == "儿童房" and s["plugins"] == {"get_news_from_newsnow": False, "play_music": False} and s["model"] == "KimiLLM"
     for bad in ({"model": "ClaudeAPI"}, {"tts": {"entry": "EdgeTTS", "voice": "zh-CN-NoSuchNeural"}},
                 {"tts": {"entry": "Qwen3TTS", "voice": "Cherry"}}, {"prompt": "   "}, {"name": "x" * 17}):
         with pytest.raises(ValueError):
@@ -142,6 +143,56 @@ async def test_delete_device(client, tmp_path, monkeypatch):
         assert res.status == 403 and ds.name("aa:bb") == "书房"
     r = await (await client.post("/admin/api/device-settings/forget", json={"device": "aa:bb", "password": "pass-1234"})).json()
     assert r["ok"] and ds.get("aa:bb") == {}
+
+
+def test_plugin_overrides(cfg_path):
+    """插件按设备逐个开关（设计画布第 40 块）：只记改过的，全局后来勾的新插件照样跟着。"""
+    m = merged(cfg_path)
+    glob = ds.global_plugins(m)
+    # 旧数据（整份清单）读的时候按当时的全局算差异
+    assert ds.overrides(["get_weather", "rack_status"], glob) == {"get_news_from_newsnow": False, "play_music": False, "rack_status": True}
+    ds.put("dev-2", {"plugin": {"name": "rack_status", "state": "on"}}, m)
+    ds.put("dev-2", {"plugin": {"name": "play_music", "state": "off"}}, m)
+    assert ds.get("dev-2")["plugins"] == {"play_music": False, "rack_status": True}
+    assert ds.plugins_for(m, "dev-2") == ["get_weather", "get_news_from_newsnow", "my_upstream_plugin", "rack_status"]
+    # 全局后来加了联网搜索：这台没改过它，所以跟着
+    m2 = copy.deepcopy(m)
+    m2["Intent"]["function_call"]["functions"].append("web_search")
+    assert "web_search" in ds.plugins_for(m2, "dev-2") and "play_music" not in ds.plugins_for(m2, "dev-2")
+    conn = SimpleNamespace(device_id="dev-2", config=copy.deepcopy(m2))
+    assert ds.apply(conn) == ["插件 开 1 个 · 关 1 个"]
+    assert conn.config["Intent"]["function_call"]["functions"][-1] == "rack_status"
+    # 改回跟着全局；全都跟着时记录删掉
+    ds.put("dev-2", {"plugin": {"name": "rack_status", "state": None}}, m)
+    ds.put("dev-2", {"plugins": {"play_music": True}}, m)
+    assert ds.get("dev-2")["plugins"] == {"play_music": True}
+    ds.put("dev-2", {"plugins": {}}, m)
+    assert ds.get("dev-2") == {}
+    for bad in ({"plugin": {"name": "nope", "state": "on"}}, {"plugin": {"name": "play_music", "state": "yes"}},
+                {"plugins": {"play_music": "on"}}, {"plugins": "play_music"}):
+        with pytest.raises(ValueError):
+            ds.put("dev-2", bad, m)
+
+
+async def test_plugin_per_device_endpoints(client):
+    """意图识别页列出按设备改过的插件；设备屏上的开关只改四个接入，拨到和全局一样就是跟着全局。"""
+    await client.post("/kiosk/reports", json={"device": "aa:bb", "version": "0.1.659"})
+    r = await (await client.post("/admin/api/device-settings", json={"device": "aa:bb", "plugin": {"name": "play_music", "state": "off"}})).json()
+    assert r["ok"] and r["settings"]["plugins"] == {"play_music": False}
+    d = await (await client.get("/admin/api/intent")).json()
+    assert d["devices"] == [{"device_id": "aa:bb", "name": "", "state": "idle", "version": "0.1.659", "plugins": {"play_music": False}}]
+    d = await (await client.get("/admin/api/device-settings")).json()
+    assert d["devices"][0]["plugins"] == {"play_music": False}
+    r = await (await client.post("/kiosk/plugin", json={"device": "aa:bb", "name": "rack_status", "on": True})).json()
+    assert r["plugins"]["rack_status"] == {"on": True, "global": False, "own": True, "ready": True}
+    assert ds.get("aa:bb")["plugins"] == {"play_music": False, "rack_status": True}
+    i = await (await client.get("/kiosk/integrations?device=aa:bb")).json()
+    assert i["plugins"]["rack_status"]["on"] and not i["plugins"]["repo_status"]["on"] and i["available"]["rack_status"]
+    r = await (await client.post("/kiosk/plugin", json={"device": "aa:bb", "name": "rack_status", "on": False})).json()
+    assert r["plugins"]["rack_status"] == {"on": False, "global": False, "own": None, "ready": True}
+    assert ds.get("aa:bb")["plugins"] == {"play_music": False}
+    for bad in ({"device": "aa:bb", "name": "play_music", "on": True}, {"device": "aa:bb", "name": "rack_status", "on": "1"}, {"name": "rack_status", "on": True}):
+        assert (await client.post("/kiosk/plugin", json=bad)).status == 400
 
 
 def test_cleared_memory_row_does_not_list_device(tmp_path):

@@ -659,6 +659,27 @@
   .dv-sec textarea.in { min-height: 96px; resize: vertical; font-size: 13px; line-height: 1.6; }
   .dv-sec .chips { margin-top: 6px; }
   .dv-sec .chip { cursor: pointer; }
+  /* [xiaozhi-hub] 插件按设备开关（设计画布第 40 块） */
+  .pd-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+  .pd-chip { border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; font-size: 12px; background: var(--card); color: var(--text); cursor: pointer; line-height: 1.6; }
+  .pd-chip.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+  .pd-chip.off { background: var(--soft); color: var(--muted); text-decoration: line-through; text-decoration-color: var(--err); }
+  .pd-chip.add { border-style: dashed; color: var(--muted); background: none; }
+  .pd-chip:hover { border-color: var(--accent-line); }
+  .pd-pop { position: fixed; z-index: 60; width: 340px; max-width: calc(100vw - 24px); background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .28); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .pd-pop .h { font-weight: 600; } .pd-pop .h small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .pd-row { display: flex; align-items: center; gap: 8px; }
+  .pd-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pd-row > span small { display: block; font-size: 11.5px; color: var(--muted); }
+  .seg.pd-seg { margin: 0; flex: none; padding: 2px; }
+  .seg.pd-seg button { padding: 3px 10px; font-size: 12px; }
+  .seg.pd-seg button.on.inh { background: var(--line); color: var(--text); box-shadow: none; }
+  .pd-list .pd-row { padding: 6px 0; border-top: 1px solid var(--line); }
+  .pd-list .pd-row:first-child { border-top: 0; }
+  .pd-list .pd-row.ch > span > b { color: var(--accent); }
+  .pd-list .pd-row > span > b { font-weight: 500; }
+  @media (max-width: 520px) { .pd-list .pd-row { flex-wrap: wrap; } .pd-list .pd-row .seg { margin-left: auto; } }
 
   /* ---------- [xiaozhi-hub] 费用分析（设计画布第 20 块，参考 CPA Manager Plus） ---------- */
   .c-tabs { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); width: max-content; margin-bottom: 12px; }
@@ -984,6 +1005,7 @@ async function openPage(name, force) {
   if (!force && name === page.name) return;
   if (!force && !confirmLeave()) { history.replaceState(null, "", "#" + page.name); return; }
   clearInterval(page.timer); page.timer = null; page.dirty = null; page.name = name;
+  closeDevicePop();
   applyBrand();   // 浏览器标签上的标题跟着页面变
   if (audio) { audio.pause(); audio = null; }
   if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
@@ -2147,7 +2169,8 @@ async function renderIntent(root) {
     <div class="card panel" id="plugins-box">
       <div class="plugins">
         ${d.plugins.map((p) => `<label class="plugin ${p.enabled ? "on" : ""}"><input type="checkbox" data-fn="${esc(p.name)}" ${p.enabled ? "checked" : ""}>
-          <div style="flex:1"><b>${esc(p.label)}</b>${p.needs_config ? ' <span class="pill warn">还没配置</span>' : ""}<small>${esc(p.desc)}</small></div>
+          <div style="flex:1"><b>${esc(p.label)}</b>${p.needs_config ? ' <span class="pill warn">还没配置</span>' : ""}<small>${esc(p.desc)}</small>
+            ${(d.devices || []).length > 1 ? `<div class="pd-chips" data-pd="${esc(p.name)}"></div>` : ""}</div>
           ${p.settings ? `<button type="button" class="btn sm" data-settings="${esc(p.settings)}" data-label="${esc(p.label)}">设置</button>` : ""}</label>`).join("")}
         ${d.always_on.map((p) => `<div class="plugin fixed"><input type="checkbox" checked disabled>
           <div><b>${esc(p.label)}</b> <span class="pill">始终开启</span><small>${esc(p.desc)}</small></div></div>`).join("")}
@@ -2157,6 +2180,7 @@ async function renderIntent(root) {
     <div class="card panel hidden" id="plugin-settings" style="margin-top:12px"></div>
     <div class="actions"><button class="btn primary" id="intent-save">保存</button></div>`;
   const values = () => ({ mode, functions: [...root.querySelectorAll("[data-fn]:checked")].map((i) => i.dataset.fn) });
+  root.querySelectorAll("[data-pd]").forEach((box) => renderDeviceChips(box, d));
   root.querySelectorAll("[data-settings]").forEach((b) => (b.onclick = (e) => {
     e.preventDefault();   // 按钮在 label 里，不要顺带勾选插件
     const id = b.dataset.settings;
@@ -2188,6 +2212,50 @@ async function renderIntent(root) {
     try { const r = await api("intent", values()); toast(r.note, r.failed); page.dirty = null; await openPage("intent", true); }
     catch (err) { toast(err.message, true); }
   });
+}
+
+// 插件按设备（设计画布第 40 块）：插件下面列出单独开、关的设备，点开小框每台三选一，点了马上保存
+const pdName = (x) => x.name || x.device_id;
+function renderDeviceChips(box, d) {
+  const name = box.dataset.pd;
+  box.innerHTML = d.devices.filter((x) => name in x.plugins).map((x) =>
+    `<button type="button" class="pd-chip ${x.plugins[name] ? "on" : "off"}">${esc(pdName(x))} ${x.plugins[name] ? "开" : "关"}</button>`).join("")
+    + '<button type="button" class="pd-chip add">＋ 按设备</button>';
+  box.querySelectorAll("button").forEach((b) => (b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openDevicePop(b, box, d); }));
+}
+function closeDevicePop() { const old = document.querySelector(".pd-pop"); if (old) { old.remove(); document.removeEventListener("pointerdown", closeDevicePop.outside, true); } }
+function openDevicePop(anchor, box, d) {
+  closeDevicePop();
+  const name = box.dataset.pd, p = d.plugins.find((x) => x.name === name);
+  const pop = document.createElement("div");
+  pop.className = "pd-pop"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", `${p.label} 按设备`);
+  const state = (x) => name in x.plugins ? (x.plugins[name] ? "on" : "off") : "inherit";
+  const draw = () => {
+    pop.innerHTML = `<div class="h">${esc(p.label)}<small>按设备</small></div>`
+      + d.devices.map((x, i) => `<div class="pd-row"><span>${esc(pdName(x))}<small>${{ talking: "对话中", idle: "待机", offline: "离线" }[x.state] || ""}${x.version ? " · " + esc(x.version) : ""}</small></span>
+        <div class="seg pd-seg" data-i="${i}">${[["inherit", "跟着全局"], ["on", "开"], ["off", "关"]].map(([v, t]) =>
+          `<button type="button" data-v="${v}" class="${state(x) === v ? "on" : ""} ${v === "inherit" ? "inh" : ""}">${t}</button>`).join("")}</div></div>`).join("")
+      + `<p class="muted small" style="margin:0">全局现在是「${p.enabled ? "开" : "关"}」。点了马上保存，设备下一次对话就用上${p.needs_config ? "；这个插件还没配置，先点「设置」填好，设备上才用得了" : ""}。</p>`;
+    pop.querySelectorAll(".pd-seg button").forEach((b) => (b.onclick = async () => {
+      const x = d.devices[+b.closest(".pd-seg").dataset.i], v = b.dataset.v;
+      if (v === state(x)) return;
+      try {
+        const r = await api("device-settings", { device: x.device_id, plugin: { name, state: v === "inherit" ? null : v } });
+        x.plugins = (r.settings && r.settings.plugins) || {};
+        draw(); renderDeviceChips(box, d);
+        toast(`已保存：${pdName(x)}的${p.label}${v === "inherit" ? "跟着全局" : v === "on" ? "单独开" : "单独关"}`);
+      } catch (err) { toast(err.message, true); }
+    }));
+  };
+  draw();
+  document.body.appendChild(pop);
+  const r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = Math.max(12, Math.min(r.left, innerWidth - w - 12)) + "px";
+  pop.style.top = (r.bottom + 6 + h > innerHeight - 12 ? Math.max(12, r.top - h - 6) : r.bottom + 6) + "px";
+  closeDevicePop.outside = (e) => { if (!pop.contains(e.target)) closeDevicePop(); };
+  setTimeout(() => document.addEventListener("pointerdown", closeDevicePop.outside, true));
+  const esc_ = (e) => { if (e.key === "Escape") { closeDevicePop(); document.removeEventListener("keydown", esc_); } };
+  document.addEventListener("keydown", esc_);
 }
 
 // 插件设置：按接口给的字段列表生成表单，显示在意图识别页插件列表下面
@@ -2256,7 +2324,7 @@ async function renderDeviceSettings(root) {
   const voiceText = (x) => { if (!x.tts) return inh(g.voice); const e = d.options.tts.find((t) => t.entry === x.tts.entry);
     const v = e && e.voices.find((y) => y.value === x.tts.voice); return ov(`${e ? e.label + " · " : ""}${v ? v.name : x.tts.voice}`); };
   const personaText = (x) => x.prompt ? ov((d.options.personas.find((p) => p.text === x.prompt) || { label: "自己写的" }).label) : inh("");
-  const pluginText = (x) => x.plugins ? ov(`${x.plugins.length} 个`) : inh(`${g.plugins.length} 个`);
+  const pluginText = (x) => x.plugins ? ov(pdCount(x.plugins)) : inh(`${g.plugins.length} 个`);
   root.innerHTML = `
     <div class="page-head"><div><h1>设备</h1><p class="sub">每台设备可以单独设默认模型、音色、人设、插件，没单独设的跟着全局。设备上的设置（唤醒词、外观、播报……）在设备自己的设置页改。</p></div></div>
     <div class="card u-panel" style="margin-top:0!important">${d.devices.length ? `<table class="u-table dv-table">
@@ -2269,6 +2337,10 @@ async function renderDeviceSettings(root) {
   root.querySelectorAll("[data-dev]").forEach((tr) => (tr.onclick = () => openDeviceDrawer(tr.dataset.dev, root)));
 }
 
+// 「开 4 个 · 关 1 个」
+const pdCount = (ov) => { const v = Object.values(ov || {}), on = v.filter(Boolean).length, off = v.length - on;
+  return [on ? `开 ${on} 个` : "", off ? `关 ${off} 个` : ""].filter(Boolean).join(" · "); };
+
 function openDeviceDrawer(id, root) {
   const d = dvData, x = d.devices.find((y) => y.device_id === id);
   if (!x) return;
@@ -2277,7 +2349,7 @@ function openDeviceDrawer(id, root) {
     const ttsSel = x.tts || { entry: (d.options.tts[0] || {}).entry, voice: "" };
     const engineOf = (entry) => d.options.tts.find((t) => t.entry === entry) || d.options.tts[0];
     const voiceOptions = (e, cur) => e && e.voices.length ? e.voices.map((v) => `<option value="${esc(v.value)}" ${v.value === cur ? "selected" : ""}>${esc(v.name)}${v.group ? " · " + esc(v.group) : ""}</option>`).join("") : "";
-    const plugins = x.plugins || d.global.plugins;
+    const pl = { ...(x.plugins || {}) };
     body.innerHTML = `
       <div class="dkv"><span>设备 ID</span><b class="mono" style="font-weight:400">${esc(x.device_id)}</b>
         <span>状态</span><b style="font-weight:400">${{ talking: "对话中", idle: "待机", offline: "离线" }[x.state]}${x.version ? " · 客户端 " + esc(x.version) : ""}</b></div>
@@ -2295,9 +2367,9 @@ function openDeviceDrawer(id, root) {
         <div class="body ${x.prompt ? "" : "hidden"}" data-body="prompt"><div class="chips">${d.options.personas.map((p, i) => `<span class="chip" data-persona="${i}">${esc(p.label)}</span>`).join("")}</div>
           <textarea class="in" id="dv-prompt" maxlength="2000" placeholder="写这台设备的人设，比如：你叫小麦，是一个耐心的小老师……">${esc(x.prompt || "")}</textarea></div>
         <p class="muted small ${x.prompt ? "hidden" : ""}" data-inh="prompt" style="margin:6px 0 0">全局人设：${esc(d.global.prompt.slice(0, 60))}${d.global.prompt.length > 60 ? "…" : ""}</p></div>
-      <div class="dv-sec"><div class="t">插件 ${tog("plugins", !!x.plugins)}</div>
-        <div class="body ${x.plugins ? "" : "hidden"}" data-body="plugins"><div class="chips">${d.options.plugins.map((p) => `<span class="chip ${plugins.includes(p.name) ? "on" : ""}" data-plugin="${esc(p.name)}">${esc(p.label)}</span>`).join("")}</div></div>
-        <p class="muted small ${x.plugins ? "hidden" : ""}" data-inh="plugins" style="margin:6px 0 0">全局开着 ${d.global.plugins.length} 个</p></div>
+      <div class="dv-sec"><div class="t">插件<span class="muted small" id="dv-pl-sum" style="font-weight:400;margin-left:auto"></span></div>
+        <div class="body pd-list" id="dv-plugins"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:4px"><button type="button" class="btn sm" id="dv-pl-reset">全部跟着全局</button></div></div>
       <div class="dv-sec"><div class="t">这台设备的数据</div><div class="body dkv">
         <span>住宅地址</span><b style="font-weight:400">${esc(x.data.home || "没设")}</b><span>儿童模式</span><b style="font-weight:400">${esc(x.data.kids)}</b>
         <span>家人声音</span><b style="font-weight:400">${x.data.voices} 人</b><span>聊天记录</span><b style="font-weight:400">${x.data.messages} 条 · 记忆 ${x.data.memory_chars} 字 <a href="#memory">去看 ›</a></b></div></div>
@@ -2315,14 +2387,29 @@ function openDeviceDrawer(id, root) {
       body.querySelector(`[data-inh="${k}"]`).classList.toggle("hidden", own);
     })));
     body.querySelectorAll("[data-persona]").forEach((c) => (c.onclick = () => { $("dv-prompt").value = d.options.personas[+c.dataset.persona].text; }));
-    body.querySelectorAll("[data-plugin]").forEach((c) => (c.onclick = () => c.classList.toggle("on")));
+    const drawPlugins = () => {
+      $("dv-plugins").innerHTML = d.options.plugins.map((p) => {
+        const g = d.global.plugins.includes(p.name), st = p.name in pl ? (pl[p.name] ? "on" : "off") : "inherit";
+        return `<div class="pd-row ${st === "inherit" ? "" : "ch"}"><span><b>${esc(p.label)}</b><small>全局${g ? "开" : "关"}${p.needs_config ? " · 还没配置" : ""}</small></span>
+          <div class="seg pd-seg" data-pl="${esc(p.name)}">${[["inherit", "跟着全局"], ["on", "开"], ["off", "关"]].map(([v, t]) =>
+            `<button type="button" data-v="${v}" class="${st === v ? "on" : ""} ${v === "inherit" ? "inh" : ""}">${t}</button>`).join("")}</div></div>`;
+      }).join("");
+      $("dv-pl-sum").textContent = `全局开着 ${d.global.plugins.length} 个` + (Object.keys(pl).length ? ` · 这台${pdCount(pl)}` : "");
+      $("dv-plugins").querySelectorAll(".pd-seg button").forEach((b) => (b.onclick = () => {
+        const n = b.closest(".pd-seg").dataset.pl;
+        if (b.dataset.v === "inherit") delete pl[n]; else pl[n] = b.dataset.v === "on";
+        drawPlugins();
+      }));
+    };
+    drawPlugins();
+    $("dv-pl-reset").onclick = () => { Object.keys(pl).forEach((k) => delete pl[k]); drawPlugins(); };
     const own = (k) => body.querySelector(`[data-tog="${k}"] .on`).dataset.v === "own";
     $("dv-save").onclick = (e) => busy(e.target, async () => {
       const payload = { device: x.device_id, name: $("dv-name").value,
         model: own("model") ? $("dv-model").value : null,
         tts: own("tts") && $("dv-voice") ? { entry: $("dv-engine").value, voice: $("dv-voice").value.trim() } : null,
         prompt: own("prompt") ? $("dv-prompt").value : null,
-        plugins: own("plugins") ? [...body.querySelectorAll("[data-plugin].on")].map((c) => c.dataset.plugin) : null };
+        plugins: { ...pl } };
       try { const r = await api("device-settings", payload); toast(r.note); closeDrawer(); await renderDeviceSettings(root); }
       catch (err) { $("dv-result").innerHTML = `<span style="color:var(--err)">${esc(err.message)}</span>`; }
     });

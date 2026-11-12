@@ -49,13 +49,21 @@ def ready(config: dict, name: str) -> bool:
 
 
 def enabled_for(config: dict, device: str, name: str) -> bool:
-    """这台设备能不能用这个插件：设备单独设了插件就看它的，没设看全局的。"""
+    """这台设备能不能用这个插件：全局的列表套上这台单独开、关的（device_settings，设计画布第 40 块）。"""
     from core.utils import device_settings
 
-    own = device_settings.get(device or "").get("plugins") if device else None
-    if own is None:
-        own = ((config.get("Intent") or {}).get("function_call") or {}).get("functions") or []
-    return name in own
+    return name in device_settings.plugins_for(config, device or "")
+
+
+def plugin_states(config: dict, device: str) -> dict:
+    """四个接入在这台设备上的状态，给设备设置里的「接入的服务」：
+    {插件: {"on": 这台用不用, "global": 全局开没开, "own": 这台单独设的（true/false，没设 null）, "ready": 必填项填了没有}}。"""
+    from core.utils import device_settings
+
+    glob = device_settings.global_plugins(config)
+    ov = device_settings.overrides(device_settings.get(device).get("plugins"), glob) if device else {}
+    eff = device_settings.effective(glob, ov)
+    return {n: {"on": n in eff, "global": n in glob, "own": ov.get(n), "ready": ready(config, n)} for n in PLUGINS}
 
 
 async def request(method: str, url: str, *, headers: dict = None, json=None, timeout: float = 8, auth=None):
