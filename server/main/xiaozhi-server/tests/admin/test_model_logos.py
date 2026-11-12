@@ -36,14 +36,14 @@ def test_entry_logo(tmp_path):
     assert pages.entry_logo(merged, pages.CLAUDE_CLI_ENTRY) == "claudecode-color"
     assert pages.entry_logo(merged, pages.DSH_ENTRY) == "deepseek-color"
     assert pages.entry_logo(merged, "SiliconFlowLLM") == "siliconcloud-color"
-    assert pages.entry_logo(merged, "MagpieLLM") == "magpie"
+    assert pages.entry_logo(merged, "MagpieLLM") == "magpie-color"
     assert pages.entry_logo(merged, "CustomOpenAILLM") == ""
-    assert pages.entry_logo(merged, "GrokBot_小G") == "grok"
+    assert pages.entry_logo(merged, "GrokBot_小G") == "grok-color"
     agents = {a["entry"]: a for a in pages.custom_agents(merged)}
     if agents:   # 智能体条目的格式以 custom_agents 认的为准
         assert pages.entry_logo(merged, "Agent_mine") == ""
         assert pages.agent_logo({"kind": "dify", "name": "x"}) == "dify-color"
-        assert pages.agent_logo({"kind": "openai", "name": "Hermes 助理"}) == "hermesagent"
+        assert pages.agent_logo({"kind": "openai", "name": "Hermes 助理"}) == "hermesagent-color"
     assert pages.entry_logo(merged, "SomethingElse") == ""
     assert all(v["logo"] == catalog.LOGOS.get(v["id"], "") for v in pages.describe_llm(merged)["vendors"])
 

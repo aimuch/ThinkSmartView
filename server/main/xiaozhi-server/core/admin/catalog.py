@@ -84,15 +84,17 @@ VENDOR_BY_ENTRY = {v["entry"]: v for v in LLM_VENDORS}
 
 # ---------- [xiaozhi-hub] 模型图标（设计画布第 42 块） ----------
 # static/logos/ 里的文件名（不带 .svg），来自 LobeHub icons 1.95.1（MIT），和设备上选模型那页同一套；magpie 来自 yetone/magpie（MIT）的小喜鹊。
+# 原本单色（黑）的几个（OpenAI、xAI、Grok、Ollama、LM Studio、Coze、Hermes、Magpie、OpenRouter）用 *-color：同一个形状，
+# 填上贴近各家品牌的渐变（设计画布第 45 块）。
 # 键是厂商 id（大模型页、看图模型页共用），加上本机 CLI、智能体几种。没有图标的（自定义）页面上用名字第一个字。
 LOGOS = {
-    "claude": "claude-color", "openai": "openai", "gemini": "gemini-color", "deepseek": "deepseek-color",
+    "claude": "claude-color", "openai": "openai-color", "gemini": "gemini-color", "deepseek": "deepseek-color",
     "qwen": "qwen-color", "doubao": "doubao-color", "glm": "zhipu-color", "zhipu": "zhipu-color", "kimi": "kimi-color",
     "siliconflow": "siliconcloud-color", "qianfan": "wenxin-color", "hunyuan": "hunyuan-color",
-    "minimax": "minimax-color", "stepfun": "stepfun-color", "spark": "spark-color", "xai": "xai",
-    "mistral": "mistral-color", "openrouter": "openrouter", "ollama": "ollama", "lmstudio": "lmstudio", "magpie": "magpie",
-    "claude_cli": "claudecode-color", "dsh": "deepseek-color", "codex": "codex-color", "grok": "grok",
-    "hermes": "hermesagent", "dify": "dify-color", "coze": "coze",
+    "minimax": "minimax-color", "stepfun": "stepfun-color", "spark": "spark-color", "xai": "xai-color",
+    "mistral": "mistral-color", "openrouter": "openrouter-color", "ollama": "ollama-color", "lmstudio": "lmstudio-color", "magpie": "magpie-color",
+    "claude_cli": "claudecode-color", "dsh": "deepseek-color", "codex": "codex-color", "grok": "grok-color",
+    "hermes": "hermesagent-color", "dify": "dify-color", "coze": "coze-color",
 }
 
 

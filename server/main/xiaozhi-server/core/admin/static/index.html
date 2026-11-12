@@ -12,6 +12,8 @@
     --bg: #f1f5f9; --card: #ffffff; --text: #0f172a; --muted: #64748b; --line: #e2e8f0; --field: #ffffff; --soft: #f8fafc;
     /* [xiaozhi-hub] 小麦的品牌蓝（设备 client/web/v2/tokens.css 的 --accent #6c8cff），浅色底上加深一档，白字按钮够对比度 */
     --accent: #3f5fe0; --btn: #3f5fe0; --btn-hover: #3350c8; --accent-soft: #eef1ff; --accent-line: #c5d0ff;
+    --ai: linear-gradient(120deg, #a78bfa, #6c8cff 55%, #38c8f0); --ai-fill: linear-gradient(120deg, #7c4dea, #4a5ae8 55%, #1477b3);
+    --ai-soft: #7c5cf014; --ai-soft-ink: #5a48d6; --ai-soft-line: #7c5cf033;
     --ok: #059669; --ok-soft: #ecfdf5; --warn: #b45309; --warn-soft: #fffbeb; --err: #dc2626; --err-soft: #fef2f2;
     --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 1px 3px rgba(15, 23, 42, .06);
   }
@@ -21,6 +23,7 @@
       --side: #131417; --side-hover: #1e1f23; --side-line: #2a2c31;
       --bg: #0e0f11; --card: #17181b; --text: #e8e9ec; --muted: #8b8f98; --line: #2a2c31; --field: #111214; --soft: #1b1c20;
       --accent: #7aa2ff; --btn: #4f7cff; --btn-hover: #3f6cf0; --accent-soft: #1b2440; --accent-line: #34407a;
+      --ai-soft: #8b7bff22; --ai-soft-ink: #b9adff; --ai-soft-line: #8b7bff44;
       --ok: #3ecf74; --ok-soft: #12291c; --warn: #f5a524; --warn-soft: #2b2110; --err: #f2555a; --err-soft: #2e1517;
       --shadow: none;
     }
@@ -31,6 +34,7 @@
       --side: #131417; --side-hover: #1e1f23; --side-line: #2a2c31;
       --bg: #0e0f11; --card: #17181b; --text: #e8e9ec; --muted: #8b8f98; --line: #2a2c31; --field: #111214; --soft: #1b1c20;
       --accent: #7aa2ff; --btn: #4f7cff; --btn-hover: #3f6cf0; --accent-soft: #1b2440; --accent-line: #34407a;
+      --ai-soft: #8b7bff22; --ai-soft-ink: #b9adff; --ai-soft-line: #8b7bff44;
       --ok: #3ecf74; --ok-soft: #12291c; --warn: #f5a524; --warn-soft: #2b2110; --err: #f2555a; --err-soft: #2e1517;
       --shadow: none;
     }
@@ -89,6 +93,11 @@
   .pill { display: inline-block; font-size: 12px; padding: 1px 10px; border-radius: 999px; font-weight: 500; white-space: nowrap;
           background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
   .pill.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+  /* AI 相关（设计画布第 45 块）：默认模型实心渐变，称呼淡紫色 */
+  .pill.ai { background: var(--ai-fill); color: #fff; border-color: transparent; font-weight: 600; }
+  .pill.ai-soft, #cn-models .chip.on { background: var(--ai-soft); color: var(--ai-soft-ink); border-color: var(--ai-soft-line); }
+  .btn.primary.ai { background: var(--ai-fill); border-color: transparent; }
+  .btn.primary.ai:hover:not(:disabled) { filter: brightness(1.08); }
   .pill.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
   .pill.err { background: var(--err-soft); color: var(--err); border-color: transparent; }
   .section-title { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .03em; margin: 28px 0 10px;
@@ -187,9 +196,12 @@
   .vendor small { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .vendor i { position: absolute; top: 12px; right: 12px; width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
   .vendor i.set { background: var(--ok); }
-  .vendor.using { border-color: var(--ok); background: var(--ok-soft); }
-  .vendor.using.on { box-shadow: 0 0 0 3px var(--accent-soft), inset 0 0 0 1px var(--ok); border-color: var(--accent); }
-  .vendor.using small { display: inline-block; margin-top: 2px; padding: 0 8px; border-radius: 999px; background: var(--ok); color: var(--card); font-weight: 600; }
+  /* 默认的那家：AI 渐变描边、「✓ 默认」渐变实心（设计画布第 45 块；绿色只留给右上角「配好了」的小点） */
+  .vendor.using { border-color: transparent; }
+  .vendor.using::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 2px; background: var(--ai); pointer-events: none;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+  .vendor.using.on { box-shadow: 0 0 0 3px var(--accent-soft); }
+  .vendor.using small { display: inline-block; margin-top: 2px; padding: 0 8px; border-radius: 999px; background: var(--ai-fill); color: #fff; font-weight: 600; }
   .vendor.using i { width: 8px; height: 8px; box-shadow: 0 0 0 3px rgba(5, 150, 105, .18); }
 
   /* 状态页 */
@@ -1398,7 +1410,7 @@ async function renderLLM(root) {
     </div>
     <div class="actions"><span class="result muted" id="dsh-result">每句话起一个 dsh 进程（约 2 秒），同一台设备接着上一轮聊。</span>
       <button class="btn ${d.kind === "dsh" ? "primary" : ""}" id="dsh-save">保存</button>
-      ${d.kind === "dsh" ? "" : `<button class="btn primary" id="dsh-use" ${dsh.install && dsh.install.installed ? "" : "disabled"}>保存并设为默认</button>`}</div>`;
+      ${d.kind === "dsh" ? "" : `<button class="btn primary ai" id="dsh-use" ${dsh.install && dsh.install.installed ? "" : "disabled"}>保存并设为默认</button>`}</div>`;
   const bindDshForm = () => {
     const f = $("dsh-form");
     f.querySelectorAll(".seg[data-dk] button").forEach((b) => (b.onclick = () => b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b))));
@@ -1430,13 +1442,13 @@ async function renderLLM(root) {
   const num = (name, label, hint) => `<label class="f">${label}${hint ? `<span class="hint">${hint}</span>` : ""}
     <input class="in" data-k="${name}" value="${esc(v[name] ?? "")}" inputmode="decimal"></label>`;
   // "默认"只是设备刚连上时用的模型；配了称呼的模型随时能叫到，所以每个模型都标出它的称呼
-  const callPill = (entry) => d.call_names_enabled && d.callable[entry] ? `<span class="pill" title="说“嗨 + 称呼”就换成它">称呼：${esc(d.callable[entry].slice(0, 3).join("、"))}${d.callable[entry].length > 3 ? "…" : ""}</span>` : "";
-  const defaultPill = (on) => (on ? '<span class="pill ok">默认模型</span>' : "");
+  const callPill = (entry) => d.call_names_enabled && d.callable[entry] ? `<span class="pill ai-soft" title="说“嗨 + 称呼”就换成它">称呼：${esc(d.callable[entry].slice(0, 3).join("、"))}${d.callable[entry].length > 3 ? "…" : ""}</span>` : "";
+  const defaultPill = (on) => (on ? '<span class="pill ai">默认模型</span>' : "");
   const grokAliases = d.grok.bots.flatMap((g) => (d.callable[g.entry] || []).slice(0, 1));
 
   root.innerHTML = `
     <div class="page-head"><div><h1>大模型</h1><p class="sub">设备刚连上时用默认模型。给模型配了称呼后，句子开头说“嗨 + 称呼”就换成它，几个模型可以同时用（称呼在<a href="#calls">称呼</a>页配）。</p></div>
-      <span class="pill ${d.kind === "other" ? "warn" : "ok"}">默认：${esc(current)}</span></div>
+      <span class="pill ${d.kind === "other" ? "warn" : "ai"}">默认：${esc(current)}</span></div>
     ${d.kind === "other" ? `<div class="banner warn">当前默认的 ${esc(d.selected)} 不在后台管理范围内（可能是手动改了配置文件）。在下面选择一种并点"保存并设为默认"即可切换。</div>` : ""}
     ${d.running && d.running !== d.selected ? `<div class="banner warn">配置里的默认模型是 ${esc(d.selected)}，但服务仍在用 ${esc(d.running)}。</div>` : ""}
 
@@ -1458,7 +1470,7 @@ async function renderLLM(root) {
       </div>
       <div class="choice ${d.kind === "grok" ? "on" : ""}" id="grok-choice" style="cursor:pointer" title="打开 Grok Bot 页">
         ${logoTile(d.logos.grok, "G", "lg")}
-        <div><b>Grok Bot</b> ${defaultPill(d.kind === "grok")} ${grokAliases.length ? `<span class="pill">称呼：${esc(grokAliases.slice(0, 3).join("、"))}${grokAliases.length > 3 ? "…" : ""}</span>` : ""}
+        <div><b>Grok Bot</b> ${defaultPill(d.kind === "grok")} ${grokAliases.length ? `<span class="pill ai-soft">称呼：${esc(grokAliases.slice(0, 3).join("、"))}${grokAliases.length > 3 ? "…" : ""}</span>` : ""}
           <small>${d.grok.bots.length ? `已勾选 ${d.grok.bots.length} 个 Bot${grokAliases.length < d.grok.bots.length ? "，有的还没配称呼" : ""}，叫名字就能派活` : "xAI 的云端 AI 同事：登录、勾选 Bot，叫名字派活，回复念给你听"}</small></div>
       </div>
     </div>
@@ -1509,7 +1521,7 @@ async function renderLLM(root) {
       <div class="actions"><span class="result" id="cli-result"></span>
         <button class="btn" id="cli-reset">撤销修改</button>
         <button class="btn ${usingCli ? "primary" : ""}" id="cli-save">保存</button>
-        ${usingCli ? "" : `<button class="btn primary" id="cli-use" ${inst.installed ? "" : "disabled"}>保存并设为默认</button>`}
+        ${usingCli ? "" : `<button class="btn primary ai" id="cli-use" ${inst.installed ? "" : "disabled"}>保存并设为默认</button>`}
       </div>` : '<div class="muted">配置文件里没有 ClaudeCLI 条目，请重新运行安装脚本生成配置。</div>'}
     </div>
 
@@ -1598,7 +1610,7 @@ async function renderLLM(root) {
       <div class="actions"><span class="result" id="api-result"></span>
         <button class="btn" id="api-test">测试连接</button>
         <button class="btn ${using ? "primary" : ""}" id="api-save">保存</button>
-        ${using ? "" : '<button class="btn primary" id="api-use">保存并设为默认</button>'}</div>`;
+        ${using ? "" : '<button class="btn primary ai" id="api-use">保存并设为默认</button>'}</div>`;
     const values = () => ({ base_url: $("api-url").value.trim(), model: $("api-model").value.trim(), api_key: $("api-key").value.trim() });
     apiDirty = snapshot(values);
     const result = (html) => ($("api-result").innerHTML = html);
@@ -2488,7 +2500,7 @@ async function renderAgents(root) {
   const ST = { ready: ["", "就绪"], setup: ["w", "没设置"], missing: ["x", "没装"] };
   const pill = (state) => { const [c, t] = ST[state] || ["x", state]; return `<span class="ag-st ${c}"><i></i>${t}</span>`; };
   const aliases = (a) => (a && a.length ? "称呼 " + a.slice(0, 2).join("、") : "还没配称呼");
-  const isDefault = (entry) => (entry === d.default ? '<span class="pill ok" style="margin-left:6px">默认</span>' : "");
+  const isDefault = (entry) => (entry === d.default ? '<span class="pill ai" style="margin-left:6px">默认</span>' : "");
   const MARK = { dsh: ["D", "#1f3a8a", "#cfe0ff"], claude: ["C", "#fef3c7", "#b45309"] };
   const grok = d.cloud;
   root.innerHTML = `
@@ -3067,7 +3079,7 @@ async function renderCallNames(root) {
     $("cn-models").innerHTML = models.map((m, mi) => `
       <div class="card" data-model="${mi}" style="margin-top:16px">
         <div class="card-head"><h2 class="with-logo">${logoTile(m.logo, m.label, "md")}${esc(m.label)}</h2><span>
-          ${m.entry === d.default ? '<span class="pill">默认模型</span>' : ""}
+          ${m.entry === d.default ? '<span class="pill ai">默认模型</span>' : ""}
           ${m.missing ? `<span class="pill err">网关上没装 ${esc(m.missing)}</span>` : m.ready ? "" : '<span class="pill err">还没配置好</span>'}</span></div>
         <div class="panel" style="padding-top:12px">
           <div class="chips">${m.aliases.length ? m.aliases.map((a, i) => `<span class="chip on">${esc(a)}

@@ -435,7 +435,7 @@ async def test_kiosk_grok_bot_is_per_device(kiosk, cfg_path, monkeypatch):
     await kiosk.post("/admin/api/logout", json={})
     data = await (await kiosk.get("/kiosk/llm?device=dev-1")).json()
     assert data["options"][-1] == {"kind": "grok", "vendor": "grok_bot", "label": "孙悟空",
-                                   "entry": "GrokBot_孙悟空", "model": "Grok Bot", "calls": [], "logo": "grok"}
+                                   "entry": "GrokBot_孙悟空", "model": "Grok Bot", "calls": [], "logo": "grok-color"}
     assert all(o["entry"] != "GrokBot_没勾好" for o in data["options"])  # 没有 bot_id 的不列
     mine = SimpleNamespace(session_id="s-1", device_id="dev-1", client_ip="127.0.0.1")
     other = SimpleNamespace(session_id="s-2", device_id="dev-2", client_ip="127.0.0.1")
