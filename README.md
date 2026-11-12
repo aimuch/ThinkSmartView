@@ -43,12 +43,12 @@
 | 后台登录、状态、工作原理 | `server/…/core/admin/`（`brand.py`、`presence.py`） | 登录页可保持登录 30 天；账号菜单里改密码、退出登录、改名称和图标（麦穗、表情或上传图片，浏览器标签图标跟着换）、填自己的仓库链接；状态页按设备心跳显示待机/对话中/离线，有 24 小时对话量、今天的费用、拓扑；工作原理画成六步路径 |
 | DSH（DeepSeek Harness） | `server/…/core/agent/dsh_session.py`、`core/providers/llm/dsh_cli/` | 后台「大模型 → 本地 CLI 与智能体」选 DSH：用 DeepSeek 的 Key，在网关上读文件、做事；说「嗨 DSH」叫它。网关上要装 `@deepseek-ai/dsh` 和 Node 24 |
 | 智能体页 | `server/…/core/agent/api_agent_session.py`、`core/providers/llm/agent_api/` | 后台侧栏「智能体」：本机（DSH、Claude Code）、云端（Grok Bot）、自己加的（OpenAI 兼容的 Hermes Agent 等、Dify 工作流、Coze）。叫名字派活，慢了转后台，做完汇报 |
-| 按设备分别配置 | `server/…/core/utils/device_settings.py` | 后台侧栏「设备」：每台设备起名字，单独设默认模型、音色、人设（有小老师、陪老人等模板）、插件，没设的跟着全局。「删除设备」会逐项列出要删的数据（聊天记录和记忆、住宅地址、儿童模式、家人声音、清单可选不删，费用统计保留），设备在线时要输入管理员密码 |
+| 按设备分别配置 | `server/…/core/utils/device_settings.py` | 后台侧栏「设备」：每台设备起名字，单独设默认模型、音色、人设（有小老师、陪老人等模板），没设的跟着全局。插件逐个选「跟着全局 / 这台开 / 这台关」，只记改过的，全局后来勾的新插件照样跟着；「意图识别」页每个插件下面列出单独开、关的设备，点「按设备」直接改（设计画布第 40 块）。「删除设备」会逐项列出要删的数据（聊天记录和记忆、住宅地址、儿童模式、家人声音、清单可选不删，费用统计保留），设备在线时要输入管理员密码 |
 | 看图模型 12 家 | `server/…/core/agent/photo_ask.py` | DeepSeek V4.1 Flash（沿用大模型的 Key）、智谱、千问、豆包、Kimi、阶跃、硅基流动、OpenAI、Gemini、Claude、Ollama、自定义 |
 | 本地和局域网服务 | `server/…/core/admin/` | Ollama、LM Studio 等可「读取模型列表」；语音识别和合成可接局域网里的 OpenAI 兼容服务（Speaches、Kokoro-FastAPI） |
 | 首页常用设备 | `client/web/v2/home.js` | 家居页长按磁贴放到首页，首页轻点开关；叫醒时家居页自动收起 |
 | 没网时换 Wi‑Fi、USB 线直连 | `client/web/v2/app.js`、`system/usbnet/` | 没连上网络时首页顶部提示「换 Wi‑Fi」；USB 线接电脑，电脑自动拿到 172.16.42.x，`ssh ubuntu@172.16.42.1` |
-| 工作台、智能中枢蓝牙灯 | `server/…/core/integrations/`、`plugins_func/functions/integrations.py`，`client/web/v2/work.js` | 接家里另外几个项目（设计画布第 38、39 块），都是后台「意图识别 › 插件」里的插件，能按设备开关：**智能中枢**（[SmartHub](https://github.com/aimuch/SmartHub) 的蓝牙灯和可调电源，填它的访问令牌）、**机柜状态**（rack-screen 用的 Prometheus，选填 rack-screen 令牌）、**仓库同步**（repo-manager）、**桌面**（Mac 上的 [DeskHub](https://github.com/aimuch/DeskHub) App 0.4.4 起，设置 › 小麦网关 里填网关地址和同一串连接口令）。设备顶栏的工作台按钮：切显示器输入源、AI 用量、电脑上的提醒事项、主机状态、同步结果；家居页最上面是蓝牙灯；首页和仪表盘可加摘要；主动告警可加机柜。语音：「补光灯调到 4300K」「服务器都正常吗」「仓库同步怎么样」「显示器切到 Windows」「Claude 额度还剩多少」 |
+| 工作台、智能中枢蓝牙灯 | `server/…/core/integrations/`、`plugins_func/functions/integrations.py`，`client/web/v2/work.js` | 接家里另外几个项目（设计画布第 38、39 块），都是后台「意图识别 › 插件」里的插件，能按设备开关（设备自己的设置 › 智能体 › 接入的服务 也能开关这台的四个）：**智能中枢**（[SmartHub](https://github.com/aimuch/SmartHub) 的蓝牙灯和可调电源，填它的访问令牌）、**机柜状态**（rack-screen 用的 Prometheus，选填 rack-screen 令牌）、**仓库同步**（repo-manager）、**桌面**（Mac 上的 [DeskHub](https://github.com/aimuch/DeskHub) App 0.4.4 起，设置 › 小麦网关 里填网关地址和同一串连接口令）。设备顶栏的工作台按钮：切显示器输入源、AI 用量、电脑上的提醒事项、主机状态、同步结果；家居页最上面是蓝牙灯；首页和仪表盘可加摘要；主动告警可加机柜。语音：「补光灯调到 4300K」「服务器都正常吗」「仓库同步怎么样」「显示器切到 Windows」「Claude 额度还剩多少」 |
 | 语音识别调优 | 服务器的 `data/.config.yaml` | X-ASR 精度版、整句识别（不按停顿分段）；对比方法和结果见 [scripts/asr-eval/](scripts/asr-eval/README.md) |
 
 ## 第三方
