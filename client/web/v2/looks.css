@@ -504,7 +504,7 @@ body.dash-on:not([data-dash="chat"]) .dash { display: grid; grid-template-rows: 
 body[data-theme="lavender"]:not(.sleeping) .dc-ic { background: linear-gradient(135deg, #8f7ff7, var(--accent-text)); }
 .dm { font-size: 15px; color: var(--ink3); line-height: 1.45; }
 .d-ok { color: var(--dok, #3ecf74) !important; }
-.d-warn { color: var(--warn-text, var(--warn)) !important; } .d-bad { color: var(--bad) !important; }
+.d-warn { color: var(--warn-text, var(--warn)) !important; }
 .dw-top { display: flex; align-items: flex-start; gap: 10px; }
 .dw-time { font-size: 60px; font-weight: 300; letter-spacing: -2px; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
 .dw-now { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; }
