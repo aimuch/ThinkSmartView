@@ -17,6 +17,11 @@ Input-idle screen blanker + ALS auto-brightness for CD-18781Y.
   "idle": seconds (optional) is the user's auto screen-off, used instead of IDLE_TIMEOUT for
   touch and conversations alike (the client sends the same value in "after"); 0 = never blank.
   Without it (older clients) IDLE_TIMEOUT and "after" work as before.
+- While the screen is dark the kiosk's page renderer (WebKitWebProcess) is stopped (SIGSTOP): it kept
+  animating at ~30% CPU behind a dark panel. Every way back (touch, voice, proximity, motion, anyone
+  else lighting the panel) continues it first (SIGCONT); so do startup (a blanker that died while it
+  was stopped) and exit. The page notices the gap and reloads its state. THINKSMART_FREEZE_WEB=0 turns
+  this off. (Idea from fubin0478/thinksmart-view, MIT.)
 
 Deploy to /usr/local/bin/idle-blanker.py
 Service: ~/.config/systemd/user/idle-blanker.service
@@ -51,6 +56,9 @@ ALS_PATH       = "/tmp/als_lux"
 ALS_INTERVAL   = 10.0      # seconds between ALS adjustments
 ALS_WAKE_COOL  = 30.0      # seconds after wake before ALS kicks in
 ALS_DEADBAND   = 150       # only adjust if target differs by this much
+FREEZE_WEB     = os.environ.get("THINKSMART_FREEZE_WEB", "1") != "0"
+WEB_COMM       = "WebKitWebProces"   # /proc/<pid>/comm keeps 15 characters
+kill           = os.kill             # tests replace it
 
 
 # stdout goes to the journal (persistent, size-capped); a log file of its own grew without bound
@@ -122,6 +130,35 @@ def read_hint(last_mtime):
         return mtime, None
 
 
+def web_pids():
+    """This user's page renderers (the kiosk's WebKitWebProcess)."""
+    pids, uid = [], os.getuid()
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            if Path(f"/proc/{d}/comm").read_text().strip() == WEB_COMM and os.stat(f"/proc/{d}").st_uid == uid:
+                pids.append(int(d))
+        except OSError:
+            pass
+    return pids
+
+
+def freeze_web(stop):
+    """Stop (screen dark) or continue the page renderers; continuing one that runs is harmless."""
+    if not FREEZE_WEB and stop:
+        return
+    done = 0
+    for pid in web_pids():
+        try:
+            kill(pid, signal.SIGSTOP if stop else signal.SIGCONT)
+            done += 1
+        except OSError:
+            pass
+    if done:
+        logger.info(f"Page renderer {'stopped' if stop else 'continued'} ({done} process{'es' if done > 1 else ''})")
+
+
 def open_input_devices():
     fds = []
     for path in glob.glob("/dev/input/event*"):
@@ -152,6 +189,7 @@ def run():
     logger.info(f"Idle blanker started — timeout={IDLE_TIMEOUT}s, ALS interval={ALS_INTERVAL}s")
     fds = open_input_devices()
     logger.info(f"Watching {len(fds)} input device(s)")
+    freeze_web(False)     # a blanker that died while the screen was dark left the page stopped
 
     last_input    = time.monotonic()
     last_als      = 0.0
@@ -168,6 +206,7 @@ def run():
 
     def handle_signal(sig, frame):
         logger.info("Signal — restoring brightness and exiting")
+        freeze_web(False)
         if blanked:
             set_brightness(target_brightness)
         sys.exit(0)
@@ -179,6 +218,7 @@ def run():
         nonlocal blanked, last_wake
         logger.info(f"{why} — restoring brightness")
         last_wake = time.monotonic()
+        freeze_web(False)      # first: the page draws while the backlight comes up
         set_brightness(awake_brightness())
         blanked = False
 
@@ -232,6 +272,7 @@ def run():
         # External restore (e.g. proximity daemon)
         if blanked and brightness is not None and brightness > BLANK_BRIGHTNESS:
             logger.info("Screen restored externally — resetting idle timer")
+            freeze_web(False)
             last_input = time.monotonic()
             last_wake  = time.monotonic()
             if dim or manual is not None:
@@ -269,6 +310,7 @@ def run():
                 if set_brightness(BLANK_BRIGHTNESS):
                     logger.info("Screen blanked")
                     blanked = True
+                    freeze_web(True)
 
 
 if __name__ == "__main__":

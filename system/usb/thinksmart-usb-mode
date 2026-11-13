@@ -1,0 +1,58 @@
+#!/bin/bash
+# The bottom Type-C port: "device" (the USB network to a computer: flashing, rescue; the default after
+# every boot) or "host" (read a USB drive). The client runs it with sudo -n from 设置 › 系统 › USB 接口.
+#   thinksmart-usb-mode status|host|device
+# status prints one JSON line: {"role": "device"|"host"|"none", "drives": [{"dev", "path", "label", "fs"}]}
+# (design board 46; idea from fubin0478/thinksmart-view, MIT)
+set -u
+ROLE=/sys/class/usb_role/7000000.usb-role-switch/role
+MEDIA=/media/thinksmart-usb
+
+wait_role() {
+    for _ in $(seq 40); do [ "$(cat "$ROLE" 2>/dev/null)" = "$1" ] && return 0; sleep 0.05; done
+    return 1
+}
+status() {
+    python3 - "$ROLE" "$MEDIA" <<'PY'
+import json, os, sys
+role_path, media = sys.argv[1:]
+try:
+    role = open(role_path).read().strip()
+except OSError:
+    role = 'none'
+drives = []
+mounts = {}
+for line in open('/proc/mounts'):
+    dev, path, fs = line.split()[:3]
+    mounts[path] = (dev, fs)
+if os.path.isdir(media):
+    for name in sorted(os.listdir(media)):
+        path = os.path.join(media, name)
+        if path in mounts:
+            dev, fs = mounts[path]
+            label = ''
+            byl = '/dev/disk/by-label'
+            if os.path.isdir(byl):
+                for l in os.listdir(byl):
+                    if os.path.realpath(os.path.join(byl, l)) == os.path.realpath(dev):
+                        label = l.replace('\\x20', ' ')
+            drives.append({'dev': os.path.basename(dev), 'path': path, 'label': label, 'fs': fs})
+print(json.dumps({'role': role, 'drives': drives}))
+PY
+}
+case "${1:-status}" in
+    status) status ;;
+    host)
+        [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
+        systemctl stop thinksmart-usb-net.service 2>/dev/null || true
+        modprobe -a usb-storage uas 2>/dev/null || true
+        echo host > "$ROLE" && wait_role host || { echo "the port did not switch to host" >&2; exit 1; }
+        status ;;
+    device)
+        [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
+        for m in "$MEDIA"/*; do [ -d "$m" ] && umount -l "$m" 2>/dev/null; done
+        echo device > "$ROLE" && wait_role device || { echo "the port did not switch to device" >&2; exit 1; }
+        systemctl start thinksmart-usb-net.service 2>/dev/null || true
+        status ;;
+    *) echo "usage: thinksmart-usb-mode status|host|device" >&2; exit 2 ;;
+esac

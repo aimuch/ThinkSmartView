@@ -1,0 +1,25 @@
+#!/bin/bash
+# Mount a USB drive's filesystem read-only under /media/thinksmart-usb/<kernel name> (add), or unmount it
+# (remove). Started by thinksmart-usb-mount@<name>.service from the udev rule; read-only: importing photos
+# never changes the drive, and pulling it out never corrupts it.
+set -u
+ACTION=${1:?add|remove}; NAME=${2:?kernel name}
+case "$NAME" in *[!a-zA-Z0-9]*) echo "bad name" >&2; exit 1 ;; esac
+DIR=/media/thinksmart-usb/$NAME
+if [ "$ACTION" = add ]; then
+    FS=$(blkid -o value -s TYPE "/dev/$NAME" 2>/dev/null)
+    mkdir -p "$DIR"
+    case "$FS" in
+        vfat|exfat|ntfs|ntfs3) OPTS="ro,nosuid,nodev,noexec,uid=1000,gid=1000,fmask=0133,dmask=0022" ;;
+        ext2|ext3|ext4|xfs|btrfs) OPTS="ro,nosuid,nodev,noexec" ;;
+        *) rmdir "$DIR" 2>/dev/null; echo "not mounting $NAME: filesystem '${FS:-unknown}'" >&2; exit 0 ;;
+    esac
+    [ "$FS" = ntfs ] && FS=ntfs3
+    mount -t "$FS" -o "$OPTS" "/dev/$NAME" "$DIR" || { rmdir "$DIR" 2>/dev/null; exit 1; }
+    echo "mounted /dev/$NAME ($FS) at $DIR read-only"
+else
+    umount -l "$DIR" 2>/dev/null
+    rmdir "$DIR" 2>/dev/null
+    echo "unmounted $DIR"
+fi
+exit 0

@@ -26,10 +26,15 @@ def blanker(tmp_path, monkeypatch):
     ib.BACKLIGHT_PATH, ib.HINT_PATH, ib.ALS_PATH = str(backlight), hint, str(tmp_path / 'als')
     ib.open_input_devices = lambda: [touch_r]
     ib.signal.signal = lambda *a: None
+    sent = []                                       # (pid, signal) to the page renderers
+    ib.web_pids = lambda: [4242]
+    ib.kill = lambda pid, sig: sent.append((pid, sig))
     threading.Thread(target=ib.run, daemon=True).start()   # left running: its files are this test's
 
     class Blanker:
         seq = 0
+        signals = sent
+        STOP, CONT = ib.signal.SIGSTOP, ib.signal.SIGCONT
 
         def hint(self, activity=True, **fields):
             Blanker.seq += activity
@@ -123,3 +128,33 @@ def test_sleep_hours_wait_for_a_longer_time(blanker):
     blanker.hint(hold=False, dim=True, idle=3, after=3)
     assert not blanker.blanked_within(2)
     assert blanker.blanked_within(2)
+
+
+# The page renderer is stopped while the panel is dark and continued on every way back.
+
+def test_page_stopped_while_dark_and_continued_on_wake(blanker):
+    assert blanker.signals[:1] == [(4242, blanker.CONT)]        # startup continues a left-over stop
+    blanker.hint(hold=False, idle=1, after=1)
+    assert blanker.blanked_within(2)
+    time.sleep(0.3)
+    assert blanker.signals[-1] == (4242, blanker.STOP)
+    blanker.touch()
+    assert blanker.signals[-1] == (4242, blanker.CONT)
+    assert blanker.level() > blanker.DIM
+
+
+def test_page_continued_when_something_else_lights_the_panel(blanker, tmp_path):
+    blanker.hint(hold=False, idle=1, after=1)
+    assert blanker.blanked_within(2)
+    time.sleep(0.3)
+    (tmp_path / 'backlight').write_text('3000\n')                # the proximity daemon lit it
+    time.sleep(0.5)
+    assert blanker.signals[-1] == (4242, blanker.CONT)
+
+
+def test_a_voice_wake_continues_the_page(blanker):
+    blanker.hint(hold=False, idle=1, after=1)
+    assert blanker.blanked_within(2)
+    time.sleep(0.3)
+    blanker.hint(hold=True)                                      # wake word: new seq
+    assert blanker.signals[-1] == (4242, blanker.CONT)

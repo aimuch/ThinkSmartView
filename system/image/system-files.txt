@@ -49,6 +49,9 @@ xiaozhi/thinksmart-mic              /usr/local/bin/thinksmart-mic               
 xiaozhi/thinksmart-mic.service      /home/ubuntu/.config/systemd/user/thinksmart-mic.service 644 ubuntu mic
 xiaozhi/asound.conf                 /etc/asound.conf                                644 root mic
 xiaozhi/10-thinksmart-rate.conf     /home/ubuntu/.config/pipewire/pipewire.conf.d/10-thinksmart-rate.conf 644 ubuntu pipewire
+xiaozhi/20-thinksmart-hifi.conf     /home/ubuntu/.config/pipewire/pipewire.conf.d/20-thinksmart-hifi.conf 644 ubuntu pipewire
+xiaozhi/20-thinksmart-hifi.conf     /home/ubuntu/.config/pipewire/client.conf.d/20-thinksmart-hifi.conf 644 ubuntu pipewire
+xiaozhi/20-thinksmart-hifi.conf     /home/ubuntu/.config/pipewire/pipewire-pulse.conf.d/20-thinksmart-hifi.conf 644 ubuntu pipewire
 xiaozhi/99-cd18781y-alsa.lua        /home/ubuntu/.config/wireplumber/main.lua.d/99-cd18781y-alsa.lua 644 ubuntu wireplumber
 xiaozhi/99-cd18781y-alsa.lua        /etc/wireplumber/main.lua.d/99-cd18781y-alsa.lua 644 root wireplumber
 
@@ -60,6 +63,10 @@ bluetooth/60-thinksmart-speaker.lua /etc/wireplumber/bluetooth.lua.d/60-thinksma
 usbnet/thinksmart-usb-net          /usr/local/sbin/thinksmart-usb-net              755 root system:thinksmart-usb-net.service
 usbnet/usb-udhcpd.conf              /etc/thinksmart/usb-udhcpd.conf                 644 root system:thinksmart-usb-net.service
 usbnet/thinksmart-usb-net.service   /etc/systemd/system/thinksmart-usb-net.service  644 root system:thinksmart-usb-net.service
+usb/thinksmart-usb-mode             /usr/local/sbin/thinksmart-usb-mode             755 root none
+usb/thinksmart-usb-mount            /usr/local/sbin/thinksmart-usb-mount            755 root none
+usb/thinksmart-usb-mount@.service   /etc/systemd/system/thinksmart-usb-mount@.service 644 root none
+usb/99-thinksmart-usb-storage.rules /etc/udev/rules.d/99-thinksmart-usb-storage.rules 644 root none
 zram/thinksmart-zram.service        /etc/systemd/system/thinksmart-zram.service     644 root boot
 zram/99-zram.conf                   /etc/sysctl.d/99-zram.conf                      644 root boot
 kiosk/timesyncd-cn.conf             /etc/systemd/timesyncd.conf.d/thinksmart.conf   644 root system:systemd-timesyncd.service

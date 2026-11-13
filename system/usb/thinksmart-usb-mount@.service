@@ -1,0 +1,10 @@
+[Unit]
+Description=Mount USB drive %i read-only for the screen (thinksmart-usb-mount)
+BindsTo=dev-%i.device
+After=dev-%i.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/thinksmart-usb-mount add %i
+ExecStop=/usr/local/sbin/thinksmart-usb-mount remove %i
