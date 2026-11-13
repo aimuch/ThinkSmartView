@@ -9,6 +9,14 @@
 # found); install unmasks it without enabling it, and on/off start and stop it with the switch.
 # (idea from fubin0478/thinksmart-view, MIT)
 set -u
+AVAHI_CONF=/etc/avahi/avahi-daemon.conf
+# the base image's avahi publishes nothing (disable-publishing=yes); AirPlay must publish its service
+allow_publishing() {
+    if grep -q '^disable-publishing=yes' "$AVAHI_CONF" 2>/dev/null; then
+        sed -i 's/^disable-publishing=yes/disable-publishing=no/' "$AVAHI_CONF"
+        systemctl try-restart avahi-daemon.service >/dev/null 2>&1 || true
+    fi
+}
 status() {
     v=$(dpkg-query -W -f='${Status} ${Version}' shairport-sync 2>/dev/null | awk '$3 == "installed" {print $4}')
     if [ -n "$v" ]; then echo "{\"installed\": true, \"version\": \"$v\"}"; else echo '{"installed": false, "version": ""}'; fi
@@ -25,10 +33,12 @@ case "${1:-}" in
             rm -rf /var/lib/apt/lists/*      # the image keeps no package lists (image/device-setup.sh)
         fi
         systemctl disable --now shairport-sync.service >/dev/null 2>&1 || true
+        allow_publishing
         systemctl unmask avahi-daemon.service avahi-daemon.socket >/dev/null 2>&1 || true
         systemctl disable avahi-daemon.service avahi-daemon.socket >/dev/null 2>&1 || true
         status ;;
     on)
+        allow_publishing
         systemctl unmask avahi-daemon.service avahi-daemon.socket >/dev/null 2>&1 || true
         systemctl start avahi-daemon.service || { echo '没开起 avahi-daemon' >&2; exit 1; }
         status ;;
