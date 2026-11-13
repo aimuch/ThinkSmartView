@@ -623,6 +623,29 @@ def make_app(client: Client):
     async def cook_timer(_request):
         return await wake_call(client.cook_timer)
 
+    async def usb_get(_request):
+        """USB 接口（设计画布第 46 块）：设置 › 系统 打开时每 3 秒问一次（U 盘插上要一两秒才挂好）。"""
+        return web.json_response(await client.usb.refresh())
+
+    async def usb_set(request):
+        """{"mode": "host"|"device"} 切换；{"import": "<挂载路径>"} 把 U 盘照片导进相册。"""
+        body = await request.json()
+        try:
+            if body.get('import'):
+                n = await client.usb.import_photos(str(body['import']))
+                return web.json_response({'ok': True, 'imported': n, 'usb': client.usb.view()})
+            return web.json_response({'ok': True, 'usb': await client.usb.set_mode(str(body.get('mode')))})
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e), 'usb': client.usb.view()})
+
+    async def gentle_set(request):
+        """温柔叫醒（设计画布第 46 块）：{"stop": true} 碰了屏幕；否则 enabled / minutes / birds。"""
+        body = await request.json()
+        if body.get('stop'):
+            return web.json_response({'ok': True, 'gentle': await client.gentle_stop()})
+        keys = ('enabled', 'minutes', 'birds')
+        return web.json_response({'ok': True, 'gentle': client.set_gentle(**{k: body[k] for k in keys if k in body})})
+
     async def standby_set(request):
         body = await request.json()
 
@@ -702,6 +725,9 @@ def make_app(client: Client):
     app.router.add_post('/api/cook/stop', cook_stop)
     app.router.add_post('/api/cook/timer', cook_timer)
     app.router.add_post('/api/standby', standby_set)
+    app.router.add_post('/api/gentle', gentle_set)
+    app.router.add_get('/api/usb', usb_get)
+    app.router.add_post('/api/usb', usb_set)
     app.router.add_post('/api/album/start', album_start)
     app.router.add_get('/api/album/{name}', album_file)
     app.router.add_post('/api/kids', kids_set)

@@ -50,7 +50,7 @@ import aiohttp
 import numpy as np
 
 from . import bg
-from . import alarms, broadcast, bt, camera, config, cook, perf, daily, kids, looks, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, camera, config, cook, perf, daily, gentle, kids, looks, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -217,6 +217,7 @@ class Client:
     kids = kids.DEFAULT                       # 儿童模式 (kids.py), likewise
     cooking = None                            # 做菜模式 (cook.py)
     media = None                              # 电台、助眠声 (media.py)
+    gentle = gentle.Gentle()                  # 温柔叫醒 (gentle.py), likewise
     notes = []                                # 留言 (daily.py)
     lists = None                              # 清单 (the hub keeps them: /kiosk/lists)
     alert = None                              # the red banner of a Mijia sensor alert
@@ -364,6 +365,8 @@ class Client:
             level = ALARM_VOLUME
         self.alarm_volume = max(0, min(100, int(level)))
         self.alarm_tone = cfg.get('alarm_tone') if cfg.get('alarm_tone') in alarms.TONES else alarms.DEFAULT_TONE
+        self.gentle = gentle.Gentle(cfg.get('gentle_wake'))   # 温柔叫醒（设计画布第 46 块）
+        self.usb = usb.Usb(ALBUM, ALBUM_MAX, on_change=self._usb_changed)   # USB 接口（设计画布第 46 块）
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
         self.mijia = MijiaService(self.events.publish)
         self.rotation = rotation.Rotation(cfg.get('rotation_auto'), self.events.publish, config.save)
@@ -1807,6 +1810,7 @@ class Client:
                 'broadcast': self.broadcast_view(), 'photo': self.photo_view(), 'slides': self.slides_view(),
                 'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),
                 'standby': self.standby_view(), 'cook': self.cook_view(), 'media': self.media_view(),
+                'gentle': self.gentle.view(time.time()),
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
                 'integrations': self.integrations,
@@ -2815,6 +2819,53 @@ class Client:
                                      'notes': ring['notes'], 'started': ring['started']},
                 'volume': self.alarm_volume, 'tone': self.alarm_tone, 'tones': alarms.TONES}
 
+    # ---- 温柔叫醒（gentle.py，设计画布第 46 块） ----
+
+    async def _gentle_tick(self, now):
+        step = self.gentle.tick(self.alarms.active(), now, ringing=bool(self.ring))
+        if not step:
+            return
+        what, level = step
+        if what == 'start':
+            a = self.gentle.active
+            log.info('gentle wake: alarm %s at %s, %d min ahead', a['id'], time.strftime('%H:%M', time.localtime(a['at'])),
+                     round((a['at'] - now) / 60))
+            self.screen.sunrise(0)
+            if self.gentle.settings['birds'] and self.media:
+                await self.media.gentle_birds(a['at'])
+        elif what == 'step':
+            self.screen.sunrise(level)
+        else:
+            await self._gentle_end()
+        self.events.publish('gentle', self.gentle.view(now))
+
+    async def _gentle_end(self, touched=False):
+        """叫醒结束：响铃接手、闹钟没了、或者用户碰了屏幕。屏幕回到用户的亮度（碰了就是活动，照常亮着）。"""
+        self.screen.sunrise(None)
+        if touched:
+            self.screen.poke()
+        if self.media and self.media.now and self.media.now.get('kind') == 'gentle':
+            await self.media.stop()
+
+    async def gentle_stop(self):
+        if self.gentle.stop():
+            log.info('gentle wake stopped by a touch')
+            await self._gentle_end(touched=True)
+            self.events.publish('gentle', self.gentle.view(time.time()))
+        return self.gentle.view(time.time())
+
+    def set_gentle(self, **changes):
+        self.gentle.settings = gentle.normalize({**self.gentle.settings, **changes})
+        config.save(gentle_wake=self.gentle.settings)
+        view = self.gentle.view(time.time())
+        self.events.publish('gentle', view)
+        return view
+
+    def _usb_changed(self, view):
+        self.events.publish('usb', view)
+        if not view.get('importing'):
+            self.events.publish('standby', self.standby_view())   # 导入完：相册变了
+
     def publish_alarms(self):
         self.events.publish('alarms', self.alarm_view())
 
@@ -2896,6 +2947,7 @@ class Client:
             self.publish_alarms()
         if not synced:
             return
+        await self._gentle_tick(now)
         if self.ring and self.ring['closing']:
             return   # the ring is ending: what is due now rings on its own once it has
         before = len(self.alarms.missed)

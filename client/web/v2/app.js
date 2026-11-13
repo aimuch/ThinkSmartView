@@ -863,7 +863,7 @@ $('sbAdd').addEventListener('click', () => DEMO === null && postJson('/api/album
 function standbyBusy() {
   const st = ui.status || {};
   // 设备详情、确认框不是 .sheet：也算在用，待机页不盖上来
-  return st.state !== 'idle' || document.querySelector('.sheet.on, .h-detail.on, .h-confirm.on') || ui.photo || (ui.cook && ui.cook.on) || !$('qrOv').hidden
+  return st.state !== 'idle' || (ui.gentle && ui.gentle.active) || document.querySelector('.sheet.on, .h-detail.on, .h-confirm.on') || ui.photo || (ui.cook && ui.cook.on) || !$('qrOv').hidden
     || (ui.alarms && ui.alarms.ringing) || ww.holding || bc.holding || (typeof slides !== 'undefined' && slides.show);
 }
 function showStandby(on) {
@@ -904,6 +904,38 @@ setInterval(() => {
   if (!st || !st.enabled || standbyBusy()) { sb.last = Math.max(sb.last, standbyBusy() ? Date.now() : 0); if (sb.shown) showStandby(false); return; }
   if (!sb.shown && Date.now() - sb.last > st.minutes * 60000) showStandby(true);
 }, 5000);
+
+/* ---- 温柔叫醒（gentle.py，设计画布第 46 块）：设置卡片、叫醒中的那一条；叫醒中碰屏幕就停 ---- */
+let gentleTimer = null;
+function renderGentle() {
+  const g = ui.gentle;
+  if (!g) return;
+  $('gentleSwitch').setAttribute('aria-checked', String(!!g.enabled));
+  $('gentleMore').classList.toggle('off', !g.enabled);
+  $('gentleBirds').setAttribute('aria-checked', String(!!g.birds));
+  $('gentleMinutes').innerHTML = (g.minutes_choices || [5, 10, 15, 30]).map(m =>
+    `<button data-gm="${m}" class="${m === g.minutes ? 'on' : ''}">${m} 分钟</button>`).join('');
+  const a = g.active;
+  $('gentleBar').hidden = $('gentleGlow').hidden = !a;
+  document.body.classList.toggle('gentle-on', !!a);
+  clearInterval(gentleTimer); gentleTimer = null;
+  if (a) {
+    const tick = () => {
+      const left = Math.max(0, Math.round((a.at * 1000 - Date.now()) / 60000));
+      $('gentleSub').textContent = `${hhmm(a.at)} ${a.label || '闹钟'} · ${left ? `还有 ${left} 分钟` : '马上响'}`;
+    };
+    tick(); gentleTimer = setInterval(tick, 15000);
+  }
+}
+async function setGentle(body) {
+  const r = await postJson('/api/gentle', body);
+  if (r.ok) { ui.gentle = r.gentle; renderGentle(); } else if (r.error) toast(r.error, 'error');
+}
+$('gentleSwitch').addEventListener('click', () => setGentle({ enabled: !(ui.gentle && ui.gentle.enabled) }));
+$('gentleBirds').addEventListener('click', () => setGentle({ birds: !(ui.gentle && ui.gentle.birds) }));
+$('gentleMinutes').addEventListener('click', e => { const b = e.target.closest('[data-gm]'); if (b) setGentle({ minutes: +b.dataset.gm }); });
+$('gentleStop').addEventListener('click', () => setGentle({ stop: true }));
+document.addEventListener('pointerdown', () => { if (ui.gentle && ui.gentle.active) setGentle({ stop: true }); }, true);
 
 /* ---- 儿童模式 (kids.py, 设计画布第 10 块) ---- */
 function renderKids() {
@@ -2270,7 +2302,38 @@ function perfMini() {
   const on = $('settings').classList.contains('on') && pane && pane.dataset.pane === 'system';
   if (on && !perfMiniTimer) { loadPerfMini(); perfMiniTimer = setInterval(loadPerfMini, 2000); }
   if (!on && perfMiniTimer) { clearInterval(perfMiniTimer); perfMiniTimer = null; }
+  if (on && !usbTimer) { loadUsb(); usbTimer = setInterval(loadUsb, 3000); }   // U 盘插上要一两秒才挂好
+  if (!on && usbTimer) { clearInterval(usbTimer); usbTimer = null; }
 }
+
+/* ---- USB 接口（usb.py，设计画布第 46 块） ---- */
+var usbTimer = null;   // var：演示模式在脚本前面就会调 setPane
+async function loadUsb() {
+  if (DEMO) return;
+  try { ui.usb = await (await fetch('/api/usb', { cache: 'no-store' })).json(); renderUsb(); } catch (e) { /* 下次再问 */ }
+}
+function renderUsb() {
+  const u = ui.usb;
+  $('usbCard').hidden = !u || !u.available;
+  if (!u || !u.available) return;
+  const host = u.role === 'host';
+  $('usbModes').querySelectorAll('[data-usb]').forEach(b => b.classList.toggle('on', b.dataset.usb === u.role));
+  $('usbSub').textContent = host ? (u.drives.length ? `${u.drives.length} 个 U 盘` : '等 U 盘插上') : '连电脑';
+  const imp = u.importing;
+  $('usbDrives').innerHTML = host ? u.drives.map(d => `<div class="al"><div class="al-text"><b>U 盘 · ${esc(d.label || d.dev)}</b>` +
+    `<span>${esc((d.fs || '').toUpperCase())}，只读 · ${d.images == null ? '正在数照片…' : d.images ? `找到 ${d.images} 张照片` : '没有 jpg、png 照片'}</span></div>` +
+    `<button class="upd-btn" data-usb-import="${esc(d.path)}" ${imp || !d.images ? 'disabled' : ''}>${imp ? `导入中 ${imp.done}/${imp.total}` : '导入相册'}</button></div>`).join('') : '';
+  $('usbNote').textContent = !host ? '' : u.drives.length ? '最多导入最新的 60 张，缩到长边 1600 像素；相册满 60 张时删最旧的。U 盘按只读挂载，不会改里面的东西。'
+    : '插上 U 盘就自动打开；Type-C 转 USB 的转接头要能供电。';
+}
+async function setUsb(body) {
+  const r = await postJson('/api/usb', body);
+  if (r.usb) { ui.usb = r.usb; renderUsb(); }
+  if (!r.ok) toast(r.error || '没做成', 'error');
+  else if (body.import) toast(`导入了 ${r.imported} 张照片，待机页的相册里能看到`);
+}
+$('usbModes').addEventListener('click', e => { const b = e.target.closest('[data-usb]'); if (b && !(ui.usb && ui.usb.role === b.dataset.usb)) setUsb({ mode: b.dataset.usb }); });
+$('usbDrives').addEventListener('click', e => { const b = e.target.closest('[data-usb-import]'); if (b) setUsb({ import: b.dataset.usbImport }); });
 async function loadPerfMini() {
   if (DEMO) return;
   let s;
@@ -2376,6 +2439,7 @@ const handlers = {
     if ('slides' in s) renderSlides(s.slides);   // the demo's snapshots have none
     if (s.kids) { ui.kids = s.kids; renderKids(); }
     if (s.standby) { ui.standby = s.standby; renderStandbyCard(); }
+    if (s.gentle) { ui.gentle = s.gentle; renderGentle(); }
     if (s.cook) { ui.cook = s.cook; renderCook(); }
     if (s.media) { ui.media = s.media; renderMedia(); }
     if (s.scenes) { ui.scenes = s.scenes; renderScenes(); }
@@ -2458,6 +2522,12 @@ const handlers = {
   standby(st) {
     ui.standby = st; renderStandbyCard();
   },
+  gentle(g) {
+    ui.gentle = g; renderGentle();
+  },
+  usb(u) {
+    ui.usb = u; renderUsb();
+  },
   cook(c) {
     ui.cook = c; renderCook();
   },
@@ -2516,7 +2586,14 @@ function connectEvents() {
     if (es === events && es.readyState === EventSource.CLOSED && !eventsRetry) eventsRetry = setTimeout(connectEvents, 3000);
   };
 }
-setInterval(() => { if (!DEMO && events && Date.now() - eventsSeen > 40000) connectEvents(); }, 10000);
+// 息屏时网页进程被暂停（idle-blanker 的 SIGSTOP）：醒来后这个计时器一下子跳过了很久，期间被丢掉的推送补不回来，
+// 重新连一次拿完整的快照
+let eventsTick = Date.now();
+setInterval(() => {
+  const now = Date.now(), resumed = now - eventsTick > 30000;
+  eventsTick = now;
+  if (!DEMO && events && (resumed || now - eventsSeen > 40000)) connectEvents();
+}, 10000);
 
 /* ---- buttons ---- */
 function post(path, body) {

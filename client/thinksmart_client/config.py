@@ -65,6 +65,7 @@ DEFAULTS = {
     'kids': {'enabled': False, 'age': 3, 'daily_minutes': 30, 'bedtime': '20:30', 'voice': 'child'},   # kids.py
     # 待机页 (设计画布第 10 块): after this long idle, a big clock, the weather and the family album
     'standby': {'enabled': True, 'minutes': 2, 'album': True},
+    'gentle_wake': {'enabled': False, 'minutes': 10, 'birds': True},   # 温柔叫醒 (gentle.py)
     'scenes': [],         # 场景口令 (daily.py): [{'name': '我出门了', 'steps': '…'}]
     'tasks': [],          # 定时任务: [{'id', 'time': 'HH:MM', 'days': 'daily'|'workdays'|'weekend'|'once', 'prompt'}]
     'alerts': {'leak': True, 'door_night': False, 'rack': False},   # 主动告警：米家传感器、机柜（接入网关的 rack_status）

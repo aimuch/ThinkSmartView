@@ -28,7 +28,7 @@ from thinksmart_client import app, config, daily, mcp, media  # noqa: E402
 def test_names_and_noise():
     assert media.find_station('东方广播') == 'dfgb' and media.find_station('中国之声') == 'zgzs'
     assert media.find_station('音乐台') is None
-    assert media.find_sound('雨声') == 'rain' and media.find_sound('下雨') == 'rain' and media.find_sound('鸟叫') is None
+    assert media.find_sound('雨声') == 'rain' and media.find_sound('下雨') == 'rain' and media.find_sound('狗叫') is None and media.find_sound('鸟叫') == 'birds'
     for kind in media.SOUNDS:
         g = media.Noise(kind, seed=1)
         x = np.concatenate([g.next(4800) for _ in range(5)])

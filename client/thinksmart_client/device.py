@@ -59,6 +59,7 @@ class Screen:
         self.level = 100             # the user's 0-100
         self.sleep_level = None      # the sleep hours' brightness (0-100) while dimmed; None: the blanker's own dim level
         self.idle = 300              # the user's screen-off in seconds, 0: never
+        self.dawn = None             # 温柔叫醒 (设计画布第 46 块): 0-100 while it brightens before an alarm, else None
         self._seq = time.time_ns()   # unique across client restarts
 
     def hold(self):
@@ -83,6 +84,14 @@ class Screen:
         if self.showing != on:
             self.showing = on
             self._write(activity=True)
+
+    def sunrise(self, level):
+        """温柔叫醒: keep the screen on at this 0-100 level (the sleep hours' dimming gives way), None when it
+        ends. Starting it lights the screen; the steps in between and the end are not activity."""
+        if level != self.dawn:
+            starting = self.dawn is None and level is not None
+            self.dawn = level
+            self._write(activity=starting)
 
     def poke(self):
         """Wake the screen now (a wake word, a report); it blanks after the user's screen-off."""
@@ -111,6 +120,8 @@ class Screen:
         if self.dimmed and self.sleep_level is not None:
             # the user's sleep brightness instead of the blanker's fixed dim level (设计画布第 29 块)
             hint['dim'], hint['brightness'] = False, self.sleep_level
+        if self.dawn is not None:
+            hint['hold'], hint['dim'], hint['brightness'] = True, False, self.dawn
         if not hint['hold'] and self.idle:
             hint['after'] = self.idle   # for a blanker older than "idle": the time after a conversation
         try:

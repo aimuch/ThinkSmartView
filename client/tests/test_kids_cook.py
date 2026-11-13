@@ -220,4 +220,4 @@ def test_media_card_lists_stations_before_anything_played(tmp_path, monkeypatch)
     c = make_client(tmp_path, monkeypatch)
     c.media = None
     v = c.media_view()
-    assert v['playing'] is None and len(v['stations']) == 6 and {s['id'] for s in v['sounds']} == {'rain', 'ocean', 'fan', 'white'}
+    assert v['playing'] is None and len(v['stations']) == 6 and {s['id'] for s in v['sounds']} == {'rain', 'ocean', 'fan', 'white', 'birds'}

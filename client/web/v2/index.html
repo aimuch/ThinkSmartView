@@ -331,6 +331,15 @@
       <div class="pf-mini"><div><small>CPU</small><b id="pmCpu">--</b></div><div><small>最热</small><b id="pmTemp">--</b></div><div><small>内存</small><b id="pmMem">--</b></div><div><small>最占资源</small><b id="pmTop">--</b></div></div>
       <p class="opt-note">也可以说「<span class="ww-name">小麦小麦</span>，设备温度多少」。</p>
     </div>
+    <!-- USB 接口（usb.py，设计画布第 46 块）：连电脑（USB 网络）还是接 U 盘；U 盘照片导进相册 -->
+    <div class="alarms-card" id="usbCard" hidden>
+      <div class="bright-head"><b>USB 接口</b><span class="bright-num" id="usbSub"></span></div>
+      <p class="opt-note">底部的 Type-C 口：平时连电脑（USB 网络，刷机、救砖用）；切到「接 U 盘」后能读 U 盘。重启后回到连电脑。</p>
+      <div class="minutes usb-modes" id="usbModes">
+        <button data-usb="device">连电脑</button><button data-usb="host">接 U 盘</button></div>
+      <div class="alarm-list" id="usbDrives"></div>
+      <p class="opt-note" id="usbNote"></p>
+    </div>
     <div class="upd" id="upd">
       <div class="opt">
         <div class="opt-text">
@@ -358,6 +367,22 @@
       <p class="opt-note">直接说：「<span class="ww-name">小麦小麦</span>，明早 7 点叫我」「倒计时 5 分钟」「10 分钟后提醒我晾衣服」「工作日早上 7 点半叫我」「我有哪些闹钟」「取消明早的闹钟」</p>
       <div class="bright-head"><b class="sub">铃声</b><span class="bright-num">点一下试听</span></div>
       <div class="minutes tones" id="tones"></div>
+    </div>
+    <!-- 温柔叫醒（gentle.py，设计画布第 46 块） -->
+    <div class="opt">
+      <div class="opt-text">
+        <b>温柔叫醒</b>
+        <span>闹钟响之前屏幕慢慢变亮、鸟叫声慢慢变大；碰一下屏幕就停。只对闹钟，提醒和倒计时不算</span>
+      </div>
+      <button class="switch" id="gentleSwitch" role="switch" aria-checked="false" aria-label="温柔叫醒"><i></i></button>
+    </div>
+    <div class="gentle-more" id="gentleMore">
+      <div class="bright-head"><b class="sub">提前</b></div>
+      <div class="minutes gentle-min" id="gentleMinutes"></div>
+      <div class="opt">
+        <div class="opt-text"><b>鸟叫声</b><span>和屏幕一起从无到有，闹钟响时停</span></div>
+        <button class="switch" id="gentleBirds" role="switch" aria-checked="true" aria-label="鸟叫声"><i></i></button>
+      </div>
     </div>
     <div class="opt">
       <div class="opt-text">
@@ -719,6 +744,13 @@
   </div>
 </div>
 <!-- 待机页 (设计画布第 10 块): a big clock over the family album; a touch or the wake word ends it -->
+<!-- 温柔叫醒中（设计画布第 46 块）：暖色的光和底部一条，碰一下屏幕或点「停下」就停 -->
+<div class="gentle-glow" id="gentleGlow" hidden></div>
+<div class="gentle-bar" id="gentleBar" hidden>
+  <span class="gw-dot"></span>
+  <span class="gw-text"><b>温柔叫醒中</b><small id="gentleSub"></small></span>
+  <button class="upd-btn" id="gentleStop">停下</button>
+</div>
 <div class="standby" id="standby" hidden>
   <img class="sb-photo" id="sbPhotoA" alt=""><img class="sb-photo" id="sbPhotoB" alt="">
   <div class="sb-shade"></div>

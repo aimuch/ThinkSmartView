@@ -26,7 +26,7 @@ STATIONS = {
     'jsjt': ('江苏交通广播', 'http://satellitepull.cnr.cn/live/wx32jsjtgb/playlist.m3u8'),
     'bjxw': ('北京新闻广播', 'http://satellitepull.cnr.cn/live/wxbjxwgb/playlist.m3u8'),
 }
-SOUNDS = {'rain': '雨声', 'ocean': '海浪', 'fan': '风扇', 'white': '白噪音'}
+SOUNDS = {'rain': '雨声', 'ocean': '海浪', 'fan': '风扇', 'white': '白噪音', 'birds': '鸟叫'}
 ALIASES = {'中国之声': 'zgzs', '经济之声': 'jjzs', '东方广播': 'dfgb', '上海东方广播': 'dfgb', '第一财经': 'dycj',
            '第一财经广播': 'dycj', '江苏交通': 'jsjt', '江苏交通广播': 'jsjt', '北京新闻': 'bjxw', '北京新闻广播': 'bjxw'}
 
@@ -50,7 +50,7 @@ def find_sound(name):
     for key, label in SOUNDS.items():
         if name and (name in label or label in name):
             return key
-    return {'下雨': 'rain', '大海': 'ocean', '电扇': 'fan', '白噪声': 'white'}.get(name)
+    return {'下雨': 'rain', '大海': 'ocean', '电扇': 'fan', '白噪声': 'white', '鸟鸣': 'birds', '鸟声': 'birds'}.get(name)
 
 
 LOOP = 2 ** 20       # samples (~22 s): noise made by FFT is periodic, so the buffer loops seamlessly
@@ -67,11 +67,28 @@ def _shaped(kind, rng):
         shape, rms = (1 / np.sqrt(f)) * (1 + (f / 800) ** 1.5) / (1 + (f / 6000) ** 2), 0.05
     elif kind == 'ocean':     # rumble: brown, rolled off above 1 kHz
         shape, rms = (1 / f) / (1 + (f / 1000) ** 2), 0.09
+    elif kind == 'birds':     # leaves in a light wind under the calls: soft pink, nothing below 300 Hz
+        shape, rms = (1 / np.sqrt(f)) / (1 + (f / 5000) ** 2) * (f > 300), 0.008
     else:                     # fan: brown-ish with a soft bump around 300 Hz
         shape, rms = (1 / np.sqrt(f)) / (1 + (f / 1500) ** 2) * (1 + 2 * np.exp(-((f - 300) / 150) ** 2)), 0.05
     shape[f < 20] = 0
     x = np.fft.irfft(spec * shape, LOOP)
     return (x / (np.sqrt(np.mean(x ** 2)) + 1e-9) * rms).astype(np.float32)
+
+
+def birdcall(rng):
+    """One call: 2 to 7 short notes swept up or down somewhere between 2.3 and 6 kHz, with a quick
+    vibrato and a soft envelope, short gaps between them (synthesised: no recordings)."""
+    base, parts = rng.uniform(2300, 5200), []
+    for _ in range(int(rng.integers(2, 8))):
+        m = int(RATE * rng.uniform(0.04, 0.15))
+        t = np.arange(m) / RATE
+        f0 = base * rng.uniform(0.9, 1.15)
+        f = np.linspace(f0, f0 * rng.uniform(0.7, 1.4), m) * (1 + 0.04 * np.sin(2 * np.pi * rng.uniform(25, 45) * t))
+        env = np.sin(np.pi * np.arange(m) / m) ** 2
+        parts += [np.sin(2 * np.pi * np.cumsum(f) / RATE) * env * rng.uniform(0.06, 0.14),
+                  np.zeros(int(RATE * rng.uniform(0.03, 0.12)))]
+    return np.concatenate(parts).astype(np.float32)
 
 
 class Noise:
@@ -84,6 +101,7 @@ class Noise:
         self.buf = _shaped(kind, self.rng)
         self.pos = 0
         self.t = 0.0
+        self.tail = np.zeros(0, np.float32)   # the part of a bird call that did not fit the last chunk
 
     def next(self, n):
         idx = (self.pos + np.arange(n)) % LOOP
@@ -93,6 +111,17 @@ class Noise:
         self.t += n / RATE
         if self.kind == 'ocean':
             x *= 0.3 + 0.7 * (0.5 + 0.5 * np.sin(2 * np.pi * t / 9.0)) ** 2
+        elif self.kind == 'birds':        # a call every 2.5 s on average, at a random place in the chunk
+            if self.rng.random() < n / (2.5 * RATE):
+                at = int(self.rng.integers(0, n))
+                call = birdcall(self.rng)
+                grown = np.zeros(max(len(self.tail), at + len(call)), np.float32)
+                grown[:len(self.tail)] = self.tail
+                grown[at:at + len(call)] += call
+                self.tail = grown
+            k = min(n, len(self.tail))
+            x[:k] += self.tail[:k]
+            self.tail = self.tail[k:]
         elif self.kind == 'rain':
             drops = np.flatnonzero(self.rng.random(n) < 0.0006)
             for d in drops[:8]:
@@ -158,6 +187,18 @@ class Player:
         self.on_change(self.view())
         return self.now
 
+    async def gentle_birds(self, ends):
+        """温柔叫醒（设计画布第 46 块）：鸟叫从无声慢慢起来（先慢后快），到 ends（闹钟响的时候）停。
+        别的声音（电台、助眠声）正在放就不打扰它。"""
+        if self.now and self.now.get('kind') != 'gentle':
+            return None
+        await self.stop(quiet=True)
+        span = max(1.0, ends - time.time())
+        self.now = {'kind': 'gentle', 'id': 'birds', 'name': '鸟叫（温柔叫醒）', 'ends': ends}
+        self.task = asyncio.create_task(self._sound('birds', ends, fade_in=span, peak=0.7, fade_out=2.0))
+        self.on_change(self.view())
+        return self.now
+
     async def _radio(self, key):
         url = STATIONS[key][1]
         failures = 0
@@ -190,7 +231,7 @@ class Player:
             self.now = None
             self.on_change(self.view())
 
-    async def _sound(self, key, ends):
+    async def _sound(self, key, ends, fade_in=2.0, peak=1.0, fade_out=FADE):
         gen = await asyncio.get_running_loop().run_in_executor(None, Noise, key)   # ~0.5 s of FFT on this board
         n = int(RATE * CHUNK)
         gen.t = 0.0
@@ -199,8 +240,9 @@ class Player:
             now = time.time()
             if ends and now >= ends:
                 break
-            gain = min(1.0, (ends - now) / FADE) if ends else 1.0
-            gain = min(gain, gen.t / 2)          # fade in over the first 2 s
+            gain = min(1.0, (ends - now) / fade_out) if ends else 1.0
+            ramp = min(1.0, gen.t / fade_in)
+            gain = min(gain, ramp if fade_in <= 2 else ramp * ramp) * peak   # long fade-ins: slow first
             mono = gen.next(n) * max(0.0, gain)
             self.background.push(np.repeat(mono[:, None], 2, axis=1))
             next_at += CHUNK
