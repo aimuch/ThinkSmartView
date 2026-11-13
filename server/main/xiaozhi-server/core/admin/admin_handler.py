@@ -182,6 +182,7 @@ class AdminHandler:
                 web.get("/kiosk/geocode", self.handle_kiosk_geocode),
                 web.post("/kiosk/home", self.handle_kiosk_home),
                 web.get("/kiosk/today", self.handle_kiosk_today),
+                web.get("/kiosk/weather", self.handle_kiosk_weather),
                 web.get("/kiosk/integrations", self.handle_kiosk_integrations),
                 web.post("/kiosk/smarthub", self.handle_kiosk_smarthub),
                 web.post("/kiosk/deskhub", self.handle_kiosk_deskhub),
@@ -1519,6 +1520,33 @@ class AdminHandler:
         except open_meteo.WeatherError as e:
             out["weather_error"] = str(e)
         return self._json(out)
+
+    async def handle_kiosk_weather(self, request: web.Request):
+        """[xiaozhi-hub] ?device=&city=：设备天气详情页（设计画布第 47 块）。city 为空是这台设备的住宅地址（同 /kiosk/today），
+        否则按地名查。20 分钟缓存；查不到时 ok:false 和原因。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.utils import device_homes, open_meteo
+
+        city = (request.query.get("city") or "").strip()[:40]
+        place, name = None, city
+        if not city:
+            place = device_homes.get(request.query.get("device") or "")
+            if not place:
+                merged = await self._blocking(self._merged)
+                name = str(((merged.get("plugins") or {}).get("get_weather") or {}).get("home_location") or "").strip()
+                if not name:
+                    return self._json({"ok": False, "error": "还没设住宅地址"})
+        key = ("detail", place["latitude"], place["longitude"]) if place else ("detail", name)
+        hit = self._today_cache.get(key)
+        if hit and time.time() - hit[0] < 1200:
+            return self._json({"ok": True, "weather": hit[1]})
+        try:
+            data = open_meteo.detail(*await open_meteo.fetch_detail(place, None if place else name))
+        except open_meteo.WeatherError as e:
+            return self._json({"ok": False, "error": str(e)})
+        self._today_cache[key] = (time.time(), data)
+        return self._json({"ok": True, "weather": data})
 
     # ---------- 接入家里别的服务（core/integrations，设计画布第 38、39 块） ----------
 

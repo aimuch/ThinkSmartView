@@ -254,3 +254,101 @@ def brief(place: dict, fc: dict, air: dict = None) -> dict:
     return {"place": place["name"], "temp": cur.get("temperature_2m"), "feels": cur.get("apparent_temperature"),
             "text": WMO.get(code, ""), "icon": ICONS.get(code, ""), "humidity": cur.get("relative_humidity_2m"),
             "pm25": pm, "air": pm25_level(pm) if pm is not None else None, "today": day(0), "tomorrow": day(1)}
+
+
+# ---------- [xiaozhi-hub] 设备的天气详情页（设计画布第 47 块）：24 小时、7 天、6 项空气质量、日出日落 ----------
+
+AIR_ITEMS = (("pm2_5", "PM2.5", (35, 75, 115, 150, 250)), ("pm10", "PM10", (50, 150, 250, 350, 420)),
+             ("ozone", "臭氧", (100, 160, 215, 265, 800)), ("nitrogen_dioxide", "二氧化氮", (40, 80, 180, 280, 565)),
+             ("sulphur_dioxide", "二氧化硫", (50, 150, 475, 800, 1600)), ("carbon_monoxide", "一氧化碳", (2, 4, 14, 24, 36)))
+AIR_LEVELS = ("优", "良", "轻度污染", "中度污染", "重度污染", "严重污染")
+
+
+def air_level(value, tops) -> str:
+    """按国标各项污染物的分档（µg/m³，一氧化碳 mg/m³）；当前值不是标准里的平均值，仅供参考。"""
+    for top, name in zip(tops, AIR_LEVELS):
+        if value <= top:
+            return name
+    return AIR_LEVELS[-1]
+
+
+async def fetch_detail(place: dict = None, location: str = None):
+    """(地方, 预报, 空气质量)：比 fetch 多 48 小时的逐时预报、日出日落、6 项空气质量。"""
+    try:
+        async with _client() as client:
+            if place is None:
+                place = await geocode(client, location)
+            loc = {"latitude": place["latitude"], "longitude": place["longitude"], "timezone": "auto"}
+            forecast_req = client.get(FORECAST_URL, params={
+                **loc, "forecast_days": 7,
+                "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,"
+                           "wind_speed_10m,wind_direction_10m,precipitation,is_day",
+                "hourly": "temperature_2m,precipitation_probability,weather_code",
+                "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,"
+                         "uv_index_max,sunrise,sunset",
+            })
+            air_req = client.get(AIR_URL, params={**loc, "current": ",".join(k for k, _, _ in AIR_ITEMS)})
+            resp, air_resp = await asyncio.gather(forecast_req, air_req, return_exceptions=True)
+            if isinstance(resp, Exception):
+                raise resp
+            resp.raise_for_status()
+            forecast = resp.json()
+            air = air_resp.json() if not isinstance(air_resp, Exception) and air_resp.status_code == 200 else None
+    except httpx.HTTPError as e:
+        raise WeatherError(f"天气服务连不上（{type(e).__name__}）")
+    return place, forecast, air
+
+
+def detail(place: dict, fc: dict, air: dict = None) -> dict:
+    """详情页的数据：当前、接下来 24 小时（每小时）、7 天、空气质量、日出日落、紫外线。"""
+    cur = fc.get("current") or {}
+    daily = fc.get("daily") or {}
+    hourly = fc.get("hourly") or {}
+    try:
+        now = datetime.datetime.fromisoformat(str(cur.get("time", ""))[:13] + ":00")
+    except ValueError:
+        now = datetime.datetime.now().replace(minute=0, second=0, microsecond=0)
+    hours = []
+    for i, t in enumerate(hourly.get("time") or []):
+        try:
+            at = datetime.datetime.fromisoformat(t)
+        except ValueError:
+            continue
+        if at < now:
+            continue
+        code = (hourly.get("weather_code") or [None] * (i + 1))[i]
+        hours.append({"hour": at.hour, "temp": (hourly.get("temperature_2m") or [None] * (i + 1))[i],
+                      "rain": (hourly.get("precipitation_probability") or [None] * (i + 1))[i], "icon": ICONS.get(code, "")})
+        if len(hours) == 24:
+            break
+    try:
+        today = datetime.date.fromisoformat(str(cur.get("time", ""))[:10])
+    except ValueError:
+        today = datetime.date.today()
+    days = []
+    for i, iso in enumerate(daily.get("time") or []):
+        at = lambda k: ((daily.get(k) or []) + [None] * (i + 1))[i]
+        d = datetime.date.fromisoformat(iso)
+        label = {0: "今天", 1: "明天"}.get((d - today).days) or f"周{WEEKDAYS[d.weekday()]}"
+        code = at("weather_code")
+        days.append({"label": label, "date": f"{d.month}/{d.day}", "icon": ICONS.get(code, ""), "text": WMO.get(code, ""),
+                     "min": at("temperature_2m_min"), "max": at("temperature_2m_max"),
+                     "rain": at("precipitation_probability_max")})
+    first = lambda k: ((daily.get(k) or [None]) + [None])[0]
+    hm = lambda s: str(s)[11:16] if s else None
+    a = (air or {}).get("current") or {}
+    items = []
+    for key, name, tops in AIR_ITEMS:
+        v = a.get(key)
+        if v is None:
+            continue
+        if key == "carbon_monoxide":
+            v = v / 1000   # µg/m³ -> mg/m³
+        items.append({"key": key, "name": name, "value": round(v, 1 if key == "carbon_monoxide" else 0),
+                      "level": air_level(v, tops)})
+    code = cur.get("weather_code")
+    return {"place": place["name"], "temp": cur.get("temperature_2m"), "feels": cur.get("apparent_temperature"),
+            "text": WMO.get(code, ""), "icon": ICONS.get(code, ""), "humidity": cur.get("relative_humidity_2m"),
+            "wind": f"{wind_dir(cur.get('wind_direction_10m'))} {wind_level(cur.get('wind_speed_10m'))} 级".strip(),
+            "sunrise": hm(first("sunrise")), "sunset": hm(first("sunset")), "uv": first("uv_index_max"),
+            "hours": hours, "days": days, "air": items}
