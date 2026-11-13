@@ -229,6 +229,15 @@
 
   /* 音色 */
   .voice-group + .voice-group { margin-top: 18px; }
+  .clone-card { margin-top: 18px; }
+  .clone-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; } .clone-head h3 { margin: 0; font-size: 16px; }
+  .clone-row { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .clone-row small { display: block; margin-top: 2px; }
+  .clone-av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #1d1d3a;
+    background: linear-gradient(135deg, #ffb3d9, #9fb2ff); }
+  .clone-acts { display: flex; gap: 8px; align-items: center; } .clone-apply { width: auto; min-width: 120px; }
+  .clone-add { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; padding: 14px; border: 1.5px dashed var(--line); border-radius: 12px; }
+  .clone-add .f { flex: 1; min-width: 180px; } .clone-mic { font-size: 26px; align-self: center; }
   .voice-group h3 { font-size: 13px; color: var(--muted); margin: 0 0 8px; font-weight: 500; }
   .voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
   .voice { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
@@ -2179,6 +2188,59 @@ async function renderTTS(root) {
       page.dirty = null; await openPage("tts", true);
     } catch (err) { toast(err.message, true); }
   });
+  renderClones(root);
+}
+
+// 声音复刻（设计画布第 50 块）：家里人的声音交给阿里云百炼复刻，设备在「回答的声音」里选；这里也能直接给设备用
+const CLONE_STATUS = { OK: ["ok", "可以用了"], DEPLOYING: ["warn", "正在复刻…"], UNDEPLOYED: ["err", "没通过审核"] };
+async function renderClones(root) {
+  const card = document.createElement("div");
+  card.className = "card panel clone-card";
+  root.appendChild(card);
+  let d;
+  try { d = await api("voice-clones"); } catch (err) { card.innerHTML = `<p class="muted">${esc(err.message)}</p>`; return; }
+  const when = (t) => t ? new Date(t * 1000).toLocaleDateString("zh-CN", { month: "long", day: "numeric" }) : "";
+  card.innerHTML = `
+    <div class="clone-head"><h3>声音复刻</h3><span class="muted small">阿里云百炼 CosyVoice · 用「千问 TTS」那里填的百炼 API Key · 创建免费，合成按字数计费</span></div>
+    ${d.ready ? "" : `<div class="banner warn">${esc(d.reason)}</div>`}
+    ${(d.clones || []).map((c) => { const [k, t] = CLONE_STATUS[c.status] || ["warn", c.status]; return `
+      <div class="clone-row" data-vid="${esc(c.voice_id)}"><span class="clone-av">${esc(c.name.slice(0, 1))}</span>
+        <div><b>${esc(c.name)}</b> <span class="pill ${k}">${t}</span>
+          <small class="muted">${esc([when(c.created), c.source && (c.source === "上传" ? "上传的录音" : `在${c.source}上录的`), c.seconds && c.seconds + " 秒",
+            c.devices.length ? "在用：" + c.devices.join("、") : ""].filter(Boolean).join(" · "))}${c.status === "UNDEPLOYED" ? " · 录音太吵或太短，重新录一段 10–20 秒的" : ""}</small></div>
+        <div class="clone-acts">${c.status === "OK" ? `<button class="btn" data-ctest="${esc(c.voice_id)}">▶ 试听</button>
+          <select class="in clone-apply" data-capply="${esc(c.voice_id)}"><option value="">给设备用…</option>${(d.device_list || []).map((x) => `<option value="${esc(x.id)}">${esc(x.name || x.id)}</option>`).join("")}<option value="*">所有设备</option></select>` : ""}
+          <button class="btn danger" data-cdel="${esc(c.voice_id)}">删除</button></div></div>`; }).join("") || '<p class="muted small">还没有复刻的声音。</p>'}
+    <div class="clone-add"><span class="clone-mic">🎙</span>
+      <label class="f">名字<input class="in" id="clone-name" maxlength="12" placeholder="妈妈"></label>
+      <label class="f">录音文件<span class="hint">10–20 秒，wav / mp3 / m4a，手机录音机录的就行；安静、只有一个人说话</span><input class="in" id="clone-file" type="file" accept="audio/*,.m4a,.wav,.mp3"></label>
+      <button class="btn primary" id="clone-go" ${d.ready ? "" : "disabled"}>上传并复刻</button></div>
+    <p class="muted small" style="margin:10px 0 0">也可以在设备上录：设备的设置 → 语音 → 回答的声音 →「＋ 复刻我的声音」。录音只发给百炼做复刻，网关不留；复刻出的声音在你的百炼账号里。</p>`;
+  card.querySelector("#clone-go").onclick = (ev) => busy(ev.currentTarget, async () => {
+    const f = card.querySelector("#clone-file").files[0], name = card.querySelector("#clone-name").value.trim();
+    if (!name || !f) return toast("填名字、选一段录音", true);
+    const form = new FormData(); form.append("name", name); form.append("audio", f, f.name);
+    const res = await fetch("/admin/api/voice-clones", { method: "POST", body: form });
+    const r = await res.json().catch(() => ({}));
+    if (!res.ok || r.ok === false) return toast(r.error || "没复刻成", true);
+    toast(`「${r.clone.name}」交给百炼了，一般 1 分钟内复刻好`); openPage("tts", true);
+  });
+  card.querySelectorAll("[data-cdel]").forEach((b) => (b.onclick = () => busy(b, async () => {
+    if (!confirm("删掉这个声音？用着它的设备会回到跟着网关的声音。")) return;
+    try { await api("voice-clones/delete", { voice_id: b.dataset.cdel }); openPage("tts", true); } catch (err) { toast(err.message, true); }
+  })));
+  card.querySelectorAll("[data-ctest]").forEach((b) => (b.onclick = () => busy(b, async () => {
+    const res = await fetch("/admin/api/voice-clones/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voice_id: b.dataset.ctest }) });
+    if (!res.ok) { const r = await res.json().catch(() => ({})); return toast(r.error || "试听失败", true); }
+    const a = new Audio(URL.createObjectURL(await res.blob())); a.play();
+  })));
+  card.querySelectorAll("[data-capply]").forEach((s) => (s.onchange = async () => {
+    if (!s.value) return;
+    const devices = s.value === "*" ? (d.device_list || []).map((x) => x.id) : [s.value];
+    try { await api("voice-clones/apply", { voice_id: s.dataset.capply, devices }); toast("设好了，设备下一次说话起换成这个声音"); openPage("tts", true); }
+    catch (err) { toast(err.message, true); s.value = ""; }
+  }));
+  if ((d.clones || []).some((c) => c.status === "DEPLOYING")) setTimeout(() => { if (card.isConnected) { card.remove(); renderClones(root); } }, 10000);
 }
 
 // ---------- 意图识别 ----------

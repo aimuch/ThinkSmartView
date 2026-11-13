@@ -130,7 +130,15 @@ def put(device: str, values: dict, merged: dict) -> dict:
             cur["model"] = m
         if "tts" in v:
             t = v.get("tts")
-            if t is not None:
+            if t is not None and str(t.get("entry") or "") == "CloneTTS":   # 复刻的声音（设计画布第 50 块）
+                from core.agent import voice_clone
+                v = voice_clone.find(str(t.get("voice") or ""))
+                if not v:
+                    raise ValueError("没有这个复刻的声音")
+                if v["status"] != "OK":
+                    raise ValueError("这个声音还没复刻好")
+                t = {"entry": voice_clone.ENTRY, "voice": v["voice_id"]}
+            elif t is not None:
                 entry, voice = str(t.get("entry") or ""), str(t.get("voice") or "").strip()
                 engine = next((e for e in catalog.TTS_ENGINES if e["entry"] == entry), None)
                 conf = (merged.get("TTS") or {}).get(entry)
@@ -201,7 +209,14 @@ def apply(conn) -> list:
         cfg["prompt"] = s["prompt"]
         done.append("人设")
     t = s.get("tts")
-    if t and isinstance((cfg.get("TTS") or {}).get(t["entry"]), dict):
+    if t and t.get("entry") == "CloneTTS":
+        from core.agent import voice_clone
+        conf = voice_clone.provider_conf(cfg, t["voice"])
+        if conf:
+            cfg.setdefault("TTS", {})["CloneTTS"] = conf
+            cfg.setdefault("selected_module", {})["TTS"] = "CloneTTS"
+            done.append("复刻的声音")
+    elif t and isinstance((cfg.get("TTS") or {}).get(t["entry"]), dict):
         cfg.setdefault("selected_module", {})["TTS"] = t["entry"]
         cfg["TTS"][t["entry"]] = {**cfg["TTS"][t["entry"]], "voice": t["voice"]}
         done.append(f"音色 {t['voice']}")

@@ -214,6 +214,13 @@ class AdminHandler:
                 web.get("/photo/{token}/status", self.handle_photo_status),
                 web.post("/photo/{token}", self.handle_photo_upload),
                 web.get("/admin/api/vision", self.handle_vision),
+                # 声音复刻（core/agent/voice_clone.py，设计画布第 50 块）
+                web.get("/admin/api/voice-clones", self.handle_clones),
+                web.post("/admin/api/voice-clones", self.handle_clone_create),
+                web.post("/admin/api/voice-clones/delete", self.handle_clone_delete),
+                web.post("/admin/api/voice-clones/test", self.handle_clone_test),
+                web.post("/admin/api/voice-clones/apply", self.handle_clone_apply),
+                web.post("/kiosk/voice/clone", self.handle_kiosk_voice_clone),
                 web.post("/admin/api/vision", self.handle_vision_save),
                 web.post("/admin/api/vision/test", self.handle_vision_test),
                 web.post("/admin/api/models/list", self.handle_models_list),
@@ -1280,12 +1287,19 @@ class AdminHandler:
         entry = (merged.get("selected_module") or {}).get("TTS") or ""
         engine = next((e for e in catalog.TTS_ENGINES if e["entry"] == entry), None)
         conf = (merged.get("TTS") or {}).get(entry) or {}
+        from core.agent import voice_clone
+
         own = device_settings.get(request.query.get("device") or "").get("tts") or {}
+        current = own.get("voice") if own.get("entry") == entry else None
+        if own.get("entry") == voice_clone.ENTRY:
+            current = voice_clone.PREFIX_VALUE + own.get("voice", "")
+        clones = await voice_clone.refresh(merged)
         return self._json({"ok": True, "engine": entry, "label": engine["label"] if engine else entry,
                            "voices": [{"value": v["value"], "name": v["name"], "style": v.get("style", "")}
                                       for v in (engine or {}).get("voices") or []],
-                           "default": conf.get("voice") or "",
-                           "current": own.get("voice") if own.get("entry") == entry else None})
+                           "default": conf.get("voice") or "", "current": current,
+                           # 复刻的声音（设计画布第 50 块）：value 是 clone:<voice_id>
+                           "clones": clones, "clone": voice_clone.ready(merged)})
 
     async def handle_kiosk_voice_set(self, request: web.Request):
         """{"device", "voice"}：这台设备回答用这个音色（下一次连接生效）；voice 为 null 时跟着网关。"""
@@ -1293,13 +1307,134 @@ class AdminHandler:
             return self._error("仅限本机", 403)
         from core.utils import device_settings
 
+        from core.agent import voice_clone
+
         body = await self._read_json(request)
         device, voice = str(body.get("device") or ""), body.get("voice")
         merged = await self._blocking(self._merged)
         entry = (merged.get("selected_module") or {}).get("TTS") or ""
+        if isinstance(voice, str) and voice.startswith(voice_clone.PREFIX_VALUE):     # 复刻的声音
+            entry, voice = voice_clone.ENTRY, voice[len(voice_clone.PREFIX_VALUE):]
         try:
             await self._blocking(device_settings.put, device,
                                  {"tts": None if voice is None else {"entry": entry, "voice": str(voice)}}, merged)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        return self._json({"ok": True})
+
+    # ---------- 声音复刻（core/agent/voice_clone.py，设计画布第 50 块） ----------
+
+    async def handle_kiosk_voice_clone(self, request: web.Request):
+        """[xiaozhi-hub] ?device=&name=，请求体是设备录的 WAV：交给百炼复刻。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.agent import voice_clone
+
+        audio = await request.read()
+        device = request.query.get("device") or ""
+        merged = await self._blocking(self._merged)
+        source = (await self._blocking(self._device_names)).get(device, "") or "设备"
+        try:
+            v = await voice_clone.create(merged, request.query.get("name") or "", audio, "device.wav", source)
+        except ValueError as e:
+            return self._json({"ok": False, "error": str(e)})
+        self.logger.bind(tag=TAG).info(f"设备 {device} 复刻了声音「{v['name']}」：{v['voice_id']}")
+        return self._json({"ok": True, "clone": v})
+
+    async def handle_clones(self, request: web.Request):
+        self._require_login(request)
+        from core.agent import voice_clone
+
+        merged = await self._blocking(self._merged)
+        names = await self._blocking(self._device_names)
+        from core.utils import device_settings
+        using = {}
+        for dev, s in device_settings.all_devices().items():
+            t = s.get("tts") or {}
+            if t.get("entry") == voice_clone.ENTRY:
+                using.setdefault(t.get("voice"), []).append(names.get(dev) or dev)
+        clones = [{**c, "devices": using.get(c["voice_id"], [])} for c in await voice_clone.refresh(merged)]
+        return self._json({"ok": True, "clones": clones, **voice_clone.ready(merged),
+                           "device_list": [{"id": d, "name": n} for d, n in names.items()]})
+
+    async def handle_clone_create(self, request: web.Request):
+        """multipart：name、audio（10–20 秒的 wav / mp3 / m4a）。"""
+        self._require_login(request)
+        from core.agent import voice_clone
+
+        name, audio, filename = "", b"", ""
+        try:
+            reader = await request.multipart()
+            while True:
+                part = await reader.next()
+                if part is None:
+                    break
+                if part.name == "name":
+                    name = (await part.text())[:40]
+                elif part.name == "audio":
+                    filename = part.filename or ""
+                    while True:
+                        chunk = await part.read_chunk(65536)
+                        if not chunk:
+                            break
+                        audio += chunk
+                        if len(audio) > 10 * 1024 * 1024:
+                            return self._error("录音太大了（最多 10 MB）", 400)
+        except Exception:
+            return self._error("上传的格式不对", 400)
+        merged = await self._blocking(self._merged)
+        try:
+            v = await voice_clone.create(merged, name, audio, filename, "上传")
+        except ValueError as e:
+            return self._error(str(e), 400)
+        self.logger.bind(tag=TAG).info(f"管理后台复刻了声音「{v['name']}」：{v['voice_id']}")
+        return self._json({"ok": True, "clone": v})
+
+    async def handle_clone_delete(self, request: web.Request):
+        self._require_login(request)
+        from core.agent import voice_clone
+        from core.utils import device_settings
+
+        body = await self._read_json(request)
+        vid = str(body.get("voice_id") or "")
+        merged = await self._blocking(self._merged)
+        try:
+            await voice_clone.delete(merged, vid)
+        except LookupError as e:
+            return self._error(str(e), 404)
+        for dev, s in device_settings.all_devices().items():      # 用着它的设备回到跟着网关
+            if (s.get("tts") or {}).get("voice") == vid:
+                await self._blocking(device_settings.put, dev, {"tts": None}, merged)
+        return self._json({"ok": True})
+
+    async def handle_clone_test(self, request: web.Request):
+        """{"voice_id", "text"?}：用这个声音说一句，返回 WAV（后台「试听」）。"""
+        self._require_login(request)
+        from core.agent import voice_clone
+
+        body = await self._read_json(request)
+        text = str(body.get("text") or "你好，我是小麦。今天想聊点什么？")[:100]
+        merged = await self._blocking(self._merged)
+        try:
+            wav = await voice_clone.speak(merged, str(body.get("voice_id") or ""), text)
+        except LookupError as e:
+            return self._error(str(e), 404)
+        except ValueError as e:
+            return self._error(str(e), 400)
+        return web.Response(body=wav, content_type="audio/wav")
+
+    async def handle_clone_apply(self, request: web.Request):
+        """{"voice_id", "devices": [设备 ID]}：这些设备用这个声音（下一次连接生效）。"""
+        self._require_login(request)
+        from core.agent import voice_clone
+        from core.utils import device_settings
+
+        body = await self._read_json(request)
+        vid = str(body.get("voice_id") or "")
+        merged = await self._blocking(self._merged)
+        try:
+            for dev in [str(d) for d in body.get("devices") or []][:50]:
+                await self._blocking(device_settings.put, dev, {"tts": {"entry": voice_clone.ENTRY, "voice": vid}}, merged)
         except ValueError as e:
             return self._error(str(e), 400)
         return self._json({"ok": True})
