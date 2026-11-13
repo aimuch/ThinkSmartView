@@ -48,6 +48,11 @@
           <path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg>
         <span id="btChipText"></span>
       </div>
+      <button class="ap-chip" id="apChip" aria-label="AirPlay 正在放">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 17H4.5A1.5 1.5 0 0 1 3 15.5v-10A1.5 1.5 0 0 1 4.5 4h15A1.5 1.5 0 0 1 21 5.5v10a1.5 1.5 0 0 1-1.5 1.5H18"/><path d="M12 14l5 6H7z"/></svg>
+        <span id="apChipText"></span>
+      </button>
       <div class="timer-chip" id="timerChip">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.5 1.5M9.5 3h5"/></svg>
@@ -318,6 +323,21 @@
       <p class="opt-note" id="btNote"></p>
       <div class="alarm-list" id="btList"></div>
       <button class="bt-add" id="btAdd">＋ 添加手机</button>
+    </div>
+    <div class="alarms-card ap-card" id="apCard" hidden>
+      <div class="bright-head"><b>AirPlay 隔空播放</b><span class="bright-num" id="apSub"></span>
+        <button class="switch" id="apSwitch" role="switch" aria-checked="false" aria-label="AirPlay"><i></i></button></div>
+      <p class="opt-note" id="apNote"></p>
+      <div class="ap-prog" id="apProg" hidden><i></i></div>
+      <div class="ap-now" id="apNow" hidden>
+        <span class="ap-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+        <div><b id="apTitle"></b><span id="apClient"></span></div></div>
+      <div class="ap-name" id="apNameRow" hidden>
+        <span>名字</span>
+        <input id="apName" type="text" enterkeyhint="done" data-kb-enter="改名" autocomplete="off" spellcheck="false" maxlength="30">
+        <button class="upd-btn" id="apNameSave">改名</button>
+      </div>
+      <button class="upd-btn pri" id="apInstall" hidden>安装</button>
     </div>
     <div class="opt">
       <div class="opt-text">

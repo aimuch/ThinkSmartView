@@ -899,3 +899,30 @@ body.focusing.studying .link span { display: none; }   /* 专注、陪伴都开�
 body.focusing.studying .link { padding: 0 14px; }
 body.focusing.studying.dash-on .link { display: none; }
 @media (orientation: portrait) { body.focusing.studying.dash-on #btnPhoto { display: none; } }   /* 竖屏还挤：摄像头正被陪伴用着，先收起「拍照问」 */
+
+/* ---- AirPlay 隔空播放（设计画布第 49 块，wf.js） ---- */
+.ap-chip { display: none; align-items: center; gap: 8px; height: 40px; max-width: 380px; padding: 0 16px; border-radius: 999px; font-size: 16px;
+  color: var(--ink); background: #5ee0ff1f; border: 1px solid #5ee0ff66; }
+.ap-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-playing .ap-chip { display: flex; }
+#apCard[hidden], .ap-card [hidden] { display: none; }
+.ap-card.off .opt-note { opacity: .8; }
+.ap-prog { height: 10px; border-radius: 5px; background: var(--card2); overflow: hidden; }
+.ap-prog i { display: block; height: 100%; width: 40%; border-radius: 5px; background: linear-gradient(90deg, var(--accent2), var(--accent));
+  animation: ap-prog 1.4s ease-in-out infinite; }
+@keyframes ap-prog { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+.ap-now { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 18px; background: #5ee0ff14; border: 1px solid #5ee0ff44; }
+.ap-ic { flex: none; width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; color: #081024;
+  background: linear-gradient(135deg, #8ff0ff, #8fa6ff); }
+.ap-now b { display: block; font-size: 21px; } .ap-now span { font-size: 16px; color: var(--ink3); }
+.ap-name { display: flex; align-items: center; gap: 12px; }
+.ap-name > span { flex: none; font-size: 18px; color: var(--ink3); }
+.ap-name input { flex: 1; min-width: 0; height: 56px; padding: 0 16px; border-radius: 16px; font: inherit; font-size: 19px; color: var(--ink);
+  background: var(--card2); border: 1px solid var(--line); outline: none; }
+.ap-name input:focus { border-color: var(--accent); }
+.ap-name .upd-btn { min-width: 0; height: 56px; padding: 0 22px; }
+#apInstall { align-self: flex-start; }
+@media (orientation: portrait) { .ap-chip { max-width: 240px; } }
+body.dash-on .ap-chip span, body.dash-on .bt-chip span { display: none; }   /* 仪表盘顶栏挤：只留图标，点开看歌名 */
+body.dash-on .ap-chip, body.dash-on .bt-chip { padding: 0 11px; }
+@media (orientation: portrait) { body.ap-playing.dash-on .link, body.bt-playing.dash-on .link { display: none; } }

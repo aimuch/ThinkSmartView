@@ -223,6 +223,7 @@ class Audio:
         self.on_block = on_block          # called on the worker thread: on_block(block, wake_block), 20 ms
         self.player = Player()
         self.background = Background()
+        self.airplay = Background()       # AirPlay (airplay.py): its own queue, so a phone on Bluetooth can't interleave with it
         self.aec = Aec(MIC_RATE, OUT_RATE)
         self.mic_level = 0.0
         # Echo cancellation costs ~21% of a core, so it runs only during a conversation
@@ -259,9 +260,10 @@ class Audio:
         if status and len(self.player.late) < 100:
             self.player.late.append(str(status))
         out = self.player.pull(frames)
-        bg = self.background.pull(frames)
-        if bg is not None:
-            out = np.clip(out + bg, -1.0, 1.0)
+        for channel in (self.background, self.airplay):
+            bg = channel.pull(frames)
+            if bg is not None:
+                out = np.clip(out + bg, -1.0, 1.0)
         outdata[:] = out
         self.aec.feed_far(outdata)
 
@@ -270,7 +272,7 @@ class Audio:
             block = raw = self._q.get()
             self.last_in = time.monotonic()
             wake_block = None
-            since_sound = time.monotonic() - max(self.player.last_sound, self.background.last_sound)
+            since_sound = time.monotonic() - max(self.player.last_sound, self.background.last_sound, self.airplay.last_sound)
             if self.aec_hold or since_sound < 3:
                 try:
                     block = self.aec.process_near(block)

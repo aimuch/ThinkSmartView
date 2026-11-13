@@ -50,7 +50,7 @@ import aiohttp
 import numpy as np
 
 from . import bg
-from . import alarms, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import airplay, alarms, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -222,6 +222,7 @@ class Client:
     focus = focus.Focus()                     # 专注计时 (focus.py), likewise
     study = study.Study()                     # 学习陪伴 (study.py), likewise
     study_task = None
+    airplay = None                            # AirPlay (airplay.py)
     notes = []                                # 留言 (daily.py)
     lists = None                              # 清单 (the hub keeps them: /kiosk/lists)
     alert = None                              # the red banner of a Mijia sensor alert
@@ -374,6 +375,7 @@ class Client:
         self.focus = focus.Focus(cfg.get('focus'))                           # 专注计时（设计画布第 47 块）
         self.study = study.Study(cfg.get('study'), STUDY_LOG)                # 学习陪伴（设计画布第 48 块）
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
+        self.airplay = airplay.AirPlay(self.audio.airplay, self.events.publish, cfg.get('airplay'))   # 设计画布第 49 块
         self.mijia = MijiaService(self.events.publish)
         self.rotation = rotation.Rotation(cfg.get('rotation_auto'), self.events.publish, config.save)
         self.cards = []               # content cards shown in the conversations (self.screen.show_card)
@@ -1509,6 +1511,8 @@ class Client:
         if data and data.get('ok'):
             self.today = {k: data.get(k) for k in ('lunar', 'weather', 'weather_error')}
             self.events.publish('today', self.today)
+            if self.airplay:
+                await self.airplay.set_device_name(data.get('device_name') or '')
 
     async def _today_loop(self):
         last_theme = None
@@ -1752,6 +1756,8 @@ class Client:
         bg.spawn(self._offline_clips_loop())
         await self.bt.start()
         bg.spawn(self._bluetooth_loop())
+        if self.airplay.enabled and self.airplay.installed:
+            self.airplay.start()
         await self.mijia.start()
         self.rotation.start()
 
@@ -1850,6 +1856,7 @@ class Client:
                 'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),
                 'standby': self.standby_view(), 'cook': self.cook_view(), 'media': self.media_view(),
                 'gentle': self.gentle.view(time.time()), 'focus': self.focus.view(), 'study': self.study_view(),
+                'airplay': self.airplay and self.airplay.view(),
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
                 'integrations': self.integrations,
@@ -2828,12 +2835,23 @@ class Client:
         paused_for = None   # the ring the phones were asked to pause for
         while True:
             await asyncio.sleep(0.1)
-            self.audio.background.target = self.background_target()
+            target = self.background_target()
+            self.audio.background.target = target
+            if self.airplay:
+                self.audio.airplay.target = target
             if self.ring and self.ring is not paused_for:
                 paused_for = self.ring
                 if self.bt.streaming():
                     log.info('alarm: asking the phone to pause')
                     await self.bt.pause()   # it doesn't resume by itself: the user plays on from the phone
+
+    async def airplay_set(self, install=False, enabled=None, name=None):
+        """设置 › 网络 › AirPlay（设计画布第 49 块）：安装、开关、名字。"""
+        if install:
+            await self.airplay.install()
+        view = await self.airplay.set(enabled, name)
+        config.save(airplay=self.airplay.saved())
+        return view
 
     async def bluetooth(self, enabled=None, window=None, remove=None, disconnect=None):
         """The page's Bluetooth controls: the switch (stored), the "add a phone" window, forgetting a phone."""

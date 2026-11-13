@@ -645,6 +645,27 @@ def make_app(client: Client):
                                                                                  with_study=with_study),
                                   'study': client.study_view()})
 
+    async def airplay_get(request):
+        return web.json_response({'ok': True, 'airplay': client.airplay.view()})
+
+    async def airplay_post(request):
+        """AirPlay（设计画布第 49 块）：{"install": true} 装 shairport-sync；{"enabled"}、{"name"}。装要一两分钟：先回、装完发 airplay 事件。"""
+        body = await request.json()
+        if body.get('install'):
+            async def install():
+                try:
+                    await client.airplay_set(install=True, enabled=True)
+                except ValueError:
+                    pass                      # the error is in the view the page gets
+            bg.spawn(install(), name='airplay-install')
+            return web.json_response({'ok': True, 'airplay': {**client.airplay.view(), 'installing': True}})
+        try:
+            view = await client.airplay_set(enabled=body.get('enabled') if isinstance(body.get('enabled'), bool) else None,
+                                            name=body.get('name') if isinstance(body.get('name'), str) else None)
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)})
+        return web.json_response({'ok': True, 'airplay': view})
+
     async def study_get(request):
         """学习陪伴（设计画布第 48 块）：?date=YYYY-MM-DD 那天的记录（默认今天），加上现在的开关和设置。"""
         date = request.query.get('date') or time.strftime('%Y-%m-%d')
@@ -767,6 +788,8 @@ def make_app(client: Client):
     app.router.add_get('/api/usb', usb_get)
     app.router.add_post('/api/focus', focus_set)
     app.router.add_get('/api/study', study_get)
+    app.router.add_get('/api/airplay', airplay_get)
+    app.router.add_post('/api/airplay', airplay_post)
     app.router.add_post('/api/study', study_set)
     app.router.add_get('/api/weather', weather_get)
     app.router.add_post('/api/weather/cities', weather_cities)

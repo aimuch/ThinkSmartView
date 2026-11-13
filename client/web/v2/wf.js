@@ -290,4 +290,51 @@ $('stDays').addEventListener('click', e => { const b = e.target.closest('[data-s
 $('studyPill').addEventListener('click', () => openStudyDay(true));
 $('studyDayBtn').addEventListener('click', () => openStudyDay(true));
 
+
+/* ---------------- AirPlay 隔空播放（设计画布第 49 块） ---------------- */
+let apNameEditing = false;
+function renderAirPlay() {
+  const a = ui.airplay;
+  const playing = !!(a && a.enabled && a.playing);
+  document.body.classList.toggle('ap-playing', playing);
+  $('apChipText').textContent = playing ? [a.title, a.artist].filter(Boolean).join(' · ') || `${a.client || '手机'} 正在放` : '';
+  if (!a) return;
+  $('apCard').hidden = !a.available;
+  const ready = a.installed && !a.installing;
+  $('apSwitch').hidden = !ready;
+  $('apSwitch').setAttribute('aria-checked', String(!!a.enabled));
+  $('apCard').classList.toggle('off', ready && !a.enabled);
+  $('apSub').textContent = a.installing ? '正在安装…' : !a.installed ? '还没装' : a.enabled ? `iPhone 上显示为「${a.name}」` : '';
+  $('apProg').hidden = !a.installing;
+  $('apInstall').hidden = a.installed || a.installing;
+  $('apNow').hidden = !playing;
+  $('apNameRow').hidden = !(ready && a.enabled) || playing;
+  let note;
+  if (a.error) note = `出错了：${a.error}`;
+  else if (a.installing) note = '从 Ubuntu 软件源下载，一两分钟。装的时候别断电。';
+  else if (!a.installed) note = 'iPhone、iPad、Mac 可以把歌直接放到这台设备上。需要先联网装一个小程序（shairport-sync，约 1 MB，不开的时候不占后台）。';
+  else if (!a.enabled) note = '打开后，iPhone 的控制中心里点「隔空播放」就能选这台设备。';
+  else note = `在 iPhone 的控制中心点「隔空播放」，选「${a.name}」。放歌时说话或闹钟响，歌声会自动变小或停下。`;
+  $('apNote').textContent = note;
+  if (playing) {
+    $('apTitle').textContent = [a.title, a.artist].filter(Boolean).join(' · ') || '正在放';
+    $('apClient').textContent = a.client ? `${a.client} 正在放` : '';
+  }
+  if (!apNameEditing) { $('apName').value = a.custom_name || ''; $('apName').placeholder = a.default_name; }
+}
+handlers.airplay = a => { ui.airplay = a; renderAirPlay(); };
+async function apPost(body) {
+  const r = await postJson('/api/airplay', body);
+  if (r.airplay) handlers.airplay(r.airplay);
+}
+$('apSwitch').addEventListener('click', () => apPost({ enabled: !(ui.airplay && ui.airplay.enabled) }));
+$('apInstall').addEventListener('click', () => apPost({ install: true }));
+$('apChip').addEventListener('click', () => { setPane('net'); $('settings').classList.add('on'); });
+$('apName').addEventListener('focus', () => { apNameEditing = true; });
+$('apName').addEventListener('blur', () => { apNameEditing = false; });
+function apSaveName() { apNameEditing = false; $('apName').blur(); apPost({ name: $('apName').value.trim() }); }
+$('apNameSave').addEventListener('pointerdown', e => { e.preventDefault(); apSaveName(); });   // 键盘起着时收不到 click
+$('apName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); apSaveName(); } });
+fetch('/api/airplay', { cache: 'no-store' }).then(r => r.json()).then(r => { if (r.airplay) handlers.airplay(r.airplay); }).catch(() => {});
+
 })();
