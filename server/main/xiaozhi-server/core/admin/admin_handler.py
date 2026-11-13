@@ -1502,7 +1502,9 @@ class AdminHandler:
         from core.utils import device_homes, open_meteo
 
         device = request.query.get("device") or ""
-        out = {"ok": True, "lunar": await self._blocking(_lunar_today), "weather": None}
+        out = {"ok": True, "lunar": await self._blocking(_lunar_today), "weather": None,
+               # 后台给这台设备起的名字（客厅、书房）：AirPlay 等对外显示的名字用它（设计画布第 49 块）
+               "device_name": (await self._blocking(self._device_names)).get(device, "")}
         home = device_homes.get(device)
         if not home:
             merged = await self._blocking(self._merged)
