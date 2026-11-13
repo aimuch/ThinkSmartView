@@ -570,6 +570,27 @@ def make_app(client: Client):
         except Exception as e:
             return web.json_response({'ok': False, 'error': f'连不上小麦网关（{type(e).__name__}）'})
 
+    async def voice_clone(request):
+        """复刻我的声音（设计画布第 50 块）：{"action": "start" | "stop" | "upload" | "cancel", "name"}。"""
+        body = await request.json()
+        action = body.get('action')
+        try:
+            if action == 'start':
+                await client.clone_record_start()
+                return web.json_response({'ok': True, 'seconds': client.CLONE_SECONDS, 'passage': client.CLONE_PASSAGE})
+            if action == 'stop':
+                return web.json_response({'ok': True, **client.clone_record_stop()})
+            if action == 'upload':
+                return web.json_response({'ok': True, 'clone': await client.clone_upload(str(body.get('name') or '').strip())})
+            if action == 'cancel':
+                if client.wake_rec is not None:
+                    client._record_audio()
+                client.clone_audio = None
+                return web.json_response({'ok': True})
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)})
+        return web.json_response({'ok': False, 'error': '不认识的操作'})
+
     async def voice_set(request):
         body = await request.json()
         try:
@@ -809,6 +830,7 @@ def make_app(client: Client):
     app.router.add_post('/api/learn', learn)
     app.router.add_get('/api/voice', voice_get)
     app.router.add_post('/api/voice', voice_set)
+    app.router.add_post('/api/voice/clone', voice_clone)
     app.router.add_get('/api/avatars/poses/{name}', avatar_pose_file)
     app.router.add_post('/api/photo', photo_start)
     app.router.add_post('/api/photo/cancel', photo_cancel)

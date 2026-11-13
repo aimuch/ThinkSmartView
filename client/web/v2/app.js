@@ -2360,7 +2360,29 @@ async function loadVoice() {
   $('voiceChips').innerHTML = `<button data-voice="" class="${v.current ? '' : 'on'}">跟着网关</button>` +
     v.voices.map(o => `<button data-voice="${esc(o.value)}" class="${o.value === v.current ? 'on' : ''}" title="${esc(o.style)}">${esc(o.name)}${o.value.includes('Yunxia') ? '（童声）' : ''}</button>`).join('');
   $('voiceNote').textContent = v.voices.length ? '下一次说话起生效。认出是孩子时照样换成童声。' : `现在的语音合成（${v.label}）没有固定的音色表，在网关后台改`;
+  // 复刻的声音（设计画布第 50 块，录音页在 wf.js）
+  const clones = v.clones || [], cl = v.clone || {};
+  $('cloneHead').hidden = $('cloneChips').hidden = !('clones' in v);
+  const cur = clones.find(c => c.value === v.current);
+  if (cur) $('voiceNow').textContent = `${cur.name}（复刻）`;
+  $('cloneChips').innerHTML = clones.map(c => c.status === 'OK'
+    ? `<button data-voice="${esc(c.value)}" class="${c.value === v.current ? 'on' : ''}">${esc(c.name)}</button>`
+    : `<button disabled>${esc(c.name)} · ${c.status === 'DEPLOYING' ? '复刻中' : '没通过'}</button>`).join('') +
+    (cl.ready ? '<button class="clone-new" data-clone-new="1">＋ 复刻我的声音</button>' : '');
+  if (!cl.ready && 'clones' in v) $('voiceNote').textContent += `　复刻声音：${cl.reason || '网关还没准备好'}`;
+  else if (cur) $('voiceNote').textContent = '选复刻的声音时，这台设备改用阿里百炼说话；下一次说话起生效。';
+  clearTimeout(loadVoice.timer);
+  if (clones.some(c => c.status === 'DEPLOYING')) loadVoice.timer = setTimeout(() => { if ($('settings').classList.contains('on')) loadVoice(); }, 10000);
 }
+$('cloneChips').addEventListener('click', e => {
+  if (e.target.closest('[data-clone-new]')) return window.openClone && window.openClone(true);
+  const b = e.target.closest('[data-voice]');
+  if (b) $('voiceChips').dispatchEvent(new CustomEvent('pick', { detail: b.dataset.voice }));
+});
+$('voiceChips').addEventListener('pick', async e => {
+  const r = await postJson('/api/voice', { voice: e.detail });
+  if (r.ok === false) toast(r.error || '没改成', 'error'); else { loadVoice(); toast('下一次说话起换成这个声音'); }
+});
 $('voiceChips').addEventListener('click', async e => {
   const b = e.target.closest('[data-voice]');
   if (!b) return;

@@ -571,6 +571,8 @@
        <div class="alarms-card" id="voiceCard">
       <div class="bright-head"><b>回答的声音</b><span class="bright-num" id="voiceNow">这台设备</span></div>
       <div class="minutes voice-chips" id="voiceChips"></div>
+      <div class="bright-head" id="cloneHead" hidden><b class="sub">我们的声音</b><span class="bright-num">阿里云百炼 · 复刻</span></div>
+      <div class="minutes voice-chips" id="cloneChips" hidden></div>
       <p class="opt-note" id="voiceNote">下一次说话起生效。认出是孩子时照样换成童声。</p>
     </div>
    </section>
@@ -802,6 +804,27 @@
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <div class="st-body" id="stBody"></div>
+</div>
+<!-- 复刻我的声音（wf.js，设计画布第 50 块） -->
+<div class="sheet cl" id="clSheet">
+  <div class="sheet-bar">
+    <div><h2>复刻我的声音</h2><p>用平时说话的语气，把下面这段念一遍（10–20 秒）。周围安静一点，离屏幕一臂远。</p></div>
+    <button class="close" id="clClose" aria-label="关闭">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="cl-body">
+    <div class="cl-passage" id="clPassage"></div>
+    <div class="cl-side">
+      <div class="fz-ring cl-ring"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" class="fz-track"/><circle cx="100" cy="100" r="88" class="cl-arc" id="clArc"/></svg>
+        <div class="fz-t"><b id="clTime">0:00</b><small id="clState">准备好了</small></div></div>
+      <div class="cl-names" id="clNames" hidden>
+        <div class="minutes cl-chips" id="clChips"></div>
+        <input id="clName" type="text" maxlength="12" placeholder="或者自己起个名字" enterkeyhint="done" data-kb-enter="好了" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="fz-btns" id="clBtns"></div>
+      <p class="opt-note" id="clMsg"></p>
+    </div>
+  </div>
 </div>
 <!-- 专注计时（wf.js，设计画布第 47 块） -->
 <div class="sheet fz" id="fzSheet">

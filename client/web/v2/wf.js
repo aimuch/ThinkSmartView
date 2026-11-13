@@ -337,4 +337,90 @@ $('apNameSave').addEventListener('pointerdown', e => { e.preventDefault(); apSav
 $('apName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); apSaveName(); } });
 fetch('/api/airplay', { cache: 'no-store' }).then(r => r.json()).then(r => { if (r.airplay) handlers.airplay(r.airplay); }).catch(() => {});
 
+
+/* ---------------- 复刻我的声音（设计画布第 50 块） ---------------- */
+// 状态：idle → rec（念，最多 20 秒）→ done（起名）→ sending → sent；出错留在原来那步，下面一行写原因
+const cl = { step: 'idle', t0: 0, seconds: 0, max: 20, name: '', timer: null, msg: '' };
+const CL_NAMES = ['妈妈', '爸爸', '奶奶', '爷爷', '外婆', '外公'];
+const CL_PASSAGE = '今天天气不错，我们一起去公园散散步吧。回来的路上顺便买点水果，晚上做你最爱吃的番茄炒蛋。小麦，记得提醒我明天早上七点起床哦。';
+function renderClone() {
+  const recording = cl.step === 'rec';
+  const shown = recording ? Math.min(cl.max, (Date.now() - cl.t0) / 1000) : cl.seconds;
+  $('clTime').textContent = `0:${String(Math.floor(shown)).padStart(2, '0')}`;
+  $('clArc').style.strokeDashoffset = String(553 * (1 - shown / cl.max));
+  $('clState').textContent = { idle: '准备好了', rec: '正在录', done: '录好了', sending: '正在交给百炼…', sent: '正在复刻' }[cl.step];
+  $('clNames').hidden = cl.step !== 'done';
+  $('clChips').innerHTML = CL_NAMES.map(n => `<button data-cn="${n}" class="${n === cl.name ? 'on' : ''}">${n}</button>`).join('');
+  $('clBtns').innerHTML = {
+    idle: '<button class="upd-btn pri" data-ca="start">开始录</button>',
+    rec: '<button class="upd-btn" data-ca="restart">重录</button><button class="upd-btn pri" data-ca="stop">念完了</button>',
+    done: `<button class="upd-btn" data-ca="restart">重录</button><button class="upd-btn pri" data-ca="upload" ${cl.name ? '' : 'disabled'}>交给百炼复刻</button>`,
+    sending: '', sent: '<button class="upd-btn pri" data-ca="close">好的</button>' }[cl.step];
+  $('clMsg').textContent = cl.msg;
+  $('clMsg').classList.toggle('warn', cl.msg.startsWith('⚠'));
+}
+async function clAction(action) {
+  const body = { action };
+  if (action === 'upload') body.name = cl.name;
+  const r = await postJson('/api/voice/clone', body);
+  return r;
+}
+async function clStart() {
+  clearInterval(cl.timer);
+  const r = await clAction('start');
+  if (!r.ok) { cl.msg = '⚠ ' + (r.error || '开不了录音'); return renderClone(); }
+  Object.assign(cl, { step: 'rec', t0: Date.now(), max: r.seconds || 20, msg: '' });
+  if (r.passage) $('clPassage').textContent = r.passage;
+  cl.timer = setInterval(() => { renderClone(); if ((Date.now() - cl.t0) / 1000 >= cl.max) clStop(); }, 250);
+  renderClone();
+}
+async function clStop() {
+  clearInterval(cl.timer); cl.timer = null;
+  const r = await clAction('stop');
+  if (!r.ok) { Object.assign(cl, { step: 'idle', seconds: 0, msg: '⚠ ' + (r.error || '没录上') }); return renderClone(); }
+  Object.assign(cl, { step: 'done', seconds: r.seconds, msg: `录了 ${r.seconds} 秒。这个声音叫什么？` });
+  renderClone();
+}
+async function clUpload() {
+  cl.step = 'sending'; cl.msg = ''; renderClone();
+  const r = await clAction('upload');
+  if (!r.ok) { Object.assign(cl, { step: 'done', msg: '⚠ ' + (r.error || '没复刻成') }); return renderClone(); }
+  Object.assign(cl, { step: 'sent', msg: `「${r.clone.name}」交给百炼了，一般 1 分钟内复刻好。好了以后在「回答的声音」里选它。录音只发给百炼，网关不留。` });
+  renderClone();
+  if (typeof loadVoice === 'function') loadVoice();
+}
+function openClone(on) {
+  if (!on && (cl.step === 'rec' || cl.step === 'done')) clAction('cancel');
+  clearInterval(cl.timer); cl.timer = null;
+  $('clSheet').classList.toggle('on', on);
+  if (on) {
+    Object.assign(cl, { step: 'idle', seconds: 0, name: '', msg: '' });
+    $('clPassage').textContent = CL_PASSAGE;
+    $('clName').value = '';
+    renderClone();
+  }
+}
+window.openClone = openClone;
+$('clClose').addEventListener('click', () => openClone(false));
+$('clBtns').addEventListener('click', e => {
+  const b = e.target.closest('[data-ca]');
+  if (!b) return;
+  const a = b.dataset.ca;
+  if (a === 'start' || a === 'restart') { if (a === 'restart' && cl.step === 'rec') clAction('cancel').then(clStart); else clStart(); }
+  else if (a === 'stop') clStop();
+  else if (a === 'upload') clUpload();
+  else if (a === 'close') openClone(false);
+});
+$('clChips').addEventListener('click', e => {
+  const b = e.target.closest('[data-cn]');
+  if (b) { cl.name = b.dataset.cn; $('clName').value = ''; renderClone(); }
+});
+$('clName').addEventListener('input', () => {
+  cl.name = $('clName').value.trim();
+  for (const b of $('clChips').children) b.classList.remove('on');
+  const up = $('clBtns').querySelector('[data-ca=upload]');
+  if (up) up.disabled = !cl.name;
+});
+$('clName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('clName').blur(); } });
+
 })();

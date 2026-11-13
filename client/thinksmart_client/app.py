@@ -44,6 +44,7 @@ import shutil
 import socket
 import time
 import urllib.parse
+import wave
 from pathlib import Path
 
 import aiohttp
@@ -1159,6 +1160,52 @@ class Client:
         if not data.get('ok'):
             raise ValueError(data.get('error') or '没改成')
         return await self.voice_view()
+
+    # ---- 复刻我的声音（设计画布第 50 块）：设备上念一段，交给网关 → 阿里云百炼复刻 ----
+    CLONE_SECONDS = 20
+    CLONE_MIN = 8
+    CLONE_PASSAGE = ('今天天气不错，我们一起去公园散散步吧。回来的路上顺便买点水果，晚上做你最爱吃的番茄炒蛋。'
+                     '小麦，记得提醒我明天早上七点起床哦。')
+    clone_audio = None
+
+    async def clone_record_start(self):
+        self.clone_audio = None
+        await self.wake_record_start(seconds=self.CLONE_SECONDS)
+
+    def clone_record_stop(self):
+        """念完了：录下的声音留着等起名字；返回秒数，太短、没声音时 ValueError。"""
+        audio = self._record_audio()
+        if audio is None:
+            raise ValueError('没听到声音，再念一次')
+        seconds = len(audio) / 16000
+        if seconds < self.CLONE_MIN:
+            raise ValueError(f'只录到 {seconds:.0f} 秒，念完整段（10–20 秒）')
+        self.clone_audio = audio
+        return {'seconds': round(seconds)}
+
+    async def clone_upload(self, name):
+        if self.clone_audio is None:
+            raise ValueError('还没录')
+        pcm = np.clip(self.clone_audio * 32768, -32768, 32767).astype('<i2').tobytes()
+        buf = io.BytesIO()
+        with wave.open(buf, 'wb') as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(16000)
+            w.writeframes(pcm)
+        q = urllib.parse.urlencode({'device': self.cfg['device_id'], 'name': name or ''})
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90)) as s:
+                async with s.post(f"{self.cfg['hub_http']}/kiosk/voice/clone?{q}", data=buf.getvalue()) as r:
+                    data = await r.json(content_type=None)
+        except Exception as e:
+            log.warning('voice clone upload failed: %s', e)
+            raise ValueError('连不上小麦网关，稍后再试')
+        if not data.get('ok'):
+            raise ValueError(data.get('error') or '没复刻成')
+        self.clone_audio = None
+        log.info('voice clone: %s sent (%s)', data['clone']['name'], data['clone']['voice_id'])
+        return data['clone']
 
     async def note_read(self, note_id):
         n = next((x for x in self.notes if x['id'] == note_id), None)

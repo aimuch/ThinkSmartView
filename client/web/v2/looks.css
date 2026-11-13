@@ -926,3 +926,28 @@ body.focusing.studying.dash-on .link { display: none; }
 body.dash-on .ap-chip span, body.dash-on .bt-chip span { display: none; }   /* 仪表盘顶栏挤：只留图标，点开看歌名 */
 body.dash-on .ap-chip, body.dash-on .bt-chip { padding: 0 11px; }
 @media (orientation: portrait) { body.ap-playing.dash-on .link, body.bt-playing.dash-on .link { display: none; } }
+
+/* ---- 复刻我的声音（设计画布第 50 块，wf.js） ---- */
+.sheet.cl { z-index: 25; }
+.cl-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 36px; align-items: center; }
+.cl-passage { font-size: 30px; line-height: 1.8; padding: 28px 32px; border-radius: 26px; background: var(--card); border: 1px solid var(--line); }
+.cl-side { display: flex; flex-direction: column; gap: 16px; align-items: stretch; min-width: 0; }
+.cl-ring { width: min(100%, 280px); }
+.cl-arc { fill: none; stroke: #ff7a9a; stroke-width: 12; stroke-linecap: round; stroke-dasharray: 553; stroke-dashoffset: 553; transition: stroke-dashoffset .25s linear; }
+.cl-names[hidden] { display: none; }
+.cl-names { display: flex; flex-direction: column; gap: 12px; }
+.cl-chips { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cl-chips button { height: 60px; font-size: 20px; }
+#clName { height: 60px; padding: 0 18px; border-radius: 18px; font: inherit; font-size: 20px; color: var(--ink); background: var(--card2);
+  border: 1px solid var(--line); outline: none; }
+#clName:focus { border-color: var(--accent); }
+#clMsg.warn { color: var(--bad); }
+#cloneHead[hidden], #cloneChips[hidden] { display: none; }
+#cloneChips .clone-new { border-style: dashed; color: var(--accent-text, var(--accent2)); background: none; }
+#cloneChips button:disabled { opacity: .55; }
+@media (orientation: portrait) {
+  .cl-body { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 24px; }
+  .cl-passage { font-size: 26px; }
+  .cl-ring { width: min(60%, 260px); }
+}
+.cl-ring { align-self: center; }
