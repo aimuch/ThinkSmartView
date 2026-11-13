@@ -18,8 +18,13 @@ function curve(hours, w, h) {
   return `<svg viewBox="0 0 ${w} ${h}" class="wx-curve" preserveAspectRatio="none">${bars}${line}${marks}</svg>`;
 }
 
+// 页签上的短名：「上海市青浦区」→「上海」，「四川成都市」→「成都」
+const PROV = /^(河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|台湾|内蒙古|广西|西藏|宁夏|新疆)(省|自治区|壮族自治区|回族自治区|维吾尔自治区)?/;
+const cut = s => s.split(/[市县]/)[0];
+const short = name => { const s = String(name); return cut(s.replace(PROV, '')) || cut(s) || s; };   // 「吉林市」不能剩「市」
 function renderWx() {
-  const all = [{ key: '', name: `⌂ ${wx.home || '家'}` }, ...wx.cities.map(c => ({ key: c, name: c.split(/[市区县]/)[0] || c }))];
+  const homeW = wx.data[''] && wx.data[''].weather;   // 设置里没填地址：用网关按这台设备查到的地名
+  const all = [{ key: '', name: `⌂ ${short(wx.home || (homeW && homeW.place) || '家')}` }, ...wx.cities.map(c => ({ key: c, name: short(c) }))];
   $('wxCities').innerHTML = all.map(c => `<button data-wxc="${esc(c.key)}" class="${c.key === wx.city ? 'on' : ''} ${wx.armed === c.key && c.key ? 'armed' : ''}">` +
     `${esc(wx.armed === c.key && c.key ? '再点删除' : c.name)}</button>`).join('') + (wx.cities.length < 5 ? '<button class="add" id="wxAdd">＋ 城市</button>' : '');
   const r = wx.data[wx.city];
