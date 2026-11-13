@@ -2,10 +2,12 @@
 # AirPlay (design board 49): install shairport-sync (3.3.8 on Ubuntu 24.04: classic AirPlay, MIT) from the
 # Ubuntu archive the first time the page's 「安装」 is pressed. Online updates never install packages,
 # so this is the one place that does, and only this package. The client runs it with sudo -n.
-#   thinksmart-airplay-install status|install
+#   thinksmart-airplay-install status|install|on|off
 # Prints one JSON line: {"installed": bool, "version": "..."}. The package's own system service is
 # disabled: the client starts shairport-sync itself (output to stdout, into its background channel)
-# only while 设置 › 网络 › AirPlay is on. (idea from fubin0478/thinksmart-view, MIT)
+# only while 设置 › 网络 › AirPlay is on. The image masks avahi-daemon (mDNS, which AirPlay needs to be
+# found); install unmasks it without enabling it, and on/off start and stop it with the switch.
+# (idea from fubin0478/thinksmart-view, MIT)
 set -u
 status() {
     v=$(dpkg-query -W -f='${Status} ${Version}' shairport-sync 2>/dev/null | awk '$3 == "installed" {print $4}')
@@ -23,6 +25,15 @@ case "${1:-}" in
             rm -rf /var/lib/apt/lists/*      # the image keeps no package lists (image/device-setup.sh)
         fi
         systemctl disable --now shairport-sync.service >/dev/null 2>&1 || true
+        systemctl unmask avahi-daemon.service avahi-daemon.socket >/dev/null 2>&1 || true
+        systemctl disable avahi-daemon.service avahi-daemon.socket >/dev/null 2>&1 || true
         status ;;
-    *) echo "usage: thinksmart-airplay-install status|install" >&2; exit 2 ;;
+    on)
+        systemctl unmask avahi-daemon.service avahi-daemon.socket >/dev/null 2>&1 || true
+        systemctl start avahi-daemon.service || { echo '没开起 avahi-daemon' >&2; exit 1; }
+        status ;;
+    off)
+        systemctl stop avahi-daemon.service avahi-daemon.socket >/dev/null 2>&1 || true
+        status ;;
+    *) echo "usage: thinksmart-airplay-install status|install|on|off" >&2; exit 2 ;;
 esac

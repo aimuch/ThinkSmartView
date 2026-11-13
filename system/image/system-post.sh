@@ -12,7 +12,14 @@ user_systemctl() { runuser -u $U -- env XDG_RUNTIME_DIR=/run/user/$(id -u $U) sy
 usermod -aG i2c $U
 # Bluetooth speaker: /etc/bluetooth/main.conf settings (no drop-in directory in BlueZ 5.72)
 sh bluetooth/setup-bluez.sh
-systemctl mask ModemManager.service avahi-daemon.service avahi-daemon.socket udisks2.service >/dev/null 2>&1 || true
+systemctl mask ModemManager.service udisks2.service >/dev/null 2>&1 || true
+# avahi (mDNS) only for AirPlay: masked unless shairport-sync is installed; then it is left unmasked but
+# not started at boot, and airplay/thinksmart-airplay-install on|off starts and stops it with the switch
+if dpkg-query -W -f='${Status}' shairport-sync 2>/dev/null | grep -q 'ok installed'; then
+    systemctl disable avahi-daemon.service avahi-daemon.socket >/dev/null 2>&1 || true
+else
+    systemctl mask avahi-daemon.service avahi-daemon.socket >/dev/null 2>&1 || true
+fi
 systemctl daemon-reload
 systemctl enable thinksmart-gpu-watchdog.service screen-wake.service thinksmart-zram.service thinksmart-usb-net.service \
     thinksmart-update-check.timer thinksmart-update-request.path thinksmart-update-boot.service
