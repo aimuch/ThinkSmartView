@@ -167,6 +167,21 @@ class AirPlay:
             self.start()
         return self.view()
 
+    async def _mdns(self, on):
+        """系统层把 avahi（让 iPhone 找得到它）默认关着：AirPlay 开时开，关时关。"""
+        if not os.path.exists(INSTALLER):
+            return True
+        try:
+            proc = await asyncio.create_subprocess_exec('sudo', '-n', INSTALLER, 'on' if on else 'off',
+                                                        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+            _, err = await asyncio.wait_for(proc.communicate(), 30)
+        except (OSError, asyncio.TimeoutError) as e:
+            log.warning('airplay: avahi %s: %s', on, e)
+            return False
+        if proc.returncode:
+            log.warning('airplay: avahi %s: %s', on, err.decode(errors='replace').strip()[:200])
+        return proc.returncode == 0
+
     # ---- 开关、名字 ----
 
     async def set(self, enabled=None, name=None):
@@ -184,6 +199,8 @@ class AirPlay:
             await self.stop()
             if self.enabled:
                 self.start()
+            elif enabled is False:
+                await self._mdns(False)
         self._changed()
         return self.view()
 
@@ -218,6 +235,9 @@ class AirPlay:
 
     async def _run(self):
         while self.enabled and self.installed:
+            if not await self._mdns(True):
+                self.error = '没开起 avahi，iPhone 可能找不到它'
+                self._changed()
             CONF.parent.mkdir(parents=True, exist_ok=True)
             CONF.write_text(config_text(self.shown_name()), encoding='utf-8')
             self._make_fifo()

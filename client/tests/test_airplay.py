@@ -91,6 +91,12 @@ async def test_switch_needs_install_and_restarts(monkeypatch):
     with pytest.raises(ValueError):
         await a.set(enabled=True)
     a.installed = True
+    mdns = []
+
+    async def fake_mdns(on):
+        mdns.append(on)
+        return True
+    monkeypatch.setattr(a, '_mdns', fake_mdns)
     started = []
     monkeypatch.setattr(a, 'start', lambda: started.append(a.shown_name()))
     await a.set(enabled=True)
@@ -99,7 +105,7 @@ async def test_switch_needs_install_and_restarts(monkeypatch):
     await a.set_device_name('书房')                    # 自己起过名字：不变
     assert a.shown_name() == '书桌音箱'
     await a.set(enabled=False)
-    assert changes[-1]['enabled'] is False
+    assert changes[-1]['enabled'] is False and mdns == [False]       # 关掉时把 avahi 也关了
 
 
 @pytest.mark.asyncio
