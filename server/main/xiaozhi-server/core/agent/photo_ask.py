@@ -204,6 +204,11 @@ def _vision_entry(merged: dict):
 
 def ask_vision(merged: dict, question: str, jpeg: bytes, device: str = None) -> str:
     """同步：把照片和问题交给选好的看图模型，返回它的回答。失败抛 PhotoError（写明原因）。"""
+    return ask_vision_images(merged, PROMPT.format(q=question), [jpeg], device)
+
+
+def ask_vision_images(merged: dict, prompt: str, images: list, device: str = None, purpose: str = "vision") -> str:
+    """同步：一段提示词和几张图（按顺序）交给选好的看图模型，返回它的回答。学习陪伴一次看 3 张连拍。"""
     import openai
 
     from core import billing
@@ -212,14 +217,14 @@ def ask_vision(merged: dict, question: str, jpeg: bytes, device: str = None) -> 
     p = PROVIDERS[ENTRY_TO_PROVIDER[name]]
     model = entry.get("model_name") or p["model_name"]
     client = openai.OpenAI(api_key=key, base_url=_url_of(entry, p), timeout=VISION_TIMEOUT, max_retries=1)
-    image = base64.b64encode(jpeg).decode()
-    mime = "image/png" if jpeg[:4] == b"\x89PNG" else "image/jpeg"   # 后台「试一下」发的是 PNG
+    content = [{"type": "text", "text": prompt}]
+    for jpeg in images:
+        mime = "image/png" if jpeg[:4] == b"\x89PNG" else "image/jpeg"   # 后台「试一下」发的是 PNG
+        content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(jpeg).decode()}"}})
     try:
         # max_tokens 给够：会思考的看图模型（GLM-4.5V 等）思考也算在里面，太少时回答是空的
-        resp = client.chat.completions.create(model=model, stream=False, max_tokens=1000, extra_body=p.get("extra_body"), messages=[{
-            "role": "user", "content": [
-                {"type": "text", "text": PROMPT.format(q=question)},
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image}"}}]}])
+        resp = client.chat.completions.create(model=model, stream=False, max_tokens=1000, extra_body=p.get("extra_body"),
+                                              messages=[{"role": "user", "content": content}])
     except openai.AuthenticationError:
         raise PhotoError("看图模型的 API Key 不对，到网关后台「大模型 → 看图模型」重新填")
     except openai.APITimeoutError:
@@ -232,7 +237,7 @@ def ask_vision(merged: dict, question: str, jpeg: bytes, device: str = None) -> 
     usage = getattr(resp, "usage", None)
     if usage:
         billing.record(model, {"prompt": usage.prompt_tokens, "completion": usage.completion_tokens},
-                       purpose="vision", entry=name, device=device)
+                       purpose=purpose, entry=name, device=device)
     if not text:
         raise PhotoError("看图模型没给出回答")
     return text

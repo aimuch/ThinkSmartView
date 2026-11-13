@@ -183,6 +183,7 @@ class AdminHandler:
                 web.post("/kiosk/home", self.handle_kiosk_home),
                 web.get("/kiosk/today", self.handle_kiosk_today),
                 web.get("/kiosk/weather", self.handle_kiosk_weather),
+                web.post("/kiosk/study/check", self.handle_kiosk_study),
                 web.get("/kiosk/integrations", self.handle_kiosk_integrations),
                 web.post("/kiosk/smarthub", self.handle_kiosk_smarthub),
                 web.post("/kiosk/deskhub", self.handle_kiosk_deskhub),
@@ -1547,6 +1548,46 @@ class AdminHandler:
             return self._json({"ok": False, "error": str(e)})
         self._today_cache[key] = (time.time(), data)
         return self._json({"ok": True, "weather": data})
+
+    async def handle_kiosk_study(self, request: web.Request):
+        """[xiaozhi-hub] 学习陪伴（设计画布第 48 块）：?device=&gap=，multipart 里 1-4 张 photo（按时间先后）。
+        交给后台选好的看图模型，回 {ok, result}；照片只在内存里，不保存。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.agent import study
+
+        images = []
+        try:
+            reader = await request.multipart()
+            while len(images) < study.MAX_FRAMES:
+                part = await reader.next()
+                if part is None:
+                    break
+                if part.name != "photo":
+                    continue
+                data = b""
+                while True:
+                    chunk = await part.read_chunk(65536)
+                    if not chunk:
+                        break
+                    data += chunk
+                    if len(data) > photo_ask.MAX_BYTES:
+                        return self._json({"ok": False, "error": "照片太大了"})
+                images.append(data)
+        except Exception:
+            return self._json({"ok": False, "error": "上传的格式不对"})
+        try:
+            gap = min(10.0, max(0.0, float(request.query.get("gap") or 4)))
+        except ValueError:
+            gap = 4.0
+        merged = await self._blocking(self._merged)
+        try:
+            result = await self._blocking(study.check, merged, images, gap, request.query.get("device") or None)
+        except photo_ask.PhotoError as e:
+            return self._json({"ok": False, "error": str(e)})
+        except ValueError as e:
+            return self._json({"ok": False, "error": str(e)})
+        return self._json({"ok": True, "result": result})
 
     # ---------- 接入家里别的服务（core/integrations，设计画布第 38、39 块） ----------
 

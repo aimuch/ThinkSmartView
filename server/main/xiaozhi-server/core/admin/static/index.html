@@ -2744,7 +2744,7 @@ const costQ = { range: "today", bucket: "auto", model: "", device: "", purpose: 
 const costSeries = new Set(["requests", "cost"]);
 const SERIES = [["requests", "调用次数", "#5b8cff"], ["input", "输入（没命中）", "#38c9b4"], ["cache_hit", "缓存命中", "#3ecf74"],
   ["output", "输出", "#9b8cff"], ["cost", "费用", "#f59b3c"], ["failures", "失败", "#f2555a"]];
-const PURPOSE_LABEL = { chat: "对话", summary: "记忆总结", intent: "意图识别", search: "联网搜索", vision: "看图" };
+const PURPOSE_LABEL = { chat: "对话", summary: "记忆总结", intent: "意图识别", search: "联网搜索", vision: "看图", study: "学习陪伴" };
 const RANGES = [["24h", "24 小时"], ["today", "今天"], ["yesterday", "昨天"], ["7d", "7 天"], ["30d", "30 天"], ["month", "本月"], ["custom", "自定义"]];
 function costHead() {
   return `<div class="page-head"><div><h1>费用</h1><p class="sub">每次请求大模型记一条（data/usage.db）：token、费用、首字和总耗时、成没成功。费用按请求那一刻的单价估算，以各家账单为准。</p></div></div>
@@ -2898,7 +2898,7 @@ async function renderCostPrices(root) {
     rows.map((r) => `<tr><td>${esc(r.key || "—")}${r.unpriced ? ' <span class="pill warn">没有单价</span>' : ""}${r.estimated ? ' <span class="pill">含估算</span>' : ""}</td>
       <td class="n">${r.requests}</td><td class="n">${num(r.prompt)}</td><td class="n">${num(r.cache_hit)}</td><td class="n">${num(r.completion)}</td>
       <td class="n">${sym(r.currency)}${r.cost.toFixed(4)}</td></tr>`).join("")}</table>` : '<p class="muted small">本月还没有记录</p>';
-  const PURPOSE = { chat: "对话", summary: "记忆总结", intent: "意图识别", search: "联网搜索", vision: "看图" };
+  const PURPOSE = { chat: "对话", summary: "记忆总结", intent: "意图识别", search: "联网搜索", vision: "看图", study: "学习陪伴" };
 
   root.innerHTML = `
     ${costHead()}
