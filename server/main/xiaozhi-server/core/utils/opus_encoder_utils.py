@@ -31,7 +31,9 @@ class OpusEncoderUtils:
         self.total_frame_size = self.frame_size * channels
 
         # 比特率和复杂度设置
-        self.bitrate = 24000  # bps
+        # [xiaozhi-hub] 24 → 48 kbps：发给设备的是 24 kHz 单声道语音，48 kbps 听不出损失（局域网，带宽不是问题；
+        # 想法来自 fubin0478/thinksmart-view 的 64 kbps）
+        self.bitrate = 48000  # bps
         self.complexity = 10  # 最高质量
 
         # 缓冲区初始化为空

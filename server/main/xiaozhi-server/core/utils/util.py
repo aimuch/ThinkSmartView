@@ -338,6 +338,7 @@ async def audio_to_data(
 
         # 初始化Opus编码器
         encoder = opuslib_next.Encoder(16000, 1, opuslib_next.APPLICATION_AUDIO)
+        encoder.bitrate = 48000   # [xiaozhi-hub] 和 OpusEncoderUtils 一样
 
         # 编码参数
         frame_duration = 60  # 60ms per frame
@@ -419,6 +420,7 @@ def pcm_to_data_stream(raw_data, is_opus=True, callback: Callable[[Any], Any] = 
     using_temp_encoder = False
     if is_opus and opus_encoder is None:
         encoder = opuslib_next.Encoder(sample_rate, 1, opuslib_next.APPLICATION_AUDIO)
+        encoder.bitrate = 48000   # [xiaozhi-hub] 和 OpusEncoderUtils 一样
         using_temp_encoder = True
 
     # 编码参数
