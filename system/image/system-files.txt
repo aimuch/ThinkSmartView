@@ -67,6 +67,9 @@ usb/thinksmart-usb-mode             /usr/local/sbin/thinksmart-usb-mode         
 usb/thinksmart-usb-mount            /usr/local/sbin/thinksmart-usb-mount            755 root none
 usb/thinksmart-usb-mount@.service   /etc/systemd/system/thinksmart-usb-mount@.service 644 root none
 usb/99-thinksmart-usb-storage.rules /etc/udev/rules.d/99-thinksmart-usb-storage.rules 644 root none
+
+# AirPlay (design board 49): installs shairport-sync on demand (the client runs it with sudo -n)
+airplay/thinksmart-airplay-install  /usr/local/sbin/thinksmart-airplay-install      755 root none
 zram/thinksmart-zram.service        /etc/systemd/system/thinksmart-zram.service     644 root boot
 zram/99-zram.conf                   /etc/sysctl.d/99-zram.conf                      644 root boot
 kiosk/timesyncd-cn.conf             /etc/systemd/timesyncd.conf.d/thinksmart.conf   644 root system:systemd-timesyncd.service
