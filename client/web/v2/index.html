@@ -59,6 +59,7 @@
         <span>睡眠中</span>
       </div>
       <div class="link" id="link"><i></i><span>待机</span></div>
+      <button class="focus-pill" id="focusPill" hidden aria-label="专注计时">🍅<b id="focusLeft"></b></button>
       <div class="clock" id="clock"><span id="time">--:--</span></div>
       <button class="gear" id="btnPhoto" aria-label="拍照问">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -134,7 +135,7 @@
         </div>
         <div class="home-notes" id="homeNotes"></div>
         <button class="home-list" id="homeList" hidden></button>
-        <div class="try" id="tryLabel">试试这样问我</div>
+        <div class="try" id="tryLabel">试试这样问我<button class="try-focus" id="tryFocus">🍅 专注</button></div>
         <div class="chips" id="chips"></div>
       </div>
 
@@ -157,7 +158,7 @@
       <div class="dg ds-right"><div class="d-chips ds-scenes" id="dSceneBar"></div><div class="ds-kinds" id="dKinds"></div><div class="ds-rooms" id="dRooms"></div></div>
     </div>
     <div class="dash-pane" data-dp="plan">
-      <div class="dg dp-left"><div class="dc" id="dCal"></div><div class="dc dc-grow" id="dTimers"></div></div>
+      <div class="dg dp-left"><button class="dc d-focus" id="dFocusBtn"><b>🍅 专注</b><small>番茄钟和自然声音</small></button><div class="dc" id="dCal"></div><div class="dc dc-grow" id="dTimers"></div></div>
       <div class="dc dp-mid" id="dNext"></div>
       <div class="dg dp-right"><div class="dc" id="dPlanLists"></div><div class="dc dc-grow" id="dPlanNotes"></div></div>
     </div>
@@ -744,6 +745,39 @@
   </div>
 </div>
 <!-- 待机页 (设计画布第 10 块): a big clock over the family album; a touch or the wake word ends it -->
+<!-- 天气详情（wf.js，设计画布第 47 块） -->
+<div class="sheet wx" id="wxSheet">
+  <div class="sheet-bar">
+    <div class="wx-head"><h2>天气</h2><div class="wx-cities" id="wxCities"></div></div>
+    <button class="close" id="wxClose" aria-label="关闭">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="wx-add" id="wxAddRow" hidden>
+    <input id="wxAddIn" type="text" placeholder="城市或区县，比如：成都、杭州西湖区" enterkeyhint="done" data-kb-enter="加上" autocomplete="off" spellcheck="false">
+    <button class="upd-btn pri" id="wxAddGo">加上</button><button class="upd-btn" id="wxAddNo">取消</button>
+  </div>
+  <div class="wx-body" id="wxBody"></div>
+</div>
+<!-- 专注计时（wf.js，设计画布第 47 块） -->
+<div class="sheet fz" id="fzSheet">
+  <div class="sheet-bar">
+    <div><h2>专注</h2><p id="fzSub"></p></div>
+    <button class="close" id="fzClose" aria-label="关闭">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="fz-body">
+    <div class="fz-ring"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" class="fz-track"/><circle cx="100" cy="100" r="88" class="fz-arc" id="fzArc"/>
+      <defs><linearGradient id="fzGrad"><stop offset="0" stop-color="#ffb547"/><stop offset="1" stop-color="#ff7a59"/></linearGradient></defs></svg>
+      <div class="fz-t"><b id="fzTime">25:00</b><small id="fzPhase">准备好了</small></div></div>
+    <div class="fz-ctl">
+      <div class="bright-head"><b class="sub">声景</b><span class="bright-num">最多两层，一起放</span></div>
+      <div class="minutes fz-chips" id="fzSounds"></div>
+      <div class="bright-head"><b class="sub">时长</b></div>
+      <div class="minutes fz-chips fz-min" id="fzMinutes"></div>
+      <div class="fz-btns" id="fzBtns"></div>
+    </div>
+  </div>
+</div>
 <!-- 温柔叫醒中（设计画布第 46 块）：暖色的光和底部一条，碰一下屏幕或点「停下」就停 -->
 <div class="gentle-glow" id="gentleGlow" hidden></div>
 <div class="gentle-bar" id="gentleBar" hidden>
@@ -796,6 +830,7 @@
 <script src="/static/v2/home.js"></script>
 <script src="/static/v2/work.js"></script>
 <script src="/static/v2/pack.js"></script>
+<script src="/static/v2/wf.js"></script>
 <script src="/static/v2/dash.js"></script>
 </body>
 </html>

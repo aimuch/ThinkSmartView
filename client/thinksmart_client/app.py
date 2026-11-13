@@ -50,7 +50,7 @@ import aiohttp
 import numpy as np
 
 from . import bg
-from . import alarms, broadcast, bt, camera, config, cook, perf, daily, gentle, kids, looks, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, kids, looks, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -218,6 +218,7 @@ class Client:
     cooking = None                            # 做菜模式 (cook.py)
     media = None                              # 电台、助眠声 (media.py)
     gentle = gentle.Gentle()                  # 温柔叫醒 (gentle.py), likewise
+    focus = focus.Focus()                     # 专注计时 (focus.py), likewise
     notes = []                                # 留言 (daily.py)
     lists = None                              # 清单 (the hub keeps them: /kiosk/lists)
     alert = None                              # the red banner of a Mijia sensor alert
@@ -367,6 +368,7 @@ class Client:
         self.alarm_tone = cfg.get('alarm_tone') if cfg.get('alarm_tone') in alarms.TONES else alarms.DEFAULT_TONE
         self.gentle = gentle.Gentle(cfg.get('gentle_wake'))   # 温柔叫醒（设计画布第 46 块）
         self.usb = usb.Usb(ALBUM, ALBUM_MAX, on_change=self._usb_changed)   # USB 接口（设计画布第 46 块）
+        self.focus = focus.Focus(cfg.get('focus'))                           # 专注计时（设计画布第 47 块）
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
         self.mijia = MijiaService(self.events.publish)
         self.rotation = rotation.Rotation(cfg.get('rotation_auto'), self.events.publish, config.save)
@@ -1589,6 +1591,39 @@ class Client:
             return {'heard': text, 'error': (data or {}).get('error') or f'没找到「{text}」这个地方'}
         return {'heard': text, 'place': data['place']}
 
+    # ---- 天气详情页（设计画布第 47 块）：家 + 自己加的城市，数据经网关的 /kiosk/weather ----
+    WEATHER_CITIES_MAX = 5
+
+    def weather_cities(self):
+        return [str(c) for c in (self.cfg.get('weather_cities') or []) if str(c).strip()][:self.WEATHER_CITIES_MAX]
+
+    async def weather_detail(self, city=''):
+        try:
+            data = await self._hub_http('/kiosk/weather?' + urllib.parse.urlencode({'device': self.cfg['device_id'],
+                                                                                   'city': city or ''}))
+        except Exception as e:
+            log.warning('weather detail %r: %s', city, e)
+            return {'ok': False, 'error': '连不上小麦网关，稍后再试'}
+        return data or {'ok': False, 'error': '网关没有回答'}
+
+    async def weather_city(self, add=None, remove=None):
+        """加一个城市（先用网关查地名，存查到的名字）或删一个；返回城市列表。"""
+        cities = self.weather_cities()
+        if remove:
+            cities = [c for c in cities if c != remove]
+        if add:
+            if len(cities) >= self.WEATHER_CITIES_MAX:
+                raise ValueError(f'最多 {self.WEATHER_CITIES_MAX} 个城市，先删一个')
+            found = await self.find_place(str(add).strip()[:40])
+            if found.get('error'):
+                raise ValueError(found['error'])
+            name = found['place']['name']
+            if name not in cities:
+                cities.append(name)
+        self.cfg['weather_cities'] = cities
+        config.save(weather_cities=cities)
+        return cities
+
     async def set_home(self, place):
         """Use this place ({'name', 'latitude', 'longitude'}, None: forget it) as the home address,
         here and on the hub (weather without a place, the model's idea of where the device is)."""
@@ -1810,7 +1845,7 @@ class Client:
                 'broadcast': self.broadcast_view(), 'photo': self.photo_view(), 'slides': self.slides_view(),
                 'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),
                 'standby': self.standby_view(), 'cook': self.cook_view(), 'media': self.media_view(),
-                'gentle': self.gentle.view(time.time()),
+                'gentle': self.gentle.view(time.time()), 'focus': self.focus.view(),
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
                 'integrations': self.integrations,
@@ -2861,6 +2896,60 @@ class Client:
         self.events.publish('gentle', view)
         return view
 
+    # ---- 专注计时（focus.py，设计画布第 47 块） ----
+
+    def _focus_publish(self):
+        config.save(focus=self.focus.saved())
+        view = self.focus.view()
+        self.events.publish('focus', view)
+        return view
+
+    async def _focus_sounds(self, on):
+        if not self.media:
+            return
+        if on and self.focus.sounds and self.focus.ends:
+            await self.media.play_mix(self.focus.sounds, self.focus.ends)
+        elif not on and self.media.now and self.media.now.get('kind') == 'focus':
+            await self.media.stop()
+
+    async def focus_action(self, action, minutes=None, sounds=None):
+        if sounds is not None:
+            self.focus.set_sounds(sounds)
+            if self.focus.phase and self.focus.ends:      # 正在专注：换声音马上生效
+                await self._focus_sounds(bool(self.focus.sounds))
+        if action is None and minutes in focus.MINUTES and not self.focus.phase:   # 只是选时长
+            self.focus.minutes = minutes
+        if action == 'start':
+            self.focus.start(minutes)
+            await self._focus_sounds(True)
+        elif action == 'break':
+            self.focus.start(phase='break')
+            await self._focus_sounds(True)
+        elif action == 'pause':
+            self.focus.pause()
+            await self._focus_sounds(False)
+        elif action == 'resume':
+            self.focus.resume()
+            await self._focus_sounds(True)
+        elif action == 'stop':
+            self.focus.stop()
+            await self._focus_sounds(False)
+        return self._focus_publish()
+
+    async def _focus_tick(self, now):
+        ended = self.focus.tick(now)
+        if not ended:
+            return
+        log.info('focus: %s ended', ended)
+        await self._focus_sounds(False)
+        if not self.ring:
+            try:
+                self.audio.player.push(alarms.reminder_chime())   # 响一声，不用闹钟铃声
+            except Exception:
+                log.exception('focus chime')
+        self.screen.poke()
+        self._focus_publish()
+
     def _usb_changed(self, view):
         self.events.publish('usb', view)
         if not view.get('importing'):
@@ -2948,6 +3037,7 @@ class Client:
         if not synced:
             return
         await self._gentle_tick(now)
+        await self._focus_tick(now)
         if self.ring and self.ring['closing']:
             return   # the ring is ending: what is due now rings on its own once it has
         before = len(self.alarms.missed)

@@ -292,6 +292,19 @@ DAILY_TOOLS = [
                                                         'name': {'type': 'string'}, 'minutes': {'type': 'number'}}},
     },
 ]
+FOCUS_TOOLS = [   # 专注计时（focus.py，设计画布第 47 块）
+    {
+        'name': 'self.focus.control',
+        'description': '专注计时（番茄钟）：「开始专注」「专注 45 分钟」action="start", minutes=分钟数（默认 25）；'
+                       '「休息一下」action="break"（5 分钟）；「暂停专注」「继续」action="pause"/"resume"；「结束专注」action="stop"；'
+                       '「专注的时候放雨声和鸟叫」sounds=["rain","birds"]（可选 rain 雨声、birds 鸟叫、ocean 海浪、fan 风扇、white 白噪音，'
+                       '最多两种，空列表表示不放）；「今天专注了多久」action="status"。调用后只说一句短的确认。',
+        'inputSchema': {'type': 'object', 'properties': {
+            'action': {'type': 'string', 'enum': ['start', 'break', 'pause', 'resume', 'stop', 'status']},
+            'minutes': {'type': 'number'}, 'sounds': {'type': 'array', 'items': {'type': 'string'}}},
+            'required': ['action']},
+    },
+]
 PROACTIVE_TOOLS = [
     {
         'name': 'self.schedule.update',
@@ -313,7 +326,7 @@ PROACTIVE_TOOLS = [
                         'required': ['enabled']},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -544,6 +557,14 @@ async def handle(payload, client=None):
                     text = _dumps(await _daily(client, name, args))
                 except ValueError as e:
                     text = _dumps({'success': False, 'reason': str(e)})
+            elif name == 'self.focus.control' and client:
+                action = args.get('action') or 'status'
+                sounds = args.get('sounds')
+                view = await client.focus_action(None if action == 'status' else action, args.get('minutes'),
+                                                 sounds if isinstance(sounds, list) else None)
+                text = _dumps({'success': True, 'phase': view['phase'], 'minutes_left': view['left'] and round(view['left'] / 60),
+                               'today_minutes': view['today']['minutes'], 'today_rounds': view['today']['rounds'],
+                               'sounds': view['sounds']})
             elif name == 'self.schedule.update' and client:
                 try:
                     action = args.get('action')

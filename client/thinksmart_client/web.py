@@ -623,6 +623,25 @@ def make_app(client: Client):
     async def cook_timer(_request):
         return await wake_call(client.cook_timer)
 
+    async def weather_get(request):
+        """天气详情页（设计画布第 47 块）：?city= 空是家。带上这台设备的城市列表。"""
+        data = await client.weather_detail(request.query.get('city', ''))
+        return web.json_response({**data, 'cities': client.weather_cities(), 'home': (client.home or {}).get('name')})
+
+    async def weather_cities(request):
+        body = await request.json()
+        try:
+            return web.json_response({'ok': True, 'cities': await client.weather_city(add=body.get('add'), remove=body.get('remove'))})
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e), 'cities': client.weather_cities()})
+
+    async def focus_set(request):
+        """专注计时（设计画布第 47 块）：{"action": start|break|pause|resume|stop, "minutes", "sounds"}。"""
+        body = await request.json()
+        sounds = body.get('sounds')
+        return web.json_response({'ok': True, 'focus': await client.focus_action(body.get('action'), body.get('minutes'),
+                                                                                 sounds if isinstance(sounds, list) else None)})
+
     async def usb_get(_request):
         """USB 接口（设计画布第 46 块）：设置 › 系统 打开时每 3 秒问一次（U 盘插上要一两秒才挂好）。"""
         return web.json_response(await client.usb.refresh())
@@ -727,6 +746,9 @@ def make_app(client: Client):
     app.router.add_post('/api/standby', standby_set)
     app.router.add_post('/api/gentle', gentle_set)
     app.router.add_get('/api/usb', usb_get)
+    app.router.add_post('/api/focus', focus_set)
+    app.router.add_get('/api/weather', weather_get)
+    app.router.add_post('/api/weather/cities', weather_cities)
     app.router.add_post('/api/usb', usb_set)
     app.router.add_post('/api/album/start', album_start)
     app.router.add_get('/api/album/{name}', album_file)

@@ -130,6 +130,19 @@ class Noise:
         return np.clip(x, -0.9, 0.9).astype(np.float32)
 
 
+class Mix:
+    """几种声音叠在一起（专注的声景，最多两层）：各自的生成器加起来、压低一点免得削顶。"""
+
+    def __init__(self, kinds, seed=None):
+        self.gens = [Noise(k, seed) for k in kinds]
+        self.t = 0.0
+
+    def next(self, n):
+        x = sum(g.next(n) for g in self.gens) * (0.75 if len(self.gens) > 1 else 1.0)
+        self.t += n / RATE
+        return np.clip(x, -0.9, 0.9).astype(np.float32)
+
+
 class Player:
     def __init__(self, background, on_change=None, on_error=None):
         self.background = background
@@ -199,6 +212,17 @@ class Player:
         self.on_change(self.view())
         return self.now
 
+    async def play_mix(self, keys, ends, name=''):
+        """专注的声景（focus.py）：keys 是 SOUNDS 里的一到两种，放到 ends，最后渐弱。"""
+        keys = [k for k in keys if k in SOUNDS][:2]
+        if not keys:
+            return None
+        await self.stop(quiet=True)
+        self.now = {'kind': 'focus', 'id': '+'.join(keys), 'name': name or ' + '.join(SOUNDS[k] for k in keys), 'ends': ends}
+        self.task = asyncio.create_task(self._sound('+'.join(keys), ends, fade_out=min(FADE, 20.0)))
+        self.on_change(self.view())
+        return self.now
+
     async def _radio(self, key):
         url = STATIONS[key][1]
         failures = 0
@@ -232,7 +256,8 @@ class Player:
             self.on_change(self.view())
 
     async def _sound(self, key, ends, fade_in=2.0, peak=1.0, fade_out=FADE):
-        gen = await asyncio.get_running_loop().run_in_executor(None, Noise, key)   # ~0.5 s of FFT on this board
+        make = (lambda: Mix(key.split('+'))) if '+' in key else (lambda: Noise(key))
+        gen = await asyncio.get_running_loop().run_in_executor(None, make)   # ~0.5 s of FFT per layer on this board
         n = int(RATE * CHUNK)
         gen.t = 0.0
         next_at = time.monotonic()
