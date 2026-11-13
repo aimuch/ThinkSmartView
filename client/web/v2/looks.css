@@ -845,3 +845,57 @@ body.focusing.dash-on .link { padding: 0 14px; }
   .fz-body { grid-template-columns: minmax(0, 1fr); align-content: center; gap: 30px; }
   .fz-ring { width: min(80%, 460px); }
 }
+
+/* ---- 学习陪伴（设计画布第 48 块，wf.js） ---- */
+.study-pill { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: 999px; font-size: 17px;
+  color: var(--ink); background: #43d39e1f; border: 1px solid #43d39e66; }
+.study-pill[hidden] { display: none; }
+body.dash-on .study-pill span { display: none; }   /* 仪表盘顶栏挤：只留相机 */
+body.dash-on .study-pill { padding: 0 12px; }
+body.studying.dash-on .link span { display: none; }
+@media (orientation: portrait) { body.studying.dash-on .link { display: none; } }
+.fz-study { gap: 14px; padding: 12px 16px; border-radius: 20px; background: var(--card); border: 1px solid var(--line); }
+.fz-study[hidden] { display: none; }
+.fz-st-ic { font-size: 28px; }
+.fz-study .opt-text span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fz-btns .fz-day { flex: none; margin-left: auto; padding: 0 22px; }
+.study-bubble { position: fixed; z-index: 31; left: 32px; right: 32px; bottom: 28px; display: flex; align-items: center; gap: 16px;
+  padding: 16px 22px; border-radius: 24px; color: var(--ink); background: linear-gradient(120deg, #43d39e40, #5ee0ff26); border: 1.5px solid #43d39e88;
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: photo-in .4s ease-out; }
+.study-bubble[hidden] { display: none; }
+.study-bubble .sb-ic { font-size: 34px; }
+.study-bubble b { display: block; font-size: 24px; } .study-bubble small { font-size: 16px; color: var(--ink2); }
+body.dash-on .study-bubble { bottom: 140px; }
+@media (orientation: portrait) { .study-bubble { left: 20px; right: 20px; bottom: 36px; } body.dash-on .study-bubble { bottom: 150px; } }
+.st-int { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.st-off { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.st-iss { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+#studyCard[hidden] { display: none; }
+#studyDayBtn { align-self: flex-start; }
+.sheet.st { z-index: 24; }
+.st-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 16px; }
+.st-kpi { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.st-kpi div { padding: 16px 20px; border-radius: 22px; background: var(--card); border: 1px solid var(--line); }
+.st-kpi small { display: block; font-size: 16px; color: var(--ink3); } .st-kpi b { font-size: 30px; font-weight: 700; }
+.st-tl { position: relative; height: 30px; border-radius: 8px; background: var(--card2); overflow: hidden; }
+.st-tl i { position: absolute; top: 0; bottom: 0; }
+.st-tl .focus, .st-leg .focus { background: var(--ok); } .st-tl .drift, .st-leg .drift { background: var(--warn); }
+.st-tl .bad, .st-leg .bad { background: var(--bad); } .st-tl .absent, .st-leg .absent { background: var(--line); }
+.st-leg { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 10px; font-size: 15px; color: var(--ink3); }
+.st-leg i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.st-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; }
+.st-hb { display: grid; grid-template-columns: 76px 1fr 30px; align-items: center; gap: 12px; height: 40px; font-size: 18px; }
+.st-hb .bar { position: relative; height: 10px; border-radius: 5px; background: var(--card2); }
+.st-hb .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: linear-gradient(90deg, var(--warn), #ff7a59); }
+.st-hb b { text-align: right; }
+.st-log { display: grid; grid-template-columns: 116px 1fr; gap: 10px 12px; font-size: 18px; }
+.st-log span { color: var(--ink3); font-variant-numeric: tabular-nums; } .st-log b { color: var(--warn-text, var(--warn)); font-weight: 600; }
+@media (orientation: portrait) {
+  .st-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .st-grid { grid-template-columns: minmax(0, 1fr); }
+  .st-iss { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+body.focusing.studying .link span { display: none; }   /* 专注、陪伴都开着：顶栏挤，「待机」只留圆点 */
+body.focusing.studying .link { padding: 0 14px; }
+body.focusing.studying.dash-on .link { display: none; }
+@media (orientation: portrait) { body.focusing.studying.dash-on #btnPhoto { display: none; } }   /* 竖屏还挤：摄像头正被陪伴用着，先收起「拍照问」 */

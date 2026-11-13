@@ -50,7 +50,7 @@ import aiohttp
 import numpy as np
 
 from . import bg
-from . import alarms, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, kids, looks, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import alarms, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -76,6 +76,7 @@ PHOTOS = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'photos'   # �
 PHOTO_POLL = 1.5
 ALBUM = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'album'   # 待机页的家庭相册
 ALBUM_MAX = 60
+STUDY_LOG = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'study'   # 学习陪伴：每天的文字记录
 STANDBY_MINUTES = (1, 2, 5, 10)
 HALT_AFTER = 3           # seconds to read "正在关机 … 等 10 秒再拔" before the screen goes dark
 UPDATE_BUSY = ('preparing', 'downloading', 'installing', 'testing', 'rolling_back')
@@ -219,6 +220,8 @@ class Client:
     media = None                              # 电台、助眠声 (media.py)
     gentle = gentle.Gentle()                  # 温柔叫醒 (gentle.py), likewise
     focus = focus.Focus()                     # 专注计时 (focus.py), likewise
+    study = study.Study()                     # 学习陪伴 (study.py), likewise
+    study_task = None
     notes = []                                # 留言 (daily.py)
     lists = None                              # 清单 (the hub keeps them: /kiosk/lists)
     alert = None                              # the red banner of a Mijia sensor alert
@@ -369,6 +372,7 @@ class Client:
         self.gentle = gentle.Gentle(cfg.get('gentle_wake'))   # 温柔叫醒（设计画布第 46 块）
         self.usb = usb.Usb(ALBUM, ALBUM_MAX, on_change=self._usb_changed)   # USB 接口（设计画布第 46 块）
         self.focus = focus.Focus(cfg.get('focus'))                           # 专注计时（设计画布第 47 块）
+        self.study = study.Study(cfg.get('study'), STUDY_LOG)                # 学习陪伴（设计画布第 48 块）
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
         self.mijia = MijiaService(self.events.publish)
         self.rotation = rotation.Rotation(cfg.get('rotation_auto'), self.events.publish, config.save)
@@ -1845,7 +1849,7 @@ class Client:
                 'broadcast': self.broadcast_view(), 'photo': self.photo_view(), 'slides': self.slides_view(),
                 'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),
                 'standby': self.standby_view(), 'cook': self.cook_view(), 'media': self.media_view(),
-                'gentle': self.gentle.view(time.time()), 'focus': self.focus.view(),
+                'gentle': self.gentle.view(time.time()), 'focus': self.focus.view(), 'study': self.study_view(),
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
                 'integrations': self.integrations,
@@ -2912,7 +2916,13 @@ class Client:
         elif not on and self.media.now and self.media.now.get('kind') == 'focus':
             await self.media.stop()
 
-    async def focus_action(self, action, minutes=None, sounds=None):
+    async def focus_action(self, action, minutes=None, sounds=None, with_study=None):
+        if with_study is not None and action in (None, 'start'):      # 专注页的「学习陪伴」那一行
+            if with_study and camera.available():
+                if self.study.start(time.time(), source='focus' if action == 'start' or self.focus.phase else None):
+                    await self._study_switched('on')
+            elif not with_study and self.study.stop():
+                await self._study_switched('off')
         if sounds is not None:
             self.focus.set_sounds(sounds)
             if self.focus.phase and self.focus.ends:      # 正在专注：换声音马上生效
@@ -2934,6 +2944,8 @@ class Client:
         elif action == 'stop':
             self.focus.stop()
             await self._focus_sounds(False)
+            if self.study.source == 'focus' and self.study.stop():
+                await self._study_switched(None)
         return self._focus_publish()
 
     async def _focus_tick(self, now):
@@ -2942,6 +2954,8 @@ class Client:
             return
         log.info('focus: %s ended', ended)
         await self._focus_sounds(False)
+        if ended == 'focus' and self.study.source == 'focus' and self.study.stop():   # 跟着专注开的，跟着关
+            await self._study_switched(None)
         if not self.ring:
             try:
                 self.audio.player.push(alarms.reminder_chime())   # 响一声，不用闹钟铃声
@@ -2949,6 +2963,98 @@ class Client:
                 log.exception('focus chime')
         self.screen.poke()
         self._focus_publish()
+
+    # ---- 学习陪伴（study.py，设计画布第 48 块） ----
+
+    def study_view(self):
+        return {**self.study.view(time.time()), 'camera': camera.available()}
+
+    def _study_publish(self, said=None):
+        view = self.study_view()
+        self.events.publish('study', {**view, 'said': said})
+        return view
+
+    async def _study_switched(self, how):
+        """开了、关了：发给页面；how 是 'on' / 'off' / 'auto_off' 时说一句（跟着专注关的不说）。"""
+        log.info('study companion %s', 'on' if self.study.enabled else 'off')
+        if not self.study.enabled and self.study_task and not self.study_task.done():
+            self.study_task.cancel()
+        self._study_publish()
+        if how and not self.in_turn() and self.ring is None:
+            bg.spawn(self._say_local(study.SWITCH[how]), name='study-switch')
+
+    async def study_control(self, enabled=None, settings=None, speak=True):
+        """页面、语音：开关，或改设置（多久看一次、开多久自动关、提醒哪些）。"""
+        if settings is not None:
+            self.study.settings = study.normalize({**self.study.settings, **settings})
+            config.save(study=self.study.settings)
+        if enabled is True:
+            if not camera.available():
+                raise ValueError('这台设备没有能用的摄像头')
+            if self.study.start(time.time()):
+                await self._study_switched('on' if speak else None)
+        elif enabled is False and self.study.stop():
+            await self._study_switched('off' if speak else None)
+        return self._study_publish()
+
+    async def _study_tick(self, now):
+        s = self.study
+        if s.auto_off_due(now):
+            s.stop()
+            await self._study_switched('auto_off')
+            return
+        if not s.due(now) or (self.study_task and not self.study_task.done()):
+            return
+        s.scheduled(now)
+        # 对话、闹钟在响、正在用摄像头拍照时这一次不看
+        if self.in_turn() or self.ring is not None or (self.photo and self.photo.get('camera')):
+            return
+        self.study_task = bg.spawn(self._study_check(), name='study-check')
+
+    async def _study_check(self):
+        """连拍 BURST 张 → 网关的看图模型 → 要不要提醒。照片只在内存里。"""
+        shots = []
+        await self.camera.acquire()          # 连拍期间摄像头一直开着（不然每张都要重开）
+        try:
+            for i in range(study.BURST):
+                if i:
+                    await asyncio.sleep(study.GAP)
+                shots.append(await self.camera.shoot())
+        except Exception as e:
+            log.warning('study: camera: %s', e)
+            self.study.failed('摄像头没拍成', time.time())
+            self._study_publish()
+            return
+        finally:
+            self.camera.release()
+        form = aiohttp.FormData()
+        for i, jpeg in enumerate(shots):
+            form.add_field('photo', jpeg, filename=f'{i}.jpg', content_type='image/jpeg')
+        url = (f"{self.cfg['hub_http']}/kiosk/study/check?"
+               + urllib.parse.urlencode({'device': self.cfg['device_id'], 'gap': study.GAP}))
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as s:
+                async with s.post(url, data=form) as r:
+                    data = await r.json(content_type=None)
+        except Exception as e:
+            log.warning('study: hub: %s', e)
+            data = {'ok': False, 'error': '连不上小麦网关'}
+        del shots, form
+        if not self.study.enabled:
+            return                            # 看的时候被关了
+        if not data.get('ok'):
+            self.study.failed(data.get('error') or '没看成', time.time())
+            self._study_publish()
+            return
+        say, issue = self.study.judge(data['result'], time.time())
+        log.info('study: %s%s', study.describe(data['result']) or data['result'].get('activity'),
+                 f' -> remind {issue}' if issue else '')
+        if say and not self.in_turn() and self.ring is None:
+            self._study_publish(said={'text': say, 'issue': study.NAMES.get(issue, '')})
+            self.screen.poke()
+            await self._say_local(say)
+        else:
+            self._study_publish()
 
     def _usb_changed(self, view):
         self.events.publish('usb', view)
@@ -3038,6 +3144,7 @@ class Client:
             return
         await self._gentle_tick(now)
         await self._focus_tick(now)
+        await self._study_tick(now)
         if self.ring and self.ring['closing']:
             return   # the ring is ending: what is due now rings on its own once it has
         before = len(self.alarms.missed)

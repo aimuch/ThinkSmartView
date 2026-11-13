@@ -60,6 +60,7 @@
       </div>
       <div class="link" id="link"><i></i><span>待机</span></div>
       <button class="focus-pill" id="focusPill" hidden aria-label="专注计时">🍅<b id="focusLeft"></b></button>
+      <button class="study-pill" id="studyPill" hidden aria-label="学习陪伴开着">📷<span>陪伴中</span></button>
       <div class="clock" id="clock"><span id="time">--:--</span></div>
       <button class="gear" id="btnPhoto" aria-label="拍照问">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -333,6 +334,21 @@
       <p class="opt-note">也可以说「<span class="ww-name">小麦小麦</span>，设备温度多少」。</p>
     </div>
     <!-- USB 接口（usb.py，设计画布第 46 块）：连电脑（USB 网络）还是接 U 盘；U 盘照片导进相册 -->
+    <div class="alarms-card" id="studyCard" hidden>
+      <div class="bright-head"><b>学习陪伴</b><span class="bright-num" id="studySub"></span></div>
+      <div class="opt">
+        <div class="opt-text"><b>现在打开</b><span>也可以说「打开学习陪伴」，或者专注时顺带打开</span></div>
+        <button class="switch" id="studySw" role="switch" aria-checked="false" aria-label="学习陪伴"><i></i></button>
+      </div>
+      <div class="bright-head"><b class="sub">多久看一次</b></div>
+      <div class="minutes st-int" id="studyInt"></div>
+      <div class="bright-head"><b class="sub">开多久自动关</b></div>
+      <div class="minutes st-off" id="studyOff"></div>
+      <div class="bright-head"><b class="sub">提醒哪些</b></div>
+      <div class="minutes st-iss" id="studyIssues"></div>
+      <p class="opt-note">每次用摄像头连拍 3 张（隔 4 秒），交给网关后台选好的看图模型，只回来一句文字结果；照片在设备和网关上都不保存。同一个问题连续看到 2 次才提醒，同一类 5 分钟内只说一次。看图模型按次计费，开 1 小时、每分钟看一次大约 60 次。</p>
+      <button class="upd-btn" id="studyDayBtn">📊 学习记录</button>
+    </div>
     <div class="alarms-card" id="usbCard" hidden>
       <div class="bright-head"><b>USB 接口</b><span class="bright-num" id="usbSub"></span></div>
       <p class="opt-note">底部的 Type-C 口：平时连电脑（USB 网络，刷机、救砖用）；切到「接 U 盘」后能读 U 盘。重启后回到连电脑。</p>
@@ -758,6 +774,15 @@
   </div>
   <div class="wx-body" id="wxBody"></div>
 </div>
+<!-- 今天的学习（wf.js，设计画布第 48 块） -->
+<div class="sheet wx st" id="stSheet">
+  <div class="sheet-bar">
+    <div class="wx-head"><h2>学习记录</h2><div class="wx-cities" id="stDays"></div></div>
+    <button class="close" id="stClose" aria-label="关闭">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="st-body" id="stBody"></div>
+</div>
 <!-- 专注计时（wf.js，设计画布第 47 块） -->
 <div class="sheet fz" id="fzSheet">
   <div class="sheet-bar">
@@ -774,12 +799,19 @@
       <div class="minutes fz-chips" id="fzSounds"></div>
       <div class="bright-head"><b class="sub">时长</b></div>
       <div class="minutes fz-chips fz-min" id="fzMinutes"></div>
+      <div class="opt fz-study" id="fzStudy" hidden>
+        <span class="fz-st-ic">📷</span>
+        <div class="opt-text"><b>学习陪伴</b><span id="fzStudySub"></span></div>
+        <button class="switch" id="fzStudySw" role="switch" aria-checked="false" aria-label="学习陪伴"><i></i></button>
+      </div>
       <div class="fz-btns" id="fzBtns"></div>
     </div>
   </div>
 </div>
 <!-- 温柔叫醒中（设计画布第 46 块）：暖色的光和底部一条，碰一下屏幕或点「停下」就停 -->
 <div class="gentle-glow" id="gentleGlow" hidden></div>
+<!-- 学习陪伴提醒了一句（wf.js，设计画布第 48 块） -->
+<div class="study-bubble" id="studyBubble" hidden><span class="sb-ic">🧍</span><div><b id="studyBubbleText"></b><small id="studyBubbleSub"></small></div></div>
 <div class="gentle-bar" id="gentleBar" hidden>
   <span class="gw-dot"></span>
   <span class="gw-text"><b>温柔叫醒中</b><small id="gentleSub"></small></span>

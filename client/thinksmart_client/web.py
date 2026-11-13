@@ -636,11 +636,30 @@ def make_app(client: Client):
             return web.json_response({'ok': False, 'error': str(e), 'cities': client.weather_cities()})
 
     async def focus_set(request):
-        """专注计时（设计画布第 47 块）：{"action": start|break|pause|resume|stop, "minutes", "sounds"}。"""
+        """专注计时（设计画布第 47 块）：{"action": start|break|pause|resume|stop, "minutes", "sounds", "study"}。"""
         body = await request.json()
         sounds = body.get('sounds')
+        with_study = body.get('study') if isinstance(body.get('study'), bool) else None
         return web.json_response({'ok': True, 'focus': await client.focus_action(body.get('action'), body.get('minutes'),
-                                                                                 sounds if isinstance(sounds, list) else None)})
+                                                                                 sounds if isinstance(sounds, list) else None,
+                                                                                 with_study=with_study),
+                                  'study': client.study_view()})
+
+    async def study_get(request):
+        """学习陪伴（设计画布第 48 块）：?date=YYYY-MM-DD 那天的记录（默认今天），加上现在的开关和设置。"""
+        date = request.query.get('date') or time.strftime('%Y-%m-%d')
+        return web.json_response({'ok': True, 'study': client.study_view(), 'date': date,
+                                  'day': client.study.day(date), 'days': client.study.days()[:14]})
+
+    async def study_set(request):
+        """{"enabled": bool} 开关；{"interval", "auto_off", "issues"} 改设置。"""
+        body = await request.json()
+        settings = {k: body[k] for k in ('interval', 'auto_off', 'issues') if k in body} or None
+        try:
+            view = await client.study_control(body.get('enabled') if isinstance(body.get('enabled'), bool) else None, settings)
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)})
+        return web.json_response({'ok': True, 'study': view})
 
     async def usb_get(_request):
         """USB 接口（设计画布第 46 块）：设置 › 系统 打开时每 3 秒问一次（U 盘插上要一两秒才挂好）。"""
@@ -747,6 +766,8 @@ def make_app(client: Client):
     app.router.add_post('/api/gentle', gentle_set)
     app.router.add_get('/api/usb', usb_get)
     app.router.add_post('/api/focus', focus_set)
+    app.router.add_get('/api/study', study_get)
+    app.router.add_post('/api/study', study_set)
     app.router.add_get('/api/weather', weather_get)
     app.router.add_post('/api/weather/cities', weather_cities)
     app.router.add_post('/api/usb', usb_set)

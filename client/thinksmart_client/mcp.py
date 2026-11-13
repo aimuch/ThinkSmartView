@@ -12,7 +12,9 @@ import asyncio
 import json
 import logging
 import re
+import time
 
+from . import study
 from .mijia import tools as home_tools
 
 log = logging.getLogger(__name__)
@@ -305,6 +307,17 @@ FOCUS_TOOLS = [   # 专注计时（focus.py，设计画布第 47 块）
             'required': ['action']},
     },
 ]
+STUDY_TOOLS = [   # 学习陪伴（study.py，设计画布第 48 块）
+    {
+        'name': 'self.study.control',
+        'description': '学习陪伴：孩子写作业时用设备的摄像头每分钟看一眼，驼背、离太近、玩手机、犯困时温和提醒。'
+                       '「打开学习陪伴」「看着我写作业」action="on"；「关掉学习陪伴」action="off"；'
+                       '「今天学得怎么样」「今天专心吗」action="status"（回答今天陪了多久、专心比例、提醒了几次）。'
+                       '打开、关上时直接念工具返回的那句话。',
+        'inputSchema': {'type': 'object', 'properties': {'action': {'type': 'string', 'enum': ['on', 'off', 'status']}},
+                        'required': ['action']},
+    },
+]
 PROACTIVE_TOOLS = [
     {
         'name': 'self.schedule.update',
@@ -326,7 +339,7 @@ PROACTIVE_TOOLS = [
                         'required': ['enabled']},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -565,6 +578,17 @@ async def handle(payload, client=None):
                 text = _dumps({'success': True, 'phase': view['phase'], 'minutes_left': view['left'] and round(view['left'] / 60),
                                'today_minutes': view['today']['minutes'], 'today_rounds': view['today']['rounds'],
                                'sounds': view['sounds']})
+            elif name == 'self.study.control' and client:
+                action = args.get('action') or 'status'
+                try:
+                    view = await client.study_control(enabled={'on': True, 'off': False}.get(action), speak=False)
+                    day = client.study.day(time.strftime('%Y-%m-%d'))
+                    text = _dumps({'success': True, 'enabled': view['enabled'], 'today_minutes': day['present_minutes'],
+                                   'focused_percent': day['focused_pct'], 'reminders': day['reminder_total'],
+                                   'reminders_by_kind': {day['names'][k]: n for k, n in day['reminders'].items() if n},
+                                   **({'action': 'RESPONSE', 'response': study.SWITCH[action]} if action in ('on', 'off') else {})})
+                except ValueError as e:
+                    text = _dumps({'success': False, 'reason': str(e)})
             elif name == 'self.schedule.update' and client:
                 try:
                     action = args.get('action')

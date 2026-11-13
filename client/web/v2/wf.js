@@ -136,8 +136,9 @@ function renderFocus() {
     `<button data-fs="" class="${f.sounds.length ? '' : 'on'}">不放</button>`;
   $('fzMinutes').innerHTML = f.choices.map(m => `<button data-fm="${m}" class="${m === f.minutes && f.phase !== 'break' ? 'on' : ''}">${m} 分钟</button>`).join('') +
     `<button data-fm="break" class="${f.phase === 'break' ? 'on' : ''}">休息 ${f.break} 分钟</button>`;
-  $('fzBtns').innerHTML = !f.phase ? '<button class="upd-btn pri" data-fa="start">开始</button>'
-    : `<button class="upd-btn" data-fa="${f.paused ? 'resume' : 'pause'}">${f.paused ? '继续' : '暂停'}</button><button class="upd-btn" data-fa="stop">结束</button>`;
+  $('fzBtns').innerHTML = (!f.phase ? '<button class="upd-btn pri" data-fa="start">开始</button>'
+    : `<button class="upd-btn" data-fa="${f.paused ? 'resume' : 'pause'}">${f.paused ? '继续' : '暂停'}</button><button class="upd-btn" data-fa="stop">结束</button>`)
+    + (ui.study && ui.study.camera ? '<button class="upd-btn fz-day" data-fa="day">📊 学习记录</button>' : '');
   clearInterval(fzTimer); fzTimer = null;
   if (f.phase) fzTimer = setInterval(renderFocusTick, 1000);
   renderFocusTick();
@@ -171,7 +172,122 @@ $('fzMinutes').addEventListener('click', e => {
 });
 $('fzBtns').addEventListener('click', e => {
   const b = e.target.closest('[data-fa]');
+  if (b && b.dataset.fa === 'day') return openStudyDay(true);
   if (b) focusPost({ action: b.dataset.fa, minutes: ui.focus && ui.focus.minutes });
 });
+
+/* ---------------- 学习陪伴（设计画布第 48 块） ---------------- */
+const st = { date: null, data: null };
+const agoText = s => s < 60 ? '刚刚' : s < 3600 ? `${Math.round(s / 60)} 分钟前` : `${Math.round(s / 3600)} 小时前`;
+const hm = t => { const d = new Date(t * 1000); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
+const dur = m => m >= 60 ? `${Math.floor(m / 60)} 小时${m % 60 ? ` ${m % 60} 分` : ''}` : `${m} 分钟`;
+let studyGot = 0;   // 收到 study 的时间：「上次」多久以前从这里往后算
+
+function studyLine(s) {
+  if (s.error) return `没看成：${s.error}`;
+  if (s.last) return `上次：${s.last.text || '看过了'}（${agoText(s.last.ago + (Date.now() - studyGot) / 1000)}）`;
+  return s.enabled ? '马上看第一眼' : '每分钟看一眼坐姿，照片不保存';
+}
+function renderStudy() {
+  const s = ui.study;
+  if (!s) return;
+  $('studyPill').hidden = !s.enabled;
+  document.body.classList.toggle('studying', !!s.enabled);
+  $('fzStudy').hidden = !s.camera;
+  $('fzStudySw').setAttribute('aria-checked', String(!!s.enabled));
+  $('fzStudySub').textContent = studyLine(s);
+  $('studyCard').hidden = !s.camera;
+  $('studySw').setAttribute('aria-checked', String(!!s.enabled));
+  $('studySub').textContent = !s.enabled ? '关着'
+    : s.auto_off_left ? `开着 · ${dur(Math.ceil(s.auto_off_left / 60))}后自动关` : '开着';
+  $('studyInt').innerHTML = s.intervals.map(v => `<button data-si="${v}" class="${v === s.interval ? 'on' : ''}">${v / 60} 分钟</button>`).join('');
+  $('studyOff').innerHTML = s.auto_off_choices.map(v => `<button data-so="${v}" class="${v === s.auto_off ? 'on' : ''}">${v ? v + ' 小时' : '不关'}</button>`).join('');
+  $('studyIssues').innerHTML = s.issue_choices.map(k => `<button data-sk="${k}" class="${s.issues.includes(k) ? 'on' : ''}">${esc(s.issue_names[k])}</button>`).join('');
+  if ($('fzSheet').classList.contains('on') && ui.focus) renderFocus();
+}
+let bubbleTimer = null;
+function showBubble(said) {
+  $('studyBubbleText').textContent = said.text;
+  $('studyBubbleSub').textContent = `小麦说的${said.issue ? ' · ' + said.issue : ''}`;
+  $('studyBubble').hidden = false;
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => { $('studyBubble').hidden = true; }, 6000);
+}
+handlers.study = s => {
+  ui.study = s; studyGot = Date.now();
+  renderStudy();
+  if (s.said) showBubble(s.said);
+  if ($('stSheet').classList.contains('on') && st.date === today()) loadStudyDay(st.date);
+};
+setInterval(() => { if (ui.study && ui.study.last) $('fzStudySub').textContent = studyLine(ui.study); }, 30000);
+async function studyPost(body) {
+  const r = await postJson('/api/study', body);
+  if (r.study) handlers.study(r.study);
+}
+$('studySw').addEventListener('click', () => studyPost({ enabled: !(ui.study && ui.study.enabled) }));
+$('fzStudySw').addEventListener('click', async () => {
+  const r = await postJson('/api/focus', { study: !(ui.study && ui.study.enabled) });
+  if (r.study) handlers.study(r.study);
+});
+$('studyInt').addEventListener('click', e => { const b = e.target.closest('[data-si]'); if (b) studyPost({ interval: +b.dataset.si }); });
+$('studyOff').addEventListener('click', e => { const b = e.target.closest('[data-so]'); if (b) studyPost({ auto_off: +b.dataset.so }); });
+$('studyIssues').addEventListener('click', e => {
+  const b = e.target.closest('[data-sk]');
+  if (!b || !ui.study) return;
+  const k = b.dataset.sk, cur = ui.study.issues;
+  studyPost({ issues: cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k] });
+});
+
+// 学习记录：家长看今天（或前几天）陪了多久、专不专心、提醒了什么
+function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function dayName(date) {
+  const t = new Date(today() + 'T00:00:00'), d = new Date(date + 'T00:00:00');
+  const n = Math.round((t - d) / 86400000);
+  return n === 0 ? '今天' : n === 1 ? '昨天' : `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+function renderStudyDay() {
+  const r = st.data;
+  const days = [...new Set([today(), ...((r && r.days) || [])])].slice(0, 6);
+  $('stDays').innerHTML = days.map(d => `<button data-sd="${d}" class="${d === st.date ? 'on' : ''}">${dayName(d)}</button>`).join('');
+  if (!r || !r.day) { $('stBody').innerHTML = '<p class="wx-msg">正在读…</p>'; return; }
+  const d = r.day;
+  if (!d.checks) {
+    $('stBody').innerHTML = `<p class="wx-msg">${dayName(st.date)}没开学习陪伴。${ui.study && ui.study.camera ? '在专注页打开那一行，或者说「打开学习陪伴」。' : ''}</p>`;
+    return;
+  }
+  const rounds = st.date === today() && ui.focus ? (ui.focus.today || {}).rounds || 0 : null;
+  const t0 = d.spans[0].start, t1 = d.spans[d.spans.length - 1].end, span = Math.max(1, t1 - t0);
+  const tl = d.spans.map(x => `<i class="${x.kind}" style="left:${(x.start - t0) / span * 100}%;width:${(x.end - x.start) / span * 100}%"></i>`).join('');
+  const most = Math.max(1, ...Object.values(d.reminders));
+  const rem = Object.entries(d.reminders).map(([k, n]) => `<div class="st-hb"><span>${esc(d.names[k])}</span><span class="bar"><i style="width:${n / most * 100}%"></i></span><b>${n}</b></div>`).join('');
+  const recent = d.recent.map(x => `<span>${hm(x.t)}${x.until > x.t ? '–' + hm(x.until) : ''}</span><div>${esc(x.text || '人不在桌前')}${x.said ? ` → <b>提醒了${esc(x.said)}</b>` : ''}</div>`).join('');
+  $('stBody').innerHTML = `
+    <div class="st-kpi"><div><small>在桌前</small><b>${dur(d.present_minutes)}</b></div>
+      <div><small>专心</small><b>${d.focused_pct == null ? '—' : d.focused_pct + '%'}</b></div>
+      <div><small>提醒</small><b>${d.reminder_total} 次</b></div>
+      <div><small>${rounds == null ? '看了' : '番茄'}</small><b>${rounds == null ? d.checks + ' 次' : rounds + ' 个'}</b></div></div>
+    <div class="wx-card"><div class="h">时间线<small>${hm(t0)} – ${hm(t1)}</small></div>
+      <div class="st-tl">${tl}</div>
+      <div class="st-leg"><span><i class="focus"></i>专心</span><span><i class="drift"></i>走神、发呆</span><span><i class="bad"></i>玩手机、趴着、睡着</span><span><i class="absent"></i>不在桌前</span></div></div>
+    <div class="st-grid"><div class="wx-card"><div class="h">提醒了什么</div>${rem}</div>
+      <div class="wx-card"><div class="h">最近<small>只记文字，不存照片</small></div><div class="st-log">${recent}</div></div></div>`;
+}
+async function loadStudyDay(date) {
+  st.date = date;
+  if (!st.data || st.data.date !== date) { st.data = st.data && { ...st.data, day: null }; renderStudyDay(); }
+  try {
+    st.data = await (await fetch('/api/study?date=' + date, { cache: 'no-store' })).json();
+  } catch (e) { return; }
+  if (st.date === date) renderStudyDay();
+}
+function openStudyDay(on) {
+  $('stSheet').classList.toggle('on', on);
+  if (on) loadStudyDay(today());
+}
+window.openStudyDay = openStudyDay;
+$('stClose').addEventListener('click', () => openStudyDay(false));
+$('stDays').addEventListener('click', e => { const b = e.target.closest('[data-sd]'); if (b) loadStudyDay(b.dataset.sd); });
+$('studyPill').addEventListener('click', () => openStudyDay(true));
+$('studyDayBtn').addEventListener('click', () => openStudyDay(true));
 
 })();

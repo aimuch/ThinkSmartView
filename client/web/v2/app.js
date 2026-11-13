@@ -2441,6 +2441,7 @@ const handlers = {
     if (s.standby) { ui.standby = s.standby; renderStandbyCard(); }
     if (s.gentle) { ui.gentle = s.gentle; renderGentle(); }
     if (s.focus) { ui.focus = s.focus; if (handlers.focus) handlers.focus(s.focus); }
+    if (s.study && handlers.study) handlers.study(s.study);
     if (s.cook) { ui.cook = s.cook; renderCook(); }
     if (s.media) { ui.media = s.media; renderMedia(); }
     if (s.scenes) { ui.scenes = s.scenes; renderScenes(); }
