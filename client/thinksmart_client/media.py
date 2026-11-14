@@ -26,6 +26,23 @@ STATIONS = {
     'jsjt': ('江苏交通广播', 'http://satellitepull.cnr.cn/live/wx32jsjtgb/playlist.m3u8'),
     'bjxw': ('北京新闻广播', 'http://satellitepull.cnr.cn/live/wxbjxwgb/playlist.m3u8'),
 }
+BUILTIN = dict(STATIONS)   # 网关连不上时用这几个；连上了用网关后台「外部服务」里的清单（设计画布第 56 块）
+
+
+def set_stations(items):
+    """网关的 /kiosk/radio：[{"id", "name", "url"}]。原地改 STATIONS（别处拿的是同一个 dict）；空的或不对就回到自带的。"""
+    fresh = {}
+    for x in items or []:
+        if isinstance(x, dict) and x.get('id') and x.get('name') and str(x.get('url') or '').startswith(('http://', 'https://')):
+            fresh[str(x['id'])[:32]] = (str(x['name'])[:20], str(x['url']))
+    fresh = fresh or BUILTIN
+    if fresh == STATIONS:
+        return False
+    STATIONS.clear()
+    STATIONS.update(fresh)
+    return True
+
+
 SOUNDS = {'rain': '雨声', 'ocean': '海浪', 'fan': '风扇', 'white': '白噪音', 'birds': '鸟叫'}
 ALIASES = {'中国之声': 'zgzs', '经济之声': 'jjzs', '东方广播': 'dfgb', '上海东方广播': 'dfgb', '第一财经': 'dycj',
            '第一财经广播': 'dycj', '江苏交通': 'jsjt', '江苏交通广播': 'jsjt', '北京新闻': 'bjxw', '北京新闻广播': 'bjxw'}
@@ -35,8 +52,11 @@ def find_station(name):
     name = str(name or '').strip()
     if name in STATIONS:
         return name
-    if name in ALIASES:
+    if name in ALIASES and ALIASES[name] in STATIONS:
         return ALIASES[name]
+    for key, (label, _) in STATIONS.items():
+        if name == label:
+            return key
     for key, (label, _) in STATIONS.items():
         if name and (name in label or label.split('（')[0] in name):
             return key

@@ -1629,10 +1629,22 @@ class Client:
             if self.airplay:
                 await self.airplay.set_device_name(data.get('device_name') or '')
 
+    async def refresh_radio(self):
+        """网关后台「外部服务」里的电台清单（设计画布第 56 块）；连不上就照旧。"""
+        try:
+            data = await self._hub_http('/kiosk/radio')
+        except Exception as e:
+            log.info('radio list from the hub: %s', e)
+            return
+        if data and data.get('ok') and media.set_stations(data.get('stations')):
+            log.info('radio stations: %s', '、'.join(v[0] for v in media.STATIONS.values()))
+            self.events.publish('media', self.media_view())
+
     async def _today_loop(self):
         last_theme = None
         while True:
             await self.refresh_today()
+            await self.refresh_radio()
             for _ in range(40):              # 20 minutes; the 'auto' theme is checked every 30 s
                 await asyncio.sleep(30)
                 theme = looks.theme_now(self.cfg['theme'])

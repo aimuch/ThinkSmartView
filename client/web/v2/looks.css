@@ -787,6 +787,7 @@ body.dash-on .gentle-bar { bottom: 140px; }
 .wx-cur > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .wx-cur b { font-size: 64px; font-weight: 700; line-height: 1; letter-spacing: -1px; }
 .wx-cur span { font-size: 18px; color: var(--ink2); }
+.wx-cur span.wx-stale { font-size: 15px; color: var(--warn); }
 .wx-card { padding: 18px 22px; border-radius: 24px; background: var(--card); border: 1px solid var(--line); min-width: 0; }
 .wx-card .h { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; font-size: 20px; font-weight: 700; }
 .wx-card .h small { font-size: 15px; font-weight: 400; color: var(--ink3); }

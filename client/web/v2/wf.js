@@ -38,7 +38,8 @@ function renderWx() {
   const pm = w.air.find(a => a.key === 'pm2_5');
   $('wxBody').innerHTML = `<div class="wx-col">
       <div class="wx-cur"><span class="big">${w.icon}</span><div><b>${n0(w.temp)}°</b><span>${esc(w.text)} · 体感 ${n0(w.feels)}° · 湿度 ${n0(w.humidity)}% · ${esc(w.wind)}</span>` +
-      `<span>${esc(w.place)}${w.sunrise ? ` · 日出 ${w.sunrise} · 日落 ${w.sunset}` : ''}${w.uv != null ? ` · 紫外线 ${n0(w.uv)}` : ''}</span></div></div>
+      `<span>${esc(w.place)}${w.sunrise ? ` · 日出 ${w.sunrise} · 日落 ${w.sunset}` : ''}${w.uv != null ? ` · 紫外线 ${n0(w.uv)}` : ''}</span>` +
+      `${w.stale_min ? `<span class="wx-stale">${w.stale_min < 60 ? w.stale_min + ' 分钟' : Math.floor(w.stale_min / 60) + ' 小时'}前的：天气服务现在连不上</span>` : ''}</div></div>
       <div class="wx-card"><div class="h">接下来 24 小时<small>温度和降水概率</small></div>${curve(w.hours, portrait ? 660 : 620, 190)}</div>
       ${air ? `<div class="wx-card"><div class="h">空气质量${pm ? `<small>PM2.5 ${pm.value} · ${esc(pm.level)}</small>` : ''}</div><div class="wx-aqs">${air}</div></div>` : ''}
     </div>

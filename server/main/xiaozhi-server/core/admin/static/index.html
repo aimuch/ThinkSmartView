@@ -253,7 +253,7 @@
   .sv-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding: 8px 12px; margin: 0 0 6px 46px; border-radius: 10px; background: var(--soft); border: 1px solid var(--line); }
   .sv-line b { color: var(--text); font-weight: 500; font-family: ui-monospace, Menlo, monospace; } .sv-line .in { width: 150px; padding: 4px 8px; }
   .sv-add { display: flex; gap: 8px; align-items: center; margin-top: 10px; } .sv-add .in { flex: 1; min-width: 0; } .sv-add .in.nm { flex: 0 0 170px; }
-  .sv-ai { display: flex; gap: 8px 22px; flex-wrap: wrap; font-size: 13px; } .sv-ai a { color: var(--text); text-decoration: none; } .sv-ai a span { color: var(--muted); } .sv-ai a:hover b { color: var(--accent); }
+  .sv-ai { display: flex; gap: 8px 22px; flex-wrap: wrap; font-size: 13px; } .sv-ai a { color: var(--text); text-decoration: none; } .sv-ai a span { color: var(--muted); } .sv-ai a b { background: var(--ai-fill); -webkit-background-clip: text; background-clip: text; color: transparent; }
   @media (max-width: 760px) {
     .sv-sum { grid-template-columns: repeat(2, 1fr); }
     .sv-row { grid-template-columns: 22px 12px minmax(0, 1fr); } .sv-row .sv-st, .sv-row .sv-acts { grid-column: 3; text-align: left; justify-content: flex-start; }
@@ -2663,7 +2663,7 @@ async function renderServices(root) {
     root.innerHTML = `
     <div class="page-head"><div><h1>外部服务</h1><p class="sub">网关和设备要连的外网服务。绿点能用、红点上次没连上；真用的时候会顺便记下，点「测试」马上试一次。</p></div>
       <button class="btn primary" id="sv-all">全部测一遍</button></div>
-    <div class="sv-sum"><div class="ok"><small>能用</small><b>${c.ok}</b></div><div class="bad"><small>上次没连上</small><b>${c.bad}</b></div>
+    <div class="sv-sum"><div class="ok"><small>能用</small><b>${c.ok}</b></div><div class="${c.bad ? "bad" : ""}"><small>上次没连上</small><b>${c.bad}</b></div>
       <div><small>关掉的</small><b>${c.off}</b></div><div><small>上次全部测试</small><b style="font-size:16px;line-height:33px">${d.checked_at ? hm(d.checked_at) : "还没测过"}</b></div></div>
     <div class="card panel sv-sec"><div class="sv-head"><b>天气</b><span class="muted small">从上往下试，连不上换下一个；设备上的天气卡片、详情页和语音问天气都用这个顺序</span></div>
       ${weatherRows()}
@@ -2671,7 +2671,7 @@ async function renderServices(root) {
     <div class="card panel sv-sec"><div class="sv-head"><b>电台</b><span class="muted small">设备连上网关时取这个清单（要客户端 0.1.682 以上）；关掉的不出现在设备上</span>
       <span class="sv-acts"><button class="btn sm" id="sv-r-all">测全部电台</button></span></div>
       ${radioRows()}
-      <div class="sv-add"><input class="in nm" id="sv-r-name" maxlength="20" placeholder="台名（说这个名字就能放）"><input class="in mono" id="sv-r-url" placeholder="直播流地址：http://…/playlist.m3u8（也可以是 mp3、aac）"><button class="btn" id="sv-r-add">添加</button></div></div>
+      <div class="sv-add"><input class="in nm" id="sv-r-name" maxlength="20" placeholder="台名，比如 上海交通广播"><input class="in mono" id="sv-r-url" placeholder="直播流地址：http://…/playlist.m3u8（也可以是 mp3、aac）"><button class="btn" id="sv-r-add">添加</button></div></div>
     <div class="grid2" style="gap:16px;align-items:start">
       <div class="card panel sv-sec" style="margin:0"><div class="sv-head"><b>新闻</b><span class="muted small">地址在插件设置里改</span></div>
         ${d.news.map((n) => `<div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">${dot(n.status)}

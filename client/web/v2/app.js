@@ -1099,7 +1099,8 @@ function renderToday() {
     const t = w.today || {};
     $('homeWeather').innerHTML = `<span class="hw-icon">${esc(w.icon || '')}</span><span class="hw-temp">${n(w.temp)}°</span>` +
       `<div class="hw-text"><b>${esc(w.text)}${w.feels !== null && w.feels !== undefined ? ` · 体感 ${n(w.feels)}°` : ''}</b>` +
-      `今天 ${n(t.min)}~${n(t.max)}°${t.rain !== null && t.rain !== undefined ? ` · 降水 ${n(t.rain)}%` : ''}${w.air ? ` · 空气${esc(w.air)}` : ''}</div>`;
+      `今天 ${n(t.min)}~${n(t.max)}°${t.rain !== null && t.rain !== undefined ? ` · 降水 ${n(t.rain)}%` : ''}${w.air ? ` · 空气${esc(w.air)}` : ''}` +
+      `${w.stale_min ? ` · ${w.stale_min < 60 ? w.stale_min + ' 分钟' : Math.floor(w.stale_min / 60) + ' 小时'}前的` : ''}</div>`;
   }
   tick();
 }

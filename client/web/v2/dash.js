@@ -33,12 +33,14 @@ function apply() {
 /* ---- 首页 ---- */
 // 空气质量的颜色：优、良是绿的，轻度污染黄的，再差红的（原来一律绿色，「严重污染」也是）
 const airClass = a => /优|良/.test(a) ? 'd-ok' : /轻度/.test(a) ? 'd-warn' : 'd-bad';
+// 天气服务都连不上时网关给的是上一次的（设计画布第 56 块）
+const staleText = m => m < 60 ? `${m} 分钟前的` : `${Math.floor(m / 60)} 小时前的`;
 function weather() {
   const w = ui.today && ui.today.weather, now = new Date(), lunar = ui.today && ui.today.lunar;
   const t = w && w.today || {};
   return `<div class="dw-top"><div><div class="dw-time" id="dTime">${pad(now.getHours())}:${pad(now.getMinutes())}</div>` +
     `<div class="dm">${now.getMonth() + 1}月${now.getDate()}日 周${WD[now.getDay()]}${lunar && lunar.text ? ' · ' + esc(lunar.text) : ''}</div></div>` +
-    (w ? `<div class="dw-now"><span class="dw-ic">${esc(w.icon || '')}</span><b>${n0(w.temp)}°</b><span class="dm">${esc(w.place || '')} · ${esc(w.text || '')}</span></div>` : '') + '</div>' +
+    (w ? `<div class="dw-now"><span class="dw-ic">${esc(w.icon || '')}</span><b>${n0(w.temp)}°</b><span class="dm">${esc(w.place || '')} · ${esc(w.text || '')}${w.stale_min ? ` · ${staleText(w.stale_min)}` : ''}</span></div>` : '') + '</div>' +
     (w ? `<div class="dm dw-row"><span>${n0(t.min)}° / ${n0(t.max)}°</span>${t.rain !== null && t.rain !== undefined ? `<span>降水 ${n0(t.rain)}%</span>` : ''}${w.air ? `<span class="${airClass(w.air)}">空气${esc(w.air)}</span>` : ''}</div>`
       : `<div class="dm">${esc((ui.today && ui.today.weather_error) || '天气还没取到')}</div>`);
 }

@@ -285,8 +285,8 @@ DAILY_TOOLS = [
     },
     {
         'name': 'self.media.play',
-        'description': '在设备上放网络电台或助眠声（说话时自动变小，闹钟响时静音）。电台：中国之声、经济之声、东方广播（上海）、'
-                       '第一财经广播、江苏交通广播、北京新闻广播，kind="radio", name=电台名。助眠声：雨声、海浪、风扇、白噪音，'
+        'description': '在设备上放网络电台或助眠声（说话时自动变小，闹钟响时静音）。电台：比如中国之声、经济之声、东方广播（上海）、'
+                       '第一财经广播，还有家里在网关后台加的台，kind="radio", name=用户说的台名（不认识会返回能放的有哪些）。助眠声：雨声、海浪、风扇、白噪音，'
                        'kind="sound", name=声音名, minutes=多久后停（默认 30，0 表示一直放）。「停」「别放了」用 action="stop"。'
                        '调用后只说一句「好，开始放…」。没有的电台如实说有哪些。',
         'inputSchema': {'type': 'object', 'properties': {'action': {'type': 'string', 'enum': ['play', 'stop']},
