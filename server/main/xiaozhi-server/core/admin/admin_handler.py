@@ -88,7 +88,9 @@ class AdminHandler:
         self.started_at = time.time()
         self.sessions = auth.SessionStore(kept_path=data_dir / ".admin-sessions-kept.json")
         from core.agent.intercom import Intercom
+        from core.agent.wake_arbiter import Arbiter
         self.intercom = Intercom()        # 视频对讲（设计画布第 51 块）
+        self.wake_arbiter = Arbiter()     # 就近唤醒（设计画布第 55 块）
         self.sessions_handover = data_dir / ".admin-sessions.json"
         if self.sessions.restore(self.sessions_handover):
             logger.bind(tag=TAG).info("更新网关后沿用了更新前的后台登录")
@@ -218,6 +220,10 @@ class AdminHandler:
                 web.get("/admin/api/vision", self.handle_vision),
                 # 常用口令不走大模型（core/agent/commands.py，设计画布第 53 块）
                 web.get("/admin/api/commands", self.handle_commands),
+                # 就近唤醒（core/agent/wake_arbiter.py，设计画布第 55 块）
+                web.post("/kiosk/wake/claim", self.handle_kiosk_wake_claim),
+                web.get("/admin/api/wake-arbiter", self.handle_wake_arbiter),
+                web.post("/admin/api/wake-arbiter", self.handle_wake_arbiter_save),
                 web.post("/admin/api/commands", self.handle_commands_save),
                 web.post("/admin/api/commands/test", self.handle_commands_test),
                 # 声音复刻（core/agent/voice_clone.py，设计画布第 50 块）
@@ -1937,6 +1943,50 @@ class AdminHandler:
         if not path or not os.path.isfile(path):
             return self._error("没有这张", 404)
         return web.FileResponse(path, headers={"Content-Type": "image/jpeg", "Cache-Control": "no-store"})
+
+    # ---------- 就近唤醒（core/agent/wake_arbiter.py，设计画布第 55 块） ----------
+
+    async def handle_kiosk_wake_claim(self, request: web.Request):
+        """[xiaozhi-hub] {"device", "score"}：听到唤醒词了，该不该我回答？关着时一律 win。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.agent import wake_arbiter
+
+        body = await self._read_json(request)
+        device = str(body.get("device") or "")
+        try:
+            score = float(body.get("score"))
+        except (TypeError, ValueError):
+            score = -100.0
+        cfg = await self._blocking(wake_arbiter.load)
+        if not cfg["enabled"] or not device:
+            return self._json({"ok": True, "win": True})
+        r = await self.wake_arbiter.claim(device, score, cfg["window"])
+        if not r["win"]:
+            names = await self._blocking(self._device_names)
+            r["winner_name"] = names.get(r.get("winner") or "", "")
+            self.logger.bind(tag=TAG).info(f"就近唤醒：{device}（{score:.0f} dB）让给 {r['winner_name'] or r.get('winner')}")
+        return self._json({"ok": True, **r})
+
+    async def handle_wake_arbiter(self, request: web.Request):
+        self._require_login(request)
+        from core.agent import wake_arbiter
+
+        names = await self._blocking(self._device_names)
+        hist = [{"t": h["t"], "winner": names.get(h["winner"] or "", h["winner"]),
+                 "claims": [{"name": names.get(d, d), "score": round(s), "win": d == h["winner"]}
+                            for d, s in sorted(h["claims"].items(), key=lambda kv: -kv[1])]}
+                for h in list(self.wake_arbiter.history)[:8]]
+        return self._json({"ok": True, **(await self._blocking(wake_arbiter.load)), "windows": list(wake_arbiter.WINDOWS),
+                           "history": hist})
+
+    async def handle_wake_arbiter_save(self, request: web.Request):
+        self._require_login(request)
+        from core.agent import wake_arbiter
+
+        body = await self._read_json(request)
+        d = await self._blocking(wake_arbiter.save, body.get("enabled"), body.get("window"))
+        return self._json({"ok": True, **d})
 
     # ---------- 常用口令（core/agent/commands.py，设计画布第 53 块） ----------
 

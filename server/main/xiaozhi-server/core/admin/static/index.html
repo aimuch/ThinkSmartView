@@ -229,6 +229,9 @@
 
   /* 音色 */
   .voice-group + .voice-group { margin-top: 18px; }
+  .wa-card { margin-bottom: 16px; } .wa-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; } .wa-head > b { font-size: 15px; }
+  .wa-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; } .wa-row.off { opacity: .5; }
+  .wa-hist { display: grid; grid-template-columns: 60px 1fr; gap: 4px 12px; margin-top: 10px; } .wa-win { color: var(--ok); font-weight: 600; }
   .cmd-head-acts { display: flex; align-items: center; gap: 14px; }
   .cmd-devs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
   .cmd-dev { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
@@ -2557,6 +2560,30 @@ async function renderDeviceSettings(root) {
       : '<div class="panel muted">还没有设备。设备第一次连上网关就会出现在这里。</div>'}</div>
     <p class="muted small">蓝字是这台单独设的，灰字是跟着全局。改完设备下一次对话就用上（设备每次叫醒都会重连）。全局的在「大模型」「语音合成」「意图识别」页。</p>`;
   root.querySelectorAll("[data-dev]").forEach((tr) => (tr.onclick = () => openDeviceDrawer(tr.dataset.dev, root)));
+  renderWakeArbiter(root);
+}
+
+// 就近唤醒（设计画布第 55 块，core/agent/wake_arbiter.py）：卡片放在设备列表上面
+async function renderWakeArbiter(root) {
+  let d;
+  try { d = await api("wake-arbiter"); } catch (e) { return; }
+  const card = document.createElement("div");
+  card.className = "card panel wa-card";
+  const head = root.querySelector(".page-head");
+  if (head) head.after(card); else root.prepend(card);
+  const when = (t) => new Date(t * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  const draw = () => {
+    card.innerHTML = `<div class="wa-head"><b>就近唤醒</b><span class="muted small">几台小麦同时听到唤醒词时，只让离你最近（听到的声音最大）的那台回答</span>
+      <label class="switch" style="margin:0 0 0 auto"><input type="checkbox" id="wa-on" ${d.enabled ? "checked" : ""}><b>${d.enabled ? "开" : "关"}</b></label></div>
+      <div class="wa-row ${d.enabled ? "" : "off"}">等多久 ${d.windows.map((w) => `<button class="btn sm ${w === d.window ? "primary" : ""}" data-wa="${w}">${w} 秒</button>`).join("")}
+        <span class="muted small">越长越不容易两台一起响，唤醒后的「叮」也晚一点</span></div>
+      ${d.history.length ? `<div class="wa-hist"><span class="muted small">最近</span><span></span>${d.history.map((h) => `<span class="small">${when(h.t)}</span><span class="small">${h.claims.map((c) =>
+        `<span class="${c.win ? "wa-win" : "muted"}">${esc(c.name)} ${c.score} dB${c.win ? " ✓" : ""}</span>`).join("　")}${h.claims.length === 1 ? '　<span class="muted">（只有一台听到）</span>' : ""}</span>`).join("")}</div>`
+        : '<p class="muted small" style="margin:6px 0 0">还没有记录：设备升级到 0.1.681 以后，喊一声「小麦小麦」这里就会列出每台听到的音量和选了谁。</p>'}`;
+    card.querySelector("#wa-on").onchange = async (e) => { try { Object.assign(d, await api("wake-arbiter", { enabled: e.target.checked })); draw(); toast(d.enabled ? "就近唤醒打开了" : "就近唤醒关了：每台听到都会回答"); } catch (err) { toast(err.message, true); } };
+    card.querySelectorAll("[data-wa]").forEach((b) => (b.onclick = async () => { try { Object.assign(d, await api("wake-arbiter", { window: +b.dataset.wa })); draw(); } catch (err) { toast(err.message, true); } }));
+  };
+  draw();
 }
 
 // 「开 4 个 · 关 1 个」
