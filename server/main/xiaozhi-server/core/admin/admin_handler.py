@@ -2235,8 +2235,8 @@ class AdminHandler:
             await media.apply_async(body)
         except media.MediaError as e:
             return self._error(str(e), 400)
-        if body.get("op") in ("navidrome", "jellyfin") and str(body.get("url") or "").strip():
-            src = media.navidrome() if body["op"] == "navidrome" else media.jellyfin()
+        if body.get("op") in ("navidrome", "jellyfin", "emby") and str(body.get("url") or "").strip():
+            src = media.navidrome() if body["op"] == "navidrome" else media.jellyfin(which=body["op"])
             if src:
                 try:
                     await src.ping()
@@ -2245,23 +2245,24 @@ class AdminHandler:
         return await self.handle_media(request)
 
     async def handle_media_test(self, request: web.Request):
-        """{"source": "navidrome"|"jellyfin"|"local", "url", "user", "password", "api_key"}：没保存的也能测（空的用存下的）。"""
+        """{"source": "navidrome"|"jellyfin"|"emby"|"local", "url", "user", "password", "api_key"}：没保存的也能测（空的用存下的）。"""
         self._require_login(request)
         body = await self._read_json(request)
         which = body.get("source") or "navidrome"
         try:
             if which == "local":
                 return self._json({"ok": True, **(await media.Local().ping())})
-            if which == "jellyfin":
-                url = media._norm_url(body.get("url"), strip=()) if body.get("url") else ""
+            if which in media.SERVERS:
+                cls = media.SERVERS[which]
+                url = media._norm_url(body.get("url"), strip=("/emby",)) if body.get("url") else ""
                 password, key = str(body.get("password") or ""), str(body.get("api_key") or "").strip()
-                saved = media.jellyfin()
+                saved = media.jellyfin(which=which)
                 if key and url:
-                    src = media.Jellyfin(url, "", key, "xiaozhi-test")
+                    src = cls(url, "", key, "xiaozhi-test")
                     await src.find_user(str(body.get("user") or ""))
                 elif password and url:
-                    token, uid = await media.Jellyfin.login(url, str(body.get("user") or ""), password, "xiaozhi-test")
-                    src = media.Jellyfin(url, uid, token, "xiaozhi-test")
+                    token, uid = await cls.login(url, str(body.get("user") or ""), password, "xiaozhi-test")
+                    src = cls(url, uid, token, "xiaozhi-test")
                 elif saved:
                     src = saved
                 else:

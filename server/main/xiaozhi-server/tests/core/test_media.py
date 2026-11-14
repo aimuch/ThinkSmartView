@@ -364,11 +364,11 @@ SOURCES = {"e1": ("mp4", "h264", 720, "aac"), "e2": ("mp4", "h264", 720, "aac"),
 def fake_jellyfin(calls):
     def authed(request):
         h = request.headers.get("Authorization", "")
-        return f'Token="{JF_TOKEN}"' in h or f'Token="{JF_KEY}"' in h
+        return f'Token="{JF_TOKEN}"' in h or f'Token="{JF_KEY}"' in h or request.headers.get("X-Emby-Token") in (JF_TOKEN, JF_KEY)
 
     async def handler(request):
         path, q = request.path, request.query
-        calls.append((request.method, path, dict(q), request.headers.get("Authorization", "")))
+        calls.append((request.method, path, dict(q), request.headers.get("Authorization", "") or request.headers.get("X-Emby-Authorization", "")))
         if path == "/Users/AuthenticateByName":
             body = await request.json()
             if body.get("Pw") != JF_PW:
@@ -562,3 +562,27 @@ def test_section_commands():
     assert plan("下一集").args == {"action": "next"} and plan("上一集").args == {"action": "prev"}
     assert plan("放东方广播") is None or plan("放东方广播").rule != "music"
     assert plan("看看天气") is None or plan("看看天气").rule != "music"
+
+
+async def test_emby_uses_the_same_code(tmp_path, jf, client):
+    """Emby（用户 NAS 上 8096 是 Emby、8097 是 Jellyfin）：同一套接口，认证头换成 X-Emby-*；两个可以都开。"""
+    await music.apply_async({"op": "emby", "url": jf.base + "/emby", "user": "andy", "password": JF_PW})
+    await configure_jf(jf)
+    d = json.loads((tmp_path / "media.json").read_text(encoding="utf-8"))
+    assert d["emby"]["url"] == jf.base and d["emby"]["token"] == JF_TOKEN and JF_PW not in json.dumps(d)
+    em = music.emby()
+    assert isinstance(em, music.Emby) and em.key == "e"
+    assert (await em.ping())["version"] == "10.10.0" and services.status("emby")["ok"]
+    login = [c for c in jf.calls if c[1] == "/Users/AuthenticateByName"][0]
+    assert login[3].startswith("Emby ")
+    assert {s.key for s in music.sources()} == {"j", "e"}
+    r = await music.find("红烧肉", video=True)
+    assert {t["id"][0] for t in r["tracks"]} <= {"j", "e"} and r["tracks"]
+    music.apply({"op": "ref", "section": "recipes", "ref": {"type": "folder", "id": "e.lib-cook", "name": "菜谱"}})
+    r = await (await client.get("/kiosk/media/section/recipes")).json()
+    assert r["tracks"][0]["id"] == "e.v1"
+    assert (await client.get("/kiosk/media/stream/e.e1")).status == 200
+    v = await (await client.get("/admin/api/media")).json()
+    assert v["emby"]["has_password"] and v["jellyfin"]["has_password"]
+    sd = await (await client.get("/admin/api/services")).json()
+    assert [m["id"] for m in sd["media"]] == ["music", "jellyfin", "emby"] and sd["media"][2]["configured"]

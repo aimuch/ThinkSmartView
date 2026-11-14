@@ -5,6 +5,7 @@
 - Jellyfin（j.）：家里 NAS 上的影音服务器，视频和音频都能放。后台填用户名密码换 AccessToken（只存 token），
   或者直接填 API Key。设备上放视频：H.264/MP4 且不高于 720p 直接发；别的让 Jellyfin 转成 720p H.264 的分片 MP4。
   （设备的 WebKit 实测：720p H.264 30 帧不掉帧，1080p 约 26 帧，VP8 只有 7 帧，见设计画布第 60 块。）
+- Emby（e.）：和 Jellyfin 同一套接口（Emby 是 Jellyfin 的前身），认证头不同，其余一样（Jellyfin 的类直接用）。
 - 网关本机 music/ 文件夹（l.）：没有 NAS 的人用，音频、视频都行，后台能上传。
 
 分区（sections）按用途，不按来源：儿童区（kid=True）「儿歌」「睡前故事」「英语启蒙」「动画」，大人区「音乐」「英语学习」「菜谱」，
@@ -90,6 +91,7 @@ def local_root() -> Path:
 def _empty() -> dict:
     return {"navidrome": {"url": "", "user": "", "salt": "", "token": "", "on": True},
             "jellyfin": {"url": "", "user": "", "user_id": "", "token": "", "device": "", "key": False, "on": True},
+            "emby": {"url": "", "user": "", "user_id": "", "token": "", "device": "", "key": False, "on": True},
             "local": {"on": True},
             "sections": [dict({k: v for k, v in p.items() if k != "words"}, refs=[]) for p in PRESETS]}
 
@@ -118,7 +120,8 @@ def load() -> dict:
             continue
     if not isinstance(raw, dict):
         return d
-    for src, keys in (("navidrome", ("url", "user", "salt", "token")), ("jellyfin", ("url", "user", "user_id", "token", "device"))):
+    for src, keys in (("navidrome", ("url", "user", "salt", "token")), ("jellyfin", ("url", "user", "user_id", "token", "device")),
+                      ("emby", ("url", "user", "user_id", "token", "device"))):
         got = raw.get(src) if isinstance(raw.get(src), dict) else {}
         for k in keys:
             if isinstance(got.get(k), str):
@@ -156,7 +159,7 @@ def _ref(x):
     if not isinstance(x, dict) or x.get("type") not in REF_TYPES:
         return None
     rid = str(x.get("id") or "")
-    if not re.fullmatch(r"[njl]\.[\w\-=./]{0,400}", rid):
+    if not re.fullmatch(r"[njel]\.[\w\-=./]{0,400}", rid):
         return None
     out = {"type": x["type"], "id": rid, "name": str(x.get("name") or "")[:60]}
     if x.get("media") in ("audio", "video"):
@@ -206,15 +209,17 @@ def apply(op: dict) -> dict:
                     raise MediaError("填上密码（改了用户名也要重新填）")
                 nv["url"], nv["user"] = url, user
             _index.pop("n", None)
-        elif kind == "jellyfin_saved":                       # apply_async 换好 token 以后
-            d["jellyfin"] = {**d["jellyfin"], **{k: op[k] for k in ("url", "user", "user_id", "token", "device", "key") if k in op}}
-            _index.pop("j", None)
-        elif kind == "jellyfin_clear":
-            d["jellyfin"] = {**_empty()["jellyfin"], "on": d["jellyfin"]["on"]}
-            _index.pop("j", None)
+        elif kind in ("jellyfin_saved", "emby_saved"):       # apply_async 换好 token 以后
+            which = kind.split("_")[0]
+            d[which] = {**d[which], **{k: op[k] for k in ("url", "user", "user_id", "token", "device", "key") if k in op}}
+            _index.pop(SERVERS[which].key, None)
+        elif kind in ("jellyfin_clear", "emby_clear"):
+            which = kind.split("_")[0]
+            d[which] = {**_empty()[which], "on": d[which]["on"]}
+            _index.pop(SERVERS[which].key, None)
         elif kind == "toggle":
             which = op.get("source")
-            if which not in ("navidrome", "jellyfin", "local"):
+            if which not in ("navidrome", "jellyfin", "emby", "local"):
                 raise MediaError("没有这个来源")
             d[which]["on"] = bool(op.get("on"))
         elif kind in ("tag", "ref"):                         # 把一项加进 / 移出分区（tag 是 58 块的说法）
@@ -274,30 +279,32 @@ def apply(op: dict) -> dict:
 
 
 async def apply_async(op: dict) -> dict:
-    """{"op": "jellyfin", "url", "user", "password" | "api_key"}：先在 Jellyfin 上换 token（密码不存），再存。"""
-    if op.get("op") != "jellyfin":
+    """{"op": "jellyfin"|"emby", "url", "user", "password" | "api_key"}：先在服务器上换 token（密码不存），再存。"""
+    which = op.get("op")
+    if which not in SERVERS:
         return await asyncio.to_thread(apply, op)
-    url = _norm_url(op.get("url"), strip=())
+    cls = SERVERS[which]
+    url = _norm_url(op.get("url"), strip=("/emby",))
     if not url:
-        return await asyncio.to_thread(apply, {"op": "jellyfin_clear"})
+        return await asyncio.to_thread(apply, {"op": f"{which}_clear"})
     d = load()
-    jf = d["jellyfin"]
+    jf = d[which]
     user, password, key = str(op.get("user") or "").strip()[:64], str(op.get("password") or ""), str(op.get("api_key") or "").strip()
     device = jf["device"] or secrets.token_hex(8)
     if key:
-        src = Jellyfin(url, "", key, device)
+        src = cls(url, "", key, device)
         uid = await src.find_user(user)
         saved = {"url": url, "user": user or src.user_name, "user_id": uid, "token": key, "device": device, "key": True}
     elif password:
         if not user:
-            raise MediaError("填上 Jellyfin 的用户名")
-        token, uid = await Jellyfin.login(url, user, password, device)
+            raise MediaError(f"填上 {cls.name} 的用户名")
+        token, uid = await cls.login(url, user, password, device)
         saved = {"url": url, "user": user, "user_id": uid, "token": token, "device": device, "key": False}
     elif jf["token"] and user == jf["user"]:
         saved = {"url": url}
     else:
         raise MediaError("填上密码或者 API Key（改了用户名也要重新填）")
-    return await asyncio.to_thread(apply, {"op": "jellyfin_saved", **saved})
+    return await asyncio.to_thread(apply, {"op": f"{which}_saved", **saved})
 
 
 # ---------------------------------------------------------------- 文字和模糊匹配
@@ -568,8 +575,8 @@ JF_ORDER = "ParentIndexNumber,IndexNumber,SortName"
 
 
 class Jellyfin(Source):
-    """Jellyfin 的 REST API。认证放在 Authorization 头里（不进 URL，也就不会出现在任何日志里）。"""
-    key, name = "j", "Jellyfin"
+    """Jellyfin 的 REST API（Emby 也用这个类，只是认证头不同）。认证放在请求头里（不进 URL，也就不会出现在任何日志里）。"""
+    key, name, sid = "j", "Jellyfin", "jellyfin"
 
     def __init__(self, url, user_id, token, device, timeout=10.0):
         self.url, self.user_id, self.token, self.device = url.rstrip("/"), user_id, token, device or "xiaozhi-hub"
@@ -581,8 +588,12 @@ class Jellyfin(Source):
         h = f'MediaBrowser Client="{CLIENT}", Device="xiaozhi-hub", DeviceId="{device}", Version="1.0"'
         return h + (f', Token="{token}"' if token else "")
 
+    @classmethod
+    def _auth_headers(cls, device, token=""):
+        return {"Authorization": cls._auth(device, token)}
+
     def _headers(self):
-        return {"Authorization": self._auth(self.device, self.token)}
+        return self._auth_headers(self.device, self.token)
 
     @classmethod
     async def login(cls, url, user, password, device):
@@ -590,11 +601,11 @@ class Jellyfin(Source):
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10, connect=4)) as s:
                 async with s.post(f"{url}/Users/AuthenticateByName", json={"Username": user, "Pw": password},
-                                  headers={"Authorization": cls._auth(device)}) as r:
+                                  headers=cls._auth_headers(device)) as r:
                     if r.status in (401, 403):
                         raise MediaError("用户名或密码不对")
                     if r.status != 200:
-                        raise MediaError(f"返回 {r.status}" + ("（地址不对？Jellyfin 的地址一般是 http://NAS:8096）" if r.status == 404 else ""))
+                        raise MediaError(f"返回 {r.status}" + (f"（地址不对？填 {cls.name} 网页的地址，比如 http://NAS:8096）" if r.status == 404 else ""))
                     data = await r.json(content_type=None)
         except MediaError:
             raise
@@ -621,10 +632,10 @@ class Jellyfin(Source):
                         raise MediaError("返回的不是 Jellyfin 接口")
         except Exception as e:  # noqa: BLE001
             if record:
-                services.record("jellyfin", False, (time.monotonic() - t0) * 1000, _safe(e))
+                services.record(self.sid, False, (time.monotonic() - t0) * 1000, _safe(e))
             raise MediaError(_safe(e)) from None
         if record:
-            services.record("jellyfin", True, (time.monotonic() - t0) * 1000)
+            services.record(self.sid, True, (time.monotonic() - t0) * 1000)
         return data
 
     async def find_user(self, name):
@@ -657,7 +668,7 @@ class Jellyfin(Source):
         artist = ", ".join(x.get("Artists") or []) or x.get("SeriesName") or x.get("AlbumArtist") or ""
         album = x.get("Album") or x.get("SeasonName") or ""
         dur = int((x.get("RunTimeTicks") or 0) / 1e7)
-        return _track("j", x.get("Id"), title, artist, album, dur, self._cover_of(x), "video" if video else "audio",
+        return _track(self.key, x.get("Id"), title, artist, album, dur, self._cover_of(x), "video" if video else "audio",
                       x.get("Height") or 0)
 
     def _folder(self, x):
@@ -668,8 +679,8 @@ class Jellyfin(Source):
         if x.get("ChildCount"):
             sub += f" · {x['ChildCount']} 个"
         cover = self._cover_of(x)
-        return {"id": f"j.{x.get('Id')}", "type": kind, "name": str(x.get("Name") or "")[:80], "sub": sub,
-                "cover": f"j.{cover}" if cover else ""}
+        return {"id": f"{self.key}.{x.get('Id')}", "type": kind, "name": str(x.get("Name") or "")[:80], "sub": sub,
+                "cover": f"{self.key}.{cover}" if cover else ""}
 
     def _split(self, items):
         folders = [self._folder(x) for x in items if x.get("IsFolder") or x.get("Type") in JF_FOLDERS]
@@ -749,10 +760,10 @@ class Jellyfin(Source):
         s = await self._source(rid)
         if not s["video"]:
             return await _relay(request, f"{self.url}/Audio/{rid}/stream", {"static": "true", "mediaSourceId": s["id"]},
-                                self._headers(), sid="jellyfin")
+                                self._headers(), sid=self.sid)
         if self.direct_ok(s):
             return await _relay(request, f"{self.url}/Videos/{rid}/stream", {"static": "true", "mediaSourceId": s["id"]},
-                                self._headers(), sid="jellyfin")
+                                self._headers(), sid=self.sid)
         try:
             start = max(0.0, float(request.query.get("t") or 0))
         except ValueError:
@@ -761,11 +772,30 @@ class Jellyfin(Source):
                   "VideoBitrate": 2500000, "AudioBitrate": 128000, "AudioChannels": 2, "static": "false",
                   "PlaySessionId": secrets.token_hex(8), "StartTimeTicks": int(start * 1e7) or None}
         return await _relay(request, f"{self.url}/Videos/{rid}/stream.mp4", {k: v for k, v in params.items() if v is not None},
-                            self._headers(), ctype="video/mp4", sid="jellyfin")
+                            self._headers(), ctype="video/mp4", sid=self.sid)
 
     async def cover(self, request, rid, size=300):
         return await _relay(request, f"{self.url}/Items/{rid}/Images/Primary", {"maxHeight": size, "quality": 85},
-                            self._headers(), ctype="image/jpeg", cache=True, sid="jellyfin")
+                            self._headers(), ctype="image/jpeg", cache=True, sid=self.sid)
+
+
+class Emby(Jellyfin):
+    """Emby：接口和 Jellyfin 一样，认证用 X-Emby-Authorization / X-Emby-Token。"""
+    key, name, sid = "e", "Emby", "emby"
+
+    @staticmethod
+    def _auth(device, token=""):
+        return f'Emby Client="{CLIENT}", Device="xiaozhi-hub", DeviceId="{device}", Version="1.0"'
+
+    @classmethod
+    def _auth_headers(cls, device, token=""):
+        h = {"X-Emby-Authorization": cls._auth(device)}
+        if token:
+            h["X-Emby-Token"] = token
+        return h
+
+
+SERVERS = {"jellyfin": Jellyfin, "emby": Emby}
 
 
 def _enc(rel: str) -> str:
@@ -936,11 +966,16 @@ def navidrome(d: dict = None, password: str = None, url: str = None, user: str =
     return Navidrome(url, user, salt, token)
 
 
-def jellyfin(d: dict = None):
-    jf = (d or load())["jellyfin"]
+def jellyfin(d: dict = None, which: str = "jellyfin"):
+    """配好的 Jellyfin（which="emby"：Emby）；没配好 None。"""
+    jf = (d or load())[which]
     if not (jf["url"] and jf["token"] and jf["user_id"]):
         return None
-    return Jellyfin(jf["url"], jf["user_id"], jf["token"], jf["device"])
+    return SERVERS[which](jf["url"], jf["user_id"], jf["token"], jf["device"])
+
+
+def emby(d: dict = None):
+    return jellyfin(d, "emby")
 
 
 def sources(d: dict = None) -> list:
@@ -950,9 +985,10 @@ def sources(d: dict = None) -> list:
     nv = navidrome(d)
     if nv and d["navidrome"]["on"]:
         out.append(nv)
-    jf = jellyfin(d)
-    if jf and d["jellyfin"]["on"]:
-        out.append(jf)
+    for which in SERVERS:
+        jf = jellyfin(d, which)
+        if jf and d[which]["on"]:
+            out.append(jf)
     if d["local"]["on"]:
         lo = Local()
         if lo.root.is_dir() and any(lo._files(lo.root)[:1]):
@@ -968,18 +1004,19 @@ def get(key: str, d: dict = None) -> Source:
         if not src:
             raise MediaError("还没在后台填 Navidrome 的地址和账号")
         return src
-    if key == "j":
-        src = jellyfin(d)
-        if not src:
-            raise MediaError("还没在后台填 Jellyfin 的地址和账号")
-        return src
+    for which, cls in SERVERS.items():
+        if key == cls.key:
+            src = jellyfin(d, which)
+            if not src:
+                raise MediaError(f"还没在后台填 {cls.name} 的地址和账号")
+            return src
     if key == "l":
         return Local()
     raise MediaError("没有这个来源")
 
 
 def split_id(sid: str) -> tuple:
-    m = re.fullmatch(r"([njl])\.([\w\-=./]{0,400})", str(sid or ""))
+    m = re.fullmatch(r"([njel])\.([\w\-=./]{0,400})", str(sid or ""))
     if not m:
         raise MediaError("没有这一项")
     return m.group(1), m.group(2)
@@ -1249,13 +1286,13 @@ def _local_count():
 def view() -> dict:
     """后台「媒体」页（不含口令和 token）。"""
     d = load()
-    nv, jf = d["navidrome"], d["jellyfin"]
+    nv = d["navidrome"]
     prog = progress_list()
     return {
         "navidrome": {"url": nv["url"], "user": nv["user"], "has_password": bool(nv["token"]), "on": nv["on"],
                       "status": services.status("music")},
-        "jellyfin": {"url": jf["url"], "user": jf["user"], "has_password": bool(jf["token"]), "key": jf["key"], "on": jf["on"],
-                     "status": services.status("jellyfin")},
+        **{w: {"url": d[w]["url"], "user": d[w]["user"], "has_password": bool(d[w]["token"]), "key": d[w]["key"], "on": d[w]["on"],
+               "status": services.status(w)} for w in SERVERS},
         "local": {"on": d["local"]["on"], "count": _local_count(), "dir": str(Local().root)},
         "sections": [dict(s, words=words_of(s)[1:], progress=[p for p in prog if p["section"] == s["id"]][:6]) for s in d["sections"]],
         "plays": PLAYS,
@@ -1285,9 +1322,11 @@ def device_view(who: str = "", kids: bool = False) -> dict:
 def brief() -> list:
     """外部服务页的两行：Navidrome、Jellyfin。"""
     d = load()
-    nv, jf = d["navidrome"], d["jellyfin"]
+    nv, jf, em = d["navidrome"], d["jellyfin"], d["emby"]
     n = _local_count() if d["local"]["on"] else 0
     return [{"id": "music", "name": "Navidrome（家里 NAS 上的音乐）", "url": nv["url"], "configured": bool(nv["url"] and nv["token"]),
              "on": nv["on"], "local": n, "status": services.status("music")},
             {"id": "jellyfin", "name": "Jellyfin（家里 NAS 上的视频）", "url": jf["url"], "configured": bool(jf["url"] and jf["token"]),
-             "on": jf["on"], "local": 0, "status": services.status("jellyfin")}]
+             "on": jf["on"], "local": 0, "status": services.status("jellyfin")},
+            {"id": "emby", "name": "Emby（家里 NAS 上的视频）", "url": em["url"], "configured": bool(em["url"] and em["token"]),
+             "on": em["on"], "local": 0, "status": services.status("emby")}]

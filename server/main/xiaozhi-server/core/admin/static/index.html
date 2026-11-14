@@ -289,7 +289,7 @@
     .mu-crumb .mu-here { margin-left: 0; flex: 0 0 100%; }
   }
   /* 媒体（设计画布第 60 块） */
-  .md-srcs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .md-srcs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
   .md-srcs .md-src:has(.mu-form) { grid-column: 1 / -1; }
   .md-src { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
   .md-line { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -2791,10 +2791,10 @@ async function renderMedia(root) {
   const ms = (v) => (v == null ? "" : v < 1000 ? `${v} 毫秒` : `${(v / 1000).toFixed(1)} 秒`);
   const dur = (s) => (s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : "");
   const TYPE_NAME = { folder: "文件夹", playlist: "歌单", album: "专辑", artist: "歌手", item: "单个" };
-  const SRC = { n: ["navidrome", "Navidrome", "音频"], j: ["jellyfin", "Jellyfin", "视频和音频"], l: ["local", "网关本机文件夹", "音频和视频"] };
+  const SRC = { n: ["navidrome", "Navidrome", "音频"], j: ["jellyfin", "Jellyfin", "视频和音频"], e: ["emby", "Emby", "视频和音频"], l: ["local", "网关本机文件夹", "音频和视频"] };
   const nav = { src: null, tab: "folders", q: "", stack: [], data: null, loading: false, playing: "", video: null };
   const tested = {}, open = {};
-  const ready = () => ["n", "j", "l"].filter((k) => k === "l" ? d.local.on : d[SRC[k][0]].url && d[SRC[k][0]].has_password);
+  const ready = () => ["n", "j", "e", "l"].filter((k) => k === "l" ? d.local.on : d[SRC[k][0]].url && d[SRC[k][0]].has_password);
   if (!nav.src) nav.src = ready()[0] || "l";
   const kidName = (s) => (s.kid ? "儿童" : "大人");
   const inSec = (id) => d.sections.filter((s) => s.refs.some((r) => r.id === id));
@@ -2808,7 +2808,7 @@ async function renderMedia(root) {
   }
   const dotOf = (which) => { const x = d[which], t = tested[which], s = t || x.status || {}; return !x.url ? "none" : t ? (t.ok ? "ok" : "bad") : !s.at ? "none" : s.ok ? "ok" : "bad"; };
   function srcCard(which) {
-    const x = d[which], jf = which === "jellyfin", name = jf ? "Jellyfin" : "Navidrome";
+    const x = d[which], jf = which !== "navidrome", name = { navidrome: "Navidrome", jellyfin: "Jellyfin", emby: "Emby" }[which];
     const form = open[which] || !x.url;
     return `<div class="md-src"><div class="sv-head"><span class="sv-dot ${dotOf(which)}"></span><b>${name}</b><span class="muted small">${jf ? "视频和音频" : "音频"}</span>
         <span class="sv-acts">${x.url ? `<button class="btn sm" data-open-form="${which}">${form ? "收起" : "改"}</button><label class="switch" style="margin:0" title="${x.on ? "不用它" : "用它"}"><input type="checkbox" data-src-on="${which}" ${x.on ? "checked" : ""}></label>` : ""}</span></div>
@@ -2816,9 +2816,9 @@ async function renderMedia(root) {
       ${form ? `<div class="mu-form ${jf ? "jf" : ""}" data-form="${which}"><label>地址<input class="in mono" data-f="url" value="${esc(x.url)}" placeholder="http://NAS:${jf ? "8096" : "4533"}" autocomplete="off"></label>
         <label>用户名<input class="in" data-f="user" value="${esc(x.user)}" autocomplete="off"></label>
         <label>密码<input class="in" data-f="password" type="password" autocomplete="new-password" placeholder="${x.has_password ? "已存（不显示），要改再填" : `${name} 的登录密码`}"></label>
-        ${jf ? '<label>或者 API Key<input class="in mono" data-f="api_key" type="password" autocomplete="off" placeholder="Jellyfin 控制台 › API 密钥"></label>' : ""}
+        ${jf ? `<label>或者 API Key<input class="in mono" data-f="api_key" type="password" autocomplete="off" placeholder="${name} 控制台 › API 密钥"></label>` : ""}
         <span class="md-btns"><button class="btn" data-test-src="${which}">测试</button><button class="btn primary" data-save-src="${which}">保存</button></span></div>
-      <p class="muted small" style="margin:6px 0 0">${jf ? "密码只用来换 Jellyfin 的登录令牌，网关存令牌不存密码；也可以填 API Key。H.264、不高于 720p 的视频直接放，别的让 Jellyfin 转成 720p 再发给设备。"
+      <p class="muted small" style="margin:6px 0 0">${jf ? `密码只用来换 ${name} 的登录令牌，网关存令牌不存密码；也可以填 API Key。H.264、不高于 720p 的视频直接放，别的让 ${name} 转成 720p 再发给设备。`
         : "密码只用来算 Subsonic 的 token（md5(密码 + 随机 salt)），网关存 token 不存密码。"}改了用户名要重新填。</p>` : ""}</div>`;
   }
   function sectionCard(s) {
@@ -2828,7 +2828,7 @@ async function renderMedia(root) {
         <select class="in md-play" data-playstyle="${s.id}" title="放法">${Object.entries(d.plays).map(([k, n]) => `<option value="${k}" ${s.play === k ? "selected" : ""}>${n}</option>`).join("")}</select>
         <button class="btn sm" data-kid="${s.id}" title="挪到${s.kid ? "大人区" : "儿童区"}">${s.kid ? "→ 大人区" : "→ 儿童区"}</button>
         ${/^c[0-9a-f]{6}$/.test(s.id) ? `<button class="btn sm danger" data-del-sec="${s.id}">删除</button>` : ""}</div>
-      <div class="md-refs">${s.refs.length ? s.refs.map((r) => `<span class="mu-chip ${s.kid ? "" : "bedtime"}">${r.id.startsWith("j.") ? "▶" : r.id.startsWith("n.") ? "♪" : "▤"} ${esc(r.name || r.id)}<small>${esc(TYPE_NAME[r.type] || "")}</small><button data-unref="${s.id}" data-ref='${esc(JSON.stringify(r))}' title="去掉" aria-label="去掉">✕</button></span>`).join("")
+      <div class="md-refs">${s.refs.length ? s.refs.map((r) => `<span class="mu-chip ${s.kid ? "" : "bedtime"}">${/^[je]\./.test(r.id) ? "▶" : r.id.startsWith("n.") ? "♪" : "▤"} ${esc(r.name || r.id)}<small>${esc(TYPE_NAME[r.type] || "")}</small><button data-unref="${s.id}" data-ref='${esc(JSON.stringify(r))}' title="去掉" aria-label="去掉">✕</button></span>`).join("")
         : '<span class="muted small">空的：在下面打开文件夹、媒体库或歌单，点「加到分区」</span>'}</div>
       ${prog ? `<div class="md-prog">${prog}</div>` : ""}</div>`;
   }
@@ -2861,22 +2861,22 @@ async function renderMedia(root) {
     return items + songs || '<p class="muted small">这里没有东西</p>';
   }
   function crumb() {
-    const top = { albums: nav.src === "j" ? "剧集和专辑" : "专辑", playlists: "歌单", folders: nav.src === "j" ? "媒体库" : "文件夹", random: "随便听听", search: `搜「${nav.q}」` }[nav.tab];
+    const top = { albums: "je".includes(nav.src) ? "剧集和专辑" : "专辑", playlists: "歌单", folders: "je".includes(nav.src) ? "媒体库" : "文件夹", random: "随便听听", search: `搜「${nav.q}」` }[nav.tab];
     if (!nav.stack.length) return `<b>${esc(top)}</b>`;
     const cur = nav.stack[nav.stack.length - 1];
     return `<a href="#" data-up="0">${esc(top)}</a>` + nav.stack.map((s, i) => i === nav.stack.length - 1 ? ` › <b>${esc(s.name)}</b>${inTags(s.id)}` : ` › <a href="#" data-up="${i + 1}">${esc(s.name)}</a>`).join("")
       + `<span class="sv-acts mu-here">${addSelect({ type: cur.type, id: cur.id, name: cur.name })}</span>`;
   }
   function tabs() {
-    const list = nav.src === "l" ? [["folders", "文件夹"], ["albums", "专辑"]] : nav.src === "j" ? [["folders", "媒体库"], ["albums", "剧集和专辑"], ["playlists", "播放列表"]]
+    const list = nav.src === "l" ? [["folders", "文件夹"], ["albums", "专辑"]] : "je".includes(nav.src) ? [["folders", "媒体库"], ["albums", "剧集和专辑"], ["playlists", "播放列表"]]
       : [["folders", "文件夹"], ["albums", "专辑"], ["playlists", "歌单"], ["random", "随便听听"]];
     return list.map(([k, n]) => `<button class="btn sm ${nav.tab === k && !nav.stack.length ? "primary" : ""}" data-tab="${k}">${n}</button>`).join("");
   }
   function draw() {
     const r = ready();
     root.innerHTML = `
-    <div class="page-head"><div><h1>媒体</h1><p class="sub">设备上说「放儿歌」「放英语第三课」「看红烧肉的视频」「下一首」时放这里的。只接自己家里的：NAS 上的 Navidrome、Jellyfin，或者网关本机的文件夹。</p></div></div>
-    <div class="md-srcs">${srcCard("navidrome")}${srcCard("jellyfin")}
+    <div class="page-head"><div><h1>媒体</h1><p class="sub">设备上说「放儿歌」「放英语第三课」「看红烧肉的视频」「下一首」时放这里的。只接自己家里的：NAS 上的 Navidrome、Jellyfin、Emby，或者网关本机的文件夹；用哪几个就填哪几个。</p></div></div>
+    <div class="md-srcs">${srcCard("navidrome")}${srcCard("jellyfin")}${srcCard("emby")}
       <div class="md-src"><div class="sv-head"><span class="sv-dot ${d.local.on && d.local.count ? "ok" : "none"}"></span><b>网关本机文件夹</b><span class="muted small">没有 NAS 时用</span>
         <span class="sv-acts"><label class="switch" style="margin:0" title="${d.local.on ? "不用它" : "用它"}"><input type="checkbox" data-src-on="local" ${d.local.on ? "checked" : ""}></label></span></div>
         <div class="md-line">${d.local.count} 个 · <span class="mono">${esc(d.local.dir)}</span></div><p class="muted small" style="margin:6px 0 0">在下面「浏览」切到「本机」上传，音频视频都行。</p></div></div>
@@ -2917,7 +2917,7 @@ async function renderMedia(root) {
       delete tested[which];
       if (await save({ op: which, ...form(which) }, "保存好了")) {
         open[which] = false; draw();
-        const k = which === "jellyfin" ? "j" : "n";
+        const k = { jellyfin: "j", emby: "e" }[which] || "n";
         if (ready().includes(k)) { nav.src = k; nav.tab = "folders"; nav.stack = []; load(); }
       }
     })));
