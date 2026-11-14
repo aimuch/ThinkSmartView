@@ -858,7 +858,7 @@ def make_app(client: Client):
     async def music_cover(request):
         """专辑封面：从网关中转（/kiosk/music/cover/<id>），设备上缓存一天。"""
         sid = request.match_info['id']
-        if not re.fullmatch(r'[njl]\.[\w\-=./]{0,400}', sid):
+        if not re.fullmatch(r'[a-z]\.[\w\-=./]{0,400}', sid):
             raise web.HTTPNotFound()
         url = f"{client.cfg['hub_http']}/kiosk/media/cover/{urllib.parse.quote(sid, safe='')}?size=300"
         try:

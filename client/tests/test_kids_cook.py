@@ -221,3 +221,39 @@ def test_media_card_lists_stations_before_anything_played(tmp_path, monkeypatch)
     c.media = None
     v = c.media_view()
     assert v['playing'] is None and len(v['stations']) == 6 and {s['id'] for s in v['sounds']} == {'rain', 'ocean', 'fan', 'white', 'birds'}
+
+
+def test_family_kids_sync_learn_and_reports(tmp_path, monkeypatch):
+    """孩子和学习（设计画布第 61 块）：网关那份比上次用的新才照着改；设备改的记下网关的时间；学一学用网关的内容；报记录。"""
+    c = make_client(tmp_path, monkeypatch)
+    c.publish_kids = lambda: None
+    c.say = lambda text: c.said.append(text) or asyncio.sleep(0)
+    gw = {'enabled': True, 'age': 6, 'daily_minutes': 45, 'bedtime': '21:00', 'voice': 'child', 'updated': 100.0}
+
+    async def hub_http(path, body=None):
+        c.hub_calls.append((path, body))
+        if path.startswith('/kiosk/kids/learn'):
+            return {'ok': True, 'text': '和6岁的孩子玩认字卡：按顺序从这些字里出：人、口、手。'}
+        if path.startswith('/kiosk/kids'):
+            return {'ok': True, 'kids': dict(gw)}
+        if path == '/kiosk/prefs':
+            return {'ok': True, 'kids': {**body['kids'], 'updated': 200.0}}
+        return {'ok': True}
+    c._hub_http = hub_http
+
+    async def run():
+        assert await c.refresh_kids() is True
+        assert c.kids['enabled'] and c.kids['daily_minutes'] == 45 and c.kids['bedtime'] == '21:00' and c.cfg['kids_synced'] == 100.0
+        assert await c.refresh_kids() is False                                  # 没有更新的
+        await c.set_kids(daily_minutes=20)                                      # 设备上改：网关记成最新的
+        assert c.cfg['kids_synced'] == 200.0
+        gw['daily_minutes'] = 90
+        assert await c.refresh_kids() is False and c.kids['daily_minutes'] == 20     # 网关那份旧：不听它的
+        gw['updated'] = 300.0
+        assert await c.refresh_kids() is True and c.kids['daily_minutes'] == 90
+        await c.learn('chars')
+        assert c.said[-1].startswith('【学习·认字卡】和6岁的孩子玩认字卡：按顺序从这些字里出：人、口、手')
+        await asyncio.sleep(0)
+        assert any(p == '/kiosk/kids/report' and b['kind'] == 'learn' and b['learn'] == 'chars' for p, b in c.hub_calls)
+    asyncio.run(run())
+    assert json.loads(config.PATH.read_text())['kids_synced'] == 300.0

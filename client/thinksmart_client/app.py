@@ -1163,6 +1163,12 @@ class Client:
 
     def _media_changed(self, view):
         self.events.publish('media', view)
+        now = view.get('playing') or {}
+        if now.get('kind') == 'music' and now.get('id') != getattr(self, '_kid_played', None):
+            self._kid_played = now.get('id')
+            sec = now.get('section') or {}
+            if sec.get('kid') or self.kids.get('enabled'):          # 儿童区的、儿童模式下放的：记给「孩子和学习」
+                self.kid_report('played', title=now.get('name') or '', section=sec.get('name') or '')
 
     def _kids_block(self):
         """儿童模式过了限时、到了睡觉时间：屏幕上点也不放（设计画布第 58 块）。"""
@@ -1400,7 +1406,14 @@ class Client:
     # ---- 孩子和学习：学一学（kids.LEARN，设计画布第 34 块） ----
 
     async def learn(self, kind):
-        text = kids.learn_prompt(kind, self.kids.get('age'))
+        text = kids.learn_prompt(kind, self.kids.get('age'))      # 先确认 kind 认得（不认得抛 ValueError）
+        try:                    # 网关后台「孩子和学习」里改的字表、古诗、口算范围（设计画布第 61 块）；连不上用自带的
+            data = await self._hub_http('/kiosk/kids/learn?' + urllib.parse.urlencode({'kind': kind, 'age': self.kids.get('age') or 6}))
+            if (data or {}).get('text'):
+                text = text.split('】', 1)[0] + '】' + data['text']
+        except Exception as e:
+            log.info('learn content from the hub: %s', e)
+        self.kid_report('learn', learn=kind)
         self.screen.poke()
         await self.say(text)
         return {}
@@ -1702,15 +1715,64 @@ class Client:
         return self.kids_view()
 
     async def _sync_prefs(self):
-        """Tell the hub (data/device_prefs.json): next connection uses the kids prompt and voice."""
+        """Tell the hub (data/device_prefs.json): next connection uses the kids prompt and voice. The hub keeps
+        the family's limits too (孩子和学习, 设计画布第 61 块): ours are now the newest, remember its time."""
         try:
-            await self._hub_http('/kiosk/prefs', {'device': self.cfg['device_id'], 'kids': self.kids})
+            data = await self._hub_http('/kiosk/prefs', {'device': self.cfg['device_id'], 'kids': self.kids})
+            self._kids_synced(((data or {}).get('kids') or {}).get('updated'))
             if self.hub.connected and not self.in_turn():
                 await self.hub.close()   # the prompt and the voice are set per connection
             return True
         except Exception as e:
             log.warning('could not tell the hub the kids setting: %s', e)
             return False
+
+    def _kids_synced(self, updated):
+        if isinstance(updated, (int, float)) and updated > (self.cfg.get('kids_synced') or 0):
+            self.cfg['kids_synced'] = updated
+            config.save(kids_synced=updated)
+
+    async def refresh_kids(self):
+        """网关后台「孩子和学习」改了儿童模式（全家的限时、睡觉时间、声音，这台开不开、几岁）：比上次用的新就照它的。
+        设备设置页上改的走 _sync_prefs，网关记成最新的；谁新听谁的。"""
+        try:
+            data = await self._hub_http('/kiosk/kids?' + urllib.parse.urlencode({'device': self.cfg['device_id']}))
+        except Exception as e:
+            log.info('kids from the hub: %s', e)
+            return False
+        gw = (data or {}).get('kids') or {}
+        updated = gw.get('updated') or 0
+        if not data.get('ok') or updated <= (self.cfg.get('kids_synced') or 0):
+            return False
+        try:
+            new = kids.normalize(self.kids, {k: gw[k] for k in ('enabled', 'age', 'daily_minutes', 'bedtime', 'voice') if k in gw})
+        except ValueError as e:
+            log.warning('kids from the hub not usable: %s', e)
+            return False
+        self._kids_synced(updated)
+        if new == self.kids:
+            return False
+        log.info('kids mode from the hub: %s', new)
+        prompt_changed = (new['enabled'], new['voice'], new['age']) != (self.kids['enabled'], self.kids['voice'], self.kids['age'])
+        self.kids = new
+        if new == kids.DEFAULT:
+            config.unset('kids')
+        else:
+            config.save(kids=new)
+        self.publish_kids()
+        if prompt_changed and self.hub.connected and not self.in_turn():
+            await self.hub.close()     # the prompt and the voice are set per connection
+        return True
+
+    def kid_report(self, kind, **value):
+        """报给网关「孩子和学习」的记录（只有分钟数、次数和名字）；网关连不上就算了。"""
+        bg.spawn(self._kid_report(kind, value), name='kid-report')
+
+    async def _kid_report(self, kind, value):
+        try:
+            await self._hub_http('/kiosk/kids/report', {'device': self.cfg['device_id'], 'kind': kind, **value})
+        except Exception as e:
+            log.info('kid report (%s): %s', kind, e)
 
     async def kids_refuse(self):
         """In kids mode past a limit: say why (no hub connection). True when the wake was refused."""
@@ -1762,6 +1824,9 @@ class Client:
                     kids.save_usage(today, self.kids_seconds)
                     if int(self.kids_seconds // 60) != before:
                         self.publish_kids()
+                if self.kids['enabled'] and int(self.kids_seconds // 300) != getattr(self, '_kid_talk_reported', -1):
+                    self._kid_talk_reported = int(self.kids_seconds // 300)     # 每多 5 分钟报一次今天聊了多久
+                    self.kid_report('talk', seconds=round(self.kids_seconds), date=today)
             except Exception:
                 log.exception('kids mode')
 
@@ -1852,6 +1917,7 @@ class Client:
         while True:
             await self.refresh_today()
             await self.refresh_radio()
+            await self.refresh_kids()
             await self.refresh_music()
             for _ in range(40):              # 20 minutes; the 'auto' theme is checked every 30 s
                 await asyncio.sleep(30)
@@ -3513,6 +3579,13 @@ class Client:
     async def _study_switched(self, how):
         """开了、关了：发给页面；how 是 'on' / 'off' / 'auto_off' 时说一句（跟着专注关的不说）。"""
         log.info('study companion %s', 'on' if self.study.enabled else 'off')
+        if not self.study.enabled:          # 关上了：今天的摘要报给网关「孩子和学习」
+            try:
+                day = self.study.day(datetime.date.today().isoformat())
+                self.kid_report('study', minutes=day['minutes'], present_minutes=day['present_minutes'],
+                                focus_pct=day['focused_pct'] or 0, reminders=day['reminder_total'])
+            except Exception:
+                log.exception('study summary')
         if not self.study.enabled and self.study_task and not self.study_task.done():
             self.study_task.cancel()
         self._study_publish()

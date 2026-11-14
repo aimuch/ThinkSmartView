@@ -65,6 +65,7 @@ DEFAULTS = {
     'avatar_recent': [],  # 最近用过的形象库款式，新的在前
     'home_blocks': [['clock', True], ['date', True], ['weather', True], ['alarms', True], ['suggest', True]],
     'kids': {'enabled': False, 'age': 3, 'daily_minutes': 30, 'bedtime': '20:30', 'voice': 'child'},   # kids.py
+    'kids_synced': 0,   # 网关「孩子和学习」那份儿童模式的 updated，用过的最新那次（设计画布第 61 块）
     # 待机页 (设计画布第 10 块): after this long idle, a big clock, the weather and the family album
     'standby': {'enabled': True, 'minutes': 2, 'album': True},
     'gentle_wake': {'enabled': False, 'minutes': 10, 'birds': True},   # 温柔叫醒 (gentle.py)
