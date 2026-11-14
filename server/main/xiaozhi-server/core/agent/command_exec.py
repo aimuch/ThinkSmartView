@@ -171,7 +171,15 @@ async def _cancel_one(conn, client, plan, device):
     data = await _call(conn, client, "self.alarm.cancel", {"id": one["id"]})
     if data.get("success") is False:
         return _said(data)
-    return f"好的，取消了{one.get('when') or ''}的{name}"
+    if kind == "timer":
+        return "好的，倒计时取消了"
+    return f"好的，取消了{_short_when(one.get('when'))}的{name}"
+
+
+def _short_when(when) -> str:
+    """设备的 when「今天（11月14日 星期六）07:00」念起来太长：去掉括号里的。"""
+    import re
+    return re.sub(r"[（(][^）)]*[）)]", "", str(when or "")).strip()
 
 
 async def _list(conn, client, plan, device):
@@ -182,7 +190,7 @@ async def _list(conn, client, plan, device):
         return f"现在没有{name}"
     if kind == "timer" and len(items) == 1:
         return f"倒计时还剩 {items[0].get('in') or ''}"
-    parts = [f"{KIND_NAME.get(i.get('type'), i.get('type') or '')} {i.get('when') or ''}{('，' + i['label']) if i.get('label') else ''}" for i in items[:3]]
+    parts = [f"{KIND_NAME.get(i.get('type'), i.get('type') or '')} {_short_when(i.get('when'))}{('，' + i['label']) if i.get('label') else ''}" for i in items[:3]]
     more = f"，还有 {len(items) - 3} 个" if len(items) > 3 else ""
     return f"有 {len(items)} 个：" + "；".join(parts) + more
 
