@@ -951,3 +951,39 @@ body.dash-on .ap-chip, body.dash-on .bt-chip { padding: 0 11px; }
   .cl-ring { width: min(60%, 260px); }
 }
 .cl-ring { align-self: center; }
+
+/* ---- 视频对讲（设计画布第 51 块，wf.js） ---- */
+.call-view { position: fixed; inset: 0; z-index: 40; background: radial-gradient(90% 60% at 30% 0%, #1a2560 0%, #050813 65%); color: #fff;
+  display: flex; align-items: center; justify-content: center; }
+.call-view[hidden], .call-view [hidden] { display: none !important; }
+.call-remote { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #050813; }
+.call-view:not([data-state="talking"]):not([data-state="connecting"]) .call-remote,
+.call-view:not([data-state="talking"]):not([data-state="connecting"]) .call-self,
+.call-view:not([data-state="talking"]):not([data-state="connecting"]) .call-time { display: none; }
+.call-self { position: absolute; right: 28px; top: 28px; width: 220px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 18px;
+  border: 2px solid #ffffff66; transform: scaleX(-1); background: #111; }
+.call-time { position: absolute; left: 28px; top: 28px; padding: 8px 18px; border-radius: 999px; background: #000a; font-size: 20px;
+  font-variant-numeric: tabular-nums; }
+.call-ring { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; padding: 24px; }
+.call-ring b { font-size: 40px; } .call-ring span { font-size: 20px; color: #c9d1f2; }
+.call-av { width: 150px; height: 150px; border-radius: 50%; display: grid; place-items: center; font-size: 62px; font-weight: 700; color: #1d1d3a;
+  background: linear-gradient(135deg, #ffb3d9, #9fb2ff); }
+.call-av.pulse { animation: call-pulse 1.6s ease-out infinite; }
+@keyframes call-pulse { 0% { box-shadow: 0 0 0 0 #2fbf7188; } 100% { box-shadow: 0 0 0 40px #2fbf7100; } }
+.call-big { display: flex; gap: 90px; margin-top: 34px; }
+.call-big button { width: 120px; height: 120px; border-radius: 50%; border: 0; color: #fff; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px; position: relative; }
+.call-big small { position: absolute; bottom: -38px; font-size: 20px; color: #c9d1f2; }
+.call-big .no { background: #ff4d5e; } .call-big .yes { background: #2fbf71; }
+.call-ctrls { position: absolute; left: 0; right: 0; bottom: 36px; display: flex; justify-content: center; gap: 28px; }
+.call-ctrls button { width: 84px; height: 84px; border-radius: 50%; border: 0; color: #fff; background: #ffffff33;
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); display: grid; place-items: center; }
+.call-ctrls button.on { background: #fff; color: #102; }
+.call-ctrls .end { background: #ff4d5e; }
+.call-big button:active, .call-ctrls button:active { transform: scale(.94); }
+#callHistory .bad { color: var(--bad); }
+@media (orientation: portrait) {
+  .call-self { width: 170px; aspect-ratio: 9 / 16; right: 20px; top: 20px; }
+  .call-time { left: 20px; top: 20px; }
+  .call-big { gap: 70px; }
+}

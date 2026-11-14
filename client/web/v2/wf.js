@@ -423,4 +423,66 @@ $('clName').addEventListener('input', () => {
 });
 $('clName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('clName').blur(); } });
 
+
+/* ---------------- 视频对讲（设计画布第 51 块） ---------------- */
+let callTick = null;
+const mmssOf = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+function renderCall() {
+  const c = ui.intercom;
+  if (!c) return;
+  const st = c.state, live = st === 'connecting' || st === 'talking';
+  $('callView').hidden = st === 'idle';
+  $('callView').dataset.state = st;
+  document.body.classList.toggle('in-call', st !== 'idle');
+  // 画面只在接通以后拉（不然一直开着连接）；结束时断开
+  const want = live ? '/api/call/video/' : '';
+  if (($('callRemote').dataset.on || '') !== want) {
+    $('callRemote').dataset.on = want;
+    $('callRemote').src = want ? want + 'remote' : '';
+    $('callSelf').src = want ? want + 'self' : '';
+    if (!want) { $('callRemote').removeAttribute('src'); $('callSelf').removeAttribute('src'); }
+  }
+  $('callRing').hidden = live;
+  $('callCtrls').hidden = !live;
+  $('callBig').hidden = st !== 'ringing';
+  $('callAv').textContent = (c.caller || '家').slice(0, 1);
+  $('callAv').classList.toggle('pulse', st === 'ringing');
+  $('callTitle').textContent = st === 'ringing' ? `${c.caller} 打来视频电话` : st === 'ended' ? c.ended : c.caller || '';
+  $('callNote').textContent = st === 'ringing' ? (c.auto_in != null && c.auto_answer ? `${c.auto_in} 秒后自动接通` : '通过 Tailscale · 手机') : '';
+  $('callMute').classList.toggle('on', !!c.muted);
+  $('callCam').classList.toggle('on', !!c.camera_off);
+  clearInterval(callTick); callTick = null;
+  const tick = () => { $('callTime').textContent = st === 'talking' && c.started ? `${mmssOf(Date.now() / 1000 - c.started)} · ${c.caller}` : '正在接通…'; };
+  if (live) { tick(); callTick = setInterval(tick, 1000); }
+  // 设置 → 家人 → 视频对讲
+  $('callAuto').setAttribute('aria-checked', String(!!c.auto_answer));
+  $('callHistory').innerHTML = (c.history || []).slice(0, 5).map(h => `<div class="al"><div class="al-text"><b>${esc(h.caller)}</b>` +
+    `<span${h.missed ? ' class="bad"' : ''}>${new Date(h.t * 1000).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${h.missed ? '未接' : mmssOf(h.seconds)}</span></div></div>`).join('');
+  $('callSub').textContent = (c.history || []).some(h => h.missed) ? '有未接来电' : '';
+}
+handlers.intercom = c => { ui.intercom = c; renderCall(); };
+async function callPost(action, value) {
+  const r = await postJson('/api/call', { action, value });
+  if (r.intercom) handlers.intercom(r.intercom);
+}
+$('callView').addEventListener('click', e => {
+  const b = e.target.closest('[data-ca2]');
+  if (!b || !ui.intercom) return;
+  const a = b.dataset.ca2;
+  if (a === 'mute') callPost('mute', !ui.intercom.muted);
+  else if (a === 'camera') callPost('camera', !ui.intercom.camera_off);
+  else callPost(a);
+});
+$('callAuto').addEventListener('click', () => callPost('auto_answer', !(ui.intercom && ui.intercom.auto_answer)));
+async function loadCallInfo() {
+  try {
+    const r = await (await fetch('/api/call/info', { cache: 'no-store' })).json();
+    $('callUrl').innerHTML = r.url ? `家人手机装好 Tailscale、登进家里的网络后，用 Safari 打开 <b>${esc(r.url)}</b>，选这台设备点「视频通话」。`
+      : esc(r.reason || '网关上还没装好 Tailscale');
+  } catch (e) { $('callUrl').textContent = '连不上小麦网关'; }
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-pane="family"]')) loadCallInfo(); });
+window.loadCallInfo = loadCallInfo;
+loadCallInfo();
+
 })();

@@ -523,6 +523,15 @@
       <div class="alarm-list" id="notesList"></div>
       <p class="opt-note">直接说「给爸爸留言：记得取快递」；首页便签也能看。</p>
     </div>
+    <div class="alarms-card" id="callCard">
+      <div class="bright-head"><b>视频对讲</b><span class="bright-num" id="callSub"></span></div>
+      <div class="opt">
+        <div class="opt-text"><b>家人打来自动接通</b><span>适合老人、孩子一个人在家：先响 5 秒、显示是谁，然后自己接通</span></div>
+        <button class="switch" id="callAuto" role="switch" aria-checked="false" aria-label="家人打来自动接通"><i></i></button>
+      </div>
+      <p class="opt-note" id="callUrl"></p>
+      <div class="alarm-list" id="callHistory"></div>
+    </div>
    </section>
    <section class="set-pane" data-pane="kids">
     <div class="alarms-card bt-card kids-card" id="kidsCard">
@@ -853,6 +862,26 @@
 </div>
 <!-- 温柔叫醒中（设计画布第 46 块）：暖色的光和底部一条，碰一下屏幕或点「停下」就停 -->
 <div class="gentle-glow" id="gentleGlow" hidden></div>
+<!-- 视频对讲：来电、通话中、结束（wf.js，设计画布第 51 块） -->
+<div class="call-view" id="callView" hidden>
+  <img class="call-remote" id="callRemote" alt="">
+  <img class="call-self" id="callSelf" alt="">
+  <span class="call-time" id="callTime"></span>
+  <div class="call-ring" id="callRing">
+    <div class="call-av" id="callAv"></div>
+    <b id="callTitle"></b>
+    <span id="callNote"></span>
+    <div class="call-big" id="callBig">
+      <button class="no" data-ca2="decline" aria-label="挂断"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg><small>挂断</small></button>
+      <button class="yes" data-ca2="accept" aria-label="接听"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 10l5-3v10l-5-3z"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg><small>接听</small></button>
+    </div>
+  </div>
+  <div class="call-ctrls" id="callCtrls">
+    <button data-ca2="mute" id="callMute" aria-label="静音"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <button data-ca2="camera" id="callCam" aria-label="关摄像头"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 10l5-3v10l-5-3z"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg></button>
+    <button class="end" data-ca2="hangup" aria-label="挂断"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+</div>
 <!-- 学习陪伴提醒了一句（wf.js，设计画布第 48 块） -->
 <div class="study-bubble" id="studyBubble" hidden><span class="sb-ic">🧍</span><div><b id="studyBubbleText"></b><small id="studyBubbleSub"></small></div></div>
 <div class="gentle-bar" id="gentleBar" hidden>

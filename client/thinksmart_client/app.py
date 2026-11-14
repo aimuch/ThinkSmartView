@@ -51,7 +51,7 @@ import aiohttp
 import numpy as np
 
 from . import bg
-from . import airplay, alarms, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import airplay, alarms, intercom, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -224,6 +224,7 @@ class Client:
     study = study.Study()                     # 学习陪伴 (study.py), likewise
     study_task = None
     airplay = None                            # AirPlay (airplay.py)
+    intercom = None                           # 视频对讲 (intercom.py)
     notes = []                                # 留言 (daily.py)
     lists = None                              # 清单 (the hub keeps them: /kiosk/lists)
     alert = None                              # the red banner of a Mijia sensor alert
@@ -377,6 +378,12 @@ class Client:
         self.study = study.Study(cfg.get('study'), STUDY_LOG)                # 学习陪伴（设计画布第 48 块）
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
         self.airplay = airplay.AirPlay(self.audio.airplay, self.events.publish, cfg.get('airplay'))   # 设计画布第 49 块
+        self.intercom = intercom.Intercom(   # 视频对讲（设计画布第 51 块）
+            cfg['hub_http'], cfg['device_id'], self.audio.call, self.events.publish,
+            lambda: camera.ROTATE.get(rotation.current(), camera.ROTATE['normal']), cfg.get('intercom'),
+            on_active=self._call_active, ring=self._call_ring,
+            saved=lambda history: config.save(intercom_history=history))
+        self.intercom.history = intercom.load_history(cfg.get('intercom_history'))
         self.mijia = MijiaService(self.events.publish)
         self.rotation = rotation.Rotation(cfg.get('rotation_auto'), self.events.publish, config.save)
         self.cards = []               # content cards shown in the conversations (self.screen.show_card)
@@ -1805,12 +1812,17 @@ class Client:
         bg.spawn(self._bluetooth_loop())
         if self.airplay.enabled and self.airplay.installed:
             self.airplay.start()
+        self.intercom.start()
         await self.mijia.start()
         self.rotation.start()
 
     # ---- microphone (worker thread) ----
 
     def _on_block(self, block, wake_block):
+        ic = self.intercom
+        if ic is not None and ic.wants_mic:       # 视频通话：麦克风给对方，唤醒词停着
+            ic.mic_feed(block)
+            return
         rec = self.wake_rec
         if rec is not None:
             # saying a new wake word: it must not wake (it may well be the current one), and nothing
@@ -1857,7 +1869,7 @@ class Client:
     # ---- state ----
 
     def set_state(self, state):
-        self.audio.aec_hold = self.hub.connected or self.state == 'connecting'
+        self.audio.aec_hold = self.hub.connected or self.state == 'connecting' or bool(self.intercom and self.intercom.active)
         if state != self.state:
             self.state = state
             self.recognising = False
@@ -1904,6 +1916,7 @@ class Client:
                 'standby': self.standby_view(), 'cook': self.cook_view(), 'media': self.media_view(),
                 'gentle': self.gentle.view(time.time()), 'focus': self.focus.view(), 'study': self.study_view(),
                 'airplay': self.airplay and self.airplay.view(),
+                'intercom': self.intercom and self.intercom.view(),
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
                 'integrations': self.integrations,
@@ -2872,7 +2885,7 @@ class Client:
         talking (from the wake to the end of the reply) or a local sound plays, else full."""
         # a preview that played to its end stays in self.preview (finished) until the next one:
         # only one still playing mutes the phone
-        if self.ring or (self.preview and not self.preview.done()):
+        if self.ring or (self.preview and not self.preview.done()) or (self.intercom and self.intercom.active):
             return 0.0
         if self.state != 'idle' or self.audio.player.buffered() > 0:
             return BACKGROUND_DUCKED
@@ -2891,6 +2904,50 @@ class Client:
                 if self.bt.streaming():
                     log.info('alarm: asking the phone to pause')
                     await self.bt.pause()   # it doesn't resume by itself: the user plays on from the phone
+
+    # ---- 视频对讲（intercom.py，设计画布第 51 块） ----
+
+    def _call_active(self, active):
+        """来电、通话开始或结束：回声消除、背景音乐（_bluetooth_loop 每 0.1 秒按 background_target 调）、电台。"""
+        self.audio.aec_hold = active or self.hub.connected or self.state == 'connecting'
+        self.screen.poke()
+        if active:
+            if self.media:
+                bg.spawn(self.media.stop(), name='call-media-stop')
+            if self.in_turn():
+                bg.spawn(self.abort(), name='call-abort')
+
+    def _call_ring(self):
+        self.screen.poke()
+        if not self.ring:
+            try:
+                self.audio.player.push(alarms.reminder_chime())
+            except Exception:
+                log.exception('call ring')
+
+    async def call_action(self, action, value=None):
+        ic = self.intercom
+        if action == 'accept':
+            await ic.accept()
+        elif action == 'decline':
+            await ic.decline()
+        elif action == 'hangup':
+            await ic.hangup()
+        elif action == 'mute':
+            ic.set_muted(value)
+        elif action == 'camera':
+            ic.set_camera_off(value)
+        elif action == 'auto_answer':
+            config.save(intercom=ic.set_auto_answer(value))
+        else:
+            raise ValueError('不认识的操作')
+        return ic.view()
+
+    async def call_info(self):
+        try:
+            return await self._hub_http('/kiosk/call/info')
+        except Exception:
+            return {'ok': False, 'url': None, 'reason': '连不上小麦网关'}
 
     async def airplay_set(self, install=False, enabled=None, name=None):
         """设置 › 网络 › AirPlay（设计画布第 49 块）：安装、开关、名字。"""

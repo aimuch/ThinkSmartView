@@ -551,6 +551,39 @@ def make_app(client: Client):
             await frames.aclose()
         return resp
 
+    async def call_post(request):
+        """视频对讲（设计画布第 51 块）：{"action": accept|decline|hangup|mute|camera|auto_answer, "value"}。"""
+        body = await request.json()
+        try:
+            return web.json_response({'ok': True, 'intercom': await client.call_action(body.get('action'), body.get('value'))})
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)})
+        except Exception as e:
+            log.exception('call action')
+            return web.json_response({'ok': False, 'error': f'没接通（{type(e).__name__}）'})
+
+    async def call_info(_request):
+        return web.json_response(await client.call_info())
+
+    async def call_video(request):
+        """通话画面：对方（remote）或自己的小窗（self），和摄像头预览一样的 multipart JPEG。"""
+        which = request.match_info['which']
+        if which not in ('remote', 'self'):
+            raise web.HTTPNotFound()
+        resp = web.StreamResponse(headers={'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+                                           'Cache-Control': 'no-store'})
+        await resp.prepare(request)
+        frames = client.intercom.frames(which)
+        try:
+            async for jpeg in frames:
+                await resp.write(b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: '
+                                 + str(len(jpeg)).encode() + b'\r\n\r\n' + jpeg + b'\r\n')
+        except (ConnectionResetError, asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+        finally:
+            await frames.aclose()
+        return resp
+
     async def camera_shoot(_request):
         try:
             return web.json_response({'ok': True, **await client.camera_shoot()})
@@ -810,6 +843,9 @@ def make_app(client: Client):
     app.router.add_post('/api/focus', focus_set)
     app.router.add_get('/api/study', study_get)
     app.router.add_get('/api/airplay', airplay_get)
+    app.router.add_post('/api/call', call_post)
+    app.router.add_get('/api/call/info', call_info)
+    app.router.add_get('/api/call/video/{which}', call_video)
     app.router.add_post('/api/airplay', airplay_post)
     app.router.add_post('/api/study', study_set)
     app.router.add_get('/api/weather', weather_get)

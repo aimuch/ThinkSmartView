@@ -2465,6 +2465,7 @@ const handlers = {
     if (s.focus) { ui.focus = s.focus; if (handlers.focus) handlers.focus(s.focus); }
     if (s.study && handlers.study) handlers.study(s.study);
     if (s.airplay && handlers.airplay) handlers.airplay(s.airplay);
+    if (s.intercom && handlers.intercom) handlers.intercom(s.intercom);
     if (s.cook) { ui.cook = s.cook; renderCook(); }
     if (s.media) { ui.media = s.media; renderMedia(); }
     if (s.scenes) { ui.scenes = s.scenes; renderScenes(); }
