@@ -35,7 +35,7 @@
 | 形象库 | `scripts/build-avatar-pack.py`、`scripts/push-avatar-pack.sh`、`web/v2/pack.js` | 来自 [Virtual-Assistant-Avatar](https://github.com/aimuch/Virtual-Assistant-Avatar) 的 163 款三状态形象（泡泡玛特、大模型、节日、迪士尼）：脚本裁剪压缩成约 24 MB 的 WebP 包，装在设备本地；「外观 › 更多形象」按角色分组挑，先看待机、唤醒、睡觉三个样子再换；也能说「换成星星人」（设计画布第 41 块）。图片不进本仓库 |
 | 儿童模式、待机页、做菜模式 | `kids.py`、`cook.py` | 设置 →「孩子和学习」「外观」里各有一张卡片；做菜时直接说「下一步」 |
 | 场景、留言、清单、电台、助眠声 | `daily.py`、`media.py`、`server/…/core/utils/device_lists.py` | 都可以直接说；清单能在手机上看 |
-| 放儿歌、放音乐 | `media.py`（Queue、Player）、`server/…/core/agent/music.py` | 网关后台「音乐」页接家里 NAS 上的 Navidrome（Subsonic 接口，token + salt 认证，不存密码）或网关本机 music 文件夹，标好「儿歌」「睡前故事」；说「放两只老虎」「放几首儿歌」「下一首」「暂停」「随机播放」，设备经网关中转 `/kiosk/music/stream/<id>` 放，走后台声道（设计画布第 58 块） |
+| 媒体：歌、故事、英语、动画、菜谱视频 | `media.py`（Queue、Player）、`server/…/core/agent/media.py` | 网关后台「媒体」页接家里 NAS 上的 Navidrome（音频，Subsonic token）、Jellyfin（视频和音频，只存登录令牌）或网关本机文件夹；按用途分区：儿童区（儿歌、睡前故事、英语启蒙、动画）、大人区（音乐、英语学习、菜谱），能改名、自己加。说「放英语第三课」「接着看动画」「看红烧肉的视频」「放两只老虎」「下一集」；儿童模式或认出是孩子时只从儿童区找，看视频也算孩子的时间；按顺序的分区按人记进度。音频走后台声道，视频网页全屏放（H.264 不高于 720p 直放，别的让 Jellyfin 转码），做菜模式有这道菜的视频就能看（设计画布第 58、60 块） |
 | 定时任务、主动告警、翻译模式 | `client/thinksmart_client/app.py` | 「每天早上七点告诉我要不要带伞」；米家漏水告警；「帮我们中英互译」 |
 | 家人声音、断网兜底 | `server/…/core/utils/local_voiceprint.py`、`client/thinksmart_client/offline.py` | 设置 →「家人声音」录名字和三句话；网关连不上时也能调音量、报时、开关灯 |
 | 网关后台界面 | `server/…/core/admin/static/index.html` | 侧栏底部一张卡片：设备状态图标（颜色就是状态，连不上换成警告圈）+ 退出登录、心跳时间、账号菜单、三段主题切换；账号菜单 →「界面」：主题、宽度、侧栏、菜单顺序；表格可排序、拖列、调列宽、拖行 |

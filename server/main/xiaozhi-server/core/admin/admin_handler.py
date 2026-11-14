@@ -30,7 +30,7 @@ from core.admin import auth, brand, catalog, config_store, connections, pages, p
 from core.admin.grokbot import GrokBotAdmin
 from core.admin.status import _claude_version, collect_status
 from core import billing
-from core.agent import chat_history, llm_router, music, photo_ask, reports
+from core.agent import chat_history, llm_router, media, photo_ask, reports
 from core.utils import local_voiceprint  # noqa: F401  导入时会初始化日志（asyncio.run），不能放到请求里再导入
 from core.agent.agent_session import ErrorKind
 from core.agent.grokbot_client import GrokBotError
@@ -229,20 +229,28 @@ class AdminHandler:
                 web.post("/admin/api/services", self.handle_services_save),
                 web.post("/admin/api/services/test", self.handle_services_test),
                 web.get("/kiosk/radio", self.handle_kiosk_radio),
-                # 音乐（core/agent/music.py，设计画布第 58 块）
-                web.get("/admin/api/music", self.handle_music),
-                web.post("/admin/api/music", self.handle_music_save),
-                web.post("/admin/api/music/test", self.handle_music_test),
-                web.get("/admin/api/music/browse", self.handle_music_browse),
-                web.get("/admin/api/music/stream/{id}", self.handle_music_stream),
-                web.get("/admin/api/music/cover/{id}", self.handle_music_cover),
-                web.post("/admin/api/music/upload", self.handle_music_upload),
-                web.post("/admin/api/music/local", self.handle_music_local),
+                # 媒体（core/agent/media.py，设计画布第 58、60 块）
+                web.get("/admin/api/media", self.handle_media),
+                web.post("/admin/api/media", self.handle_media_save),
+                web.post("/admin/api/media/test", self.handle_media_test),
+                web.get("/admin/api/media/browse", self.handle_media_browse),
+                web.get("/admin/api/media/stream/{id}", self.handle_media_stream),
+                web.get("/admin/api/media/cover/{id}", self.handle_media_cover),
+                web.post("/admin/api/media/upload", self.handle_media_upload),
+                web.post("/admin/api/media/local", self.handle_media_local),
+                web.get("/kiosk/media", self.handle_kiosk_media),
+                web.get("/kiosk/media/find", self.handle_kiosk_media_find),
+                web.get("/kiosk/media/section/{section}", self.handle_kiosk_media_section),
+                web.get("/kiosk/media/info/{id}", self.handle_kiosk_media_info),
+                web.post("/kiosk/media/progress", self.handle_kiosk_media_progress),
+                web.get("/kiosk/media/stream/{id}", self.handle_media_stream),
+                web.get("/kiosk/media/cover/{id}", self.handle_media_cover),
+                # 58 块的客户端（0.1.685）还在用
                 web.get("/kiosk/music", self.handle_kiosk_music),
-                web.get("/kiosk/music/find", self.handle_kiosk_music_find),
+                web.get("/kiosk/music/find", self.handle_kiosk_media_find),
                 web.get("/kiosk/music/tag/{tag}", self.handle_kiosk_music_tag),
-                web.get("/kiosk/music/stream/{id}", self.handle_music_stream),
-                web.get("/kiosk/music/cover/{id}", self.handle_music_cover),
+                web.get("/kiosk/music/stream/{id}", self.handle_media_stream),
+                web.get("/kiosk/music/cover/{id}", self.handle_media_cover),
                 web.post("/kiosk/wake/greet", self.handle_kiosk_wake_greet),
                 web.get("/admin/api/greetings", self.handle_greetings),
                 web.post("/admin/api/greetings", self.handle_greetings_save),
@@ -2183,9 +2191,9 @@ class AdminHandler:
 
         return self._json({"ok": True, "stations": await self._blocking(services.radio_list)})
 
-    # ---------- 音乐（core/agent/music.py，设计画布第 58 块） ----------
+    # ---------- 媒体（core/agent/media.py，设计画布第 58、60 块） ----------
 
-    def _music_access(self, request: web.Request):
+    def _media_access(self, request: web.Request):
         """/admin/... 要登录；/kiosk/... 只认本机（设备经隧道来）。"""
         if request.path.startswith("/kiosk/"):
             if not self._from_this_machine(request):
@@ -2193,54 +2201,91 @@ class AdminHandler:
         else:
             self._require_login(request)
 
-    async def handle_music(self, request: web.Request):
-        self._require_login(request)
-        return self._json({"ok": True, **(await self._blocking(music.view))})
+    @staticmethod
+    def _media_who(request: web.Request, device: str = None) -> tuple:
+        """(谁, 是不是孩子)：这台设备这一轮认出的说话人（名字带「（孩子）」就是孩子）；认不出按设备记进度。
+        设备开着儿童模式时 kids=1，也只给儿童区。"""
+        device = str(request.query.get("device") or "") if device is None else device
+        speaker = ""
+        for conn in connections.all_connections():
+            if device and str(getattr(conn, "device_id", "") or "") == device:
+                speaker = str(getattr(conn, "turn_speaker", "") or "")
+                break
+        child = speaker.endswith("（孩子）")
+        name = speaker[:-4] if child else speaker
+        return (name or (f"设备:{device}" if device else "")), (child or request.query.get("kids") == "1")
 
-    async def handle_music_save(self, request: web.Request):
-        """{"op": "navidrome", "url", "user", "password"(空=不改)} / {"op": "toggle", "source", "on"} /
-        {"op": "tag", "tag": kids|bedtime, "ref": {"type", "id", "name"}, "on"}。密码只用来算 token，不存、不记日志。"""
+    async def handle_media(self, request: web.Request):
+        self._require_login(request)
+        v = await self._blocking(media.view)
+        names = await self._blocking(self._device_names)
+        for s in v["sections"]:             # 进度里的「设备:<id>」换成设备的名字
+            for p in s["progress"]:
+                if p["who"].startswith("设备:"):
+                    p["who"] = names.get(p["who"][3:]) or "这台设备"
+        return self._json({"ok": True, **v})
+
+    async def handle_media_save(self, request: web.Request):
+        """{"op": "navidrome"|"jellyfin", "url", "user", "password"(空=不改), "api_key"?} / {"op": "toggle", "source", "on"} /
+        {"op": "ref", "section", "ref", "on"} / {"op": "section", "id", "name"?, "kid"?, "play"?} / add_section / delete_section。
+        密码只用来换 token，不存、不记日志。"""
         self._require_login(request)
         body = await self._read_json(request)
         try:
-            await self._blocking(music.apply, body)
-        except music.MusicError as e:
+            await media.apply_async(body)
+        except media.MediaError as e:
             return self._error(str(e), 400)
-        if body.get("op") == "navidrome" and str(body.get("url") or "").strip():
-            src = music.navidrome()
+        if body.get("op") in ("navidrome", "jellyfin") and str(body.get("url") or "").strip():
+            src = media.navidrome() if body["op"] == "navidrome" else media.jellyfin()
             if src:
                 try:
                     await src.ping()
-                except music.MusicError:
+                except media.MediaError:
                     pass                         # 状态记下了，页面上显示
-        return self._json({"ok": True, **(await self._blocking(music.view))})
+        return await self.handle_media(request)
 
-    async def handle_music_test(self, request: web.Request):
-        """{"source": "navidrome", "url", "user", "password"}：没保存的也能测（密码空就用存下的 token）；{"source": "local"}。"""
+    async def handle_media_test(self, request: web.Request):
+        """{"source": "navidrome"|"jellyfin"|"local", "url", "user", "password", "api_key"}：没保存的也能测（空的用存下的）。"""
         self._require_login(request)
         body = await self._read_json(request)
+        which = body.get("source") or "navidrome"
         try:
-            if body.get("source") == "local":
-                return self._json({"ok": True, **(await music.Local().ping())})
-            src = music.navidrome(password=str(body.get("password") or ""),
+            if which == "local":
+                return self._json({"ok": True, **(await media.Local().ping())})
+            if which == "jellyfin":
+                url = media._norm_url(body.get("url"), strip=()) if body.get("url") else ""
+                password, key = str(body.get("password") or ""), str(body.get("api_key") or "").strip()
+                saved = media.jellyfin()
+                if key and url:
+                    src = media.Jellyfin(url, "", key, "xiaozhi-test")
+                    await src.find_user(str(body.get("user") or ""))
+                elif password and url:
+                    token, uid = await media.Jellyfin.login(url, str(body.get("user") or ""), password, "xiaozhi-test")
+                    src = media.Jellyfin(url, uid, token, "xiaozhi-test")
+                elif saved:
+                    src = saved
+                else:
+                    return self._error("先填地址、用户名和密码（或 API Key）", 400)
+                return self._json({"ok": True, **(await src.ping())})
+            src = media.navidrome(password=str(body.get("password") or ""),
                                   url=body.get("url") if body.get("url") is not None else None,
                                   user=body.get("user") if body.get("user") is not None else None)
             if not src:
                 return self._error("先填地址、用户名和密码", 400)
             return self._json({"ok": True, **(await src.ping())})
-        except music.MusicError as e:
+        except media.MediaError as e:
             return self._json({"ok": False, "error": str(e)})
 
-    async def handle_music_browse(self, request: web.Request):
-        """?src=n|l&type=albums|playlists|folders|search|random|folder|playlist|album|artist&id=&q=&offset="""
+    async def handle_media_browse(self, request: web.Request):
+        """?src=n|j|l&type=albums|playlists|folders|search|random|folder|playlist|album|artist|item&id=&q=&offset="""
         self._require_login(request)
         q = request.query
         what = q.get("type") or "albums"
         try:
-            if what in ("folder", "playlist", "album", "artist"):
-                key, rid = music.split_id(q.get("id"))
-                return self._json({"ok": True, **(await music.get(key).open(what, rid))})
-            src = music.get(q.get("src") or "n")
+            if what in ("folder", "playlist", "album", "artist", "item"):
+                key, rid = media.split_id(q.get("id"))
+                return self._json({"ok": True, **(await media.get(key).open(what, rid))})
+            src = media.get(q.get("src") or "n")
             if what == "albums":
                 return self._json({"ok": True, "items": await src.albums(int(q.get("offset") or 0)), "songs": []})
             if what == "playlists":
@@ -2250,49 +2295,51 @@ class AdminHandler:
             if what == "random":
                 return self._json({"ok": True, "items": [], "songs": await src.random(30)})
             if what == "search":
-                r = await src.search(str(q.get("q") or "").strip()[:40], 30)
-                if not r["songs"] and str(q.get("q") or "").strip():   # 中文歌名只认开头：再模糊比一遍
-                    idx = await music._cached_index(src)
-                    hits = sorted(((music.score(q["q"], s["title"]), s) for s in idx), key=lambda x: -x[0])
+                word = str(q.get("q") or "").strip()[:40]
+                r = await src.search(word, 30)
+                if not r["songs"] and word:              # 中文名字只认开头：再模糊比一遍
+                    idx = await media._cached_index(src)
+                    hits = sorted(((media.score(word, s["title"]), s) for s in idx), key=lambda x: -x[0])
                     r["songs"] = [s for sc, s in hits if sc >= 0.6][:30]
                 return self._json({"ok": True, "items": r["albums"] + r["artists"], "songs": r["songs"]})
             return self._error("不认识的类型", 400)
-        except music.MusicError as e:
+        except media.MediaError as e:
             return self._error(str(e), 400)
         except ValueError:
             return self._error("参数不对", 400)
 
-    async def handle_music_stream(self, request: web.Request):
-        """放一首歌（设备 /kiosk/music/stream/<id>，后台试听 /admin/api/music/stream/<id>）：转发 Range，能接着放。"""
-        self._music_access(request)
+    async def handle_media_stream(self, request: web.Request):
+        """放一个（设备 /kiosk/media/stream/<id>，后台试听 /admin/api/media/stream/<id>）：转发 Range，能拖、能接着放；
+        视频要转码时 ?t=秒 从那里开始。"""
+        self._media_access(request)
         try:
-            key, rid = music.split_id(request.match_info["id"])
-            return await music.get(key).stream(request, rid)
-        except music.MusicError as e:
+            key, rid = media.split_id(request.match_info["id"])
+            return await media.get(key).stream(request, rid)
+        except media.MediaError as e:
             return self._error(str(e), 404)
         except (ConnectionResetError, asyncio.CancelledError):
             raise
         except Exception as e:  # noqa: BLE001  设备那头断了、上游断了：不带地址记一行
-            self.logger.bind(tag=TAG).info(f"放歌中断：{type(e).__name__}")
+            self.logger.bind(tag=TAG).info(f"放的时候断了：{type(e).__name__}")
             raise web.HTTPBadGateway()
 
-    async def handle_music_cover(self, request: web.Request):
-        self._music_access(request)
+    async def handle_media_cover(self, request: web.Request):
+        self._media_access(request)
         try:
             size = max(60, min(800, int(request.query.get("size") or 300)))
-            key, rid = music.split_id(request.match_info["id"])
-            return await music.get(key).cover(request, rid, size)
-        except music.MusicError as e:
+            key, rid = media.split_id(request.match_info["id"])
+            return await media.get(key).cover(request, rid, size)
+        except media.MediaError as e:
             return self._error(str(e), 404)
         except ValueError:
             return self._error("参数不对", 400)
 
-    async def handle_music_upload(self, request: web.Request):
-        """?dir=<l. 开头的文件夹 id>&name=<文件名>，请求体就是文件（不走 multipart，边收边写，最大 300 MB）。"""
+    async def handle_media_upload(self, request: web.Request):
+        """?dir=<l. 开头的文件夹 id>&name=<文件名>，请求体就是文件（不走 multipart，边收边写，最大 2 GB）。"""
         self._require_login(request)
         try:
-            dest = music.Local().save_upload_path(request.query.get("dir", "l.").split(".", 1)[-1], request.query.get("name"))
-        except music.MusicError as e:
+            dest = media.Local().save_upload_path(request.query.get("dir", "l.").split(".", 1)[-1], request.query.get("name"))
+        except media.MediaError as e:
             return self._error(str(e), 400)
         tmp = dest.with_name("." + dest.name + ".part")
         size = 0
@@ -2300,70 +2347,123 @@ class AdminHandler:
             with open(tmp, "wb") as f:
                 async for chunk in request.content.iter_chunked(256 * 1024):
                     size += len(chunk)
-                    if size > music.MAX_UPLOAD:
-                        raise music.MusicError("文件太大（最多 300 MB）")
+                    if size > media.MAX_UPLOAD:
+                        raise media.MediaError("文件太大（最多 2 GB）")
                     await self._blocking(f.write, chunk)
             if not size:
-                raise music.MusicError("文件是空的")
+                raise media.MediaError("文件是空的")
             os.replace(tmp, dest)
-        except music.MusicError as e:
+        except media.MediaError as e:
             tmp.unlink(missing_ok=True)
             return self._error(str(e), 400)
         finally:
             if tmp.exists():
                 tmp.unlink(missing_ok=True)
-        music._index.pop("l", None)
+        media._index.pop("l", None)
+        media._members.clear()
         return self._json({"ok": True, "name": dest.name, "size": size})
 
-    async def handle_music_local(self, request: web.Request):
+    async def handle_media_local(self, request: web.Request):
         """本机 music 文件夹：{"op": "mkdir", "dir", "name"} / {"op": "delete", "id"}。"""
         self._require_login(request)
         body = await self._read_json(request)
-        lo = music.Local()
+        lo = media.Local()
         try:
             if body.get("op") == "mkdir":
                 lo.root.mkdir(parents=True, exist_ok=True)
                 item = await self._blocking(lo.mkdir, str(body.get("dir") or "l.").split(".", 1)[-1], body.get("name"))
                 return self._json({"ok": True, "item": item})
             if body.get("op") == "delete":
-                key, rid = music.split_id(body.get("id"))
+                key, rid = media.split_id(body.get("id"))
                 if key != "l":
                     return self._error("只能删网关本机的", 400)
                 await self._blocking(lo.delete, rid)
+                media._members.clear()
                 return self._json({"ok": True})
-        except music.MusicError as e:
+        except media.MediaError as e:
             return self._error(str(e), 400)
         return self._error("不认识的操作", 400)
 
-    async def handle_kiosk_music(self, request: web.Request):
-        """设备问：能不能放、标了哪些（「放儿歌」有没有东西）。"""
+    async def handle_kiosk_media(self, request: web.Request):
+        """设备的卡片、设置页：能放的分区（儿童模式、认出是孩子时只给儿童区）、按顺序的接着第几个。"""
         if not self._from_this_machine(request):
             return self._error("仅限本机", 403)
-        d = await self._blocking(music.load)
-        return self._json({"ok": True, "ready": bool(await self._blocking(music.sources, d)),
-                           "tags": {k: len(v) for k, v in d["tags"].items()}, "tag_names": music.TAGS})
+        who, kid = self._media_who(request)
+        return self._json({"ok": True, "who": who, "kid": kid, **(await self._blocking(media.device_view, who, kid))})
 
-    async def handle_kiosk_music_find(self, request: web.Request):
-        """?q=两只老虎&n=20 → {"tracks", "match", "name"}；没接音乐库、没找到时 ok 照样是 true，tracks 空，error 说原因。"""
+    async def handle_kiosk_media_find(self, request: web.Request):
+        """?q=两只老虎&n=20&video=1&section=recipes&device=&kids= → {"tracks", "match", "name"}；
+        没接媒体库、没找到时 ok 照样是 true，tracks 空，error 说原因。"""
         if not self._from_this_machine(request):
             return self._error("仅限本机", 403)
+        _, kid = self._media_who(request)
+        video = {"1": True, "0": False}.get(request.query.get("video") or "")
         try:
             n = max(1, min(50, int(request.query.get("n") or 20)))
-            r = await music.find(str(request.query.get("q") or "")[:40], n)
-        except music.MusicError as e:
+            r = await media.find(str(request.query.get("q") or "")[:40], n, kid=kid, video=video,
+                                 section=str(request.query.get("section") or "") or None)
+        except media.MediaError as e:
             return self._json({"ok": True, "tracks": [], "match": "", "error": str(e)})
         except ValueError:
             return self._error("参数不对", 400)
         return self._json({"ok": True, **r})
 
+    async def handle_kiosk_media_section(self, request: web.Request):
+        """/kiosk/media/section/<id 或说法>?lesson=3&device=&kids= → {"section", "tracks", "start", "at", "lesson", "who"}。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        who, kid = self._media_who(request)
+        try:
+            lesson = int(request.query.get("lesson") or 0) or None
+            n = max(1, min(100, int(request.query.get("n") or 40)))
+            r = await media.play_section(request.match_info["section"], kid=kid, who=who, lesson=lesson, n=n)
+        except media.MediaError as e:
+            return self._json({"ok": True, "tracks": [], "error": str(e)})
+        except ValueError:
+            return self._error("参数不对", 400)
+        return self._json({"ok": True, "who": who, **r})
+
+    async def handle_kiosk_media_info(self, request: web.Request):
+        """视频放之前问一下：direct（能拖动，用 currentTime）还是转码（从中间开始要带 ?t=）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        try:
+            key, rid = media.split_id(request.match_info["id"])
+            return self._json({"ok": True, **(await media.get(key).info(rid))})
+        except media.MediaError as e:
+            return self._json({"ok": False, "error": str(e)})
+
+    async def handle_kiosk_media_progress(self, request: web.Request):
+        """{"device", "section", "id", "index", "at", "duration", "title"}：按顺序的分区记住这个人（认不出按设备）放到哪。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        body = await self._read_json(request)
+        who, _ = self._media_who(request, str(body.get("device") or ""))
+        try:
+            rec = await self._blocking(media.save_progress, str(body.get("section") or ""), who, str(body.get("id") or ""),
+                                       int(body.get("index") or 0), float(body.get("at") or 0), float(body.get("duration") or 0),
+                                       str(body.get("title") or ""))
+        except (media.MediaError, ValueError, TypeError) as e:
+            return self._error(str(e) or "参数不对", 400)
+        return self._json({"ok": True, "who": who, **rec})
+
+    async def handle_kiosk_music(self, request: web.Request):
+        """58 块的设备（0.1.685）：能不能放、儿歌和睡前故事标了几项。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        d = await self._blocking(media.load)
+        return self._json({"ok": True, "ready": bool(await self._blocking(media.sources, d)),
+                           "tags": {t: len(media.section_of(d, sid)["refs"]) for t, sid in media.OLD_TAGS.items()},
+                           "tag_names": {"kids": "儿歌", "bedtime": "睡前故事"}})
+
     async def handle_kiosk_music_tag(self, request: web.Request):
-        """/kiosk/music/tag/kids|bedtime|any?n=40 → {"tracks", "name"}。"""
+        """58 块的设备：/kiosk/music/tag/kids|bedtime|any → {"tracks", "name"}。"""
         if not self._from_this_machine(request):
             return self._error("仅限本机", 403)
         try:
             n = max(1, min(100, int(request.query.get("n") or 40)))
-            r = await music.tagged(request.match_info["tag"], n)
-        except music.MusicError as e:
+            r = await media.tagged(request.match_info["tag"], n)
+        except media.MediaError as e:
             return self._json({"ok": True, "tracks": [], "error": str(e)})
         except ValueError:
             return self._error("参数不对", 400)

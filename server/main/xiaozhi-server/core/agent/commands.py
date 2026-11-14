@@ -209,7 +209,7 @@ CATEGORIES = [
     ("volume", "音量、静音", "大点声 · 小点声 · 音量调到{数字} · 最大声 · 静音 · 取消静音", "音量 {音量}"),
     ("screen", "亮度、睡眠", "屏幕亮一点 · 调暗 · 亮度调到{数字} · 开启睡眠模式 · 关闭睡眠模式", "好的"),
     ("media", "播放、学习陪伴", "停止播放 · 别放了 · 打开学习陪伴 · 关掉学习陪伴", "好的"),
-    ("music", "放歌", "放儿歌 · 放睡前故事 · 放{歌名} · 下一首 · 上一首 · 暂停 · 继续 · 单曲循环 · 随机播放", "（按结果说）"),
+    ("music", "放歌、放视频", "放儿歌 · 放英语第3课 · 接着放英语 · 看红烧肉的视频 · 放{歌名} · 下一首 · 下一集 · 暂停 · 继续 · 单曲循环", "（按结果说）"),
 ]
 CATEGORY_IDS = [c[0] for c in CATEGORIES]
 
@@ -334,20 +334,30 @@ NOT_SONG = re.compile(r"电台|广播|之声|收音机|雨声|海浪|风扇|白�
                       r"^(?:心|假|学|弃|松|屁|鞭炮|烟花|风筝|羊|牛|电影|大点|大一点|大声|小点|小一点|小声|慢点|快点)")
 
 
+def _section(word: str):
+    """说的是不是媒体的一个分区（「儿歌」「英语」「动画片」，后台改的名字也认）。"""
+    try:
+        from core.agent import media
+
+        return media.find_section(word)
+    except Exception:  # noqa: BLE001  媒体配置读不了：当不是
+        return None
+
+
 def _music(t: str, raw: str = ""):
-    """放歌的说法 → Plan（steps="music"，参数原样给设备的 self.music.play）。raw 是没把中文数字换成阿拉伯数字的
-    （歌名里的「两只老虎」不能变成「2只老虎」）。"""
+    """放歌、放视频的说法 → Plan（steps="music"，参数原样给设备的 self.music.play；设计画布第 58、60 块）。
+    raw 是没把中文数字换成阿拉伯数字的（歌名里的「两只老虎」不能变成「2只老虎」）。"""
     raw = raw or t
 
     def mk(args, note):
         return Plan("music", "steps", "", steps="music", args=args, note=note)
-    if re.fullmatch(r"下1首|下首|下1曲|换1首|换首歌?|切歌|跳过这首|不听这首", t):
-        return mk({"action": "next"}, "下一首")
-    if re.fullmatch(r"上1首|上首|上1曲|前1首|刚才那首|再放1遍刚才那首", t):
-        return mk({"action": "prev"}, "上一首")
-    if re.fullmatch(r"暂停(?:播放|音乐|1下)?|先暂停", t):
-        return mk({"action": "pause"}, "暂停（没在放歌就交给大模型）")
-    if re.fullmatch(r"继续(?:播放|放|听|唱)?|接着放|接着播|接着听|恢复播放", t):
+    if re.fullmatch(r"下1首|下首|下1曲|下1集|下集|换1首|换首歌?|换1集|切歌|跳过这首|跳过这集|不听这首|不看这集", t):
+        return mk({"action": "next"}, "下一首 / 下一集")
+    if re.fullmatch(r"上1首|上首|上1曲|上1集|上集|前1首|前1集|刚才那首|再放1遍刚才那首", t):
+        return mk({"action": "prev"}, "上一首 / 上一集")
+    if re.fullmatch(r"暂停(?:播放|音乐|视频|1下)?|先暂停", t):
+        return mk({"action": "pause"}, "暂停（没在放就交给大模型）")
+    if re.fullmatch(r"继续(?:播放|放|听|唱|看)?|接着放|接着播|接着听|接着看|恢复播放", t):
         return mk({"action": "resume"}, "继续（没暂停就交给大模型）")
     if re.fullmatch(r"单曲循环|循环(?:这首|播放这首)|1直放这首|重复这首", t):
         return mk({"action": "mode", "mode": "one"}, "单曲循环")
@@ -355,12 +365,25 @@ def _music(t: str, raw: str = ""):
         return mk({"action": "mode", "mode": "loop"}, "列表循环")
     if re.fullmatch(r"随机播放|随机放|乱序播放|打乱(?:顺序|播放)?", t):
         return mk({"action": "mode", "mode": "shuffle"}, "随机播放")
-    if re.fullmatch(rf"{PLAY}(?:几首|1首|首|1些|些|点|1点|几个)?儿歌(?:吧|听听|给宝宝听|给孩子听)?|唱(?:1?首|个)?儿歌", t):
-        return mk({"action": "play", "tag": "kids"}, "放标成儿歌的")
-    if re.fullmatch(rf"(?:{PLAY}|讲)(?:1个|个|几个|1段|段|点)?(?:睡前)?故事(?:吧|听听)?", t):
-        return mk({"action": "play", "tag": "bedtime"}, "放标成睡前故事的（没标就让大模型讲）")
-    if re.fullmatch(rf"{PLAY}(?:点|1点|些|几首|1首|首)?(?:音乐|歌|歌曲)(?:吧|听听)?|随便放(?:点|几首)?(?:歌|音乐)?", t):
+    if re.fullmatch(r"(?:看|放|播放)(?:做法|做菜的?)?视频|看看怎么做", t):
+        return mk({"action": "cook_video"}, "做菜模式里放这道菜的视频（没有就交给大模型）")
+    # 分区：「放英语第三课」「看动画第2集」「接着放英语」「放几首儿歌」「讲个故事」（说法就是分区名，后台改了名也认）
+    m = re.fullmatch(rf"(?:{PLAY}|看|学|讲)(.{{1,8}}?)第(\d{{1,3}})(?:课|集|节|个|讲|单元|首|期)(?:吧)?", t)
+    if m and _section(m.group(1)):
+        return mk({"action": "play", "section": m.group(1), "lesson": int(m.group(2))}, f"「{m.group(1)}」第 {m.group(2)} 个")
+    m = re.fullmatch(r"(?:继续|接着)(?:放|看|听|学|上)?(.{1,8}?)(?:吧|课)?", t)
+    if m and _section(m.group(1)):
+        return mk({"action": "play", "section": m.group(1)}, f"「{m.group(1)}」从上次的地方接着")
+    m = re.fullmatch(rf"(?:{PLAY}|看|学|讲|唱)(?:几首|1首|首|1些|些|点|1点|几个|1个|个|1集|几集|1段|段|1节|1课)?(.{{1,8}}?)"
+                     rf"(?:吧|听听|看看|给宝宝听|给孩子听|给宝宝看|给孩子看)?", t)
+    if m and _section(m.group(1)):
+        return mk({"action": "play", "section": m.group(1)}, f"放「{m.group(1)}」这个分区")
+    if re.fullmatch(rf"{PLAY}(?:点|1点|些|几首|1首|首)?(?:歌曲|歌)(?:吧|听听)?|随便放(?:点|几首)?(?:歌|音乐)?|随便听听?", t):
         return mk({"action": "play", "tag": "any"}, "随便放")
+    m = re.fullmatch(r"(?:看|放|播放|播|我想看|我要看|想看)?(?:一下)?(.{1,12}?)的视频", raw) or \
+        re.fullmatch(r"(?:看|放|播放|播|我想看|我要看|想看)(.{1,12}?)的(?:动画片?|视频)", raw)
+    if m and not NOT_SONG.search(m.group(1).replace("动画", "")):
+        return mk({"action": "play", "query": m.group(1), "video": True}, f"找「{m.group(1)}」的视频（没找到交给大模型）")
     m = (re.fullmatch(rf"{SONG_VERB}(?:一首|首|一下)?(.{{2,20}}?)(?:这首歌|那首歌|这首|吧|听听|给我听)?", raw)
          or re.fullmatch(r"(?:来一首|来首|唱一首|唱首)(.{2,20}?)(?:这首歌|吧|听听)?", raw))
     if m:

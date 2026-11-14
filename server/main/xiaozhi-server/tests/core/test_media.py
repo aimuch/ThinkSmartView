@@ -1,10 +1,11 @@
-"""[xiaozhi-hub] 音乐（设计画布第 58 块）：Navidrome 用本机起的假 Subsonic 服务测，不联网。
+"""[xiaozhi-hub] 媒体（设计画布第 58、60 块）：Navidrome、Jellyfin 都用本机起的假服务测，不联网。
 
 覆盖：token + salt 认证（密码不存）、找歌（搜不到时模糊比全部歌名）、按标签挑、随便放、本机 music 文件夹、
 后台的保存/测试/浏览/上传、设备的 /kiosk/music/* 中转（带 Range）、外部服务页的状态、常用口令。
 """
 import hashlib
 import json
+import re
 
 import pytest
 from aiohttp import web
@@ -12,7 +13,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from core.admin.admin_handler import AdminHandler
 from core.agent import commands as cm
-from core.agent import music, services
+from core.agent import media as music, services
 
 USER, PASSWORD = "family", "s3cret-pw"
 AUDIO = bytes(range(256)) * 40          # 10 KB 的「歌」
@@ -105,11 +106,14 @@ async def nas():
 
 @pytest.fixture(autouse=True)
 def store(tmp_path, monkeypatch):
-    monkeypatch.setattr(music, "_path", lambda: str(tmp_path / "music.json"))
+    monkeypatch.setattr(music, "_path", lambda: str(tmp_path / "media.json"))
+    monkeypatch.setattr(music, "_old_path", lambda: str(tmp_path / "music.json"))
+    monkeypatch.setattr(music, "_progress_path", lambda: str(tmp_path / "media_progress.json"))
     monkeypatch.setattr(music, "local_root", lambda: tmp_path / "music")
     monkeypatch.setattr(services, "_path", lambda: str(tmp_path / "services.json"))
     services.STATUS.clear()
     music._index.clear()
+    music._members.clear()
     yield
 
 
@@ -121,18 +125,18 @@ def configure(nas):
 
 def test_password_is_not_stored_and_token_works(tmp_path, nas):
     configure(nas)
-    raw = (tmp_path / "music.json").read_text(encoding="utf-8")
+    raw = (tmp_path / "media.json").read_text(encoding="utf-8")
     assert PASSWORD not in raw
     d = json.loads(raw)["navidrome"]
     assert d["token"] == hashlib.md5((PASSWORD + d["salt"]).encode()).hexdigest() and d["url"] == nas.base
-    assert oct((tmp_path / "music.json").stat().st_mode)[-3:] == "600"
+    assert oct((tmp_path / "media.json").stat().st_mode)[-3:] == "600"
     music.apply({"op": "navidrome", "url": nas.base + "/rest", "user": USER, "password": ""})   # 只改地址：留着 token
     assert music.load()["navidrome"]["token"] == d["token"] and music.load()["navidrome"]["url"] == nas.base
     with pytest.raises(music.MusicError, match="重新填"):
         music.apply({"op": "navidrome", "url": nas.base, "user": "someone-else", "password": ""})
     with pytest.raises(music.MusicError, match="http"):
         music.apply({"op": "navidrome", "url": "nas:4533", "user": USER, "password": "x"})
-    with pytest.raises(music.MusicError, match="标"):
+    with pytest.raises(music.MusicError, match="只能加"):
         music.apply({"op": "tag", "tag": "kids", "ref": {"type": "song", "id": "n.s1"}})
     music.apply({"op": "navidrome", "url": "", "user": "", "password": ""})
     assert music.navidrome() is None and music.view()["navidrome"]["has_password"] is False
@@ -189,7 +193,7 @@ async def test_find_song_fuzzy_artist_album(nas):
 
 
 async def test_find_without_library():
-    with pytest.raises(music.MusicError, match="还没接音乐库"):
+    with pytest.raises(music.MusicError, match="还没接媒体库"):
         await music.find("两只老虎")
 
 
@@ -204,7 +208,7 @@ async def test_tags_and_random(nas):
     assert [t["id"] for t in (await music.tagged("bedtime"))["tracks"]] == ["n.s4"]
     assert len((await music.tagged("any", 3))["tracks"]) == 3
     music.apply({"op": "tag", "tag": "kids", "ref": {"type": "folder", "id": "n.d-kids"}, "on": False})
-    assert music.load()["tags"]["kids"] == []
+    assert music.section_of(music.load(), "songs")["refs"] == []
 
 
 # ---------------------------------------------------------------- 本机 music 文件夹
@@ -250,32 +254,32 @@ async def client(tmp_path):
 
 
 async def test_admin_save_test_browse(client, nas):
-    r = await client.post("/admin/api/music/test", json={"source": "navidrome", "url": nas.base, "user": USER, "password": PASSWORD})
+    r = await client.post("/admin/api/media/test", json={"source": "navidrome", "url": nas.base, "user": USER, "password": PASSWORD})
     assert (await r.json())["ok"] is True and music.load()["navidrome"]["url"] == ""     # 测试不保存
-    r = await client.post("/admin/api/music/test", json={"source": "navidrome", "url": nas.base, "user": USER, "password": "bad"})
+    r = await client.post("/admin/api/media/test", json={"source": "navidrome", "url": nas.base, "user": USER, "password": "bad"})
     assert (await r.json()) == {"ok": False, "error": "用户名或密码不对"}
-    r = await client.post("/admin/api/music", json={"op": "navidrome", "url": nas.base, "user": USER, "password": PASSWORD})
+    r = await client.post("/admin/api/media", json={"op": "navidrome", "url": nas.base, "user": USER, "password": PASSWORD})
     d = await r.json()
     assert d["navidrome"]["has_password"] and "token" not in json.dumps(d) and PASSWORD not in json.dumps(d)
     assert d["navidrome"]["status"]["ok"] is True and d["ready"] is True
-    r = await client.post("/admin/api/music/test", json={"source": "navidrome"})          # 用存下的
+    r = await client.post("/admin/api/media/test", json={"source": "navidrome"})          # 用存下的
     assert (await r.json())["ok"] is True
-    assert [i["name"] for i in (await (await client.get("/admin/api/music/browse?src=n&type=albums")).json())["items"]] == ["儿歌精选", "睡前故事"]
-    assert (await (await client.get("/admin/api/music/browse?src=n&type=playlists")).json())["items"][0]["id"] == "n.pl-sleep"
-    libs = (await (await client.get("/admin/api/music/browse?src=n&type=folders")).json())["items"]
-    top = await (await client.get(f"/admin/api/music/browse?type=folder&id={libs[0]['id']}")).json()
+    assert [i["name"] for i in (await (await client.get("/admin/api/media/browse?src=n&type=albums")).json())["items"]] == ["儿歌精选", "睡前故事"]
+    assert (await (await client.get("/admin/api/media/browse?src=n&type=playlists")).json())["items"][0]["id"] == "n.pl-sleep"
+    libs = (await (await client.get("/admin/api/media/browse?src=n&type=folders")).json())["items"]
+    top = await (await client.get(f"/admin/api/media/browse?type=folder&id={libs[0]['id']}")).json()
     assert [i["name"] for i in top["items"]] == ["儿歌", "故事"]
-    kids = await (await client.get("/admin/api/music/browse?type=folder&id=n.d-kids")).json()
+    kids = await (await client.get("/admin/api/media/browse?type=folder&id=n.d-kids")).json()
     assert len(kids["songs"]) == 3 and kids["items"][0]["name"] == "英文儿歌"
-    s = await (await client.get("/admin/api/music/browse?src=n&type=search&q=老虎")).json()
+    s = await (await client.get("/admin/api/media/browse?src=n&type=search&q=老虎")).json()
     assert s["songs"][0]["id"] == "n.s1"
-    r = await client.get("/admin/api/music/stream/n.s1")                                    # 试听
+    r = await client.get("/admin/api/media/stream/n.s1")                                    # 试听
     assert r.status == 200 and await r.read() == AUDIO
     sd = await (await client.get("/admin/api/services")).json()
-    assert sd["music"]["configured"] and sd["music"]["status"]["ok"]
+    assert sd["media"][0]["configured"] and sd["media"][0]["status"]["ok"] and not sd["media"][1]["configured"]
     await client.post("/admin/api/logout", json={})
-    assert (await client.get("/admin/api/music")).status == 401
-    assert (await client.get("/admin/api/music/stream/n.s1")).status == 401
+    assert (await client.get("/admin/api/media")).status == 401
+    assert (await client.get("/admin/api/media/stream/n.s1")).status == 401
 
 
 async def test_kiosk_relay_and_find(client, nas):
@@ -302,19 +306,19 @@ async def test_kiosk_relay_and_find(client, nas):
 
 
 async def test_upload_mkdir_delete(client, tmp_path):
-    r = await client.post("/admin/api/music/local", json={"op": "mkdir", "dir": "l.", "name": "儿歌"})
+    r = await client.post("/admin/api/media/local", json={"op": "mkdir", "dir": "l.", "name": "儿歌"})
     folder = (await r.json())["item"]
     assert folder["name"] == "儿歌" and (tmp_path / "music" / "儿歌").is_dir()
-    r = await client.post(f"/admin/api/music/upload?dir={folder['id']}&name=两只老虎.mp3", data=AUDIO)
+    r = await client.post(f"/admin/api/media/upload?dir={folder['id']}&name=两只老虎.mp3", data=AUDIO)
     assert (await r.json())["size"] == len(AUDIO) and (tmp_path / "music" / "儿歌" / "两只老虎.mp3").read_bytes() == AUDIO
-    assert (await client.post("/admin/api/music/upload?dir=l.&name=x.exe", data=b"1")).status == 400
+    assert (await client.post("/admin/api/media/upload?dir=l.&name=x.exe", data=b"1")).status == 400
     assert not list((tmp_path / "music").glob(".*.part"))
     f = await (await client.get("/kiosk/music/find?q=两只老虎")).json()
     tid = f["tracks"][0]["id"]
     r = await client.get(f"/kiosk/music/stream/{tid}", headers={"Range": "bytes=10-19"})
     assert r.status == 206 and await r.read() == AUDIO[10:20]
-    assert (await client.post("/admin/api/music/local", json={"op": "delete", "id": tid})).status == 200
-    assert (await client.post("/admin/api/music/local", json={"op": "delete", "id": folder["id"]})).status == 200
+    assert (await client.post("/admin/api/media/local", json={"op": "delete", "id": tid})).status == 200
+    assert (await client.post("/admin/api/media/local", json={"op": "delete", "id": folder["id"]})).status == 200
     assert not (tmp_path / "music" / "儿歌").exists()
 
 
@@ -329,10 +333,11 @@ def test_music_commands():
     assert p.steps == "music" and p.args == {"action": "play", "query": "两只老虎"}
     assert plan("我想听小兔子乖乖").args == {"action": "play", "query": "小兔子乖乖"}
     assert plan("来一首三只小猪吧").args == {"action": "play", "query": "三只小猪"}
-    assert plan("放几首儿歌").args == {"action": "play", "tag": "kids"}
-    assert plan("放睡前故事").args == {"action": "play", "tag": "bedtime"}
-    assert plan("讲个故事").args == {"action": "play", "tag": "bedtime"}
-    assert plan("放首歌").args == {"action": "play", "tag": "any"}
+    assert plan("放几首儿歌").args == {"action": "play", "section": "儿歌"}
+    assert plan("放睡前故事").args == {"action": "play", "section": "睡前故事"}
+    assert plan("讲个故事").args == {"action": "play", "section": "故事"}
+    assert plan("放首歌").args == {"action": "play", "section": "歌"}
+    assert plan("随便听听").args == {"action": "play", "tag": "any"}
     assert plan("下一首").args == {"action": "next"} and plan("换一首").args == {"action": "next"}
     assert plan("上一首").args == {"action": "prev"}
     assert plan("暂停").args == {"action": "pause"} and plan("继续播放").args == {"action": "resume"}
@@ -343,3 +348,217 @@ def test_music_commands():
     for t in ("放东方广播", "放雨声", "放心吧", "放假了", "放大一点", "放十分钟雨声", "给我讲个笑话", "放松一下"):
         p = plan(t)
         assert p is None or p.rule != "music", t
+
+
+# ---------------------------------------------------------------- Jellyfin、分区、进度、儿童区（设计画布第 60 块）
+
+JF_PW, JF_TOKEN, JF_KEY = "jf-pass", "tok-1", "key-1"
+EPISODES = [{"Id": f"e{i}", "Name": n, "Type": "Episode", "IndexNumber": i, "SeriesName": "Peppa Pig", "SeriesId": "series-1",
+             "RunTimeTicks": 300 * 10 ** 7, "ParentId": "season-1"} for i, n in enumerate(["Muddy Puddles", "Mr Dinosaur", "Best Friend"], 1)]
+COOK = [{"Id": "v1", "Name": "红烧肉的做法", "Type": "Video", "RunTimeTicks": 600 * 10 ** 7, "ImageTags": {"Primary": "x"}},
+        {"Id": "v2", "Name": "番茄炒蛋", "Type": "Video", "RunTimeTicks": 300 * 10 ** 7}]
+SOURCES = {"e1": ("mp4", "h264", 720, "aac"), "e2": ("mp4", "h264", 720, "aac"), "e3": ("mp4", "h264", 720, "aac"),
+           "v1": ("mkv", "hevc", 1080, "ac3"), "v2": ("mp4", "h264", 1080, "aac")}
+
+
+def fake_jellyfin(calls):
+    def authed(request):
+        h = request.headers.get("Authorization", "")
+        return f'Token="{JF_TOKEN}"' in h or f'Token="{JF_KEY}"' in h
+
+    async def handler(request):
+        path, q = request.path, request.query
+        calls.append((request.method, path, dict(q), request.headers.get("Authorization", "")))
+        if path == "/Users/AuthenticateByName":
+            body = await request.json()
+            if body.get("Pw") != JF_PW:
+                return web.Response(status=401)
+            return web.json_response({"AccessToken": JF_TOKEN, "User": {"Id": "u1", "Name": body["Username"]}})
+        if not authed(request):
+            return web.Response(status=401)
+        if path == "/Users":
+            return web.json_response([{"Id": "u1", "Name": "andy", "Policy": {"IsAdministrator": True}}])
+        if path == "/System/Info":
+            return web.json_response({"Version": "10.10.0", "ServerName": "fnVideos"})
+        if path == "/Users/u1/Views":
+            return web.json_response({"Items": [{"Id": "lib-kids", "Name": "少儿英语", "Type": "CollectionFolder", "IsFolder": True},
+                                                {"Id": "lib-cook", "Name": "菜谱", "Type": "CollectionFolder", "IsFolder": True}]})
+        if path == "/Users/u1/Items":
+            if q.get("SearchTerm"):
+                pool = EPISODES + COOK
+                return web.json_response({"Items": [x for x in pool if q["SearchTerm"] in x["Name"]]})
+            parent, deep = q.get("ParentId"), q.get("Recursive") == "true"
+            if parent == "lib-kids":
+                items = EPISODES if deep else [{"Id": "series-1", "Name": "Peppa Pig", "Type": "Series", "IsFolder": True, "ChildCount": 3}]
+            elif parent == "series-1":
+                items = EPISODES
+            elif parent == "lib-cook":
+                items = COOK
+            else:
+                items = (EPISODES + COOK) if deep else []
+            return web.json_response({"Items": items})
+        m = re.fullmatch(r"/Items/(\w+)/PlaybackInfo", path)
+        if m:
+            c, v, h, a = SOURCES[m.group(1)]
+            return web.json_response({"MediaSources": [{"Id": "ms-" + m.group(1), "Container": c, "MediaStreams": [
+                {"Type": "Video", "Codec": v, "Height": h}, {"Type": "Audio", "Codec": a}]}]})
+        if re.fullmatch(r"/Videos/\w+/stream", path):
+            rng = request.headers.get("Range")
+            if rng:
+                start = int(rng.split("=")[1].split("-")[0])
+                return web.Response(status=206, body=AUDIO[start:], content_type="video/mp4",
+                                    headers={"Content-Range": f"bytes {start}-{len(AUDIO) - 1}/{len(AUDIO)}"})
+            return web.Response(body=AUDIO, content_type="video/mp4")
+        if re.fullmatch(r"/Videos/\w+/stream\.mp4", path):
+            return web.Response(body=b"TRANSCODED", content_type="video/mp4")
+        if re.fullmatch(r"/Items/\w+/Images/Primary", path):
+            return web.Response(body=b"\xff\xd8JF", content_type="image/jpeg")
+        return web.Response(status=404)
+
+    app = web.Application()
+    app.router.add_route("*", "/{tail:.*}", handler)
+    return app
+
+
+@pytest.fixture
+async def jf():
+    calls = []
+    async with TestServer(fake_jellyfin(calls)) as server:
+        server.calls = calls
+        server.base = f"http://127.0.0.1:{server.port}"
+        yield server
+
+
+async def configure_jf(jf, **kw):
+    await music.apply_async({"op": "jellyfin", "url": jf.base + "/web/index.html", "user": "andy", "password": JF_PW, **kw})
+
+
+async def test_jellyfin_login_keeps_only_the_token(tmp_path, jf):
+    with pytest.raises(music.MediaError, match="用户名或密码不对"):
+        await music.apply_async({"op": "jellyfin", "url": jf.base, "user": "andy", "password": "nope"})
+    await configure_jf(jf)
+    raw = (tmp_path / "media.json").read_text(encoding="utf-8")
+    assert JF_PW not in raw
+    d = json.loads(raw)["jellyfin"]
+    assert d["url"] == jf.base and d["token"] == JF_TOKEN and d["user_id"] == "u1" and d["device"] and not d["key"]
+    r = await music.jellyfin().ping()
+    assert r["version"] == "10.10.0" and r["libraries"] == ["少儿英语", "菜谱"] and services.status("jellyfin")["ok"]
+    assert all(JF_TOKEN not in json.dumps(c[2]) for c in jf.calls)               # token 只在请求头里
+    await music.apply_async({"op": "jellyfin", "url": jf.base, "user": "", "api_key": JF_KEY})
+    d = music.load()["jellyfin"]
+    assert d["token"] == JF_KEY and d["key"] and d["user"] == "andy" and d["user_id"] == "u1"
+    v = music.view()
+    assert v["jellyfin"]["has_password"] and JF_KEY not in json.dumps(v)
+
+
+def test_old_tags_become_sections(tmp_path):
+    (tmp_path / "music.json").write_text(json.dumps({"navidrome": {"url": "http://x", "user": "a", "salt": "s", "token": "t"},
+                                                     "tags": {"kids": [{"type": "folder", "id": "n.d-kids", "name": "儿歌"}],
+                                                              "bedtime": []}}), encoding="utf-8")
+    d = music.load()
+    assert d["navidrome"]["token"] == "t" and music.section_of(d, "songs")["refs"][0]["id"] == "n.d-kids"
+    assert [s["id"] for s in d["sections"]] == [p["id"] for p in music.PRESETS]
+    music.apply({"op": "section", "id": "songs", "name": "宝宝儿歌"})
+    assert music.find_section("宝宝儿歌")["id"] == "songs" and music.find_section("儿歌")["id"] == "songs"
+    assert (tmp_path / "media.json").exists()
+    music.apply({"op": "add_section", "name": "国学", "kid": True, "play": "course"})
+    sec = music.find_section("国学", kid=True)
+    assert sec and sec["kid"] and sec["play"] == "course"
+    with pytest.raises(music.MediaError, match="预设"):
+        music.apply({"op": "delete_section", "id": "songs"})
+    music.apply({"op": "delete_section", "id": sec["id"]})
+    assert music.find_section("国学") is None
+
+
+async def test_course_lessons_progress_and_kids(jf, nas):
+    configure(nas)
+    await configure_jf(jf)
+    music.apply({"op": "ref", "section": "kid_english", "ref": {"type": "folder", "id": "j.series-1", "name": "Peppa Pig"}})
+    music.apply({"op": "ref", "section": "recipes", "ref": {"type": "folder", "id": "j.lib-cook", "name": "菜谱"}})
+    music.apply({"op": "ref", "section": "songs", "ref": {"type": "folder", "id": "n.d-kids", "name": "儿歌"}})
+    assert music.find_section("英语")["id"] == "kid_english"                     # 大人区的英语还空着
+    r = await music.play_section("英语", who="宝宝")
+    assert [t["id"] for t in r["tracks"]] == ["j.e1", "j.e2", "j.e3"] and r["start"] == 0 and r["tracks"][0]["media"] == "video"
+    assert r["tracks"][0]["title"] == "第 1 集 · Muddy Puddles" and r["tracks"][0]["cover"] == "j.series-1"
+    assert (await music.play_section("英语", lesson=3))["start"] == 2
+    with pytest.raises(music.MediaError, match="没有第 9 个"):
+        await music.play_section("英语", lesson=9)
+    music.save_progress("kid_english", "宝宝", "j.e2", 1, 100, 300, "Mr Dinosaur")
+    r = await music.play_section("英语", who="宝宝")
+    assert r["start"] == 1 and r["at"] == 100 and r["lesson"] == 2                # 没看完：接着看
+    music.save_progress("kid_english", "宝宝", "j.e2", 1, 290, 300)
+    r = await music.play_section("英语", who="宝宝")
+    assert r["start"] == 2 and r["at"] == 0                                       # 看完了：下一集
+    assert (await music.play_section("英语", who="妈妈"))["start"] == 0            # 每个人各记各的
+    dv = music.device_view("宝宝", kids=True)
+    assert {s["id"] for s in dv["sections"]} == {"songs", "kid_english"} and \
+        next(s for s in dv["sections"] if s["id"] == "kid_english")["lesson"] == 3
+    # 孩子只在儿童区找
+    assert (await music.find("红烧肉", kid=True))["tracks"] == []
+    with pytest.raises(music.MediaError, match="大人区"):
+        await music.play_section("菜谱", kid=True)
+    r = await music.find("红烧肉", video=True)
+    assert r["tracks"][0]["id"] == "j.v1" and r["tracks"][0]["media"] == "video"
+    r = await music.find("红烧肉", section="recipes")
+    assert r["tracks"][0]["id"] == "j.v1"
+    assert (await music.find("两只老虎", kid=True))["tracks"][0]["id"] == "n.s1"
+    assert (await music.find("Peppa", kid=True, video=True))["tracks"]
+
+
+async def test_kiosk_media_endpoints(client, jf, monkeypatch):
+    from types import SimpleNamespace
+
+    from core.admin import admin_handler as ah
+
+    await configure_jf(jf)
+    music.apply({"op": "ref", "section": "kid_english", "ref": {"type": "folder", "id": "j.series-1", "name": "Peppa Pig"}})
+    music.apply({"op": "ref", "section": "recipes", "ref": {"type": "folder", "id": "j.lib-cook", "name": "菜谱"}})
+    conns = [SimpleNamespace(device_id="dev-1", turn_speaker="宝宝（孩子）")]
+    monkeypatch.setattr(ah.connections, "all_connections", lambda: conns)
+    d = await (await client.get("/kiosk/media?device=dev-1")).json()
+    assert d["kid"] and d["who"] == "宝宝" and [s["id"] for s in d["sections"]] == ["kid_english"]
+    r = await (await client.get("/kiosk/media/section/英语?device=dev-1")).json()
+    assert r["section"]["id"] == "kid_english" and len(r["tracks"]) == 3
+    r = await (await client.get("/kiosk/media/section/菜谱?device=dev-1")).json()
+    assert r["tracks"] == [] and "大人区" in r["error"]
+    r = await (await client.post("/kiosk/media/progress", json={"device": "dev-1", "section": "kid_english", "id": "j.e1",
+                                                                "index": 0, "at": 30, "duration": 300})).json()
+    assert r["who"] == "宝宝" and not r["done"]
+    conns[0].turn_speaker = "妈妈"
+    d = await (await client.get("/kiosk/media?device=dev-1")).json()
+    assert not d["kid"] and {s["id"] for s in d["sections"]} == {"kid_english", "recipes"}
+    assert (await (await client.get("/kiosk/media?device=dev-1&kids=1")).json())["kid"]       # 设备开着儿童模式
+    assert (await (await client.get("/kiosk/media/info/j.e1")).json())["direct"] is True
+    assert (await (await client.get("/kiosk/media/info/j.v1")).json())["direct"] is False
+    r = await client.get("/kiosk/media/stream/j.e1", headers={"Range": "bytes=100-"})
+    assert r.status == 206 and await r.read() == AUDIO[100:]
+    assert [c for c in jf.calls if c[1] == "/Videos/e1/stream"][-1][2]["static"] == "true"
+    r = await client.get("/kiosk/media/stream/j.v1?t=30")
+    assert await r.read() == b"TRANSCODED"
+    q = [c for c in jf.calls if c[1] == "/Videos/v1/stream.mp4"][-1][2]
+    assert q["VideoCodec"] == "h264" and q["MaxHeight"] == "720" and q["StartTimeTicks"] == str(30 * 10 ** 7)
+    assert all(JF_TOKEN not in json.dumps(c[2]) for c in jf.calls)
+    assert (await client.get("/kiosk/media/cover/j.v1")).status == 200
+    v = await (await client.get("/admin/api/media")).json()
+    eng = next(s for s in v["sections"] if s["id"] == "kid_english")
+    assert eng["progress"][0]["who"] == "宝宝" and eng["refs"][0]["name"] == "Peppa Pig"
+    br = await (await client.get("/admin/api/media/browse?src=j&type=folders")).json()
+    assert [i["name"] for i in br["items"]] == ["少儿英语", "菜谱"]
+    br = await (await client.get("/admin/api/media/browse?type=folder&id=j.lib-kids")).json()
+    assert br["items"][0]["name"] == "Peppa Pig" and br["items"][0]["sub"].startswith("剧集")
+    r = await client.post("/admin/api/media/test", json={"source": "jellyfin", "url": jf.base, "user": "andy", "password": "bad"})
+    assert (await r.json()) == {"ok": False, "error": "用户名或密码不对"}
+
+
+def test_section_commands():
+    assert plan("放英语第三课").args == {"action": "play", "section": "英语", "lesson": 3}
+    assert plan("看动画第2集").args == {"action": "play", "section": "动画", "lesson": 2}
+    assert plan("接着放英语").args == {"action": "play", "section": "英语"}
+    assert plan("继续学英语").args == {"action": "play", "section": "英语"}
+    assert plan("看动画片").args == {"action": "play", "section": "动画片"}
+    assert plan("看红烧肉的视频").args == {"action": "play", "query": "红烧肉", "video": True}
+    assert plan("放一下番茄炒蛋的视频").args == {"action": "play", "query": "番茄炒蛋", "video": True}
+    assert plan("看视频").args == {"action": "cook_video"}
+    assert plan("下一集").args == {"action": "next"} and plan("上一集").args == {"action": "prev"}
+    assert plan("放东方广播") is None or plan("放东方广播").rule != "music"
+    assert plan("看看天气") is None or plan("看看天气").rule != "music"

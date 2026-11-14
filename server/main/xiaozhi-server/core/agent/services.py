@@ -6,7 +6,7 @@
 - 电台：预设是原来设备里写死的那几个台，可以关掉、自己加；设备连网关时取 /kiosk/radio。
 - 新闻：地址在插件设置里改（plugins.get_news_from_newsnow / get_news_from_chinanews），这里只看状态和测试。
 - 定位：按 IP 猜城市（pconline）可以关。
-- 音乐：家里 NAS 上的 Navidrome（core/agent/music.py，设计画布第 58 块），在「音乐」页填，这里只看状态和测试。
+- 媒体：家里 NAS 上的 Navidrome 和 Jellyfin（core/agent/media.py，设计画布第 58、60 块），在「媒体」页填，这里只看状态和测试。
 
 用户改的存在 data/services.json；预设写在这里，随网关更新。状态（能不能用、多快、上次成功）只在内存里：
 真用的时候顺便记（record），后台的「测试」也记。
@@ -347,15 +347,15 @@ async def _test_geo():
         pass
 
 
-async def _test_music():
-    from core.agent import music
+async def _test_music(which: str = "music"):
+    from core.agent import media
 
-    src = music.navidrome()
+    src = media.navidrome() if which == "music" else media.jellyfin()
     if not src:
-        raise ServicesError("还没在「音乐」页填 Navidrome")
+        raise ServicesError("还没在「媒体」页填")
     try:
         await src.ping()                 # 自己会记状态
-    except music.MusicError:
+    except media.MediaError:
         pass
 
 
@@ -375,8 +375,8 @@ async def run_test(group: str, sid: str, merged: dict):
         await _test_news(sid, merged)
     elif group == "geoip":
         await _test_geo()
-    elif group == "music":
-        await _test_music()
+    elif group in ("music", "jellyfin"):
+        await _test_music(group)
     else:
         raise ServicesError("没有这一类")
 
@@ -396,7 +396,7 @@ async def run_all(merged: dict, group: str = None):
         jobs += [_test_news("newsnow", merged), _test_news("chinanews", merged)]
         if geoip_on():
             jobs.append(_test_geo())
-        jobs.append(_test_music())
+        jobs += [_test_music("music"), _test_music("jellyfin")]
     await asyncio.gather(*jobs, return_exceptions=True)
     if group is None:
         LAST_ALL["at"] = int(time.time())
@@ -417,15 +417,15 @@ def view(merged: dict) -> dict:
         "radio": [dict(r, status=st(r["id"])) for r in radio_all()],
         "news": news,
         "geoip": {**GEO, "on": geoip_on(), "status": st("geoip")},
-        "music": _music_brief(),
+        "media": _music_brief(),
         "checked_at": LAST_ALL["at"],
     }
 
 
-def _music_brief() -> dict:
-    from core.agent import music
+def _music_brief() -> list:
+    from core.agent import media
 
-    return music.brief()
+    return media.brief()
 
 
 def _news_url(sid: str, merged: dict) -> str:
