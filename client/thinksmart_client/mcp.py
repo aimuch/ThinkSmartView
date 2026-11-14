@@ -307,6 +307,20 @@ FOCUS_TOOLS = [   # 专注计时（focus.py，设计画布第 47 块）
             'required': ['action']},
     },
 ]
+PAGES = ('home', 'work', 'work.rack', 'work.desk', 'work.repo', 'weather', 'focus', 'study', 'smart', 'settings',
+         'settings.screen', 'settings.looks', 'settings.net', 'settings.system', 'settings.alarms', 'settings.family',
+         'settings.voice', 'close')   # 和网关 core/agent/commands.py 的 PAGES 一致
+PAGE_TOOLS = [   # 打开设备上的页面（设计画布第 53 块）
+    {
+        'name': 'self.screen.open_page',
+        'description': '在设备屏幕上打开一个页面：「打开机柜」「看看机柜」page="work.rack"；「打开工作台」work；「仓库同步」work.repo；'
+                       '「DeskHub」「桌面」work.desk；「打开天气」weather；「专注」focus；「学习记录」study；「家居」「米家」smart；'
+                       '「打开设置」settings，设置里的分类 settings.screen（屏幕和声音）/ settings.looks（外观）/ settings.net（网络）/ '
+                       'settings.system（系统）/ settings.alarms（闹钟和作息）/ settings.family（家人）/ settings.voice（语音）；'
+                       '「回首页」home；「关掉」「退出这个页面」close。打开后只说一句「好的」。',
+        'inputSchema': {'type': 'object', 'properties': {'page': {'type': 'string', 'enum': list(PAGES)}}, 'required': ['page']},
+    },
+]
 LISTEN_TOOLS = [   # 说完以后怎么听（设计画布第 52 块）
     {
         'name': 'self.listen.mode',
@@ -351,7 +365,7 @@ PROACTIVE_TOOLS = [
                         'required': ['enabled']},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + LISTEN_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + LISTEN_TOOLS + PAGE_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -590,6 +604,13 @@ async def handle(payload, client=None):
                 text = _dumps({'success': True, 'phase': view['phase'], 'minutes_left': view['left'] and round(view['left'] / 60),
                                'today_minutes': view['today']['minutes'], 'today_rounds': view['today']['rounds'],
                                'sounds': view['sounds']})
+            elif name == 'self.screen.open_page' and client:
+                page = args.get('page')
+                if page in PAGES:
+                    client.open_page(page)
+                    text = _dumps({'success': True, 'page': page})
+                else:
+                    text = _dumps({'success': False, 'reason': f'没有这个页面：{page}'})
             elif name == 'self.listen.mode' and client:
                 try:
                     secs = args.get('seconds')

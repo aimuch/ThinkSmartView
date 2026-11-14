@@ -1068,6 +1068,11 @@ class Client:
         s = self.cfg.get('follow_up_seconds')
         return s if s in FOLLOW_SECONDS else 10
 
+    def open_page(self, page):
+        """让页面打开某一页（语音、口令都用；页面上 wf.js 的 handlers.open_page）。"""
+        self.screen.poke()
+        self.events.publish('open_page', {'page': page})
+
     # ---- 说完以后怎么听（设计画布第 52 块） ----
 
     def listen_scene(self):

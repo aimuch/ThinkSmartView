@@ -36,7 +36,7 @@ async function refresh() {
 }
 
 /* ---------------- 工作台 ---------------- */
-function openWork(on) {
+function openWork(on) {   // 也给「打开页面」用（wf.js，设计画布第 53 块）
   ig.open = on;
   $('work').classList.toggle('on', on);
   if (!DEMO) postJson('/api/integrations/visible', { visible: on || ig.homeOpen });
@@ -377,4 +377,5 @@ handlers.integrations = d => { ig.data = d; renderAll(); };
 // 叫醒时工作台和灯的详情也收起（和家居页一样）
 const baseAutoClose = window.miAutoClose;
 window.miAutoClose = () => { if (baseAutoClose) baseAutoClose(); if (ig.open) openWork(false); closeLight(); };
+window.openWork = openWork;
 })();

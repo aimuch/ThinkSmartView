@@ -1007,3 +1007,7 @@ body.dash-on .window-pill > span { display: none; }
 @media (orientation: portrait) { .window-pill > span { display: none; } }
 .window-pill b, .window-pill { white-space: nowrap; }
 body.follow-window.dash-on .link { display: none; }   /* 仪表盘顶栏挤：接着听时「待机」先收起 */
+
+/* ---- 打开页面时亮一下（设计画布第 53 块） ---- */
+.wk-flash { animation: wk-flash 1.6s ease-out; border-radius: 22px; }
+@keyframes wk-flash { 0%, 40% { box-shadow: inset 0 0 0 3px var(--accent); } 100% { box-shadow: inset 0 0 0 3px transparent; } }

@@ -146,3 +146,15 @@ def test_voice_tools(tmp_path, monkeypatch):
     assert r['action'] == 'RESPONSE' and '东方广播' in r['response']
     assert '30 分钟后停' in call(c, 'self.media.play', kind='sound', name='雨声')['response']
     assert call(c, 'self.media.play', action='stop')['response'] == '好，停了。' and c.played[-1] == 'stop'
+
+
+def test_open_page_tool():
+    """打开设备上的页面（设计画布第 53 块）：语音和网关口令都用 self.screen.open_page。"""
+    import types
+    opened = []
+    c = types.SimpleNamespace(open_page=opened.append)
+    for page, ok in (('work.rack', True), ('settings.voice', True), ('nowhere', False)):
+        r = asyncio.run(mcp.handle({'id': 1, 'method': 'tools/call', 'params': {'name': 'self.screen.open_page', 'arguments': {'page': page}}}, client=c))
+        assert json.loads(r['result']['content'][0]['text'])['success'] is ok
+    assert opened == ['work.rack', 'settings.voice']
+    assert 'self.screen.open_page' in [t['name'] for t in mcp.TOOLS]

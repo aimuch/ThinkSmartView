@@ -526,4 +526,36 @@ handlers.window = w => {
   if (until) windowTimer = setInterval(tick, 250);
 };
 
+
+/* ---------------- 打开页面（语音、口令，设计画布第 53 块） ---------------- */
+function closeAll() {
+  document.querySelectorAll('.sheet.on').forEach(el => el.classList.remove('on'));
+  $('settings').classList.remove('on');
+  if (window.openWork) window.openWork(false);
+  if (window.miApi) window.miApi.openHome(false);
+}
+handlers.open_page = ({ page }) => {
+  if (!page) return;
+  closeAll();
+  if (page === 'home' || page === 'close') return;
+  const [main, sub] = page.split('.');
+  if (main === 'work' && window.openWork) {
+    window.openWork(true);
+    const sec = { rack: 'wkRack', desk: 'wkDesk', repo: 'wkRepo' }[sub];
+    if (sec) setTimeout(() => {           // 内容画好以后再滚过去、亮一下边框
+      const el = $(sec);
+      if (!el) return;
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.classList.remove('wk-flash'); void el.offsetWidth; el.classList.add('wk-flash');
+    }, 250);
+  } else if (main === 'weather') window.openWeather(true);
+  else if (main === 'focus') openFocus(true);
+  else if (main === 'study') openStudyDay(true);
+  else if (main === 'smart' && window.miApi) window.miApi.openHome(true);
+  else if (main === 'settings') {
+    $('settings').classList.add('on');
+    if (sub) setPane(sub);
+  }
+};
+
 })();
