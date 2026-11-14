@@ -38,6 +38,18 @@ class ListenTextMessageHandler(TextMessageHandler):
             # [xiaozhi-hub] 回答完接着听（不用唤醒）；lock：只认这一轮先问的那个人（core/utils/turn_filter.py）
             conn.follow_up = bool(msg_json.get("follow_up"))
             conn.follow_lock = bool(msg_json.get("lock"))
+            # [xiaozhi-hub] 认人打招呼（core/agent/greetings.py，设计画布第 57 块）：念了的那句记进对话，
+            # 这一轮就当是这个人在问（接着听时只认他）
+            if msg_json.get("greet_id"):
+                from core.agent import greetings
+
+                g = greetings.mark(str(msg_json["greet_id"]), bool(msg_json.get("greet_said")))
+                if g and msg_json.get("greet_said") and g.get("text"):
+                    conn.turn_speaker = f"{g['speaker']}（孩子）" if g.get("child") else g["speaker"]
+                    try:
+                        conn.dialogue.put(Message(role="assistant", content=g["text"]))
+                    except Exception as e:  # noqa: BLE001
+                        conn.logger.bind(tag=TAG).warning(f"打招呼没记进对话：{e}")
         elif msg_json["state"] == "stop":
             # 收到stop但asr未初始化，跳过处理
             if conn.asr is None:

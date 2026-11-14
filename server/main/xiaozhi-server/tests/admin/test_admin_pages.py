@@ -1296,9 +1296,12 @@ async def test_voiceprint_enroll_and_identify(kiosk, tmp_path, monkeypatch):
     assert {p["name"]: p["child"] for p in people} == {"妈妈": False, "宝宝": True}
     assert lv.identify("dev-1", lv.pcm16_to_float(loud))[0] == "妈妈"
     assert lv.identify("dev-1", lv.pcm16_to_float(soft))[0] == "宝宝（孩子）"
-    assert lv.identify("dev-2", lv.pcm16_to_float(loud))[0] is None
-    assert lv.for_device("dev-1") is not None and lv.for_device("dev-9") is None
-    assert (await (await kiosk.post("/kiosk/voiceprint/remove", json={"device": "dev-1", "name": "妈妈"})).json())["ok"]
+    # 全家共用（设计画布第 57 块）：别的设备也认得，设备页列的也是全家的人
+    assert lv.identify("dev-2", lv.pcm16_to_float(loud))[0] == "妈妈"
+    assert lv.for_device("dev-9") is not None
+    people2 = (await (await kiosk.get("/kiosk/voiceprint?device=dev-2")).json())["people"]
+    assert {p["name"]: (p["devices"], p["here"]) for p in people2} == {"妈妈": (["另一台"], False), "宝宝": (["另一台"], False)}   # 没起名字的设备
+    assert (await (await kiosk.post("/kiosk/voiceprint/remove", json={"device": "dev-2", "name": "妈妈"})).json())["ok"]
     assert [p["name"] for p in lv.people("dev-1")] == ["宝宝"]
 
 
@@ -1339,3 +1342,40 @@ async def test_services_page_and_kiosk_radio(kiosk, tmp_path, monkeypatch):
     await kiosk.post("/admin/api/logout", json={})
     assert (await kiosk.get("/admin/api/services")).status == 401
     assert (await kiosk.get("/kiosk/radio")).status == 200   # 设备经隧道来，算本机
+
+
+# ---------- 认人打招呼（core/agent/greetings.py，设计画布第 57 块） ----------
+
+async def test_wake_greeting(kiosk, tmp_path, monkeypatch):
+    import base64
+
+    import numpy as np
+
+    from core.agent import greetings
+    from core.utils import local_voiceprint as lv
+
+    monkeypatch.setattr(greetings, "_path", lambda: str(tmp_path / "greetings.json"))
+    monkeypatch.setattr(lv, "_path", lambda: str(tmp_path / "voiceprints.json"))
+    monkeypatch.setattr(lv, "available", lambda: True)
+    greetings.history.clear()
+    pcm = (np.ones(16000 * 2) * 0.3 * 32767).astype("<i2").tobytes()
+    # 家里还没录声音：不打招呼
+    assert (await (await kiosk.post("/kiosk/wake/greet?device=dev-1", data=pcm)).json())["text"] == ""
+    monkeypatch.setattr(lv, "rank", lambda x, m=0.8: [("宝宝", 0.72, True), ("妈妈", 0.41, False)])
+    said = []
+    monkeypatch.setattr(ah.AdminHandler, "_synthesize", lambda self, text: said.append(text) or b"\x01\x00" * 2400)
+    await kiosk.post("/admin/api/greetings", json={"people": {"宝宝": {"call": "小宝", "lines": ["你好呀，{称呼}"]}}})
+    r = await (await kiosk.post("/kiosk/wake/greet?device=dev-1", data=pcm)).json()
+    assert r["speaker"] == "宝宝" and r["child"] and r["text"] == "你好呀，小宝" and r["id"]
+    assert base64.b64decode(r["wav"])[:4] == b"RIFF"
+    await kiosk.post("/kiosk/wake/greet?device=dev-1", data=pcm)
+    assert said.count("你好呀，小宝") == 1                         # 合成过的记住
+    d = await (await kiosk.get("/admin/api/greetings")).json()
+    assert d["people"]["宝宝"]["call"] == "小宝" and d["history"][0]["text"] == "你好呀，小宝"
+    wav = await kiosk.post("/admin/api/greetings/preview", json={"text": "你好呀，小宝"})
+    assert wav.status == 200 and wav.content_type == "audio/wav"
+    # 分不清：只叮
+    monkeypatch.setattr(lv, "rank", lambda x, m=0.8: [("妈妈", 0.60, False), ("奶奶", 0.58, False)])
+    assert (await (await kiosk.post("/kiosk/wake/greet?device=dev-1", data=pcm)).json())["text"] == ""
+    await kiosk.post("/admin/api/logout", json={})
+    assert (await kiosk.get("/admin/api/greetings")).status == 401

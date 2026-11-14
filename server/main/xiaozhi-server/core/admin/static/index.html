@@ -259,6 +259,20 @@
     .sv-row { grid-template-columns: 22px 12px minmax(0, 1fr); } .sv-row .sv-st, .sv-row .sv-acts { grid-column: 3; text-align: left; justify-content: flex-start; }
     .sv-line { margin-left: 0; } .sv-add { flex-wrap: wrap; } .sv-add .in.nm { flex: 1 1 100%; }
   }
+  /* 认人打招呼（设计画布第 57 块） */
+  .gr-card { margin-bottom: 16px; } .gr-body.off { opacity: .5; }
+  .gr-def { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; } .gr-def textarea { min-height: 70px; resize: vertical; }
+  .gr-row { display: grid; grid-template-columns: 36px 150px 150px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); margin-top: 6px; }
+  .gr-av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--accent); }
+  .gr-av.kid { background: linear-gradient(135deg, #f5a524, #e86fae); }
+  .gr-who { min-width: 0; } .gr-who small { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gr-call { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; } .gr-call .in { padding: 4px 8px; min-width: 0; }
+  .gr-lines { min-width: 0; } .gr-lines textarea { width: 100%; min-height: 48px; resize: vertical; }
+  .gr-hist { display: grid; grid-template-columns: 50px 90px 1fr; gap: 4px 12px; margin-top: 12px; }
+  @media (max-width: 900px) {
+    .gr-def { grid-template-columns: 1fr; }
+    .gr-row { grid-template-columns: 36px minmax(0, 1fr); } .gr-row .gr-call, .gr-row .gr-lines, .gr-row .sv-acts { grid-column: 2; justify-content: flex-start; }
+  }
   .wa-card { margin-bottom: 16px; } .wa-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; } .wa-head > b { font-size: 15px; }
   .wa-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; } .wa-row.off { opacity: .5; }
   .wa-hist { display: grid; grid-template-columns: 60px 1fr; gap: 4px 12px; margin-top: 10px; } .wa-win { color: var(--ok); font-weight: 600; }
@@ -2591,7 +2605,7 @@ async function renderDeviceSettings(root) {
       : '<div class="panel muted">还没有设备。设备第一次连上网关就会出现在这里。</div>'}</div>
     <p class="muted small">蓝字是这台单独设的，灰字是跟着全局。改完设备下一次对话就用上（设备每次叫醒都会重连）。全局的在「大模型」「语音合成」「意图识别」页。</p>`;
   root.querySelectorAll("[data-dev]").forEach((tr) => (tr.onclick = () => openDeviceDrawer(tr.dataset.dev, root)));
-  renderWakeArbiter(root);
+  renderWakeArbiter(root).then(() => renderGreetings(root));
 }
 
 // 就近唤醒（设计画布第 55 块，core/agent/wake_arbiter.py）：卡片放在设备列表上面
@@ -2709,6 +2723,109 @@ async function renderServices(root) {
     if ($("sv-line-save")) $("sv-line-save").onclick = async () => { lineEdit = false; await op({ op: "line", ip: $("sv-line-ip").value.trim() }, "线路改好了"); };
     $("sv-w-add").onclick = () => op({ op: "add", group: "weather", name: $("sv-w-name").value, url: $("sv-w-url").value.trim() }, "加好了，排在最后；可以用 ▲ 往前挪");
     $("sv-r-add").onclick = () => op({ op: "add", group: "radio", name: $("sv-r-name").value, url: $("sv-r-url").value.trim() }, "加好了：设备下次连网关时就能放");
+  }
+  draw();
+}
+
+// ---------- [xiaozhi-hub] 认人打招呼（设计画布第 57 块，core/agent/greetings.py） ----------
+async function renderGreetings(root) {
+  let d;
+  try { d = await api("greetings"); } catch (e) { return; }
+  const card = document.createElement("div");
+  card.className = "card panel gr-card";
+  const after = root.querySelector(".wa-card") || root.querySelector(".page-head");
+  if (after) after.after(card); else root.prepend(card);
+  const when = (t) => new Date(t * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  let cfg = { enabled: d.enabled, level: d.level, child: d.child.slice(), adult: d.adult.slice(), people: JSON.parse(JSON.stringify(d.people || {})) };
+  const LEVEL_NAMES = { loose: "宽松", normal: "适中", strict: "严格" };
+  const own = new Set(Object.keys(cfg.people).filter((n) => (cfg.people[n].lines || []).length));
+  let dirty = false;
+  const person = (n) => (cfg.people[n] = cfg.people[n] || { call: "", lines: [], off: false });
+  const linesOf = (v) => v.split("\n").map((x) => x.trim()).filter(Boolean);
+  const sample = (v) => {
+    const p = cfg.people[v.name] || {}, call = (p.call || v.name).trim();
+    const raw = (p.lines && p.lines.length) ? p.lines : cfg[v.child ? "child" : "adult"];
+    return (raw[0] || "").replaceAll("{称呼}", call);
+  };
+  async function preview(btn, text) {
+    if (!text) return toast("这个人设成只「叮」，没有要念的", true);
+    await busy(btn, async () => {
+      try {
+        const r = await fetch("/admin/api/greetings/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        if (!r.ok) { let m = "试听失败"; try { m = (await r.json()).error || m; } catch (e) {} throw new Error(m); }
+        const a = new Audio(URL.createObjectURL(await r.blob()));
+        await a.play();
+      } catch (err) { toast(err.message, true); }
+    });
+  }
+  function histRow(h) {
+    const who = h.speaker ? `<b class="wa-win">${esc(h.speaker)} ${h.score}</b>`
+      : `<span class="muted">${esc(h.why || "没认出")}${h.best ? `（最像 ${esc(h.best)} ${h.score}${h.second != null ? `，第二 ${h.second}` : ""}）` : ""}</span>`;
+    const what = h.text ? (h.said === false ? '<span class="muted">接着就问了，没念</span>' : h.said ? `「${esc(h.text)}」`
+        : `<span class="muted">「${esc(h.text)}」没念：复核下来不是唤醒词</span>`) : (h.speaker ? `<span class="muted">${esc(h.why)} → 叮</span>` : "→ 叮");
+    return `<span class="small">${when(h.t)}</span><span class="small">${esc(h.device)}</span><span class="small">${who} → ${what}</span>`;
+  }
+  function draw() {
+    const voices = d.voices || [];
+    card.innerHTML = `<div class="wa-head"><b>认人打招呼</b><span class="muted small">喊「小麦小麦」时听出是家里的谁，用他的称呼打招呼；认不出、没把握或接着就问了，照旧只「叮」</span>
+        <label class="switch" style="margin:0 0 0 auto"><input type="checkbox" id="gr-on" ${cfg.enabled ? "checked" : ""}><b>${cfg.enabled ? "开" : "关"}</b></label></div>
+      ${d.available ? "" : '<div class="banner warn" style="margin-top:10px">网关上还没有声纹模型（models/voiceprint/），认不了人。</div>'}
+      <div class="gr-body ${cfg.enabled ? "" : "off"}">
+      <div class="gr-def"><label class="f">孩子的说法 <span class="sv-tag me">孩子</span><textarea class="in" id="gr-child" rows="3">${esc(cfg.child.join("\n"))}</textarea></label>
+        <label class="f">大人的说法<textarea class="in" id="gr-adult" rows="3">${esc(cfg.adult.join("\n"))}</textarea></label></div>
+      <p class="muted small" style="margin:4px 0 0">一行一句（最多 5 句、每句 30 字），随机念一句；{称呼} 换成下面每个人的称呼。每个人也可以单独写。</p>
+      ${voices.length ? voices.map((v, i) => {
+        const p = cfg.people[v.name] || {}, mine = own.has(v.name);
+        return `<div class="gr-row" data-i="${i}"><span class="gr-av ${v.child ? "kid" : ""}">${esc(v.name.slice(0, 1))}</span>
+          <span class="gr-who"><b>${esc(v.name)}</b>${v.child ? '<span class="sv-tag me">孩子</span>' : ""}<small>${v.samples} 段声音 · 在${esc(v.devices.join("、"))}录的</small></span>
+          <label class="gr-call">称呼<input class="in" data-call value="${esc(p.call || "")}" placeholder="${esc(v.name)}" maxlength="12"></label>
+          <span class="gr-lines">${p.off ? '<span class="muted small">不打招呼，只「叮」</span>' : mine
+            ? `<textarea class="in" data-lines rows="2" placeholder="一行一句">${esc((p.lines || []).join("\n"))}</textarea>`
+            : `<span class="muted small">用${v.child ? "孩子" : "大人"}的说法：「${esc(sample(v))}」</span>`}</span>
+          <span class="sv-acts"><button class="btn sm" data-try>试听</button>${p.off ? "" : `<button class="btn sm" data-own>${mine ? "用默认的" : "自己写"}</button>`}
+            <button class="btn sm danger" data-forget title="删掉这个人的声音（全家所有设备）">删除声音</button>
+            <label class="switch" style="margin:0" title="${p.off ? "打开" : "关掉"}打招呼"><input type="checkbox" data-on ${p.off ? "" : "checked"}></label></span></div>`;
+      }).join("") : '<p class="muted small" style="margin:10px 0 0">还没录家人声音：在设备的「设置 → 家人声音」里录（先说名字，再念三句，可以标孩子）。录一次，家里每台小麦都认得。</p>'}
+      ${d.history.length ? `<div class="gr-hist"><span class="muted small">最近</span><span></span><span></span>${d.history.map(histRow).join("")}</div>` : ""}
+      </div>
+      <div class="wa-row">多像才叫名字 ${Object.keys(d.levels).map((k) => `<button class="btn sm ${k === cfg.level ? "primary" : ""}" data-level="${k}">${LEVEL_NAMES[k]} ${d.levels[k]}</button>`).join("")}
+        <span class="muted small">最像的人要到这个分数、且比第二像的高 ${d.margin} 以上。常有别的孩子来家里玩就选「严格」（别的孩子的声音容易被认成自家孩子）；自家人老是只「叮」就选「宽松」或多录几段</span></div>
+      <div class="actions" style="margin-top:10px"><span class="muted small">「最近」里能看到每次的分数。</span>
+        <button class="btn ${dirty ? "primary" : ""}" id="gr-save">保存</button></div>`;
+    bind();
+  }
+  const mark = () => { dirty = true; card.querySelector("#gr-save").classList.add("primary"); };
+  function collect() {
+    cfg.child = linesOf(card.querySelector("#gr-child").value);
+    cfg.adult = linesOf(card.querySelector("#gr-adult").value);
+    card.querySelectorAll(".gr-row").forEach((row) => {
+      const v = d.voices[+row.dataset.i], p = person(v.name);
+      p.call = row.querySelector("[data-call]").value.trim();
+      const ta = row.querySelector("[data-lines]");
+      if (ta) p.lines = linesOf(ta.value);
+    });
+  }
+  function bind() {
+    card.querySelector("#gr-on").onchange = (e) => { cfg.enabled = e.target.checked; collect(); draw(); mark(); };
+    card.querySelectorAll("[data-level]").forEach((b) => (b.onclick = () => { collect(); cfg.level = b.dataset.level; draw(); mark(); }));
+    card.querySelectorAll("textarea, input[data-call]").forEach((el) => (el.oninput = mark));
+    card.querySelectorAll(".gr-row").forEach((row) => {
+      const v = d.voices[+row.dataset.i];
+      row.querySelector("[data-try]").onclick = (e) => { collect(); preview(e.target, (cfg.people[v.name] || {}).off ? "" : sample(v)); };
+      const ownBtn = row.querySelector("[data-own]");
+      if (ownBtn) ownBtn.onclick = () => { collect(); const p = person(v.name);
+        if (own.has(v.name)) { own.delete(v.name); p.lines = []; } else { own.add(v.name); p.lines = (cfg[v.child ? "child" : "adult"]).slice(); }
+        draw(); mark(); };
+      row.querySelector("[data-on]").onchange = (e) => { collect(); person(v.name).off = !e.target.checked; draw(); mark(); };
+      row.querySelector("[data-forget]").onclick = async () => {
+        if (!confirm(`删掉「${v.name}」的声音？家里每台小麦都不再认得他，要重新在设备上录。`)) return;
+        try { d = await api("greetings/forget-voice", { name: v.name }); draw(); toast(`删掉了「${v.name}」的声音`); } catch (err) { toast(err.message, true); }
+      };
+    });
+    card.querySelector("#gr-save").onclick = (e) => busy(e.target, async () => {
+      collect();
+      try { d = await api("greetings", cfg); dirty = false; draw(); toast("保存好了：要念的话会先合成好，喊的时候不用等"); } catch (err) { toast(err.message, true); }
+    });
   }
   draw();
 }

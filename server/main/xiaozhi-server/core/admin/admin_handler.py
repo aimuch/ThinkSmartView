@@ -90,7 +90,8 @@ class AdminHandler:
         from core.agent.intercom import Intercom
         from core.agent.wake_arbiter import Arbiter
         self.intercom = Intercom()        # 视频对讲（设计画布第 51 块）
-        self.wake_arbiter = Arbiter()     # 就近唤醒（设计画布第 55 块）
+        self.wake_arbiter = Arbiter()
+        self._greet_wavs = {}       # 认人打招呼：念的那句 → WAV（设计画布第 57 块）     # 就近唤醒（设计画布第 55 块）
         self.sessions_handover = data_dir / ".admin-sessions.json"
         if self.sessions.restore(self.sessions_handover):
             logger.bind(tag=TAG).info("更新网关后沿用了更新前的后台登录")
@@ -228,6 +229,11 @@ class AdminHandler:
                 web.post("/admin/api/services", self.handle_services_save),
                 web.post("/admin/api/services/test", self.handle_services_test),
                 web.get("/kiosk/radio", self.handle_kiosk_radio),
+                web.post("/kiosk/wake/greet", self.handle_kiosk_wake_greet),
+                web.get("/admin/api/greetings", self.handle_greetings),
+                web.post("/admin/api/greetings", self.handle_greetings_save),
+                web.post("/admin/api/greetings/preview", self.handle_greetings_preview),
+                web.post("/admin/api/greetings/forget-voice", self.handle_greetings_forget_voice),
                 web.post("/admin/api/commands", self.handle_commands_save),
                 web.post("/admin/api/commands/test", self.handle_commands_test),
                 # 声音复刻（core/agent/voice_clone.py，设计画布第 50 块）
@@ -1593,8 +1599,11 @@ class AdminHandler:
             return self._error("仅限本机", 403)
         from core.utils import local_voiceprint as lv
 
+        # 全家共用（设计画布第 57 块）：列全家的人，devices 是在哪几台录的（后台起的名字）
+        names = await self._blocking(self._device_names)
+        people = await self._blocking(lv.people, request.query.get("device") or "")
         return self._json({"ok": True, "available": lv.available(),
-                           "people": await self._blocking(lv.people, request.query.get("device") or "")})
+                           "people": [{**p, "devices": [names.get(d) or "另一台" for d in p["devices"]]} for p in people]})
 
     async def handle_kiosk_voiceprint_enroll(self, request: web.Request):
         """?device=&name=&child=1，请求体是 16 kHz 16 位单声道 PCM（4～8 秒）：加一段这个人的声音。"""
@@ -1997,6 +2006,118 @@ class AdminHandler:
         body = await self._read_json(request)
         d = await self._blocking(wake_arbiter.save, body.get("enabled"), body.get("window"))
         return self._json({"ok": True, **d})
+
+    # ---------- 认人打招呼（core/agent/greetings.py，设计画布第 57 块） ----------
+
+    def _greet_wav(self, text: str):
+        """念的那句的 WAV（合成过的记住；换了语音合成就重新合成）。合成不了返回 None。"""
+        key = (str((self.config.get("selected_module") or {}).get("TTS") or ""), text)
+        wav = self._greet_wavs.get(key)
+        if wav is None:
+            try:
+                pcm = self._synthesize(text)
+            except Exception as e:  # noqa: BLE001
+                self.logger.bind(tag=TAG).warning(f"打招呼合成失败（{text}）：{e}")
+                return None
+            if not pcm:
+                return None
+            wav = _wav(pcm, KIOSK_TTS_RATE)
+            if len(self._greet_wavs) > 64:
+                self._greet_wavs.clear()
+            self._greet_wavs[key] = wav
+        return wav
+
+    def _greet_prewarm(self):
+        """改完说法以后把全家要用的每一句先合成好：喊的时候就不用等合成。"""
+        from core.agent import greetings
+        from core.utils import local_voiceprint as lv
+
+        cfg = greetings.load()
+        if not cfg["enabled"]:
+            return
+        for text in greetings.all_lines(cfg, lv.people()):
+            self._greet_wav(text)
+
+    async def handle_kiosk_wake_greet(self, request: web.Request):
+        """?device=，请求体是唤醒词那几秒的 16 kHz 16 位单声道 PCM：认出是家里的谁，回要念的那句和它的 WAV（base64）。
+        没认出、没把握、关着时 text 为空，设备照旧只「叮」。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        import base64
+        from core.agent import greetings
+        from core.utils import local_voiceprint as lv
+
+        device = request.query.get("device") or ""
+        pcm = await request.read()
+        if len(pcm) > KIOSK_ASR_MAX_BYTES:
+            return self._error("音频太长", 413)
+        cfg = await self._blocking(greetings.load)
+        if not cfg["enabled"] or not lv.available():
+            return self._json({"ok": True, "text": ""})
+        try:
+            ranked = await self._blocking(lambda: lv.rank(greetings.speech_part(lv.pcm16_to_float(pcm)), 0.5))
+        except Exception as e:  # noqa: BLE001
+            self.logger.bind(tag=TAG).warning(f"打招呼认人失败：{e}")
+            return self._json({"ok": True, "text": ""})
+        if not ranked:
+            return self._json({"ok": True, "text": ""})
+        g = greetings.decide(device, ranked, cfg)
+        out = {"ok": True, "id": g["id"], "speaker": g["speaker"], "child": g["child"], "score": g["score"], "text": g["text"]}
+        if g["text"]:
+            wav = await self._blocking(self._greet_wav, g["text"])
+            if wav is None:
+                out["text"] = ""
+                g["text"], g["why"] = "", "合成不了"
+            else:
+                out["wav"] = base64.b64encode(wav).decode()
+        self.logger.bind(tag=TAG).info(f"认人打招呼：{g['best']} {g['score']}（第二 {g['second']}）→ {g['text'] or g['why']}")
+        return self._json(out)
+
+    async def handle_greetings(self, request: web.Request):
+        self._require_login(request)
+        from core.agent import greetings
+        from core.utils import local_voiceprint as lv
+
+        names = await self._blocking(self._device_names)
+        hist = [{**{k: e[k] for k in ("t", "speaker", "best", "score", "second", "text", "said", "why")},
+                 "device": names.get(e["device"], e["device"])} for e in list(greetings.history)[:8]]
+        people = [{**p, "devices": [names.get(d, d) for d in p["devices"]]} for p in await self._blocking(lv.people)]
+        return self._json({"ok": True, **(await self._blocking(greetings.load)), "voices": people,
+                           "available": lv.available(), "history": hist,
+                           "levels": greetings.LEVELS, "margin": greetings.MARGIN})
+
+    async def handle_greetings_save(self, request: web.Request):
+        self._require_login(request)
+        from core.agent import greetings
+
+        body = await self._read_json(request)
+        await self._blocking(greetings.save, body)
+        asyncio.get_running_loop().run_in_executor(None, self._greet_prewarm)
+        return await self.handle_greetings(request)
+
+    async def handle_greetings_preview(self, request: web.Request):
+        """{"text"}：试听（用网关现在的语音合成）。"""
+        self._require_login(request)
+        body = await self._read_json(request)
+        text = str(body.get("text") or "").strip()[:60]
+        if not text:
+            return self._error("没有要念的话", 400)
+        wav = await self._blocking(self._greet_wav, text)
+        if wav is None:
+            return self._error("合成失败，请检查语音合成服务能否访问", 502)
+        return web.Response(body=wav, content_type="audio/wav", headers=SECURITY_HEADERS)
+
+    async def handle_greetings_forget_voice(self, request: web.Request):
+        """{"name"}：删掉这个人的声音（全家所有设备）。"""
+        self._require_login(request)
+        from core.utils import local_voiceprint as lv
+
+        body = await self._read_json(request)
+        try:
+            await self._blocking(lv.remove, "", str(body.get("name") or ""))
+        except ValueError as e:
+            return self._error(str(e), 400)
+        return await self.handle_greetings(request)
 
     # ---------- 外部服务（core/agent/services.py，设计画布第 56 块） ----------
 
