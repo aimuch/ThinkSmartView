@@ -580,7 +580,7 @@ async def test_emby_uses_the_same_code(tmp_path, jf, client):
     assert {t["id"][0] for t in r["tracks"]} <= {"j", "e"} and r["tracks"]
     music.apply({"op": "ref", "section": "recipes", "ref": {"type": "folder", "id": "e.lib-cook", "name": "菜谱"}})
     r = await (await client.get("/kiosk/media/section/recipes")).json()
-    assert r["tracks"][0]["id"] == "e.v1"
+    assert {t["id"] for t in r["tracks"]} == {"e.v1", "e.v2"}                   # 不是按顺序的分区：整区放时打乱
     assert (await client.get("/kiosk/media/stream/e.e1")).status == 200
     v = await (await client.get("/admin/api/media")).json()
     assert v["emby"]["has_password"] and v["jellyfin"]["has_password"]
