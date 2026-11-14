@@ -163,6 +163,10 @@ async def test_unreachable_message_has_no_url():
 
 # ---------------------------------------------------------------- 找歌、标签、随便放
 
+def test_unknown_tags_are_blank():
+    assert music._known("[Unknown Artist]") == "" and music._known("[Unknown Album]") == "" and music._known("贝乐虎") == "贝乐虎"
+
+
 def test_score():
     assert music.score("两只老虎", "两只老虎 (儿歌版)") == 1.0
     assert music.score("小兔子乖乖", "01.小兔子乖乖") == 1.0

@@ -425,6 +425,12 @@ async def _relay(request, url, params, headers=None, ctype=None, cache=False, si
         await session.close()
 
 
+def _known(name) -> str:
+    """Navidrome 没有标签时给「[Unknown Artist]」「[Unknown Album]」：当成没有。"""
+    name = str(name or "")
+    return "" if re.fullmatch(r"\[Unknown [A-Za-z ]+\]", name) else name
+
+
 class Navidrome(Source):
     key, name = "n", "Navidrome"
 
@@ -468,11 +474,11 @@ class Navidrome(Source):
                 "server": body.get("type") or "Subsonic", "libraries": [str(x.get("name") or "") for x in libs]}
 
     def _song(self, x):
-        return _track("n", x.get("id"), x.get("title"), x.get("artist"), x.get("album"), x.get("duration"), x.get("coverArt"))
+        return _track("n", x.get("id"), x.get("title"), _known(x.get("artist")), _known(x.get("album")), x.get("duration"), x.get("coverArt"))
 
     def _album(self, x):
         return {"id": f"n.{x.get('id')}", "type": "album", "name": str(x.get("name") or x.get("title") or "")[:80],
-                "sub": " · ".join(p for p in (str(x.get("artist") or ""), f"{x['songCount']} 首" if x.get("songCount") else "") if p),
+                "sub": " · ".join(p for p in (_known(x.get("artist")), f"{x['songCount']} 首" if x.get("songCount") else "") if p),
                 "cover": f"n.{x['coverArt']}" if x.get("coverArt") else ""}
 
     async def search(self, q, n=20):
