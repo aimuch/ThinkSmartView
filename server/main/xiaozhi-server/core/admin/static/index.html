@@ -240,7 +240,8 @@
   .cmd-rule .in, .cmd-cat .in, .cmd-alias .in, .cmd-try .in, .cmd-dev .in { width: auto; margin-top: 0; }
   .in.bad { border-color: var(--err); }
   .cmd-res { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.7; }
-  .cmd-res.ok { background: var(--ok-soft); } .cmd-res.llm { background: var(--warn-soft); }
+  .cmd-res.ok { background: var(--ok-soft); } .cmd-res.llm { background: var(--ai-soft); color: var(--ai-soft-ink); border: 1px solid var(--ai-soft-line); }
+  .cmd-stats div.ai { background: var(--ai-soft); color: var(--ai-soft-ink); border: 1px solid var(--ai-soft-line); }
   .cmd-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 200px)); gap: 10px; } .cmd-stats div { padding: 10px 12px; border-radius: 10px; background: var(--soft); }
   .cmd-stats b { display: block; font-size: 22px; }
   .cmd-miss, .cmd-recent { display: flex; gap: 10px; align-items: center; padding: 4px 0; font-size: 13px; }
@@ -2218,7 +2219,7 @@ async function renderClones(root) {
   try { d = await api("voice-clones"); } catch (err) { card.innerHTML = `<p class="muted">${esc(err.message)}</p>`; return; }
   const when = (t) => t ? new Date(t * 1000).toLocaleDateString("zh-CN", { month: "long", day: "numeric" }) : "";
   card.innerHTML = `
-    <div class="clone-head"><h3>声音复刻</h3><span class="muted small">阿里云百炼 CosyVoice · 用「千问 TTS」那里填的百炼 API Key · 创建免费，合成按字数计费</span></div>
+    <div class="clone-head"><h3>声音复刻</h3><span class="pill ai-soft">AI · 阿里云百炼 CosyVoice</span><span class="muted small">用「千问 TTS」那里填的百炼 API Key · 创建免费，合成按字数计费</span></div>
     ${d.ready ? "" : `<div class="banner warn">${esc(d.reason)}</div>`}
     ${(d.clones || []).map((c) => { const [k, t] = CLONE_STATUS[c.status] || ["warn", c.status]; return `
       <div class="clone-row" data-vid="${esc(c.voice_id)}"><span class="clone-av">${esc(c.name.slice(0, 1))}</span>
@@ -2231,7 +2232,7 @@ async function renderClones(root) {
     <div class="clone-add"><span class="clone-mic">🎙</span>
       <label class="f">名字<input class="in" id="clone-name" maxlength="12" placeholder="妈妈"></label>
       <label class="f">录音文件<span class="hint">10–20 秒，wav / mp3 / m4a，手机录音机录的就行；安静、只有一个人说话</span><input class="in" id="clone-file" type="file" accept="audio/*,.m4a,.wav,.mp3"></label>
-      <button class="btn primary" id="clone-go" ${d.ready ? "" : "disabled"}>上传并复刻</button></div>
+      <button class="btn primary ai" id="clone-go" ${d.ready ? "" : "disabled"}>上传并复刻</button></div>
     <p class="muted small" style="margin:10px 0 0">也可以在设备上录：设备的设置 → 语音 → 回答的声音 →「＋ 复刻我的声音」。录音只发给百炼做复刻，网关不留；复刻出的声音在你的百炼账号里。</p>`;
   card.querySelector("#clone-go").onclick = (ev) => busy(ev.currentTarget, async () => {
     const f = card.querySelector("#clone-file").files[0], name = card.querySelector("#clone-name").value.trim();
@@ -2316,11 +2317,11 @@ async function renderCommands(root) {
       <div class="cmd-try"><input class="in" id="cmd-text" placeholder="例如：明天早上七点半叫我"><button class="btn primary" id="cmd-test">试</button></div>
       <div id="cmd-result"></div></div>
     <div class="card panel"><div class="section-title" style="margin-top:0">最近 7 天</div>
-      <div class="cmd-stats"><div><small class="muted">不走大模型</small><b>${s.fast || 0} 句</b></div><div><small class="muted">交给大模型</small><b>${s.llm || 0} 句</b></div></div>
+      <div class="cmd-stats"><div><small class="muted">不走大模型</small><b>${s.fast || 0} 句</b></div><div class="ai"><small>交给大模型</small><b>${s.llm || 0} 句</b></div></div>
       ${(s.misses || []).length ? `<div class="section-title">常没认出来的短句<span class="muted small" style="font-weight:400">点「加成口令」做成自定义口令</span></div>
         ${s.misses.map((m) => `<div class="cmd-miss"><span>${esc(m.text)}</span><span class="muted small">× ${m.count}</span><button class="btn sm" data-miss="${esc(m.text)}">加成口令</button></div>`).join("")}` : ""}
       ${(s.recent || []).length ? `<div class="section-title">最近<span class="muted small" style="font-weight:400">网关重启后从头记</span></div>
-        ${s.recent.slice(0, 12).map((r) => `<div class="cmd-recent"><span class="pill ${r.outcome === "fast" ? "ok" : ""}">${r.outcome === "fast" ? "口令" : "大模型"}</span><span>${esc(r.text)}</span><small class="muted">${esc(r.rule || "")}</small></div>`).join("")}` : ""}</div>`;
+        ${s.recent.slice(0, 12).map((r) => `<div class="cmd-recent"><span class="pill ${r.outcome === "fast" ? "ok" : "ai-soft"}">${r.outcome === "fast" ? "口令" : "大模型"}</span><span>${esc(r.text)}</span><small class="muted">${esc(r.rule || "")}</small></div>`).join("")}` : ""}</div>`;
     wire();
   }
   function wire() {
