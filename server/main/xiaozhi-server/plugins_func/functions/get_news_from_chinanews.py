@@ -1,4 +1,6 @@
 import random
+import time
+
 import httpx
 import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
@@ -46,9 +48,13 @@ GET_NEWS_FROM_CHINANEWS_FUNCTION_DESC = {
 
 async def fetch_news_from_rss(rss_url):
     """从RSS源获取新闻列表"""
+    from core.agent import services
+
+    t0 = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=3.0)) as client:
             response = await client.get(rss_url)
+        response.raise_for_status()
 
         # 解析XML
         root = ET.fromstring(response.content)
@@ -80,8 +86,11 @@ async def fetch_news_from_rss(rss_url):
                 }
             )
 
+        # [xiaozhi-hub] 后台「外部服务」的状态（设计画布第 56 块）
+        services.record("chinanews", bool(news_items), (time.monotonic() - t0) * 1000, "" if news_items else "RSS 里没有新闻")
         return news_items
     except Exception as e:
+        services.record("chinanews", False, (time.monotonic() - t0) * 1000, str(e) or type(e).__name__)
         logger.bind(tag=TAG).error(f"获取RSS新闻失败: {e}")
         return []
 
@@ -203,16 +212,15 @@ async def get_news_from_chinanews(
         # 否则，获取新闻列表并随机选择一条
         # 从配置中获取RSS URL
         rss_config = conn.config.get("plugins", {}).get("get_news_from_chinanews", {})
-        default_rss_url = rss_config.get(
-            "default_rss_url", "https://www.chinanews.com.cn/rss/society.xml"
-        )
+        # [xiaozhi-hub] 后台插件设置里留空的字段存成空字符串，表示用默认
+        default_rss_url = rss_config.get("default_rss_url") or "https://www.chinanews.com.cn/rss/society.xml"
 
         # 将用户输入的类别映射到配置中的类别键
         mapped_category = map_category(category)
 
         # 如果提供了类别，尝试从配置中获取对应的URL
         rss_url = default_rss_url
-        if mapped_category and mapped_category in rss_config:
+        if mapped_category and rss_config.get(mapped_category):
             rss_url = rss_config[mapped_category]
 
         logger.bind(tag=TAG).info(

@@ -224,6 +224,39 @@ async def qweather_report(location, api_key, api_host):
     return weather_report
 
 
+async def report_by_chain(place, location, settings) -> str:
+    """[xiaozhi-hub] 按后台「外部服务」里天气的顺序试（设计画布第 56 块）：Open-Meteo 兼容的地址、和风天气（填了 Key 才试），
+    连不上换下一个；地名查不到不往下试。"""
+    import time
+    from core.agent import services
+    from core.utils import open_meteo
+
+    chain = services.weather_chain()
+    errors = []
+    for src in chain:
+        if src["kind"] == "qweather":
+            if not (settings["qweather_key"] and settings["qweather_host"]):
+                continue
+            t0 = time.monotonic()
+            try:
+                report = await qweather_report(location, settings["qweather_key"], settings["qweather_host"])
+            except Exception as e:  # noqa: BLE001
+                services.record(src["id"], False, (time.monotonic() - t0) * 1000, str(e))
+                errors.append(f"和风天气：{e}")
+                continue
+            services.record(src["id"], True, (time.monotonic() - t0) * 1000)
+            return report
+        try:
+            return await open_meteo.report_at(place, location, sources=[src])
+        except open_meteo.PlaceNotFound:
+            raise
+        except open_meteo.WeatherError as e:
+            errors.append(str(e))
+    if not errors:
+        raise open_meteo.WeatherError("天气服务都关掉了，网关后台「外部服务」页可以打开")
+    raise open_meteo.WeatherError("；".join(errors))
+
+
 @register_function("get_weather", GET_WEATHER_FUNCTION_DESC, ToolType.SYSTEM_CTL)
 async def get_weather(conn: "ConnectionHandler", location: str = None, lang: str = "zh_CN"):
     """[xiaozhi-hub] 默认用 Open-Meteo（免费、不用 Key）；后台填了自己的和风天气 Key 才用和风。
@@ -242,10 +275,7 @@ async def get_weather(conn: "ConnectionHandler", location: str = None, lang: str
     if cached_weather_report:
         return ActionResponse(Action.REQLLM, cached_weather_report, None)
     try:
-        if settings["qweather_key"] and settings["qweather_host"]:
-            weather_report = await qweather_report(location, settings["qweather_key"], settings["qweather_host"])
-        else:
-            weather_report = await open_meteo.report_at(place, location)
+        weather_report = await report_by_chain(place, location, settings)
     except Exception as e:
         logger.bind(tag=TAG).warning(f"查天气失败（{location}）: {e}")
         return ActionResponse(

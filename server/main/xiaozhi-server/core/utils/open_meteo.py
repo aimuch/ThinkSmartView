@@ -8,8 +8,11 @@
 import asyncio
 import datetime
 import time
+from urllib.parse import urlsplit
 
 import httpx
+
+from core.utils import net_lines
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -36,6 +39,10 @@ GEO_TTL = 86400
 
 class WeatherError(Exception):
     pass
+
+
+class PlaceNotFound(WeatherError):
+    """地名查不到：换服务也没用，不往下试。"""
 
 
 def _client() -> httpx.AsyncClient:
@@ -90,7 +97,7 @@ async def geocode(client: httpx.AsyncClient, name: str) -> dict:
     tries = candidates(name)
 
     async def lookup(query):
-        resp = await client.get(GEOCODE_URL, params={"name": query, "count": 5, "language": "zh"})
+        resp = await net_lines.get(client, GEOCODE_URL, params={"name": query, "count": 5, "language": "zh"})
         resp.raise_for_status()
         return resp.json().get("results") or []
 
@@ -111,7 +118,7 @@ async def geocode(client: httpx.AsyncClient, name: str) -> dict:
     if not found and errors and len(errors) == len(answers):
         raise errors[0]
     if not found:
-        raise WeatherError(f"没找到「{name}」这个地方，换个写法试试（比如写成「青浦区」「杭州市」）")
+        raise PlaceNotFound(f"没找到「{name}」这个地方，换个写法试试（比如写成「青浦区」「杭州市」）")
     _geo_cache[name] = (time.time(), found)
     return found
 
@@ -202,36 +209,74 @@ async def report(location: str) -> str:
     return await report_at(None, location)
 
 
-async def fetch(place: dict = None, location: str = None):
-    """(地方, 预报, 空气质量)；place 已知坐标时不查地名。查不到或连不上时抛 WeatherError。"""
-    try:
-        async with _client() as client:
-            if place is None:
+FETCH_CURRENT = ("temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,"
+                 "wind_speed_10m,wind_direction_10m,precipitation")
+FETCH_DAILY = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max"
+
+
+def _why(e: Exception) -> str:
+    if isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout)):
+        return "连不上"
+    if isinstance(e, httpx.TimeoutException):
+        return "超时"
+    if isinstance(e, httpx.HTTPStatusError):
+        return f"返回 {e.response.status_code}"
+    if isinstance(e, httpx.HTTPError):
+        return type(e).__name__
+    return "返回的不是天气数据"
+
+
+async def _fetch(place, location, params: dict, air_current: str, sources=None):
+    """[xiaozhi-hub] 按后台「外部服务」的顺序试 Open-Meteo 兼容的预报地址（设计画布第 56 块），
+    连不上换下一个；每个都记状态。地名查不到不往下试。"""
+    from core.agent import services
+
+    sources = services.weather_chain(kinds=("open-meteo", "custom")) if sources is None else sources
+    if not sources:
+        raise WeatherError("天气服务都关掉了，网关后台「外部服务」页可以打开")
+    errors = []
+    async with _client() as client:
+        if place is None:
+            try:
                 place = await geocode(client, location)
-            loc = {"latitude": place["latitude"], "longitude": place["longitude"], "timezone": "auto"}
-            forecast_req = client.get(FORECAST_URL, params={
-                **loc, "forecast_days": 7,
-                "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,"
-                           "wind_speed_10m,wind_direction_10m,precipitation",
-                "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max",
-            })
-            air_req = client.get(AIR_URL, params={**loc, "current": "pm2_5"})
-            resp, air_resp = await asyncio.gather(forecast_req, air_req, return_exceptions=True)
-            if isinstance(resp, Exception):
-                raise resp
-            resp.raise_for_status()
-            forecast = resp.json()
+            except httpx.HTTPError as e:
+                raise WeatherError(f"地名查询服务{_why(e)}，网关后台「外部服务」页可以看")
+        loc = {"latitude": place["latitude"], "longitude": place["longitude"], "timezone": "auto"}
+        for src in sources:
+            t0 = time.monotonic()
+            try:
+                forecast_req = net_lines.get(client, src["url"], params={**loc, **params})
+                air_req = net_lines.get(client, AIR_URL, params={**loc, "current": air_current})
+                resp, air_resp = await asyncio.gather(forecast_req, air_req, return_exceptions=True)
+                if isinstance(resp, Exception):
+                    raise resp
+                resp.raise_for_status()
+                forecast = resp.json()
+                if not isinstance(forecast, dict) or "current" not in forecast:
+                    raise ValueError("no current")
+            except (httpx.HTTPError, ValueError) as e:
+                services.record(src["id"], False, (time.monotonic() - t0) * 1000, _why(e))
+                errors.append(f"{src['name']}{_why(e)}")
+                continue
+            host = urlsplit(src["url"]).hostname or ""
+            services.record(src["id"], True, (time.monotonic() - t0) * 1000, via=net_lines.info(host)["ip"])
             # 空气质量拿不到不影响天气
             air = air_resp.json() if not isinstance(air_resp, Exception) and air_resp.status_code == 200 else None
-    except httpx.HTTPError as e:
-        raise WeatherError(f"天气服务连不上（{type(e).__name__}）")
-    return place, forecast, air
+            return place, forecast, air
+    hint = "，网关后台「外部服务」页可以看是哪一个" if len(sources) > 1 else "，网关后台「外部服务」页可以看"
+    raise WeatherError("天气服务连不上（" + "；".join(errors) + "）" + hint)
 
 
-async def report_at(place: dict = None, location: str = None) -> str:
+async def fetch(place: dict = None, location: str = None, sources=None):
+    """(地方, 预报, 空气质量)；place 已知坐标时不查地名。查不到或连不上时抛 WeatherError。"""
+    return await _fetch(place, location, {"forecast_days": 7, "current": FETCH_CURRENT, "daily": FETCH_DAILY},
+                        "pm2_5", sources)
+
+
+async def report_at(place: dict = None, location: str = None, sources=None) -> str:
     """已知坐标的地方（设备的住宅地址，{"name", "latitude", "longitude"}）直接查，不再查地名；
     place 为 None 时按 location 查地名。"""
-    return build_report(*await fetch(place, location))
+    return build_report(*await fetch(place, location, sources))
 
 
 ICONS = {0: "☀️", 1: "🌤", 2: "⛅", 3: "☁️", 45: "🌫", 48: "🌫", 51: "🌦", 53: "🌦", 55: "🌧", 56: "🌧", 57: "🌧",
@@ -274,29 +319,11 @@ def air_level(value, tops) -> str:
 
 async def fetch_detail(place: dict = None, location: str = None):
     """(地方, 预报, 空气质量)：比 fetch 多 48 小时的逐时预报、日出日落、6 项空气质量。"""
-    try:
-        async with _client() as client:
-            if place is None:
-                place = await geocode(client, location)
-            loc = {"latitude": place["latitude"], "longitude": place["longitude"], "timezone": "auto"}
-            forecast_req = client.get(FORECAST_URL, params={
-                **loc, "forecast_days": 7,
-                "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,"
-                           "wind_speed_10m,wind_direction_10m,precipitation,is_day",
-                "hourly": "temperature_2m,precipitation_probability,weather_code",
-                "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,"
-                         "uv_index_max,sunrise,sunset",
-            })
-            air_req = client.get(AIR_URL, params={**loc, "current": ",".join(k for k, _, _ in AIR_ITEMS)})
-            resp, air_resp = await asyncio.gather(forecast_req, air_req, return_exceptions=True)
-            if isinstance(resp, Exception):
-                raise resp
-            resp.raise_for_status()
-            forecast = resp.json()
-            air = air_resp.json() if not isinstance(air_resp, Exception) and air_resp.status_code == 200 else None
-    except httpx.HTTPError as e:
-        raise WeatherError(f"天气服务连不上（{type(e).__name__}）")
-    return place, forecast, air
+    return await _fetch(place, location, {
+        "forecast_days": 7, "current": FETCH_CURRENT + ",is_day",
+        "hourly": "temperature_2m,precipitation_probability,weather_code",
+        "daily": FETCH_DAILY + ",sunrise,sunset",
+    }, ",".join(k for k, _, _ in AIR_ITEMS))
 
 
 def detail(place: dict, fc: dict, air: dict = None) -> dict:

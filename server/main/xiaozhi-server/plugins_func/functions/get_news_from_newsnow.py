@@ -1,4 +1,6 @@
 import random
+import time
+
 import httpx
 from io import BytesIO
 from markitdown import MarkItDown, StreamInfo
@@ -112,6 +114,9 @@ GET_NEWS_FROM_NEWSNOW_FUNCTION_DESC = {
 
 async def fetch_news_from_api(conn: "ConnectionHandler", source="thepaper"):
     """从API获取新闻列表"""
+    from core.agent import services
+
+    t0 = time.monotonic()
     try:
         api_url = f"https://newsnow.busiyi.world/api/s?id={source}"
 
@@ -123,15 +128,20 @@ async def fetch_news_from_api(conn: "ConnectionHandler", source="thepaper"):
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
             response = await client.get(api_url, headers=headers)
 
+        response.raise_for_status()
         data = response.json()
 
+        # [xiaozhi-hub] 后台「外部服务」的状态（设计画布第 56 块）
         if "items" in data:
+            services.record("newsnow", True, (time.monotonic() - t0) * 1000)
             return data["items"]
         else:
+            services.record("newsnow", False, (time.monotonic() - t0) * 1000, "返回的不是新闻列表")
             logger.bind(tag=TAG).error(f"获取新闻API响应格式错误: {data}")
             return []
 
     except Exception as e:
+        services.record("newsnow", False, (time.monotonic() - t0) * 1000, str(e) or type(e).__name__)
         logger.bind(tag=TAG).error(f"获取新闻API失败: {e}")
         return []
 

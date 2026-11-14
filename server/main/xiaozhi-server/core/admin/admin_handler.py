@@ -224,6 +224,10 @@ class AdminHandler:
                 web.post("/kiosk/wake/claim", self.handle_kiosk_wake_claim),
                 web.get("/admin/api/wake-arbiter", self.handle_wake_arbiter),
                 web.post("/admin/api/wake-arbiter", self.handle_wake_arbiter_save),
+                web.get("/admin/api/services", self.handle_services),
+                web.post("/admin/api/services", self.handle_services_save),
+                web.post("/admin/api/services/test", self.handle_services_test),
+                web.get("/kiosk/radio", self.handle_kiosk_radio),
                 web.post("/admin/api/commands", self.handle_commands_save),
                 web.post("/admin/api/commands/test", self.handle_commands_test),
                 # 声音复刻（core/agent/voice_clone.py，设计画布第 50 块）
@@ -1676,6 +1680,9 @@ class AdminHandler:
             self._today_cache[key] = (time.time(), out["weather"])
         except open_meteo.WeatherError as e:
             out["weather_error"] = str(e)
+            # 天气服务都连不上：照旧给上一次查到的，标上是几分钟前的（设计画布第 56 块）
+            if hit and not isinstance(e, open_meteo.PlaceNotFound):
+                out["weather"] = dict(hit[1], stale_min=int((time.time() - hit[0]) // 60))
         return self._json(out)
 
     async def handle_kiosk_weather(self, request: web.Request):
@@ -1701,6 +1708,9 @@ class AdminHandler:
         try:
             data = open_meteo.detail(*await open_meteo.fetch_detail(place, None if place else name))
         except open_meteo.WeatherError as e:
+            if hit and not isinstance(e, open_meteo.PlaceNotFound):
+                return self._json({"ok": True, "weather": dict(hit[1], stale_min=int((time.time() - hit[0]) // 60)),
+                                   "error": str(e)})
             return self._json({"ok": False, "error": str(e)})
         self._today_cache[key] = (time.time(), data)
         return self._json({"ok": True, "weather": data})
@@ -1987,6 +1997,56 @@ class AdminHandler:
         body = await self._read_json(request)
         d = await self._blocking(wake_arbiter.save, body.get("enabled"), body.get("window"))
         return self._json({"ok": True, **d})
+
+    # ---------- 外部服务（core/agent/services.py，设计画布第 56 块） ----------
+
+    async def _services_view(self) -> dict:
+        from core.agent import services
+
+        merged = await self._blocking(self._merged)
+        sel = merged.get("selected_module") or {}
+        return {"ok": True, **(await self._blocking(services.view, merged)),
+                "ai": {"llm": llm_router.model_label(sel.get("LLM") or ""), "asr": sel.get("ASR") or "",
+                       "tts": sel.get("TTS") or ""}}
+
+    async def handle_services(self, request: web.Request):
+        self._require_login(request)
+        return self._json(await self._services_view())
+
+    async def handle_services_save(self, request: web.Request):
+        self._require_login(request)
+        from core.agent import services
+
+        body = await self._read_json(request)
+        try:
+            await self._blocking(services.apply, body)
+        except services.ServicesError as e:
+            return self._error(str(e), 400)
+        return self._json(await self._services_view())
+
+    async def handle_services_test(self, request: web.Request):
+        """{"group", "id"} 测一个；{"all": true} 全部；{"group": "radio", "all": true} 测这一类。"""
+        self._require_login(request)
+        from core.agent import services
+
+        body = await self._read_json(request)
+        merged = await self._blocking(self._merged)
+        try:
+            if body.get("all"):
+                await services.run_all(merged, body.get("group") or None)
+            else:
+                await services.run_test(str(body.get("group") or ""), str(body.get("id") or ""), merged)
+        except services.ServicesError as e:
+            return self._error(str(e), 400)
+        return self._json(await self._services_view())
+
+    async def handle_kiosk_radio(self, request: web.Request):
+        """设备上能放的电台（预设里没关掉的 + 自己加的）：[{"id", "name", "url"}]。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.agent import services
+
+        return self._json({"ok": True, "stations": await self._blocking(services.radio_list)})
 
     # ---------- 常用口令（core/agent/commands.py，设计画布第 53 块） ----------
 

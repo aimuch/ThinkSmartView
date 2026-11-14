@@ -171,15 +171,11 @@ async def _test_web_search(values: dict) -> dict:
 
 async def _test_get_weather(values: dict) -> dict:
     from plugins_func.functions import get_weather
-    from core.utils import open_meteo
 
     settings = get_weather.weather_settings({"plugins": {"get_weather": values}})
     place = settings["home_location"] or settings["default_location"]
     try:
-        if settings["qweather_key"] and settings["qweather_host"]:
-            report = await get_weather.qweather_report(place, settings["qweather_key"], settings["qweather_host"])
-        else:
-            report = await open_meteo.report(place)
+        report = await get_weather.report_by_chain(None, place, settings)
     except Exception as e:
         raise ValueError(f"没查到：{e}")
     lines = [line for line in report.splitlines() if line.strip()]
@@ -216,7 +212,29 @@ async def _test_integration(name: str, values: dict) -> dict:
         raise ValueError(str(e))
 
 
-TESTS = {"web_search": _test_web_search, "get_weather": _test_get_weather}
+async def _test_newsnow(values: dict) -> dict:
+    from plugins_func.functions import get_news_from_newsnow as nn
+
+    class _Conn:   # fetch_news_from_api 只读 conn.config
+        config = {"plugins": {"get_news_from_newsnow": values}}
+    items = await nn.fetch_news_from_api(_Conn(), "thepaper")
+    if not items:
+        raise ValueError("没取到新闻：地址连不上，或者返回的不是 newsnow 的格式")
+    return {"message": f"取到 {len(items)} 条，第一条：{items[0].get('title', '')}"}
+
+
+async def _test_chinanews(values: dict) -> dict:
+    from plugins_func.functions import get_news_from_chinanews as cn
+
+    url = values.get("default_rss_url") or "https://www.chinanews.com.cn/rss/society.xml"
+    items = await cn.fetch_news_from_rss(url)
+    if not items:
+        raise ValueError("没取到新闻：地址连不上，或者不是 RSS")
+    return {"message": f"取到 {len(items)} 条，第一条：{items[0].get('title', '')}"}
+
+
+TESTS = {"web_search": _test_web_search, "get_weather": _test_get_weather,
+         "get_news_from_newsnow": _test_newsnow, "get_news_from_chinanews": _test_chinanews}
 for _name in ("smart_hub", "rack_status", "repo_status", "desk_hub"):
     TESTS[_name] = functools.partial(_test_integration, _name)
 

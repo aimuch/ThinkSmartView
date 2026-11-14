@@ -68,7 +68,7 @@ async def test_report_tries_variants(monkeypatch):
 async def test_get_weather_failure_not_cached(monkeypatch):
     from core.utils.cache.manager import cache_manager, CacheType
 
-    async def boom(place=None, location=None):
+    async def boom(place=None, location=None, sources=None):
         raise open_meteo.WeatherError("天气服务连不上（ConnectTimeout）")
     monkeypatch.setattr(open_meteo, "report_at", boom)
     conn = SimpleNamespace(config={"plugins": {"get_weather": {"home_location": "测试区"}}}, client_ip=None)
@@ -78,7 +78,7 @@ async def test_get_weather_failure_not_cached(monkeypatch):
     hour = f"{datetime.datetime.now():%Y%m%d%H}"
     assert cache_manager.get(CacheType.WEATHER, f"full_weather_测试区_zh_CN_{hour}") is None
 
-    async def ok(place=None, location=None):
+    async def ok(place=None, location=None, sources=None):
         return f"您查询的位置是：{location}"
     monkeypatch.setattr(open_meteo, "report_at", ok)
     r = await get_weather.get_weather(conn)
@@ -120,7 +120,7 @@ async def test_weather_uses_the_device_home(tmp_path, monkeypatch):
     device_homes.put("dev-1", home)
     seen = []
 
-    async def report_at(place=None, location=None):
+    async def report_at(place=None, location=None, sources=None):
         seen.append((place and place["name"], location))
         return f"您查询的位置是：{(place or {}).get('name') or location}"
     monkeypatch.setattr(open_meteo, "report_at", report_at)

@@ -1135,6 +1135,22 @@ async def test_kiosk_today(kiosk, tmp_path, monkeypatch):
     await kiosk.get("/kiosk/today?device=dev-1")
     assert calls == ["上海市青浦区"]   # cached
 
+    # 缓存过了期、天气服务又都连不上：照旧给上一次的，标上是几分钟前的（设计画布第 56 块）
+    async def down(place=None, location=None):
+        raise open_meteo.WeatherError("天气服务连不上（Open-Meteo连不上）")
+    monkeypatch.setattr(open_meteo, "fetch", down)
+    h = kiosk.handler
+    for k, (t, v) in list(h._today_cache.items()):
+        h._today_cache[k] = (t - 1800, v)
+    data = await (await kiosk.get("/kiosk/today?device=dev-1")).json()
+    assert data["weather"]["temp"] == 10.7 and data["weather"]["stale_min"] == 30 and "连不上" in data["weather_error"]
+    # 地名查不到不算连不上：不拿旧的顶替
+    async def nowhere(place=None, location=None):
+        raise open_meteo.PlaceNotFound("没找到")
+    monkeypatch.setattr(open_meteo, "fetch", nowhere)
+    data = await (await kiosk.get("/kiosk/today?device=dev-1")).json()
+    assert data["weather"] is None
+
 
 async def test_avatar_generation(kiosk, tmp_path, monkeypatch):
     from core.agent import photo_ask
@@ -1300,3 +1316,26 @@ async def test_kiosk_voice_per_device(kiosk, tmp_path, monkeypatch):
     assert (await kiosk.post("/kiosk/voice", json={"device": "dev-1", "voice": "nope"})).status == 400
     assert (await kiosk.post("/kiosk/voice", json={"device": "dev-1", "voice": None})).status == 200
     assert (await (await kiosk.get("/kiosk/voice?device=dev-1")).json())["current"] is None
+
+
+# ---------- 外部服务（core/agent/services.py，设计画布第 56 块） ----------
+
+async def test_services_page_and_kiosk_radio(kiosk, tmp_path, monkeypatch):
+    from core.agent import services
+
+    monkeypatch.setattr(services, "_path", lambda: str(tmp_path / "services.json"))
+    d = await (await kiosk.get("/admin/api/services")).json()
+    assert [w["id"] for w in d["weather"]] == ["open-meteo", "qweather"] and d["qweather_ready"] is False
+    assert d["line"]["host"] == "api.open-meteo.com" and len(d["radio"]) == 6 and d["geoip"]["on"]
+    assert [n["id"] for n in d["news"]] == ["newsnow", "chinanews"] and "llm" in d["ai"]
+    r = await kiosk.post("/admin/api/services", json={"op": "add", "group": "radio", "name": "上海交通广播", "url": "http://x/a.m3u8"})
+    assert r.status == 200 and (await r.json())["radio"][-1]["name"] == "上海交通广播"
+    r = await kiosk.post("/admin/api/services", json={"op": "add", "group": "radio", "name": "", "url": "http://x/a.m3u8"})
+    assert r.status == 400 and "台名" in (await r.json())["error"]
+    await kiosk.post("/admin/api/services", json={"op": "toggle", "group": "radio", "id": "zgzs", "on": False})
+    stations = (await (await kiosk.get("/kiosk/radio")).json())["stations"]
+    assert stations[-1]["name"] == "上海交通广播" and "zgzs" not in [s["id"] for s in stations]
+    assert (await kiosk.post("/admin/api/services/test", json={"group": "nope", "id": "x"})).status == 400
+    await kiosk.post("/admin/api/logout", json={})
+    assert (await kiosk.get("/admin/api/services")).status == 401
+    assert (await kiosk.get("/kiosk/radio")).status == 200   # 设备经隧道来，算本机

@@ -134,8 +134,14 @@ def get_ip_info(ip_addr, logger):
         # 缓存未命中，调用API
         if is_private_ip(ip_addr):
             ip_addr = ""
+        # [xiaozhi-hub] 后台「外部服务」可以关掉按 IP 猜城市；状态记在那里（设计画布第 56 块）
+        from core.agent import services
+
+        if not services.geoip_on():
+            return {}
         url = f"https://whois.pconline.com.cn/ipJson.jsp?json=true&ip={ip_addr}"
-        resp = requests.get(url).json()
+        with services.timer("geoip"):
+            resp = requests.get(url, timeout=5).json()
         ip_info = {"city": resp.get("city")}
 
         # 存入缓存

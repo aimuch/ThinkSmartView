@@ -229,6 +229,36 @@
 
   /* 音色 */
   .voice-group + .voice-group { margin-top: 18px; }
+  /* 外部服务（设计画布第 56 块） */
+  .sv-sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .sv-sum > div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+  .sv-sum small { display: block; color: var(--muted); font-size: 12px; } .sv-sum b { font-size: 22px; font-weight: 600; }
+  .sv-sum .ok b { color: var(--ok); } .sv-sum .bad b { color: var(--err); }
+  .sv-sec { margin-bottom: 16px; } .sv-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .sv-head > b { font-size: 15px; } .sv-head .sv-acts { margin-left: auto; }
+  .sv-row { display: grid; grid-template-columns: 22px 12px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+  .sv-row.first, .sv-head + .sv-row { border-top: 0; }
+  .sv-ord { display: flex; flex-direction: column; align-items: center; } .sv-ord button { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 4px; font-size: 10px; line-height: 1.2; }
+  .sv-ord button:disabled { opacity: .25; cursor: default; } .sv-ord button:not(:disabled):hover { color: var(--text); }
+  .sv-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+  .sv-dot.ok { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); } .sv-dot.bad { background: var(--err); box-shadow: 0 0 0 3px var(--err-soft); }
+  .sv-dot.none { background: none; border: 2px solid var(--line); box-sizing: border-box; } .sv-dot.skip { background: var(--warn); }
+  .sv-name { min-width: 0; } .sv-name b { font-weight: 600; } .sv-name small { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sv-name small.mono { font-family: ui-monospace, Menlo, monospace; }
+  .sv-tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; margin-left: 6px; font-weight: 500; vertical-align: 1px; }
+  .sv-tag.pre { background: var(--accent-soft); color: var(--accent); } .sv-tag.me { background: var(--warn-soft); color: var(--warn); }
+  .sv-st { font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; } .sv-st.ok { color: var(--ok); } .sv-st.bad { color: var(--err); }
+  .sv-name .sv-st { display: block; text-align: left; margin-top: 2px; }
+  .sv-acts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+  .sv-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding: 8px 12px; margin: 0 0 6px 46px; border-radius: 10px; background: var(--soft); border: 1px solid var(--line); }
+  .sv-line b { color: var(--text); font-weight: 500; font-family: ui-monospace, Menlo, monospace; } .sv-line .in { width: 150px; padding: 4px 8px; }
+  .sv-add { display: flex; gap: 8px; align-items: center; margin-top: 10px; } .sv-add .in { flex: 1; min-width: 0; } .sv-add .in.nm { flex: 0 0 170px; }
+  .sv-ai { display: flex; gap: 8px 22px; flex-wrap: wrap; font-size: 13px; } .sv-ai a { color: var(--text); text-decoration: none; } .sv-ai a span { color: var(--muted); } .sv-ai a:hover b { color: var(--accent); }
+  @media (max-width: 760px) {
+    .sv-sum { grid-template-columns: repeat(2, 1fr); }
+    .sv-row { grid-template-columns: 22px 12px minmax(0, 1fr); } .sv-row .sv-st, .sv-row .sv-acts { grid-column: 3; text-align: left; justify-content: flex-start; }
+    .sv-line { margin-left: 0; } .sv-add { flex-wrap: wrap; } .sv-add .in.nm { flex: 1 1 100%; }
+  }
   .wa-card { margin-bottom: 16px; } .wa-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; } .wa-head > b { font-size: 15px; }
   .wa-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; } .wa-row.off { opacity: .5; }
   .wa-hist { display: grid; grid-template-columns: 60px 1fr; gap: 4px 12px; margin-top: 10px; } .wa-win { color: var(--ok); font-weight: 600; }
@@ -812,6 +842,7 @@
       <button data-page="tts"><span class="ico">♪</span>语音合成</button>
       <button data-page="intent"><span class="ico">⚙</span>意图识别</button>
       <button data-page="commands"><span class="ico">⚡</span>口令</button>
+      <button data-page="services"><span class="ico">☁</span>外部服务</button>
       <button data-page="update"><span class="ico">⟳</span>更新网关</button>
     </nav>
     <div class="side-foot"><div class="sf-box">
@@ -1051,7 +1082,7 @@ function renderPasswordDrawer(body) {
 
 $("logout").onclick = async () => { if (!confirmLeave()) return; page.dirty = null; await api("logout", {}); await route(); };
 
-const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, devices: renderDeviceSettings, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, commands: renderCommands, update: renderUpdate };
+const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, devices: renderDeviceSettings, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, commands: renderCommands, services: renderServices, update: renderUpdate };
 const page = { name: "", dirty: null, timer: null };
 function currentPage() { const p = location.hash.slice(1); return PAGES[p] ? p : "status"; }
 function confirmLeave() { return !(page.dirty && page.dirty()) || confirm("当前页面有修改还没保存，确定离开吗？"); }
@@ -2513,7 +2544,7 @@ async function openPluginSettings(id, label, onSaved) {
   pluginSettingsDirty = () => !box.classList.contains("hidden") && dirty();
   $("ps-close").onclick = () => { box.classList.add("hidden"); box.innerHTML = ""; };
   if ($("ps-test")) $("ps-test").onclick = (e) => busy(e.target, async () => {
-    result('<span class="muted">正在真搜一次，最多等 30 秒…</span>');
+    result(`<span class="muted">${id === "web_search" ? "正在真搜一次" : "正在试"}，最多等 30 秒…</span>`);
     try {
       const r = await api(`plugin-settings/${encodeURIComponent(id)}/test`, values());
       result(`<span style="color:var(--ok)">✓ ${r.message ? esc(r.message) : `搜到 ${r.count} 条，用时 ${r.seconds} 秒。第一条：${esc(r.first)}`}</span>`);
@@ -2583,6 +2614,102 @@ async function renderWakeArbiter(root) {
     card.querySelector("#wa-on").onchange = async (e) => { try { Object.assign(d, await api("wake-arbiter", { enabled: e.target.checked })); draw(); toast(d.enabled ? "就近唤醒打开了" : "就近唤醒关了：每台听到都会回答"); } catch (err) { toast(err.message, true); } };
     card.querySelectorAll("[data-wa]").forEach((b) => (b.onclick = async () => { try { Object.assign(d, await api("wake-arbiter", { window: +b.dataset.wa })); draw(); } catch (err) { toast(err.message, true); } }));
   };
+  draw();
+}
+
+// ---------- [xiaozhi-hub] 外部服务（设计画布第 56 块，core/agent/services.py）：天气、电台、新闻、定位 ----------
+async function renderServices(root) {
+  let d = await api("services");
+  const hm = (t) => new Date(t * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  const ms = (v) => (v == null ? "" : v < 1000 ? `${v} 毫秒` : `${(v / 1000).toFixed(1)} 秒`);
+  const qwSkip = (w) => w.kind === "qweather" && !d.qweather_ready;
+  const dot = (s, on, skip) => `<span class="sv-dot ${on === false ? "" : skip ? "skip" : !s || !s.at ? "none" : s.ok ? "ok" : "bad"}"></span>`;
+  const st = (s, on, skip) => on === false ? '<span class="sv-st">关着</span>' : skip ? '<span class="sv-st">没填 Key，跳过</span>'
+    : !s || !s.at ? '<span class="sv-st">还没用过</span>'
+    : s.ok ? `<span class="sv-st ok">${ms(s.ms)} · ${hm(s.at)}</span>`
+    : `<span class="sv-st bad" title="${esc(s.err || "")}">${esc((s.err || "没连上").slice(0, 24))} · ${hm(s.at)}</span>`;
+  const sw = (group, id, on) => `<label class="switch" style="margin:0" title="${on ? "关掉" : "打开"}"><input type="checkbox" data-tog="${group}" data-id="${esc(id)}" ${on ? "checked" : ""}></label>`;
+  const tag = (custom) => `<span class="sv-tag ${custom ? "me" : "pre"}">${custom ? "自己加的" : "预设"}</span>`;
+  let lineEdit = false;
+  function counts() {
+    const all = [...d.weather.filter((w) => !qwSkip(w)), ...d.radio, ...d.news.map((n) => ({ ...n, on: true })), { ...d.geoip }];
+    const on = all.filter((x) => x.on !== false);
+    return { ok: on.filter((x) => x.status && x.status.ok).length, bad: on.filter((x) => x.status && x.status.at && !x.status.ok).length,
+             off: all.length - on.length };
+  }
+  function weatherRows() {
+    const n = d.weather.length, L = d.line;
+    return d.weather.map((w, i) => `<div class="sv-row">
+        <span class="sv-ord"><button data-mv="${i}" data-dir="-1" ${i === 0 ? "disabled" : ""} title="往前">▲</button><button data-mv="${i}" data-dir="1" ${i === n - 1 ? "disabled" : ""} title="往后">▼</button></span>
+        ${dot(w.status, w.on, qwSkip(w))}
+        <span class="sv-name"><b>${esc(w.name)}</b>${tag(w.custom)}<small class="${w.url ? "mono" : ""}">${w.url ? esc(w.url.replace(/^https?:\/\//, "")) + (w.note ? " · " + esc(w.note) : "") : esc(w.note)}</small></span>
+        ${st(w.status, w.on, qwSkip(w))}
+        <span class="sv-acts">${w.kind === "qweather"
+          ? `<button class="btn sm" data-plugin="get_weather" data-label="查天气">${d.qweather_ready ? "改 Key" : "去填 Key"}</button>${d.qweather_ready ? `<button class="btn sm" data-test="weather" data-id="${esc(w.id)}">测试</button>` : ""}${sw("weather", w.id, w.on)}`
+          : `<button class="btn sm" data-test="weather" data-id="${esc(w.id)}">测试</button>${w.custom ? `<button class="btn sm danger" data-del="weather" data-id="${esc(w.id)}">删除</button>` : ""}${sw("weather", w.id, w.on)}`}</span></div>
+      ${w.id === "open-meteo" ? `<div class="sv-line">线路
+        <button class="btn sm ${!L.manual && !lineEdit ? "primary" : ""}" data-line="auto">自动</button><button class="btn sm ${L.manual || lineEdit ? "primary" : ""}" data-line="edit">指定地址</button>
+        ${lineEdit ? `<input class="in mono" id="sv-line-ip" value="${esc(L.manual || L.ip || "")}" placeholder="比如 188.40.99.226"><button class="btn sm" id="sv-line-save">保存</button>`
+          : L.ip ? `现在用 <b>${esc(L.ip)}</b>（${esc(L.source)}）` : "现在直接连，没换过线路"}
+        ${!lineEdit && L.skipped && L.skipped.length ? `；${L.skipped.map((x) => `<b>${esc(x.ip)}</b> ${esc(x.why)}`).join("、")}，已跳过` : ""}</div>` : ""}`).join("");
+  }
+  function radioRows() {
+    return d.radio.map((r) => `<div class="sv-row"><span></span>${dot(r.status, r.on)}
+        <span class="sv-name"><b>${esc(r.name)}</b>${tag(r.custom)}<small class="mono">${esc(r.url)}</small></span>${st(r.status, r.on)}
+        <span class="sv-acts"><button class="btn sm" data-test="radio" data-id="${esc(r.id)}">测试</button>${r.custom ? `<button class="btn sm danger" data-del="radio" data-id="${esc(r.id)}">删除</button>` : ""}${sw("radio", r.id, r.on)}</span></div>`).join("");
+  }
+  function draw() {
+    const c = counts();
+    root.innerHTML = `
+    <div class="page-head"><div><h1>外部服务</h1><p class="sub">网关和设备要连的外网服务。绿点能用、红点上次没连上；真用的时候会顺便记下，点「测试」马上试一次。</p></div>
+      <button class="btn primary" id="sv-all">全部测一遍</button></div>
+    <div class="sv-sum"><div class="ok"><small>能用</small><b>${c.ok}</b></div><div class="bad"><small>上次没连上</small><b>${c.bad}</b></div>
+      <div><small>关掉的</small><b>${c.off}</b></div><div><small>上次全部测试</small><b style="font-size:16px;line-height:33px">${d.checked_at ? hm(d.checked_at) : "还没测过"}</b></div></div>
+    <div class="card panel sv-sec"><div class="sv-head"><b>天气</b><span class="muted small">从上往下试，连不上换下一个；设备上的天气卡片、详情页和语音问天气都用这个顺序</span></div>
+      ${weatherRows()}
+      <div class="sv-add"><input class="in nm" id="sv-w-name" maxlength="20" placeholder="名字（比如 家里 NAS）"><input class="in mono" id="sv-w-url" placeholder="Open-Meteo 兼容的预报地址：https://…/v1/forecast"><button class="btn" id="sv-w-add">添加</button></div></div>
+    <div class="card panel sv-sec"><div class="sv-head"><b>电台</b><span class="muted small">设备连上网关时取这个清单（要客户端 0.1.682 以上）；关掉的不出现在设备上</span>
+      <span class="sv-acts"><button class="btn sm" id="sv-r-all">测全部电台</button></span></div>
+      ${radioRows()}
+      <div class="sv-add"><input class="in nm" id="sv-r-name" maxlength="20" placeholder="台名（说这个名字就能放）"><input class="in mono" id="sv-r-url" placeholder="直播流地址：http://…/playlist.m3u8（也可以是 mp3、aac）"><button class="btn" id="sv-r-add">添加</button></div></div>
+    <div class="grid2" style="gap:16px;align-items:start">
+      <div class="card panel sv-sec" style="margin:0"><div class="sv-head"><b>新闻</b><span class="muted small">地址在插件设置里改</span></div>
+        ${d.news.map((n) => `<div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">${dot(n.status)}
+          <span class="sv-name"><b>${esc(n.name)}</b><small class="mono">${esc(n.url.replace(/^https?:\/\//, ""))}</small>${st(n.status)}</span>
+          <span class="sv-acts"><button class="btn sm" data-test="news" data-id="${n.id}">测试</button><button class="btn sm" data-plugin="${esc(n.plugin)}" data-label="${esc(n.label)}">改地址</button></span></div>`).join("")}</div>
+      <div class="card panel sv-sec" style="margin:0"><div class="sv-head"><b>定位</b></div>
+        <div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">${dot(d.geoip.status, d.geoip.on)}
+          <span class="sv-name"><b>${esc(d.geoip.name)}</b><small>设备没设住宅地址时，查天气用它猜在哪个城市；设了就用不到</small>${st(d.geoip.status, d.geoip.on)}</span>
+          <span class="sv-acts"><button class="btn sm" data-test="geoip" data-id="geoip">测试</button>${sw("geoip", "geoip", d.geoip.on)}</span></div></div>
+    </div>
+    <div class="card panel sv-sec" style="margin-top:16px"><div class="sv-head"><b>AI 服务</b><span class="muted small">在各自的页面里选和改</span></div>
+      <div class="sv-ai"><a href="#llm"><span>大模型</span> <b>${esc(d.ai.llm || "没选")}</b> ›</a><a href="#asr"><span>语音识别</span> <b>${esc(d.ai.asr || "没选")}</b> ›</a>
+        <a href="#tts"><span>语音合成</span> <b>${esc(d.ai.tts || "没选")}</b> ›</a><a href="#tts"><span>声音复刻</span> <b>百炼</b> ›</a></div></div>
+    <div class="card panel hidden" id="plugin-settings" style="margin-top:12px"></div>`;
+    bind();
+  }
+  const op = async (body, msg) => { try { d = await api("services", body); draw(); if (msg) toast(msg); } catch (err) { toast(err.message, true); } };
+  const test = (btn, body) => busy(btn, async () => { try { d = await api("services/test", body); draw(); } catch (err) { toast(err.message, true); } });
+  function bind() {
+    $("sv-all").onclick = (e) => test(e.target, { all: true });
+    $("sv-r-all").onclick = (e) => test(e.target, { all: true, group: "radio" });
+    root.querySelectorAll("[data-test]").forEach((b) => (b.onclick = () => test(b, { group: b.dataset.test, id: b.dataset.id })));
+    root.querySelectorAll("[data-tog]").forEach((i) => (i.onchange = () => op({ op: "toggle", group: i.dataset.tog, id: i.dataset.id, on: i.checked })));
+    root.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => { if (confirm("删掉这一个？")) op({ op: "delete", group: b.dataset.del, id: b.dataset.id }, "删掉了"); }));
+    root.querySelectorAll("[data-mv]").forEach((b) => (b.onclick = () => {
+      const ids = d.weather.map((w) => w.id), i = +b.dataset.mv, j = i + +b.dataset.dir;
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+      op({ op: "order", ids });
+    }));
+    root.querySelectorAll("[data-plugin]").forEach((b) => (b.onclick = () => openPluginSettings(b.dataset.plugin, b.dataset.label, async () => { d = await api("services"); })));
+    root.querySelectorAll("[data-line]").forEach((b) => (b.onclick = () => {
+      if (b.dataset.line === "auto") { lineEdit = false; if (d.line.manual) op({ op: "line", ip: "" }, "线路改回自动"); else draw(); }
+      else { lineEdit = true; draw(); $("sv-line-ip").focus(); }
+    }));
+    if ($("sv-line-save")) $("sv-line-save").onclick = async () => { lineEdit = false; await op({ op: "line", ip: $("sv-line-ip").value.trim() }, "线路改好了"); };
+    $("sv-w-add").onclick = () => op({ op: "add", group: "weather", name: $("sv-w-name").value, url: $("sv-w-url").value.trim() }, "加好了，排在最后；可以用 ▲ 往前挪");
+    $("sv-r-add").onclick = () => op({ op: "add", group: "radio", name: $("sv-r-name").value, url: $("sv-r-url").value.trim() }, "加好了：设备下次连网关时就能放");
+  }
   draw();
 }
 

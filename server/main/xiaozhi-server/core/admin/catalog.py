@@ -253,8 +253,10 @@ ALWAYS_ON_PLUGINS = [
 PLUGINS = [
     {"name": "get_weather", "label": "查天气", "desc": "实时天气、空气质量和 7 天预报（Open-Meteo，免费、不用 Key），点「设置」填设备所在地",
      "config": "get_weather", "settings": "get_weather"},
-    {"name": "get_news_from_newsnow", "label": "热点新闻", "desc": "澎湃新闻、百度热搜、财联社等热榜"},
-    {"name": "get_news_from_chinanews", "label": "中新网新闻", "desc": "中国新闻网的社会、国际、财经新闻"},
+    {"name": "get_news_from_newsnow", "label": "热点新闻", "desc": "澎湃新闻、百度热搜、财联社等热榜；点「设置」可以换成自建的 newsnow",
+     "config": "get_news_from_newsnow", "settings": "get_news_from_newsnow"},
+    {"name": "get_news_from_chinanews", "label": "中新网新闻", "desc": "中国新闻网的社会、国际、财经新闻；点「设置」可以改 RSS 地址",
+     "config": "get_news_from_chinanews", "settings": "get_news_from_chinanews"},
     {"name": "play_music", "label": "放音乐", "desc": "播放电脑上 music 目录里的歌曲"},
     {"name": "web_search", "label": "联网搜索", "desc": "用 Anthropic 协议接口自带的搜索查实时信息，点「设置」填接口和 Key",
      "config": "web_search", "settings": "web_search"},
@@ -289,13 +291,14 @@ PLUGIN_NAMES = {p["name"] for p in PLUGINS}
 # 要有「测试」按钮，在 core/admin/plugin_settings.py 的 TESTS 里登记测试函数。
 PLUGIN_SETTINGS = {
     "get_weather": {
-        "note": "默认用 Open-Meteo，免费、不用注册。设备通过网关上网，按 IP 只能猜到网关所在的城市，"
-                "所以最好填上设备所在地；问别的城市的天气不受影响。",
+        "note": "默认用 Open-Meteo，免费、不用注册；连不上时换哪个、按什么顺序在「外部服务」页设。"
+                "设备通过网关上网，按 IP 只能猜到网关所在的城市，所以最好填上设备所在地；问别的城市的天气不受影响。",
         "fields": [
             {"key": "home_location", "label": "设备所在地", "type": "text",
              "hint": "写区县或城市的全称，比如「青浦区」「杭州市」；留空按网关的公网 IP 推断"},
             {"key": "qweather_key", "label": "和风天气 Key（选填）", "type": "secret",
-             "hint": "填了 Key 和 API Host 就改用和风天气（在 console.qweather.com 申请）"},
+             "hint": "填了 Key 和 API Host，语音问天气时和风天气也能用上（在 console.qweather.com 申请）；"
+                     "先用哪个在「外部服务」页排"},
             {"key": "qweather_host", "label": "和风天气 API Host（选填）", "type": "text",
              "hint": "和风控制台「设置」里的 API Host，形如 xxxx.re.qweatherapi.com"},
         ],
@@ -318,6 +321,28 @@ PLUGIN_SETTINGS = {
                        "新版不会使用它。请重新填写 API Key 并保存，旧设置会一起清掉。",
     },
 }
+# [xiaozhi-hub] 新闻的地址（设计画布第 56 块）：默认值和 config.yaml 一致
+PLUGIN_SETTINGS.update({
+    "get_news_from_newsnow": {
+        "note": "热榜来自 newsnow（开源项目，可以自己部署一份）。官方地址连不上时换成自建的。",
+        "fields": [
+            {"key": "url", "label": "接口地址", "type": "text", "default": "https://newsnow.busiyi.world/api/s?id=",
+             "hint": "以 id= 结尾，后面会接上新闻源的 id（比如 thepaper）"},
+            {"key": "news_sources", "label": "新闻源", "type": "text", "default": "澎湃新闻;百度热搜;财联社",
+             "hint": "用分号隔开，没说哪个时从这几个里挑"},
+        ],
+    },
+    "get_news_from_chinanews": {
+        "note": "中国新闻网的 RSS。换成别的 RSS 地址也行（要是 RSS 2.0：<item> 里有 title、link、description）。",
+        "fields": [
+            {"key": "default_rss_url", "label": "默认", "type": "text", "default": "https://www.chinanews.com.cn/rss/society.xml",
+             "hint": "没说哪一类时用"},
+            {"key": "society_rss_url", "label": "社会", "type": "text", "default": "https://www.chinanews.com.cn/rss/society.xml"},
+            {"key": "world_rss_url", "label": "国际", "type": "text", "default": "https://www.chinanews.com.cn/rss/world.xml"},
+            {"key": "finance_rss_url", "label": "财经", "type": "text", "default": "https://www.chinanews.com.cn/rss/finance.xml"},
+        ],
+    },
+})
 # [xiaozhi-hub] 四个接入的设置（字段和 core/integrations/common.DEFAULTS 一致）
 PLUGIN_SETTINGS.update({
     "smart_hub": {
