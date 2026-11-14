@@ -124,6 +124,12 @@ async def startToChat(conn: "ConnectionHandler", text, gen=None):
     if actual_text is None:
         return
 
+    # [xiaozhi-hub] 常用口令（定闹钟、倒计时、音量、打开机柜……）认准了直接执行，不走大模型（设计画布第 53 块）
+    from core.agent import command_exec
+    actual_text = await command_exec.handle(conn, actual_text)
+    if actual_text is None:
+        return
+
     # 首先进行意图分析，使用实际文本内容
     intent_handled = await handle_user_intent(conn, actual_text)
 

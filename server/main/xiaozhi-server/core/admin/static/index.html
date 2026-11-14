@@ -229,6 +229,22 @@
 
   /* 音色 */
   .voice-group + .voice-group { margin-top: 18px; }
+  .cmd-head-acts { display: flex; align-items: center; gap: 14px; }
+  .cmd-devs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .cmd-dev { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .cmd-cat { display: grid; grid-template-columns: 170px 1fr 260px; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+  .cmd-alias, .cmd-try { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; } .cmd-alias .in, .cmd-try .in { flex: 1; }
+  .cmd-rule { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .cmd-rule-top, .cmd-rule-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .cmd-rule-top .in { flex: 1; min-width: 240px; } .cmd-rule-row .in { flex: 1; min-width: 160px; } .cmd-rule-row select.in { flex: 0 0 auto; min-width: 140px; }
+  .cmd-rule .in, .cmd-cat .in, .cmd-alias .in, .cmd-try .in, .cmd-dev .in { width: auto; margin-top: 0; }
+  .in.bad { border-color: var(--err); }
+  .cmd-res { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.7; }
+  .cmd-res.ok { background: var(--ok-soft); } .cmd-res.llm { background: var(--warn-soft); }
+  .cmd-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 200px)); gap: 10px; } .cmd-stats div { padding: 10px 12px; border-radius: 10px; background: var(--soft); }
+  .cmd-stats b { display: block; font-size: 22px; }
+  .cmd-miss, .cmd-recent { display: flex; gap: 10px; align-items: center; padding: 4px 0; font-size: 13px; }
+  @media (max-width: 760px) { .cmd-cat { grid-template-columns: 1fr; } }
   .clone-card { margin-top: 18px; }
   .clone-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; } .clone-head h3 { margin: 0; font-size: 16px; }
   .clone-row { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
@@ -791,6 +807,7 @@
       <button data-page="asr"><span class="ico">◐</span>语音识别</button>
       <button data-page="tts"><span class="ico">♪</span>语音合成</button>
       <button data-page="intent"><span class="ico">⚙</span>意图识别</button>
+      <button data-page="commands"><span class="ico">⚡</span>口令</button>
       <button data-page="update"><span class="ico">⟳</span>更新网关</button>
     </nav>
     <div class="side-foot"><div class="sf-box">
@@ -1030,7 +1047,7 @@ function renderPasswordDrawer(body) {
 
 $("logout").onclick = async () => { if (!confirmLeave()) return; page.dirty = null; await api("logout", {}); await route(); };
 
-const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, devices: renderDeviceSettings, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, update: renderUpdate };
+const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, devices: renderDeviceSettings, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, commands: renderCommands, update: renderUpdate };
 const page = { name: "", dirty: null, timer: null };
 function currentPage() { const p = location.hash.slice(1); return PAGES[p] ? p : "status"; }
 function confirmLeave() { return !(page.dirty && page.dirty()) || confirm("当前页面有修改还没保存，确定离开吗？"); }
@@ -2244,6 +2261,116 @@ async function renderClones(root) {
 }
 
 // ---------- 意图识别 ----------
+
+// 常用口令不走大模型（设计画布第 53 块，core/agent/commands.py）
+const CMD_ACTIONS = { page: "打开设备页面", tool: "设备工具", say: "只回一句话", llm: "交给大模型" };
+async function renderCommands(root) {
+  const d = await api("commands");
+  let cfg = JSON.parse(JSON.stringify(d.config));
+  let dirty = false;
+  page.dirty = () => dirty;
+  const mark = () => { dirty = true; root.querySelector("#cmd-save").classList.add("primary"); };
+  const pageOpts = (sel) => d.pages.map((p) => `<option value="${esc(p.id)}" ${p.id === sel ? "selected" : ""}>${esc(p.label)}</option>`).join("");
+  const toolOpts = (sel) => `<option value="">选一个工具…</option>` + d.tools.map((t) => `<option value="${esc(t.name)}" ${t.name === sel ? "selected" : ""} title="${esc(t.description)}">${esc(t.name)}</option>`).join("")
+    + (sel && !d.tools.some((t) => t.name === sel) ? `<option value="${esc(sel)}" selected>${esc(sel)}（设备不在线）</option>` : "");
+  const devSel = (id) => { const v = (cfg.devices || {})[id]; return v === true ? "on" : v === false ? "off" : ""; };
+  function ruleHtml(r, i) {
+    const a = r.action || {};
+    const tool = d.tools.find((t) => t.name === a.tool);
+    return `<div class="cmd-rule" data-i="${i}">
+      <div class="cmd-rule-top"><label class="switch" style="margin:0"><input type="checkbox" data-f="enabled" ${r.enabled !== false ? "checked" : ""}></label>
+        <input class="in" data-f="phrases" value="${esc((r.phrases || []).join("、"))}" placeholder="说法，用顿号隔开；空位：{数字} {时长} {时间} {日期} {文字}">
+        <button class="btn danger sm" data-del="${i}">删除</button></div>
+      <div class="cmd-rule-row"><select class="in" data-f="type">${Object.entries(CMD_ACTIONS).map(([k, v]) => `<option value="${k}" ${k === a.type ? "selected" : ""}>${v}</option>`).join("")}</select>
+        ${a.type === "page" ? `<select class="in" data-f="page">${pageOpts(a.page)}</select>` : ""}
+        ${a.type === "tool" ? `<select class="in" data-f="tool">${toolOpts(a.tool)}</select><input class="in mono" data-f="args" value="${esc(JSON.stringify(a.args || {}))}" placeholder='参数 JSON，例如 {"volume": "{数字}"}'>` : ""}
+        ${a.type === "say" ? `<input class="in" data-f="text" value="${esc(a.text || "")}" placeholder="要说的话">` : ""}
+        ${a.type === "llm" ? `<input class="in" data-f="hint" value="${esc(a.hint || "")}" placeholder="附给大模型的提示（可以不填）">` : ""}
+        ${a.type !== "llm" ? `<input class="in" data-f="reply" value="${esc(r.reply || "")}" placeholder="回复（可用 {数字} {结果} 等；留空就说「好的」）">` : ""}</div>
+      ${tool ? `<small class="muted">${esc(tool.description)}${tool.params.length ? ` · 参数：${tool.params.map(esc).join("、")}` : ""}</small>` : ""}</div>`;
+  }
+  function draw() {
+    const s = d.stats || {};
+    root.innerHTML = `
+    <div class="page-head"><div><h1>口令</h1><p class="sub">定闹钟、倒计时、音量、打开机柜这类常用指令，认准了直接执行，不走大模型；认不准照常交给大模型。</p></div>
+      <div class="cmd-head-acts"><label class="switch" style="margin:0"><input type="checkbox" id="cmd-on" ${cfg.enabled ? "checked" : ""}><b>常用口令不走大模型</b></label>
+        <button class="btn" id="cmd-save">保存</button></div></div>
+    ${cfg.enabled ? "" : '<div class="banner info">总开关关着：所有句子都交给大模型，和以前一样（下面单独设成「开」的设备除外）。</div>'}
+    <div class="card panel"><div class="section-title" style="margin-top:0">设备</div>
+      <div class="cmd-devs">${(d.devices || []).map((x) => `<label class="cmd-dev"><span>${esc(x.name || x.id)}</span><select class="in" data-dev="${esc(x.id)}">
+        <option value="" ${devSel(x.id) === "" ? "selected" : ""}>跟着总开关（${cfg.enabled ? "开" : "关"}）</option><option value="on" ${devSel(x.id) === "on" ? "selected" : ""}>开</option>
+        <option value="off" ${devSel(x.id) === "off" ? "selected" : ""}>关（全走大模型）</option></select></label>`).join("") || '<p class="muted small">还没有设备。</p>'}</div></div>
+    <div class="card panel"><div class="section-title" style="margin-top:0">内置口令<span class="muted small" style="font-weight:400">每类可以单独关；回复里能用 {时长} {when} {音量} {结果}</span></div>
+      ${d.categories.map((c) => { const b = cfg.builtin[c.id] || {}; return `<div class="cmd-cat">
+        <label class="switch" style="margin:0"><input type="checkbox" data-cat="${c.id}" ${b.enabled !== false ? "checked" : ""}><b>${esc(c.label)}</b></label>
+        <span class="muted small">${esc(c.examples)}</span>
+        <input class="in" data-reply="${c.id}" value="${esc(b.reply || "")}" placeholder="${esc(c.reply)}"></div>`; }).join("")}
+      <div class="section-title">别名<span class="muted small" style="font-weight:400">给内置口令加说法：整句换成另一句再认，例如「安静会儿」当「静音」</span></div>
+      ${(cfg.aliases || []).map((a, i) => `<div class="cmd-alias"><input class="in" data-al="${i}" data-k="say" value="${esc(a.say)}" placeholder="新说法"><span>当作</span>
+        <input class="in" data-al="${i}" data-k="means" value="${esc(a.means)}" placeholder="已有说法，例如 静音"><button class="btn danger sm" data-aldel="${i}">删除</button></div>`).join("")}
+      <button class="btn sm" id="cmd-alias-add">＋ 别名</button></div>
+    <div class="card panel"><div class="section-title" style="margin-top:0">自定义口令<button class="btn primary sm" id="cmd-add" style="margin-left:auto">＋ 新口令</button></div>
+      ${(cfg.custom || []).map(ruleHtml).join("") || '<p class="muted small">还没有自定义口令。</p>'}
+      ${d.tools.length ? "" : '<p class="muted small">「设备工具」的清单从在线设备读，现在没有设备在线。</p>'}</div>
+    <div class="card panel"><div class="section-title" style="margin-top:0">试一试<span class="muted small" style="font-weight:400">按还没保存的设置试</span></div>
+      <div class="cmd-try"><input class="in" id="cmd-text" placeholder="例如：明天早上七点半叫我"><button class="btn primary" id="cmd-test">试</button></div>
+      <div id="cmd-result"></div></div>
+    <div class="card panel"><div class="section-title" style="margin-top:0">最近 7 天</div>
+      <div class="cmd-stats"><div><small class="muted">不走大模型</small><b>${s.fast || 0} 句</b></div><div><small class="muted">交给大模型</small><b>${s.llm || 0} 句</b></div></div>
+      ${(s.misses || []).length ? `<div class="section-title">常没认出来的短句<span class="muted small" style="font-weight:400">点「加成口令」做成自定义口令</span></div>
+        ${s.misses.map((m) => `<div class="cmd-miss"><span>${esc(m.text)}</span><span class="muted small">× ${m.count}</span><button class="btn sm" data-miss="${esc(m.text)}">加成口令</button></div>`).join("")}` : ""}
+      ${(s.recent || []).length ? `<div class="section-title">最近<span class="muted small" style="font-weight:400">网关重启后从头记</span></div>
+        ${s.recent.slice(0, 12).map((r) => `<div class="cmd-recent"><span class="pill ${r.outcome === "fast" ? "ok" : ""}">${r.outcome === "fast" ? "口令" : "大模型"}</span><span>${esc(r.text)}</span><small class="muted">${esc(r.rule || "")}</small></div>`).join("")}` : ""}</div>`;
+    wire();
+  }
+  function wire() {
+    root.querySelector("#cmd-on").onchange = (e) => { cfg.enabled = e.target.checked; mark(); draw(); mark(); };
+    root.querySelectorAll("[data-dev]").forEach((s) => (s.onchange = () => { cfg.devices = cfg.devices || {};
+      if (s.value === "") delete cfg.devices[s.dataset.dev]; else cfg.devices[s.dataset.dev] = s.value === "on"; mark(); }));
+    root.querySelectorAll("[data-cat]").forEach((c) => (c.onchange = () => { cfg.builtin[c.dataset.cat].enabled = c.checked; mark(); }));
+    root.querySelectorAll("[data-reply]").forEach((c) => (c.oninput = () => { cfg.builtin[c.dataset.reply].reply = c.value; mark(); }));
+    root.querySelectorAll("[data-al]").forEach((c) => (c.oninput = () => { cfg.aliases[+c.dataset.al][c.dataset.k] = c.value; mark(); }));
+    root.querySelectorAll("[data-aldel]").forEach((b) => (b.onclick = () => { cfg.aliases.splice(+b.dataset.aldel, 1); mark(); draw(); mark(); }));
+    root.querySelector("#cmd-alias-add").onclick = () => { (cfg.aliases = cfg.aliases || []).push({ say: "", means: "" }); mark(); draw(); mark(); };
+    root.querySelector("#cmd-add").onclick = () => { cfg.custom.push({ id: "", enabled: true, phrases: [], action: { type: "page", page: "work.rack" }, reply: "好的" }); mark(); draw(); mark(); };
+    root.querySelectorAll("[data-miss]").forEach((b) => (b.onclick = () => { cfg.custom.push({ id: "", enabled: true, phrases: [b.dataset.miss], action: { type: "say", text: "" }, reply: "" }); mark(); draw(); mark(); }));
+    root.querySelectorAll(".cmd-rule").forEach((el) => {
+      const r = cfg.custom[+el.dataset.i];
+      el.querySelectorAll("[data-f]").forEach((f) => (f[f.type === "checkbox" ? "onchange" : f.tagName === "SELECT" ? "onchange" : "oninput"] = () => {
+        const k = f.dataset.f;
+        if (k === "enabled") r.enabled = f.checked;
+        else if (k === "phrases") r.phrases = f.value.split(/[、,，\n]/).map((x) => x.trim()).filter(Boolean);
+        else if (k === "reply") r.reply = f.value;
+        else if (k === "type") { r.action = { type: f.value }; if (f.value === "page") r.action.page = "work.rack"; draw(); }
+        else if (k === "args") { try { r.action.args = JSON.parse(f.value || "{}"); f.classList.remove("bad"); } catch (e) { f.classList.add("bad"); } }
+        else { r.action[k] = f.value; if (k === "tool") draw(); }
+        mark();
+      }));
+    });
+    root.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => { cfg.custom.splice(+b.dataset.del, 1); mark(); draw(); mark(); }));
+    const test = async () => {
+      const text = root.querySelector("#cmd-text").value.trim();
+      if (!text) return;
+      try {
+        const r = await api("commands/test", { text, config: cfg });
+        const what = r.matched ? (r.kind === "answer" ? "网关直接答" : r.tool ? `${esc(r.tool)} ${esc(JSON.stringify(r.args))}` : r.kind === "steps" ? esc(r.note) : "只回一句话")
+          : "";
+        root.querySelector("#cmd-result").innerHTML = r.matched
+          ? `<div class="cmd-res ok">命中「${esc(r.rule)}」→ ${what}${r.reply ? `<br>回复：${esc(r.reply)}` : ""}${r.note && r.kind !== "steps" ? `<br><span class="muted small">${esc(r.note)}</span>` : ""}</div>`
+          : `<div class="cmd-res llm">「${esc(text)}」→ 交给大模型（${esc(r.why)}）</div>`;
+      } catch (e) { toast(e.message, true); }
+    };
+    root.querySelector("#cmd-test").onclick = test;
+    root.querySelector("#cmd-text").onkeydown = (e) => { if (e.key === "Enter") test(); };
+    root.querySelector("#cmd-save").onclick = (e) => busy(e.currentTarget, async () => {
+      try {
+        const r = await api("commands", { config: cfg });
+        cfg = JSON.parse(JSON.stringify(r.config)); dirty = false; toast("保存了，下一句话起生效"); draw();
+      } catch (err) { toast(err.message, true); }
+    });
+  }
+  draw();
+}
 
 async function renderIntent(root) {
   const d = await api("intent");

@@ -216,6 +216,10 @@ class AdminHandler:
                 web.get("/photo/{token}/status", self.handle_photo_status),
                 web.post("/photo/{token}", self.handle_photo_upload),
                 web.get("/admin/api/vision", self.handle_vision),
+                # 常用口令不走大模型（core/agent/commands.py，设计画布第 53 块）
+                web.get("/admin/api/commands", self.handle_commands),
+                web.post("/admin/api/commands", self.handle_commands_save),
+                web.post("/admin/api/commands/test", self.handle_commands_test),
                 # 声音复刻（core/agent/voice_clone.py，设计画布第 50 块）
                 web.get("/admin/api/voice-clones", self.handle_clones),
                 web.post("/admin/api/voice-clones", self.handle_clone_create),
@@ -1933,6 +1937,54 @@ class AdminHandler:
         if not path or not os.path.isfile(path):
             return self._error("没有这张", 404)
         return web.FileResponse(path, headers={"Content-Type": "image/jpeg", "Cache-Control": "no-store"})
+
+    # ---------- 常用口令（core/agent/commands.py，设计画布第 53 块） ----------
+
+    def _device_tools(self) -> list:
+        """在线设备上报的工具（自定义口令选「设备工具」时用）：名字、说明、参数。"""
+        seen = {}
+        for conn in connections.all_connections():
+            client = getattr(conn, "mcp_client", None)
+            for t in (getattr(client, "tools", None) or {}).values():
+                name = t.get("name")
+                if name and name not in seen:
+                    seen[name] = {"name": name, "description": (t.get("description") or "")[:120],
+                                  "params": sorted(((t.get("inputSchema") or {}).get("properties") or {}).keys())}
+        return sorted(seen.values(), key=lambda x: x["name"])
+
+    async def handle_commands(self, request: web.Request):
+        self._require_login(request)
+        from core.agent import commands
+
+        names = await self._blocking(self._device_names)
+        cfg = await self._blocking(commands.load)
+        return self._json({"ok": True, "config": cfg, "stats": await self._blocking(commands.stats),
+                           "categories": [{"id": c, "label": l, "examples": e, "reply": r} for c, l, e, r in commands.CATEGORIES],
+                           "pages": [{"id": p, "label": l} for p, l in commands.PAGES],
+                           "devices": [{"id": d, "name": n} for d, n in names.items()],
+                           "tools": self._device_tools()})
+
+    async def handle_commands_save(self, request: web.Request):
+        self._require_login(request)
+        from core.agent import commands
+
+        body = await self._read_json(request)
+        saved = await self._blocking(commands.save, body.get("config") or {})
+        self.logger.bind(tag=TAG).info(f"管理后台改了口令：总开关 {'开' if saved['enabled'] else '关'}，自定义 {len(saved['custom'])} 条")
+        return self._json({"ok": True, "config": saved})
+
+    async def handle_commands_test(self, request: web.Request):
+        """{"text", "config"?}：这句话会怎么走（config 不传用存着的；传了就按还没保存的试）。"""
+        self._require_login(request)
+        from core.agent import commands
+
+        body = await self._read_json(request)
+        cfg = body.get("config")
+        if isinstance(cfg, dict):
+            cfg = {**commands.defaults(), **cfg, "custom": [r for r in (commands.validate_rule(x) for x in cfg.get("custom") or []) if r]}
+        else:
+            cfg = None
+        return self._json({"ok": True, **commands.explain(str(body.get("text") or "")[:60], cfg)})
 
     # ---------- 视频对讲（core/agent/intercom.py，设计画布第 51 块） ----------
 
