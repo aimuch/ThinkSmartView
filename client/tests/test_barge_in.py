@@ -384,3 +384,41 @@ def test_listen_modes_scenes_and_settings(monkeypatch):
         c.set_listen('sometimes')
     with pytest.raises(ValueError):
         c.set_listen(seconds=7)
+
+
+# ---- 就近唤醒（设计画布第 55 块） ----
+
+def test_wake_loudness():
+    t = np.arange(16000) / 16000
+    loud = (0.3 * np.sin(2 * np.pi * 300 * t)).astype(np.float32)
+    quiet = loud * 0.05
+    assert app.wake_loudness(loud) > app.wake_loudness(quiet) + 20
+    assert app.wake_loudness(np.zeros(0, np.float32)) == -100.0
+
+
+@pytest.mark.asyncio
+async def test_a_nearer_device_answers(monkeypatch):
+    c = make_client()
+    c.backlog = []
+    calls = []
+
+    async def lose(audio):
+        calls.append(len(audio))
+        return False
+    c._claim_wake = lose
+
+    async def no_kids():
+        return False
+    c.kids_refuse = no_kids
+    c.cooking = None
+    await c.voice_wake('小麦小麦', np.zeros(16000, np.float32))
+    assert calls == [16000] and c.state == 'idle' and c.hub.sent == [] and c.backlog is None
+    c.uploading = True                                   # 接着听的时候：不用问网关
+    calls.clear()
+    c.verifier = None
+
+    async def woke(source='button', chimed=False):
+        calls.append(source)
+    c.wake = woke
+    await c.voice_wake('小麦小麦', np.zeros(16000, np.float32))
+    assert calls == ['voice']

@@ -183,6 +183,18 @@ def asks_back(text):
     return t.endswith('吗') or any(ch in '？?' for ch in t[-QUESTION_TAIL:])
 
 
+def wake_loudness(audio, rate=16000):
+    """唤醒词那一段有多响（dBFS）：20 ms 一帧，取最响的 0.5 秒平均。就近唤醒用它比谁离得近（设计画布第 55 块）。"""
+    audio = np.asarray(audio, dtype=np.float32)
+    n = rate // 50
+    frames = len(audio) // n
+    if frames == 0:
+        return -100.0
+    rms = np.sqrt(np.mean(audio[:frames * n].reshape(frames, n) ** 2, axis=1))
+    top = np.sort(rms)[-max(1, min(frames, 25)):]
+    return round(float(20 * np.log10(np.mean(top) + 1e-9)), 1)
+
+
 def has_default_route():
     """An IPv4 default route (/proc/net/route: destination 00000000), as a hint whether the device is online."""
     try:
@@ -2015,6 +2027,10 @@ class Client:
             return
         if self.ring is None and not self.in_turn() and await self.kids_refuse():
             return
+        # 就近唤醒：没在对话、没在响铃、不是接着听的时候，先问网关该不该我回答（设计画布第 55 块）
+        if self.ring is None and not self.in_turn() and not self.uploading and not await self._claim_wake(audio):
+            self.backlog = None
+            return
         """The wake word model fired. With a second look (wake_verify.py), which takes 1-2 s here,
         the chime still comes at once, but connecting and listening wait for its answer: what is
         said meanwhile is kept (backlog) and sent on, and a false wake ends quietly instead of
@@ -2036,6 +2052,22 @@ class Client:
                 self.set_state('idle')
         if not self.uploading:
             self.backlog = None
+
+    async def _claim_wake(self, audio):
+        """几台小麦都听到时只让最近的那台回答：报听到的音量，网关说 win 才响。网关没回（或很慢）就照常响。"""
+        score = wake_loudness(audio)
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.0)) as s:
+                async with s.post(f"{self.cfg['hub_http']}/kiosk/wake/claim",
+                                  json={'device': self.cfg['device_id'], 'score': score}) as r:
+                    data = await r.json(content_type=None)
+        except Exception as e:
+            log.info('wake claim: no answer from the hub (%s), answering anyway', type(e).__name__)
+            return True
+        if data.get('win', True):
+            return True
+        log.info('wake: %s heard it louder (here %.0f dB), staying quiet', data.get('winner_name') or data.get('winner'), score)
+        return False
 
     async def _check_wake(self, label, audio):
         return await asyncio.get_running_loop().run_in_executor(None, self.verifier.check, audio, label)
