@@ -39,14 +39,17 @@ SEGMENT_MIN_BYTES = 16000 * 2  # [xiaozhi-hub] 边说边识别：不到 1 秒的
 SEGMENT_CUT_BYTES = 16000 * 2 * 15 // 100
 
 
-async def send_vad_event(conn: "ConnectionHandler", state: str):
+async def send_vad_event(conn: "ConnectionHandler", state: str, reason: str = None):
     """[xiaozhi-hub] 给 hello 里声明了 features.vad_end 的客户端发 {"type": "vad", "state": ...}：
     end = 判定说完、开始识别（界面显示"正在识别"）；empty = 这句什么也没识别出来（咳嗽、太短、只有回声、
     识别出错），客户端不用再等文字，马上提示"没听清"。"""
     if not (conn.features or {}).get("vad_end"):
         return
     try:
-        await conn.websocket.send(json.dumps({"type": "vad", "state": state, "session_id": conn.session_id}))
+        msg = {"type": "vad", "state": state, "session_id": conn.session_id}
+        if reason:
+            msg["reason"] = reason      # [xiaozhi-hub] wake / filler / close / other_speaker（turn_filter）
+        await conn.websocket.send(json.dumps(msg))
     except Exception:
         pass
 
@@ -177,6 +180,7 @@ class ASRProviderBase(ABC):
 
         [xiaozhi-hub] segments：说话期间已经送去识别的前几段（future），asr_audio_task 的前 segmented_bytes
         字节就是它们；这里只识别剩下的部分，再按顺序拼起来。"""
+        reject_reason = None      # [xiaozhi-hub] turn_filter 拦下这句的原因
         try:
             total_start_time = time.monotonic()
             # [xiaozhi-hub] 识别要 1～2 秒，期间设备可能打断了这一句（唤醒词、按钮）：识别完代次变了就丢掉
@@ -264,6 +268,22 @@ class ASRProviderBase(ABC):
                 if speaker_name:
                     logger.bind(tag=TAG).info(f"识别说话人: {speaker_name}")
 
+                # [xiaozhi-hub] 只有唤醒词、只有「嗯」「好的」、「谢谢」「好了」、接着听时别人说的：不交给大模型（设计画布第 52 块）
+                if raw_text and (conn.features or {}).get("turn_filter"):
+                    from core.utils import turn_filter
+                    follow_up = bool(getattr(conn, "follow_up", False))
+                    heard = raw_text
+                    verdict, raw_text = turn_filter.judge(raw_text, (conn.features or {}).get("wake_words") or [], follow_up)
+                    if verdict is None and turn_filter.other_speaker(
+                            follow_up, getattr(conn, "follow_lock", False), getattr(conn, "turn_speaker", None), speaker_name):
+                        verdict = "other_speaker"
+                    if verdict:
+                        logger.bind(tag=TAG).info(f"不交给大模型（{verdict}）: {heard}")
+                        reject_reason = verdict
+                        raw_text = ""
+                    elif not follow_up:
+                        conn.turn_speaker = speaker_name or None      # 这一轮是谁问的：接着听时只认他
+
                 # 构建包含说话人信息的JSON字符串
                 enhanced_text = self._build_enhanced_text(raw_text, speaker_name)
                 content_for_length_check = raw_text
@@ -295,7 +315,7 @@ class ASRProviderBase(ABC):
                 await startToChat(conn, enhanced_text, gen=gen)
             elif not turn_gen.stale(conn, gen):
                 # 被打断丢掉的不用说：设备已经在听下一句了
-                await send_vad_event(conn, "empty")  # [xiaozhi-hub] 没识别出字，或只是回复的回声
+                await send_vad_event(conn, "empty", reject_reason)  # [xiaozhi-hub] 没识别出字、回声，或上面拦下的
         except Exception as e:
             logger.bind(tag=TAG).error(f"处理语音停止失败: {e}")
             await send_vad_event(conn, "empty")  # [xiaozhi-hub]

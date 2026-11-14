@@ -35,6 +35,9 @@ class ListenTextMessageHandler(TextMessageHandler):
         if msg_json["state"] == "start":
             # 设备从播放模式切回录音模式,清除所有音频状态和缓冲区
             conn.reset_audio_states()
+            # [xiaozhi-hub] 回答完接着听（不用唤醒）；lock：只认这一轮先问的那个人（core/utils/turn_filter.py）
+            conn.follow_up = bool(msg_json.get("follow_up"))
+            conn.follow_lock = bool(msg_json.get("lock"))
         elif msg_json["state"] == "stop":
             # 收到stop但asr未初始化，跳过处理
             if conn.asr is None:
@@ -53,6 +56,7 @@ class ListenTextMessageHandler(TextMessageHandler):
                     if len(asr_audio_task) > 0:
                         await conn.asr.handle_voice_stop(conn, asr_audio_task)
         elif msg_json["state"] == "detect":
+            conn.follow_up = False
             conn.client_have_voice = False
             conn.reset_audio_states()
             if "text" in msg_json:
