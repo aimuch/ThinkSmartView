@@ -40,8 +40,8 @@ function weather() {
   const t = w && w.today || {};
   return `<div class="dw-top"><div><div class="dw-time" id="dTime">${pad(now.getHours())}:${pad(now.getMinutes())}</div>` +
     `<div class="dm">${now.getMonth() + 1}月${now.getDate()}日 周${WD[now.getDay()]}${lunar && lunar.text ? ' · ' + esc(lunar.text) : ''}</div></div>` +
-    (w ? `<div class="dw-now"><span class="dw-ic">${esc(w.icon || '')}</span><b>${n0(w.temp)}°</b><span class="dm">${esc(w.place || '')} · ${esc(w.text || '')}${w.stale_min ? ` · ${staleText(w.stale_min)}` : ''}</span></div>` : '') + '</div>' +
-    (w ? `<div class="dm dw-row"><span>${n0(t.min)}° / ${n0(t.max)}°</span>${t.rain !== null && t.rain !== undefined ? `<span>降水 ${n0(t.rain)}%</span>` : ''}${w.air ? `<span class="${airClass(w.air)}">空气${esc(w.air)}</span>` : ''}</div>`
+    (w ? `<div class="dw-now"><span class="dw-ic">${esc(w.icon || '')}</span><b>${n0(w.temp)}°</b><span class="dm">${esc(w.place || '')} · ${esc(w.text || '')}</span></div>` : '') + '</div>' +
+    (w ? `<div class="dm dw-row"><span>${n0(t.min)}° / ${n0(t.max)}°</span>${t.rain !== null && t.rain !== undefined ? `<span>降水 ${n0(t.rain)}%</span>` : ''}${w.air ? `<span class="${airClass(w.air)}">空气${esc(w.air)}</span>` : ''}${w.stale_min ? `<span class="dw-stale">${staleText(w.stale_min)}</span>` : ''}</div>`
       : `<div class="dm">${esc((ui.today && ui.today.weather_error) || '天气还没取到')}</div>`);
 }
 function todoItems(max) {
