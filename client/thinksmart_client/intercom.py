@@ -21,6 +21,8 @@ import numpy as np
 from . import bg
 
 log = logging.getLogger(__name__)
+for _noisy in ('aioice', 'aiortc'):          # 每个候选地址都记一行，太吵
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 FPS = 15
 LONG = 640
@@ -317,11 +319,13 @@ class Intercom:
     async def accept(self):
         if self.state != 'ringing' or not self.call:
             raise ValueError('现在没有来电')
-        from aiortc import RTCPeerConnection, RTCSessionDescription
+        from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription
         self._set('connecting')
         call = self.call
         self.mic.clear()
-        pc = self.pc = RTCPeerConnection()
+        # 不用 STUN：只走家里局域网和 Tailscale（网关发布了家里网段）。不写的话 aiortc 默认去问 Google 的 STUN，
+        # 连不上时收集候选地址要等十来秒（2026-11-14 书房那台实测接听后 11 秒才开始连）
+        pc = self.pc = RTCPeerConnection(RTCConfiguration(iceServers=[]))
         cam, mic = make_tracks(self)
         self.tracks = [cam, mic]
 
