@@ -485,4 +485,45 @@ document.addEventListener('click', e => { if (e.target.closest('[data-pane="fami
 window.loadCallInfo = loadCallInfo;
 loadCallInfo();
 
+
+/* ---------------- 说完以后怎么听（设计画布第 52 块） ---------------- */
+const LISTEN_OPTS = { question: ['它问我时才接着听', '回答在问你（「要提醒你带伞吗？」）才接着听，默认'],
+  always: ['每次都接着听', '可以连着聊；配合「只听刚才说话的人」不怕旁人插话'],
+  never: ['每句都要唤醒', '回答完马上关麦，下一句先喊唤醒词'] };
+const SCENE = { cook: '做菜模式中：现在每次都接着听', translate: '翻译模式中：现在每次都接着听（30 秒）',
+  study: '学习陪伴开着：现在每次都接着听', sleep: '睡眠时段：现在每句都要唤醒' };
+function renderListen() {
+  const v = ui.listen;
+  if (!v) return;
+  $('listenOpts').innerHTML = v.choices.map(k => `<button data-lo="${k}" class="${k === v.follow_up ? 'on' : ''}"><b>${LISTEN_OPTS[k][0]}</b><span>${LISTEN_OPTS[k][1]}</span></button>`).join('');
+  $('listenSecs').innerHTML = v.seconds_choices.map(s => `<button data-ls="${s}" class="${s === v.seconds ? 'on' : ''}">${s} 秒</button>`).join('');
+  $('listenLock').setAttribute('aria-checked', String(!!v.lock));
+  $('listenNote').textContent = (v.scene ? SCENE[v.scene] + '。' : '') + '做菜、翻译、学习陪伴时自动每次都接着听；睡眠时段自动每句都要唤醒。也可以说「以后每句都要叫我」「以后连着聊」。';
+}
+handlers.listen = v => { ui.listen = v; renderListen(); };
+async function listenPost(body) {
+  const r = await postJson('/api/listen', body);
+  if (r.listen) handlers.listen(r.listen);
+}
+$('listenOpts').addEventListener('click', e => { const b = e.target.closest('[data-lo]'); if (b) listenPost({ follow_up: b.dataset.lo }); });
+$('listenSecs').addEventListener('click', e => { const b = e.target.closest('[data-ls]'); if (b) listenPost({ seconds: +b.dataset.ls }); });
+$('listenLock').addEventListener('click', () => listenPost({ lock: !(ui.listen && ui.listen.lock) }));
+
+// 顶栏「还在听 · N 秒」：回答完接着听时，页面看得见麦克风还开着
+let windowTimer = null;
+handlers.window = w => {
+  clearInterval(windowTimer); windowTimer = null;
+  const until = w && w.until, total = (w && w.seconds) || 10;
+  const tick = () => {
+    const left = until ? until - Date.now() / 1000 : 0;
+    $('windowPill').hidden = left <= 0;
+    document.body.classList.toggle('follow-window', left > 0);
+    if (left <= 0) { clearInterval(windowTimer); windowTimer = null; return; }
+    $('windowLeft').textContent = `${Math.ceil(left)} 秒`;
+    $('windowArc').style.strokeDashoffset = String(94 * (1 - left / total));
+  };
+  tick();
+  if (until) windowTimer = setInterval(tick, 250);
+};
+
 })();

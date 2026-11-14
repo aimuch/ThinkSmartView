@@ -307,6 +307,18 @@ FOCUS_TOOLS = [   # 专注计时（focus.py，设计画布第 47 块）
             'required': ['action']},
     },
 ]
+LISTEN_TOOLS = [   # 说完以后怎么听（设计画布第 52 块）
+    {
+        'name': 'self.listen.mode',
+        'description': '回答完以后要不要接着听（不用再喊唤醒词）。「以后每句都要叫我」「别接着听了」mode="never"；'
+                       '「以后连着聊」「回答完接着听」mode="always"；「恢复默认」「问我的时候才接着听」mode="question"。'
+                       '「接着听久一点」seconds=20，「短一点」seconds=5（只有 5、10、20）。'
+                       '「只听我说的」「别人说话别理」lock=true；「谁说都行」lock=false。调用后只说一句短的确认。',
+        'inputSchema': {'type': 'object', 'properties': {
+            'mode': {'type': 'string', 'enum': ['question', 'always', 'never']},
+            'seconds': {'type': 'number'}, 'lock': {'type': 'boolean'}}},
+    },
+]
 STUDY_TOOLS = [   # 学习陪伴（study.py，设计画布第 48 块）
     {
         'name': 'self.study.control',
@@ -339,7 +351,7 @@ PROACTIVE_TOOLS = [
                         'required': ['enabled']},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + LISTEN_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -578,6 +590,14 @@ async def handle(payload, client=None):
                 text = _dumps({'success': True, 'phase': view['phase'], 'minutes_left': view['left'] and round(view['left'] / 60),
                                'today_minutes': view['today']['minutes'], 'today_rounds': view['today']['rounds'],
                                'sounds': view['sounds']})
+            elif name == 'self.listen.mode' and client:
+                try:
+                    secs = args.get('seconds')
+                    view = client.set_listen(args.get('mode'), int(secs) if isinstance(secs, (int, float)) else None,
+                                             args.get('lock') if isinstance(args.get('lock'), bool) else None)
+                    text = _dumps({'success': True, 'mode': view['follow_up'], 'seconds': view['seconds'], 'lock': view['lock']})
+                except ValueError as e:
+                    text = _dumps({'success': False, 'reason': str(e)})
             elif name == 'self.study.control' and client:
                 action = args.get('action') or 'status'
                 try:

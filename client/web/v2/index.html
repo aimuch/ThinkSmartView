@@ -66,6 +66,7 @@
       <div class="link" id="link"><i></i><span>待机</span></div>
       <button class="focus-pill" id="focusPill" hidden aria-label="专注计时">🍅<b id="focusLeft"></b></button>
       <button class="study-pill" id="studyPill" hidden aria-label="学习陪伴开着">📷<span>陪伴中</span></button>
+      <span class="window-pill" id="windowPill" hidden><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" class="wp-track"/><circle cx="18" cy="18" r="15" class="wp-arc" id="windowArc"/></svg><span>还在听</span><b id="windowLeft"></b></span>
       <div class="clock" id="clock"><span id="time">--:--</span></div>
       <button class="gear" id="btnPhoto" aria-label="拍照问">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -583,6 +584,17 @@
       <div class="bright-head" id="cloneHead" hidden><b class="sub">我们的声音</b><span class="bright-num">阿里云百炼 · 复刻</span></div>
       <div class="minutes voice-chips" id="cloneChips" hidden></div>
       <p class="opt-note" id="voiceNote">下一次说话起生效。认出是孩子时照样换成童声。</p>
+    </div>
+       <div class="alarms-card" id="listenCard">
+      <div class="bright-head"><b>说完以后</b><span class="bright-num">回答完要不要接着听，不用再喊唤醒词</span></div>
+      <div class="listen-opts" id="listenOpts"></div>
+      <div class="bright-head"><b class="sub">接着听多久</b></div>
+      <div class="minutes listen-secs" id="listenSecs"></div>
+      <div class="opt">
+        <div class="opt-text"><b>只听刚才说话的人</b><span>认得出是家里谁（设置 → 家人里录过声音）时，别人说话不算</span></div>
+        <button class="switch" id="listenLock" role="switch" aria-checked="true" aria-label="只听刚才说话的人"><i></i></button>
+      </div>
+      <p class="opt-note" id="listenNote"></p>
     </div>
    </section>
    <section class="set-pane" data-pane="agent">

@@ -92,6 +92,7 @@ QUESTION_TAIL = 15       # a reply asks back when a question mark is among its l
 # such as "要不要设个闹钟？比如明早七点"
 TRAILING = set(' \t\n）)」』"”’\'～~…—*')
 FOLLOW_UPS = ('question', 'always', 'never')
+FOLLOW_SECONDS = (5, 10, 20)
 REPORT_POLL = 10         # seconds between asking the hub for pending reports (local HTTP)
 HISTORY_LIMIT = 50       # messages per model shown from the hub's saved conversations
 MODEL_POLL = 30          # seconds between asking the hub for its models (changes made in its admin page)
@@ -279,6 +280,7 @@ class Client:
         self.audio = Audio(self._on_block)
         self.hub = Hub(cfg['hub_ws'], cfg['device_id'], cfg['client_id'], cfg['token'],
                        self._on_json, self._on_audio, self._on_closed)
+        self.hub.extra_features = lambda: {'turn_filter': True, 'wake_words': self.wake_labels()}   # 设计画布第 52 块
         sounds = ROOT / 'web' / 'sounds'
         # Wake: two rising marimba notes; goodbye is the same two falling
         self.sounds = {'wake': marimba([G5, D6], 0.09), 'bye': marimba([D6, G5], 0.12, 0.16),
@@ -1061,7 +1063,49 @@ class Client:
 
     def follow_up_seconds(self):
         """How long the mic stays open after a reply: longer in 翻译模式 (two people take turns)."""
-        return 30 if self.cfg.get('translate', {}).get('enabled') else self.cfg['follow_up_seconds']
+        if self.cfg.get('translate', {}).get('enabled'):
+            return 30
+        s = self.cfg.get('follow_up_seconds')
+        return s if s in FOLLOW_SECONDS else 10
+
+    # ---- 说完以后怎么听（设计画布第 52 块） ----
+
+    def listen_scene(self):
+        """场景自动换档：做菜、翻译、学习陪伴时每次都接着听；睡眠时段每句都要唤醒。"""
+        if self.cfg.get('translate', {}).get('enabled'):
+            return 'translate'
+        if self.cooking:
+            return 'cook'
+        if self.study.enabled:
+            return 'study'
+        if self.sleeping:
+            return 'sleep'
+        return None
+
+    def listen_view(self):
+        mode = self.cfg.get('follow_up', 'question')
+        return {'follow_up': mode if mode in FOLLOW_UPS else 'question', 'seconds': self.follow_up_seconds(),
+                'lock': self.cfg.get('follow_lock', True) is not False, 'choices': list(FOLLOW_UPS),
+                'seconds_choices': list(FOLLOW_SECONDS), 'scene': self.listen_scene()}
+
+    def set_listen(self, follow_up=None, seconds=None, lock=None):
+        changes = {}
+        if follow_up is not None:
+            if follow_up not in FOLLOW_UPS:
+                raise ValueError('只能是 question、always 或 never')
+            changes['follow_up'] = follow_up
+        if seconds is not None:
+            if seconds not in FOLLOW_SECONDS:
+                raise ValueError('只能是 5、10 或 20 秒')
+            changes['follow_up_seconds'] = seconds
+        if lock is not None:
+            changes['follow_lock'] = bool(lock)
+        if changes:
+            self.cfg.update(changes)
+            config.save(**changes)
+        view = self.listen_view()
+        self.events.publish('listen', view)
+        return view
 
     async def _after_playback(self, then):
         give_up = time.monotonic() + 8
@@ -1917,6 +1961,7 @@ class Client:
                 'gentle': self.gentle.view(time.time()), 'focus': self.focus.view(), 'study': self.study_view(),
                 'airplay': self.airplay and self.airplay.view(),
                 'intercom': self.intercom and self.intercom.view(),
+                'listen': self.listen_view(),
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
                 'integrations': self.integrations,
@@ -2021,8 +2066,11 @@ class Client:
         self.heard = False
         self.deadline = time.monotonic() + self.follow_up_seconds()
 
-    async def start_listening(self, mode):
-        await self.hub.send({'type': 'listen', 'state': 'start', 'mode': mode})
+    async def start_listening(self, mode, follow_up=False):
+        msg = {'type': 'listen', 'state': 'start', 'mode': mode}
+        if follow_up:   # 回答完接着听：网关只认这一轮先问的那个人（开着的话），见 hub 的 turn_filter
+            msg.update(follow_up=True, lock=self.cfg.get('follow_lock', True) is not False)
+        await self.hub.send(msg)
         self.uploading = True
         self.listen_mode = mode
         self.vad_ended = False
@@ -2037,6 +2085,7 @@ class Client:
     async def stop_uploading(self, missed=False):
         self.uploading = False
         self.deadline = None
+        self._publish_window()
         if missed:
             self.play('miss')
             self.events.publish('toast', {'kind': 'info', 'text': f'没听清，可以再说一次「{self.wake_label()}」'})
@@ -2200,6 +2249,8 @@ class Client:
                 if self.uploading and not self.recognising:
                     self.recognising = self.vad_ended = True
                     self.set_state(self.state)
+            elif state == 'empty' and msg.get('reason') in ('wake', 'filler', 'close', 'other_speaker'):
+                await self._filtered(msg['reason'])
             elif state == 'empty':
                 self.hub_pending = self.vad_ended = False
                 log.info('the hub recognised nothing')
@@ -2326,6 +2377,35 @@ class Client:
         self.threads.setdefault(self.entry, []).extend(moved)
         self.events.publish('thread', {'entry': self.entry, 'messages': self.threads[self.entry]})
 
+    async def _filtered(self, reason):
+        """网关没把这句交给大模型（core/utils/turn_filter.py，设计画布第 52 块）：
+        wake 又喊了一遍唤醒词 → 叮一声，重新开始听；filler 只是「嗯」「好的」、other_speaker 接着听时别人说的
+        → 不算，窗口照开；close「谢谢」「好了」→ 收尾、关麦。"""
+        self.hub_pending = self.vad_ended = False
+        log.info('the hub kept this one from the model: %s', reason)
+        if reason == 'close':
+            self.awaiting_text = self.recognising = False
+            await self.stop_uploading(missed=False)
+            self._publish_window()
+            return
+        if reason == 'wake':
+            self.chime('voice')
+            if self.awaiting_text or not self.uploading:
+                self.awaiting_text = False
+                await self.start_listening('realtime')
+            self.recognising = False
+            self.heard = False
+            self.deadline = time.monotonic() + self.follow_up_seconds()
+            self.set_state('listening')
+            return
+        # filler / other_speaker
+        if self.awaiting_text:
+            self.awaiting_text = False
+            await self.stop_uploading(missed=False)
+        elif self.recognising:
+            self.recognising = False
+            self.set_state(self.state)
+
     def wants_follow_up(self, said):
         """Open the mic after this reply? (said: its text; None when nothing was shown, e.g. the turn
         failed, and then the user may want to say it again at once.)"""
@@ -2334,6 +2414,11 @@ class Client:
         mode = self.cfg.get('follow_up', 'question')
         if mode not in FOLLOW_UPS:
             mode = 'question'
+        scene = self.listen_scene()
+        if scene in ('cook', 'study'):
+            mode = 'always'       # 手上有事、在写作业：不用每句都喊
+        elif scene == 'sleep':
+            mode = 'never'        # 夜里说梦话、翻身不该接着听
         if mode != 'question' or said is None:
             ok = mode != 'never'
         else:
@@ -2355,7 +2440,7 @@ class Client:
             self.set_state('idle')
             return
         recognised = self.recognised
-        await self.start_listening('realtime')
+        await self.start_listening('realtime', follow_up=True)
         if self.recognised != recognised:
             # the hub cut this reply off for a newer question that arrived while we reopened
             self.uploading, self.listen_after_reply = False, True
@@ -2363,6 +2448,13 @@ class Client:
             return
         self.heard = True
         self.deadline = time.monotonic() + self.follow_up_seconds()
+        self._publish_window()
+
+    def _publish_window(self):
+        """页面顶栏的「还在听 · N 秒」（设计画布第 52 块）：到什么时候（墙上时间）、一共多少秒。"""
+        left = max(0.0, self.deadline - time.monotonic()) if self.deadline else 0
+        self.events.publish('window', {'until': time.time() + left if left else None, 'seconds': self.follow_up_seconds(),
+                                       'lock': self.cfg.get('follow_lock', True) is not False})
 
     def _on_audio(self, packet):
         if self.mute_audio:

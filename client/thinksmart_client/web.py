@@ -562,6 +562,15 @@ def make_app(client: Client):
             log.exception('call action')
             return web.json_response({'ok': False, 'error': f'没接通（{type(e).__name__}）'})
 
+    async def listen_set(request):
+        """说完以后怎么听（设计画布第 52 块）：{"follow_up": question|always|never, "seconds": 5|10|20, "lock": bool}。"""
+        body = await request.json()
+        try:
+            return web.json_response({'ok': True, 'listen': client.set_listen(
+                body.get('follow_up'), body.get('seconds'), body.get('lock') if isinstance(body.get('lock'), bool) else None)})
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)})
+
     async def call_info(_request):
         return web.json_response(await client.call_info())
 
@@ -844,6 +853,7 @@ def make_app(client: Client):
     app.router.add_get('/api/study', study_get)
     app.router.add_get('/api/airplay', airplay_get)
     app.router.add_post('/api/call', call_post)
+    app.router.add_post('/api/listen', listen_set)
     app.router.add_get('/api/call/info', call_info)
     app.router.add_get('/api/call/video/{which}', call_video)
     app.router.add_post('/api/airplay', airplay_post)

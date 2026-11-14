@@ -45,6 +45,8 @@ DEFAULTS = {
     # which replies open that window: 'question' only one that asks something back (ends in a
     # question), 'always' every reply, 'never' none (the wake word each time). 翻译模式 always listens.
     'follow_up': 'question',
+    # 接着听时只认这一轮先问的那个人（网关的声纹认得出来时；设计画布第 52 块）
+    'follow_lock': True,
     'port': 8090,
     'sleep': {'enabled': False, 'start': '22:00', 'end': '07:00'},   # sleep.py
     'brightness': 100,    # the screen's 0-100, set on the page or by voice (no automatic brightness: the user asked)

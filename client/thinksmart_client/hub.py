@@ -25,6 +25,9 @@ class Hub:
         self.audio_params = {'sample_rate': 24000, 'frame_duration': 60}
         self._reader = None
         self.features = {}
+        # more hello features from the client (设计画布第 52 块): turn_filter and the wake words, so the hub
+        # doesn't send "小麦小麦" or a lone "嗯" / "谢谢" to the model
+        self.extra_features = lambda: {}
 
     @property
     def connected(self):
@@ -42,7 +45,7 @@ class Hub:
             # vad_end: the hub says when its VAD decides the user finished (the page shows "recognising")
             # ready_on_tts_start: messages and audio are handled in order, so audio right after "tts start"
             # plays (the hub need not wait before a cached reply such as "我在")
-            'features': {'mcp': True, 'vad_end': True, 'ready_on_tts_start': True},
+            'features': {'mcp': True, 'vad_end': True, 'ready_on_tts_start': True, **self.extra_features()},
             'audio_params': {'format': 'opus', 'sample_rate': 16000, 'channels': 1, 'frame_duration': 20},
         }))
         try:

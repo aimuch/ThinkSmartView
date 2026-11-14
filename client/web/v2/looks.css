@@ -987,3 +987,23 @@ body.dash-on .ap-chip, body.dash-on .bt-chip { padding: 0 11px; }
   .call-time { left: 20px; top: 20px; }
   .call-big { gap: 70px; }
 }
+
+/* ---- 说完以后怎么听（设计画布第 52 块，wf.js） ---- */
+.listen-opts { display: grid; gap: 10px; }
+.listen-opts button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px 18px; border-radius: 18px; text-align: left;
+  color: var(--ink); background: var(--card); border: 1.5px solid var(--line); }
+.listen-opts button b { font-size: 20px; } .listen-opts button span { font-size: 16px; color: var(--ink3); }
+.listen-opts button.on { border-color: var(--accent); background: var(--card2); box-shadow: inset 0 0 0 1px var(--accent); }
+.listen-secs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.window-pill { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px 0 8px; border-radius: 999px; font-size: 17px;
+  color: var(--ink); background: #5ee0ff1f; border: 1px solid #5ee0ff66; }
+.window-pill[hidden] { display: none; }
+.window-pill svg { width: 26px; height: 26px; transform: rotate(-90deg); }
+.wp-track { fill: none; stroke: var(--line); stroke-width: 4; }
+.wp-arc { fill: none; stroke: var(--accent2); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 94; transition: stroke-dashoffset .25s linear; }
+.window-pill b { font-variant-numeric: tabular-nums; font-weight: 600; }
+body:not([data-state="listening"]) .window-pill { display: none; }
+body.dash-on .window-pill > span { display: none; }
+@media (orientation: portrait) { .window-pill > span { display: none; } }
+.window-pill b, .window-pill { white-space: nowrap; }
+body.follow-window.dash-on .link { display: none; }   /* 仪表盘顶栏挤：接着听时「待机」先收起 */

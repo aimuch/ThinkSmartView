@@ -331,3 +331,56 @@ async def test_push_to_talk_with_nothing_recognised_ends_at_once():
     assert c.state == 'thinking' and c.status()['recognising']
     await c._on_json({'type': 'vad', 'state': 'empty'})
     assert c.state == 'idle' and shown == ['没听清，可以再说一次「小麦小麦」']
+
+
+# ---- 网关拦下的句子（core/utils/turn_filter.py，设计画布第 52 块） ----
+
+@pytest.mark.asyncio
+async def test_hub_filtered_a_second_wake_word_keeps_listening():
+    c = make_client()
+    shown = toasts(c)
+    played = []
+    c.play = played.append
+    await c.start_listening('realtime')
+    await c._on_json({'type': 'vad', 'state': 'end'})
+    c.uploading, c.awaiting_text = False, True       # the mic had closed while it was being recognised
+    await c._on_json({'type': 'vad', 'state': 'empty', 'reason': 'wake'})
+    assert c.state == 'listening' and c.uploading and not c.awaiting_text and shown == []
+    assert played == ['wake'] and c.hub.kinds()[-1] == ('listen', 'start') and c.deadline
+
+
+@pytest.mark.asyncio
+async def test_hub_filtered_filler_and_close():
+    c = make_client()
+    shown = toasts(c)
+    await c.start_listening('realtime', follow_up=True)
+    assert c.hub.sent[-1] == {'type': 'listen', 'state': 'start', 'mode': 'realtime', 'follow_up': True, 'lock': True}
+    await c._on_json({'type': 'vad', 'state': 'end'})
+    await c._on_json({'type': 'vad', 'state': 'empty', 'reason': 'filler'})       # 「嗯」：窗口照开
+    assert c.state == 'listening' and c.uploading and shown == []
+    await c._on_json({'type': 'vad', 'state': 'end'})
+    await c._on_json({'type': 'vad', 'state': 'empty', 'reason': 'close'})        # 「谢谢」：收尾
+    assert c.state == 'idle' and not c.uploading and shown == []
+
+
+def test_listen_modes_scenes_and_settings(monkeypatch):
+    c = make_client()
+    c.cfg = {'follow_up': 'question', 'follow_up_seconds': 10}
+    c.cooking = None
+    c.study = types.SimpleNamespace(enabled=False)
+    saved = {}
+    monkeypatch.setattr(app.config, 'save', lambda **kw: saved.update(kw))
+    assert c.wants_follow_up('今天晴。') is False and c.wants_follow_up('要提醒你吗？') is True
+    c.study.enabled = True
+    assert c.wants_follow_up('今天晴。') is True and c.listen_view()['scene'] == 'study'   # 学习陪伴：每次都接着听
+    c.study.enabled, c.sleeping = False, True
+    assert c.wants_follow_up('要提醒你吗？') is False                                     # 睡眠时段：每句都要唤醒
+    c.sleeping = False
+    v = c.set_listen('never', 20, False)
+    assert v['follow_up'] == 'never' and v['seconds'] == 20 and v['lock'] is False
+    assert saved == {'follow_up': 'never', 'follow_up_seconds': 20, 'follow_lock': False}
+    assert c.follow_up_seconds() == 20 and c.wants_follow_up('要提醒你吗？') is False
+    with pytest.raises(ValueError):
+        c.set_listen('sometimes')
+    with pytest.raises(ValueError):
+        c.set_listen(seconds=7)
