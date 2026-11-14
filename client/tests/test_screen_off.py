@@ -22,10 +22,10 @@ def hint(tmp_path, monkeypatch):
 
 
 def test_normalize():
-    assert device.normalize_screen_off(None) == {'enabled': True, 'minutes': 5}
-    assert device.normalize_screen_off({'enabled': False, 'minutes': 30, 'x': 1}) == {'enabled': False, 'minutes': 30}
+    assert device.normalize_screen_off(None) == {'enabled': True, 'minutes': 5, 'proximity': True}
+    assert device.normalize_screen_off({'enabled': False, 'minutes': 30, 'x': 1}) == {'enabled': False, 'minutes': 30, 'proximity': True}
     assert device.normalize_screen_off({'minutes': 10}, {'enabled': False, 'minutes': None}) == \
-        {'enabled': False, 'minutes': 10}
+        {'enabled': False, 'minutes': 10, 'proximity': True}
     for bad in (2, 0, True, '5', 60):
         with pytest.raises(ValueError):
             device.normalize_screen_off(None, {'minutes': bad})
@@ -50,13 +50,16 @@ async def test_set_screen_off_saves_and_hints(hint, monkeypatch):
     c = app.Client.__new__(app.Client)
     c.screen, c.screen_off, c.state = device.Screen(), device.normalize_screen_off(None), 'idle'
     c.set_state = lambda state: None
-    assert await c.set_screen_off(minutes=1) == {'enabled': True, 'minutes': 1}
-    assert hint()['idle'] == 60 and saved['screen_off'] == {'enabled': True, 'minutes': 1}
-    assert await c.set_screen_off(enabled=False) == {'enabled': False, 'minutes': 1}
+    assert await c.set_screen_off(minutes=1) == {'enabled': True, 'minutes': 1, 'proximity': True}
+    assert hint()['idle'] == 60 and saved['screen_off'] == {'enabled': True, 'minutes': 1, 'proximity': True}
+    # 走近亮屏（设计画布第 59 块）：关掉写进给熄屏程序和接近传感器的提示里
+    assert hint()['proximity'] is True
+    assert (await c.set_screen_off(proximity=False))['proximity'] is False and hint()['proximity'] is False
+    assert await c.set_screen_off(enabled=False) == {'enabled': False, 'minutes': 1, 'proximity': False}
     assert hint()['idle'] == 0
     with pytest.raises(ValueError):
         await c.set_screen_off(minutes=7)
-    assert c.screen_off == {'enabled': False, 'minutes': 1}
+    assert c.screen_off == {'enabled': False, 'minutes': 1, 'proximity': False}
 
 
 @pytest.mark.asyncio
@@ -99,3 +102,13 @@ def test_sleep_brightness_goes_to_the_blanker(tmp_path, monkeypatch):
     s.dim(False)
     h = json.loads((tmp_path / 'hint.json').read_text())
     assert h['dim'] is False and h['brightness'] == 100
+
+
+def test_proximity_status(tmp_path):
+    """走近亮屏（设计画布第 59 块）：接近传感器上次熄屏时量的读数，设置页显示。"""
+    p = tmp_path / 'thinksmart-proximity.json'
+    assert device.proximity_status(p) is None
+    p.write_text('{"baseline": 182, "threshold": 252, "measured": 1, "last_wake": null, "enabled": true}')
+    assert device.proximity_status(p)['threshold'] == 252
+    p.write_text('[1]')
+    assert device.proximity_status(p) is None

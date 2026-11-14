@@ -260,7 +260,7 @@
     <div class="opt">
       <div class="opt-text">
         <b>自动熄屏</b>
-        <span>一段时间没碰屏幕、也没在对话就熄屏；碰一下屏幕、走近或叫「<span class="ww-name">小麦小麦</span>」就亮。关掉就一直亮着，睡眠时段照常调暗。</span>
+        <span>一段时间没碰屏幕、也没在对话就熄屏；碰一下屏幕、走近（下面可以关）或叫「<span class="ww-name">小麦小麦</span>」就亮。关掉就一直亮着，睡眠时段照常调暗。</span>
       </div>
       <button class="switch" id="offSwitch" role="switch" aria-checked="true" aria-label="自动熄屏"><i></i></button>
     </div>
@@ -268,6 +268,14 @@
       <button data-m="1">1 分钟</button><button data-m="3">3 分钟</button><button data-m="5">5 分钟</button><button data-m="10">10 分钟</button><button data-m="30">30 分钟</button>
     </div>
     <p class="opt-note" id="offNote"></p>
+    <div class="opt" id="proxRow">
+      <div class="opt-text">
+        <b>走近亮屏</b>
+        <span>熄屏时用机身的接近传感器：手或人凑近屏幕就亮。关掉以后只有碰屏幕、叫它或闹钟才亮。</span>
+      </div>
+      <button class="switch" id="proxSwitch" role="switch" aria-checked="true" aria-label="走近亮屏"><i></i></button>
+    </div>
+    <p class="opt-note" id="proxNote"></p>
     <div class="alarms-card" id="rotCard">
       <div class="bright-head"><b>屏幕方向</b><span class="bright-num" id="rotNow"></span></div>
       <div class="minutes" id="rotChoices"></div>

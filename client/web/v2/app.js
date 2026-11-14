@@ -407,7 +407,18 @@ $('brightRange').addEventListener('pointercancel', dropBright);
 /* ---- settings: auto screen-off (the client hints the system's screen blanker) ---- */
 const offEdit = {};   // a change on its way
 function offSetting() {
-  return Object.assign({ enabled: true, minutes: 5 }, ui.status.screen_off || {}, offEdit);
+  return Object.assign({ enabled: true, minutes: 5, proximity: true }, ui.status.screen_off || {}, offEdit);
+}
+// 走近亮屏（设计画布第 59 块）：接近传感器上次熄屏时量的「没人时的读数」和门槛
+function proxNote(on) {
+  if (!on) return '关着：熄屏以后走近不会亮';
+  const p = ui.status.proximity;
+  if (!p || p.threshold == null) return '熄屏以后会量一次这台传感器没人时的读数';
+  const ago = t => { if (!t) return ''; const d = new Date(t * 1000), now = new Date();
+    return (d.toDateString() === now.toDateString() ? '' : d.toDateString() === new Date(now - 864e5).toDateString() ? '昨天 ' : `${d.getMonth() + 1}月${d.getDate()}日 `) + `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const high = p.baseline != null && p.baseline > 40;
+  return `这台没人时读数 ${p.baseline ?? '?'}${high ? '，比一般的高（屏幕前可能有东西挡着或反光），已经自动把门槛调到 ' : '，门槛 '}${p.threshold}` +
+    (p.last_wake ? `；上次走近亮屏 ${ago(p.last_wake)}` : '');
 }
 function renderScreenOff() {
   const s = offSetting();
@@ -415,6 +426,9 @@ function renderScreenOff() {
   $('offMinutes').classList.toggle('off', !s.enabled);
   for (const b of $('offMinutes').children) b.classList.toggle('on', Number(b.dataset.m) === s.minutes);
   $('offNote').textContent = s.enabled ? `${s.minutes} 分钟没碰屏幕、也没在对话，就熄屏` : '屏幕一直亮着，不会自动熄屏';
+  $('proxRow').hidden = $('proxNote').hidden = !s.enabled;
+  $('proxSwitch').setAttribute('aria-checked', String(s.proximity !== false));
+  $('proxNote').textContent = proxNote(s.proximity !== false);
 }
 async function sendScreenOff(changes) {
   Object.assign(offEdit, changes);
@@ -431,6 +445,7 @@ async function sendScreenOff(changes) {
   renderScreenOff();
 }
 $('offSwitch').addEventListener('click', () => sendScreenOff({ enabled: !offSetting().enabled }));
+$('proxSwitch').addEventListener('click', () => sendScreenOff({ proximity: offSetting().proximity === false }));
 for (const b of $('offMinutes').children) b.addEventListener('click', () => sendScreenOff({ minutes: Number(b.dataset.m) }));
 
 /* ---- settings: volumes (the device's, which the keys and voice change too, and the alarms' own) ---- */

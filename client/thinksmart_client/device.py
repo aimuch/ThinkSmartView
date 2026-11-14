@@ -20,6 +20,8 @@ from . import bg
 log = logging.getLogger(__name__)
 
 HINT_PATH = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/1000')) / 'thinksmart-screen.json'
+# what the proximity daemon measured at the last blank (system/screen/vcnl4200-proximity-daemon.py, 设计画布第 59 块)
+PROXIMITY_STATUS = HINT_PATH.with_name('thinksmart-proximity.json')
 SCREEN_OFF_MINUTES = (1, 3, 5, 10, 30)   # the settings page's choices; 5 by default (config.py)
 # the blanker's MANUAL_MIN (0%), MAX_BRIGHTNESS (100%) and DIM_BRIGHTNESS (sleep hours) on the 0-100 scale
 DIM_LEVEL = round((1600 - 1400) * 100 / (4095 - 1400))
@@ -33,12 +35,14 @@ EVIOCGSW = (2 << 30) | (8 << 16) | (ord('E') << 8) | 0x1b
 
 
 def normalize_screen_off(setting, changes=None):
-    """A complete, valid screen-off setting: {'enabled': bool, 'minutes': one of SCREEN_OFF_MINUTES}.
+    """A complete, valid screen-off setting: {'enabled': bool, 'minutes': one of SCREEN_OFF_MINUTES,
+    'proximity': bool (走近亮屏: the proximity sensor wakes the dark screen)}.
     Raises ValueError for other minutes."""
-    s = {'enabled': True, 'minutes': 5}
+    s = {'enabled': True, 'minutes': 5, 'proximity': True}
     s.update({k: v for k, v in (setting or {}).items() if k in s})
     s.update({k: v for k, v in (changes or {}).items() if k in s and v is not None})
     s['enabled'] = bool(s['enabled'])
+    s['proximity'] = bool(s['proximity'])   # 走近亮屏 (设计画布第 59 块)
     if isinstance(s['minutes'], bool) or s['minutes'] not in SCREEN_OFF_MINUTES:
         raise ValueError(f'minutes must be one of {SCREEN_OFF_MINUTES}, got {s["minutes"]!r}')
     s['minutes'] = int(s['minutes'])
@@ -59,6 +63,7 @@ class Screen:
         self.level = 100             # the user's 0-100
         self.sleep_level = None      # the sleep hours' brightness (0-100) while dimmed; None: the blanker's own dim level
         self.idle = 300              # the user's screen-off in seconds, 0: never
+        self.proximity = True        # 走近亮屏: the proximity daemon may wake the dark screen
         self.dawn = None             # 温柔叫醒 (设计画布第 46 块): 0-100 while it brightens before an alarm, else None
         self._seq = time.time_ns()   # unique across client restarts
 
@@ -107,6 +112,11 @@ class Screen:
             self.level = level
             self._write(activity=False)
 
+    def proximity_wake(self, on):
+        if self.proximity != bool(on):
+            self.proximity = bool(on)
+            self._write(activity=False)
+
     def blank_after(self, seconds):
         if self.idle != seconds:
             self.idle = seconds
@@ -116,7 +126,7 @@ class Screen:
         if activity:
             self._seq += 1
         hint = {'hold': bool(self.held or self.ringing or self.showing), 'dim': self.dimmed, 'seq': self._seq,
-                'brightness': self.level, 'idle': self.idle}
+                'brightness': self.level, 'idle': self.idle, 'proximity': self.proximity}
         if self.dimmed and self.sleep_level is not None:
             # the user's sleep brightness instead of the blanker's fixed dim level (设计画布第 29 块)
             hint['dim'], hint['brightness'] = False, self.sleep_level
@@ -196,3 +206,13 @@ class Keys:
             elif etype == EV_SW and code == SW_MIC:
                 self.mic_on = bool(value)
                 self.on_mic(self.mic_on)
+
+
+def proximity_status(path=None):
+    """What the proximity daemon measured at the last blank: {'baseline', 'threshold', 'measured', 'last_wake',
+    'enabled'}, or None before the first blank (or with an older system layer)."""
+    try:
+        data = json.loads((path or PROXIMITY_STATUS).read_text())
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None

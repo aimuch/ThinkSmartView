@@ -3,8 +3,20 @@
 Standalone VCNL4200 Proximity Sensor Daemon
 Monitors proximity sensor and triggers wake when display is off and hand approaches
 Independent from vp5 - runs as separate systemd service
+
+Each time the screen blanks the sensor is switched on and measured first (设计画布第 59 块): the
+first reading after switching on is stale (0), then about a second of readings gives this unit's
+"nobody here" level, and only a reading MARGIN above it (and above PROXIMITY_THRESHOLD) twice in a
+row wakes the screen. Most units read 2-11 with nobody near; one read 85-180 (something in front of
+the sensor, or the cover glass reflecting) and with the fixed threshold of 50 it lit the screen
+again within a second of every blank. The level then follows slow drift while the screen stays dark.
+
+The voice client can turn this off: "proximity": false in its screen hint (HINT_PATH, the file the
+idle blanker reads). What was measured goes to STATUS_PATH for the client's settings page.
 """
 
+import json
+import os
 import subprocess
 import time
 import sys
@@ -32,8 +44,11 @@ PS_MS_REG = 0x04
 PS_LED_200MA = 0x0700  # low byte (PS_CONF3) = 0x00, high byte (PS_MS) = 0x07
 
 # Thresholds
-PROXIMITY_THRESHOLD = 50   # Counts above this = object detected (ambient ~5-11, hand ~87-1044)
-DEBOUNCE_COUNT = 1         # Require N consecutive readings above threshold before waking
+PROXIMITY_THRESHOLD = 50   # The lowest threshold: counts above this = object detected (ambient ~2-11, hand ~87-1044)
+MARGIN = 70                # ...and this much above the unit's own "nobody here" level, measured at each blank
+CALIBRATE_READS = 8        # readings (0.12 s apart, after a stale first one) for that level
+DRIFT = 0.05               # how fast the level follows readings below the threshold while the screen stays dark
+DEBOUNCE_COUNT = 2         # Require N consecutive readings above threshold before waking
 WAKE_COOLDOWN = 10.0       # Seconds to wait before triggering wake again
 POLLING_INTERVAL = 0.5    # Poll at 2 Hz
 BACKLIGHT_PATH = "/sys/class/backlight/backlight/brightness"
@@ -41,6 +56,69 @@ BACKLIGHT_PATH = "/sys/class/backlight/backlight/brightness"
 # Blanking value must match idle-blanker.py BLANK_BRIGHTNESS.
 # Proximity sensor is enabled when brightness <= this value (screen is blanked).
 BLANK_BRIGHTNESS = 10
+
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+HINT_PATH = os.path.join(RUNTIME_DIR, "thinksmart-screen.json")       # written by thinksmart-client
+STATUS_PATH = os.path.join(RUNTIME_DIR, "thinksmart-proximity.json")  # read by thinksmart-client
+
+
+class Gate:
+    """When a reading means someone came near: above max(PROXIMITY_THRESHOLD, nobody-here level + MARGIN),
+    DEBOUNCE_COUNT times in a row. No hardware here, so it can be tested."""
+
+    def __init__(self, floor=PROXIMITY_THRESHOLD, margin=MARGIN, debounce=DEBOUNCE_COUNT):
+        self.floor, self.margin, self.debounce = floor, margin, debounce
+        self.baseline = None
+        self.above = 0
+
+    @property
+    def threshold(self):
+        if self.baseline is None:            # nothing measured: the fixed threshold, as before
+            return self.floor
+        return max(self.floor, int(round(self.baseline + self.margin)))
+
+    def calibrate(self, readings):
+        """The nobody-here level from readings taken right after switching the sensor on: zeros (stale,
+        failed reads) don't count. Returns it (None when nothing usable came back)."""
+        good = [r for r in readings if r]
+        self.baseline = max(good) if good else None
+        self.above = 0
+        return self.baseline
+
+    def feed(self, prox):
+        """True when this reading wakes the screen."""
+        if prox > self.threshold:
+            self.above += 1
+            if self.above >= self.debounce:
+                self.above = 0
+                return True
+            return False
+        self.above = 0
+        if prox and self.baseline is not None:
+            self.baseline += (prox - self.baseline) * DRIFT
+        elif prox and self.baseline is None:
+            self.baseline = prox
+        return False
+
+
+def proximity_wanted(path=HINT_PATH):
+    """The client's "走近亮屏" switch; on when the hint is missing or says nothing about it."""
+    try:
+        with open(path) as f:
+            return json.load(f).get("proximity", True) is not False
+    except (OSError, ValueError, AttributeError):
+        return True
+
+
+def write_status(status, path=STATUS_PATH):
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(status, f)
+        os.replace(tmp, path)
+    except OSError as e:
+        logger.warning(f"could not write {path}: {e}")
+
 
 # Logging
 # stdout goes to the journal (persistent, size-capped); a log file of its own grew without bound
@@ -56,8 +134,9 @@ class ProximitySensor:
         self.running = False
         self.sensor_enabled = False
         self.last_brightness = None
-        self._above_count = 0          # consecutive readings above threshold
         self._last_wake_time = 0.0     # time of last wake trigger (for cooldown)
+        self.gate = Gate()
+        self.status = {"enabled": True, "baseline": None, "threshold": None, "measured": None, "last_wake": None}
         self.bus = None                # smbus2.SMBus, opened on first use
         self.bus_failed = False
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -157,6 +236,22 @@ class ProximitySensor:
         else:
             logger.warning("Failed to disable sensor")
 
+    def calibrate(self):
+        """Measure this unit's nobody-here level right after switching the sensor on."""
+        time.sleep(0.15)
+        self.read_proximity()                      # stale: 0 right after switching on
+        readings = []
+        for _ in range(CALIBRATE_READS):
+            time.sleep(0.12)
+            v = self.read_proximity()
+            if v is not None:
+                readings.append(v)
+        base = self.gate.calibrate(readings)
+        self.status.update(baseline=None if base is None else int(base), threshold=self.gate.threshold,
+                           measured=int(time.time()))
+        write_status(self.status)
+        logger.info(f"nobody-here level {base} (readings {readings}), wake above {self.gate.threshold}")
+
     def read_proximity(self):
         """Read proximity data"""
         val = self.i2c_get(PS_DATA_REG)
@@ -172,7 +267,8 @@ class ProximitySensor:
             return
         logger.warning("=== PROXIMITY DETECTED — WAKING SCREEN ===")
         self._last_wake_time = now
-        self._above_count = 0
+        self.status["last_wake"] = int(now)
+        write_status(self.status)
 
         # Restore backlight via sudo tee.
         try:
@@ -208,27 +304,28 @@ class ProximitySensor:
                         logger.info(f"Brightness changed: {self.last_brightness} -> {brightness}")
                         self.last_brightness = brightness
 
+                    wanted = proximity_wanted()
+                    if wanted != self.status["enabled"]:
+                        logger.info(f"走近亮屏 {'on' if wanted else 'off'} (the client's setting)")
+                        self.status["enabled"] = wanted
+                        write_status(self.status)
+
                     # Screen is blanked (brightness at or below BLANK_BRIGHTNESS=10)
-                    if brightness <= BLANK_BRIGHTNESS:
+                    if brightness <= BLANK_BRIGHTNESS and wanted:
                         if not self.sensor_enabled:
                             self.enable_sensor()
-                            self._above_count = 0  # reset debounce on enable
+                            self.calibrate()
 
                         # Read proximity
                         prox = self.read_proximity()
                         if prox is not None:
                             logger.debug(f"PS_DATA = 0x{prox:04x} ({prox})")
+                            if self.gate.feed(prox):
+                                logger.warning(f"PROXIMITY: {prox} counts (nobody-here level {self.gate.baseline:.0f}, "
+                                               f"threshold {self.gate.threshold}) — triggering wake")
+                                self.trigger_wake()
 
-                            if prox > PROXIMITY_THRESHOLD:
-                                self._above_count += 1
-                                logger.debug(f"Above threshold ({prox} > {PROXIMITY_THRESHOLD}), debounce {self._above_count}/{DEBOUNCE_COUNT}")
-                                if self._above_count >= DEBOUNCE_COUNT:
-                                    logger.warning(f"PROXIMITY: {prox} counts over {DEBOUNCE_COUNT} readings — triggering wake")
-                                    self.trigger_wake()
-                            else:
-                                self._above_count = 0
-
-                    # Screen is ON (brightness > BLANK_BRIGHTNESS)
+                    # Screen is ON (brightness > BLANK_BRIGHTNESS), or 走近亮屏 is off
                     else:
                         if self.sensor_enabled:
                             self.disable_sensor()

@@ -56,7 +56,7 @@ from . import airplay, alarms, intercom, broadcast, bt, camera, config, cook, pe
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
-from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off
+from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off, proximity_status
 from .hub import Hub
 from .kws import Kws
 from .opus import Decoder, Encoder
@@ -372,6 +372,7 @@ class Client:
             log.warning('invalid screen_off %r, using the default', cfg.get('screen_off'))
             self.screen_off = normalize_screen_off(None)
         self.screen.idle = self._screen_off_seconds()   # written by start()'s release()
+        self.screen.proximity = self.screen_off['proximity']
         self.reports = 0              # pending on the hub
         self.hub_seen = 0.0           # monotonic: last answer from the hub's HTTP side (health check)
         self.keys = Keys(on_step=self.volume_step, on_mic=self._on_mic)
@@ -2086,7 +2087,7 @@ class Client:
         return {'state': self.state, 'connected': self.hub.connected, 'uploading': self.uploading,
                 'recognising': self.recognising or self.awaiting_text,
                 'mic': self.keys.mic_on, 'sleep': {**self.sleep, 'active': self.sleeping},
-                'brightness': self.brightness(), 'screen_off': self.screen_off,
+                'brightness': self.brightness(), 'screen_off': self.screen_off, 'proximity': proximity_status(),
                 'reports': self.reports, 'volume': self.volume}
 
     def mic_off_toast(self):
@@ -2960,6 +2961,7 @@ class Client:
         self.screen_off = normalize_screen_off(self.screen_off, changes)
         config.save(screen_off=self.screen_off)
         self.screen.blank_after(self._screen_off_seconds())
+        self.screen.proximity_wake(self.screen_off['proximity'])
         log.info('screen-off: %s', self.screen_off)
         self.set_state(self.state)
         return self.screen_off
