@@ -807,9 +807,13 @@ def make_app(client: Client):
                 return {'lists': await client.list_change(body.get('op'), body.get('name'), body.get('items') or [], body.get('done'))}
             if kind == 'music':           # 屏幕上的音乐按钮（设计画布第 58 块）
                 minutes = body.get('minutes')
+                if body.get('action') == 'video':     # 网页里的 <video> 报放到哪、放完了（设计画布第 60 块）
+                    client.video_event(str(body.get('event') or ''), body.get('at'), body.get('duration'))
+                    return {}
                 r = await client.music_control(body.get('action') or 'play', body.get('query') or None, body.get('tag') or None,
                                                body.get('mode') or None,
-                                               minutes if isinstance(minutes, (int, float)) and minutes > 0 else None)
+                                               minutes if isinstance(minutes, (int, float)) and minutes > 0 else None,
+                                               body.get('section') or None, body.get('lesson') or None)
                 if r.get('success') is False:
                     raise ValueError(r.get('reason') or '放不了')
                 return {'media': client.media_view()}
@@ -854,9 +858,9 @@ def make_app(client: Client):
     async def music_cover(request):
         """专辑封面：从网关中转（/kiosk/music/cover/<id>），设备上缓存一天。"""
         sid = request.match_info['id']
-        if not re.fullmatch(r'[nl]\.[\w\-=./]{0,400}', sid):
+        if not re.fullmatch(r'[njl]\.[\w\-=./]{0,400}', sid):
             raise web.HTTPNotFound()
-        url = f"{client.cfg['hub_http']}/kiosk/music/cover/{urllib.parse.quote(sid, safe='')}?size=300"
+        url = f"{client.cfg['hub_http']}/kiosk/media/cover/{urllib.parse.quote(sid, safe='')}?size=300"
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
                 async with s.get(url) as r:

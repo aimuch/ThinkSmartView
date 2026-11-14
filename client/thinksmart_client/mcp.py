@@ -295,16 +295,19 @@ DAILY_TOOLS = [
     },
     {
         'name': 'self.music.play',
-        'description': '放歌、儿歌、睡前故事（家里 NAS 上的音乐库，说话时自动变小，放的时候照样能对话）。'
-                       '「放两只老虎」「我想听晴天」「周杰伦的歌」action="play", query=歌名或「歌手的歌」（模糊匹配）；'
-                       '「放几首儿歌」tag="kids"；「放睡前故事」tag="bedtime"；「随便放点歌」tag="any"；'
-                       '「放儿歌，二十分钟后停」加 minutes=20；正在放时「半小时后停」action="timer", minutes=30（0 取消定时）。'
-                       '「下一首」next，「上一首」prev，「暂停」pause，「继续」resume，「停」stop，「现在放的是什么歌」status；'
+        'description': '放家里 NAS 上的歌、故事、英语、动画、菜谱视频（媒体按用途分区：儿童区有儿歌、睡前故事、英语启蒙、动画，大人区有音乐、英语学习、菜谱，'
+                       '家里还可能自己加了别的分区）。音频走后台声道，视频在屏幕上放；说话时自动变小，放的时候照样能对话。'
+                       '「放儿歌」「放英语」「看动画片」「讲个睡前故事」action="play", section=用户说的分区名；按顺序的分区（英语、动画）会从这个人上次的地方接着放，'
+                       '「放英语第三课」「看动画第 2 集」加 lesson=3；「放两只老虎」「我想听晴天」「周杰伦的歌」query=名字（模糊匹配）；'
+                       '「看红烧肉的视频」「看小猪佩奇」query=名字, video=true；「随便放点歌」tag="any"；「放儿歌，二十分钟后停」加 minutes=20；'
+                       '正在放时「半小时后停」action="timer", minutes=30（0 取消定时）。做菜时「看视频」action="cook_video"。'
+                       '「下一首/下一集」next，「上一首」prev，「暂停」pause，「继续」resume，「停」stop，「现在放的是什么」status；'
                        '「单曲循环」action="mode", mode="one"，「列表循环」mode="loop"，「随机播放」mode="shuffle"。'
-                       '调用后照着返回的 response 说一句就行。没找到、没接音乐库时如实说原因；电台和助眠声用 self.media.play。',
+                       '孩子在说、或者开着儿童模式时只会从儿童区找，找不到如实说。调用后照着返回的 response 说一句就行。电台和助眠声用 self.media.play。',
         'inputSchema': {'type': 'object', 'properties': {
-            'action': {'type': 'string', 'enum': ['play', 'next', 'prev', 'pause', 'resume', 'stop', 'mode', 'timer', 'status']},
-            'query': {'type': 'string'}, 'tag': {'type': 'string', 'enum': ['kids', 'bedtime', 'any']},
+            'action': {'type': 'string', 'enum': ['play', 'next', 'prev', 'pause', 'resume', 'stop', 'mode', 'timer', 'status', 'cook_video']},
+            'query': {'type': 'string'}, 'section': {'type': 'string'}, 'lesson': {'type': 'integer'},
+            'video': {'type': 'boolean'}, 'tag': {'type': 'string', 'enum': ['kids', 'bedtime', 'any']},
             'mode': {'type': 'string', 'enum': ['loop', 'one', 'shuffle']}, 'minutes': {'type': 'number'}}},
     },
 ]
@@ -613,9 +616,13 @@ async def handle(payload, client=None):
             elif name == 'self.music.play' and client:
                 try:
                     minutes = args.get('minutes')
+                    lesson = args.get('lesson')
                     r = await client.music_control(args.get('action') or 'play', str(args.get('query') or '').strip() or None,
                                                    args.get('tag') or None, args.get('mode') or None,
-                                                   minutes if isinstance(minutes, (int, float)) and minutes > 0 else None)
+                                                   minutes if isinstance(minutes, (int, float)) and minutes > 0 else None,
+                                                   str(args.get('section') or '').strip() or None,
+                                                   int(lesson) if isinstance(lesson, (int, float)) and lesson > 0 else None,
+                                                   args.get('video') if isinstance(args.get('video'), bool) else None)
                 except ValueError as e:
                     r = {'success': False, 'reason': str(e)}
                 if r.get('success') and r.get('response') and set(r) <= {'success', 'response'}:

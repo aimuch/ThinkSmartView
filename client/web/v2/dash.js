@@ -111,23 +111,23 @@ function media() {
   const m = ui.media || {}, now = m.playing, mu = window.musicApi;
   if (now && now.kind === 'music' && mu) {          // 音乐（设计画布第 58 块）：封面、歌名、进度、按钮、下一首
     const [ic, modeName] = mu.modes[now.mode] || mu.modes.loop;
-    return head('♪', '音乐和电台', esc(now.list ? `${now.list} · ${now.index}/${now.count}` : `${now.index}/${now.count}`)) +
+    return head('▶', '媒体', esc(now.list ? `${now.list} · ${now.index}/${now.count}` : `${now.index}/${now.count}`)) +
       `<div class="dm-row">${mu.cover(now, 'dm-cover')}<div class="dm-tx"><b>${esc(now.name)}</b><div class="dm">${esc([now.artist, now.album].filter(Boolean).join(' · ')) || (now.paused ? '暂停了' : '正在放')}</div></div></div>` +
       mu.progress(now) +
       `<div class="dm-ctl"><button data-mact="mode" aria-label="${modeName}" title="${modeName}">${ic}</button><button data-mact="prev" aria-label="上一首">⏮</button>` +
       `<button class="pp" data-mact="toggle" aria-label="${now.paused ? '继续' : '暂停'}">${now.paused ? '▶' : '❚❚'}</button><button data-mact="next" aria-label="下一首">⏭</button><button data-mact="stop" aria-label="停">■</button></div>` +
-      (now.next ? `<div class="dm dm-next">下一首 <b>${esc(now.next.name)}</b></div>` : '');
+      (now.next ? `<div class="dm dm-next">下一${now.media === 'video' ? '集' : '首'} <b>${esc(now.next.name)}</b></div>` : '');
   }
   if (now) {
     const left = now.ends ? Math.max(0, Math.round((now.ends - Date.now() / 1000) / 60)) : null;
-    return head('♪', '音乐和电台', '正在放') + `<div class="dm-row"><span class="dm-cover"></span><div><b>${esc(now.name)}</b><div class="dm">${now.kind === 'radio' ? '电台直播' : left !== null ? `还有 ${left} 分钟停` : '一直放'}</div></div>` +
+    return head('▶', '媒体', '正在放') + `<div class="dm-row"><span class="dm-cover"></span><div><b>${esc(now.name)}</b><div class="dm">${now.kind === 'radio' ? '电台直播' : left !== null ? `还有 ${left} 分钟停` : '一直放'}</div></div>` +
       '<button class="da-mic small" data-media="stop" aria-label="停">❚❚</button></div>';
   }
-  const info = m.music || {}, tags = info.tags || {};
-  const quick = info.ready ? [tags.kids ? '<button data-mtag="kids">儿歌</button>' : '', tags.bedtime ? '<button data-mtag="bedtime">睡前故事</button>' : '',
-    '<button data-mtag="any">随便听</button>'].join('') : '';
-  return head('♪', '音乐和电台') + (quick ? `<div class="d-chips">${quick}</div>` : '') +
-    `<div class="d-chips">${(m.stations || []).slice(0, 3).map(s => `<button data-media="${esc(s.id)}">${esc(s.name)}</button>`).join('')}</div>`;
+  // 卡片窄：分区一行排下去（儿童区在前、带黄边），没有分区时才放电台
+  const secs = ((m.music || {}).ready && (m.music.sections || [])) || [];
+  const chips = secs.length ? secs.slice(0, 8).map(x => `<button data-msec="${esc(x.id)}" class="${x.kid ? 'kid' : ''}">${esc(x.name)}${x.lesson ? `<small>${x.lesson}</small>` : ''}</button>`).join('')
+    : (m.stations || []).slice(0, 3).map(s => `<button data-media="${esc(s.id)}">${esc(s.name)}</button>`).join('');
+  return head('▶', '媒体', secs.length ? '黄边是儿童区' : '') + `<div class="d-chips dm-secs">${chips}</div>`;
 }
 function nums() {
   const v = mi(), plugs = v && v.account ? v.rooms.flatMap(r => r.cards).filter(c => c.state && typeof c.state.power_w === 'number') : [];
@@ -390,7 +390,7 @@ $('dash').addEventListener('click', e => {
   if (sc) return post('/api/text', { text: sc.dataset.scene });
   const ck = t.closest('[data-check]');
   if (ck) return dailyPost('lists', { op: 'check', name: ck.dataset.check, items: [ck.dataset.text], done: ck.dataset.done !== '1' });
-  if ((t.closest('[data-mact]') || t.closest('[data-mtag]')) && window.musicApi) return window.musicApi.click(t);
+  if ((t.closest('[data-mact]') || t.closest('[data-mtag]') || t.closest('[data-msec]')) && window.musicApi) return window.musicApi.click(t);
   const md = t.closest('[data-media]');
   if (md) return dailyPost('media', md.dataset.media === 'stop' ? { stop: true } : { kind: 'radio', name: md.dataset.media });
   const dy = t.closest('[data-day]');

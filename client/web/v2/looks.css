@@ -587,6 +587,50 @@ img.dm-cover { object-fit: cover; background: var(--card2); } .dm-cover.mu-nocv 
 .minutes.mu-modes, .minutes.mu-quick { grid-template-columns: repeat(3, 1fr); } .minutes.mu-timer { grid-template-columns: repeat(4, 1fr); }
 .minutes.mu-timer button { font-size: 18px; }
 .mu-none { margin: 0; }
+/* 分区按钮（设计画布第 60 块）：儿童区一行、大人区一行 */
+.mu-zone { display: flex; align-items: flex-start; gap: 10px; }
+.mu-zl { flex: none; width: 34px; padding-top: 12px; font-size: 13px; color: var(--ink3); }
+.mu-zone .d-chips { flex: 1; min-width: 0; }
+.mu-zone .d-chips button small, .mu-chips button small { margin-left: 6px; font-size: 13px; color: var(--ink3); font-weight: 400; }
+.d-chips button.kid { box-shadow: inset 0 0 0 1.5px #ffb54799; }
+.dm-secs { gap: 6px; } .dm-secs button { height: 38px; padding: 0 12px; font-size: 15px; }
+.dm-secs button small { margin-left: 4px; font-size: 12px; padding: 1px 6px; border-radius: 999px; background: var(--card); color: var(--ink3); }
+.mu-chips { flex: 1; display: flex; flex-wrap: wrap; gap: 12px; }
+.mu-chips button { height: 64px; padding: 0 24px; border-radius: 20px; font-size: 21px; color: var(--ink2); background: var(--card2); border: 1px solid var(--line); }
+.mu-chips button.kid { border-color: #ffb54788; }
+.mu-chips button:active { transform: scale(.96); }
+.mu-box .mu-zl { font-size: 16px; padding-top: 20px; width: 40px; }
+/* 放视频：铺满屏幕；点一下出控制条，几秒后收起 */
+.vid-ov { position: fixed; inset: 0; z-index: 70; background: #000; }
+.vid-ov[hidden] { display: none; }
+.vid-ov video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.vid-ui { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 22px 26px;
+  background: linear-gradient(#000a, transparent 22%, transparent 70%, #000b); opacity: 0; transition: opacity .25s; pointer-events: none; color: #fff; }
+.vid-ui.on { opacity: 1; pointer-events: auto; }
+.vid-top { display: flex; align-items: flex-start; gap: 16px; } .vid-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.vid-tx b { font-size: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .vid-tx small { font-size: 16px; opacity: .8; }
+.vid-x { flex: none; width: 64px; height: 64px; border-radius: 20px; background: #0008; color: #fff; font-size: 24px; }
+.vid-duck { position: absolute; right: 26px; bottom: 170px; padding: 8px 16px; border-radius: 999px; background: #000a; font-size: 16px; }
+.vid-duck[hidden] { display: none; }
+.vid-bot { display: flex; flex-direction: column; gap: 12px; }
+.vid-bar { height: 6px; border-radius: 3px; background: #ffffff40; overflow: hidden; } .vid-bar i { display: block; height: 100%; width: 0; background: #fff; }
+.vid-time { font-size: 15px; opacity: .85; font-variant-numeric: tabular-nums; }
+.vid-ctl { display: flex; justify-content: center; align-items: center; gap: 22px; }
+.vid-ctl button { width: 72px; height: 72px; border-radius: 50%; background: #0008; color: #fff; font-size: 20px; display: grid; place-items: center; }
+.vid-ctl button.pp { width: 88px; height: 88px; background: #ffffffe6; color: #081024; font-size: 26px; }
+.vid-ov:not(.seekable) [data-vact="back"], .vid-ov:not(.seekable) [data-vact="fwd"] { display: none; }
+.vid-ctl button:active, .vid-x:active { transform: scale(.94); }
+/* 做菜模式里有这道菜的视频 */
+.cook-video { display: flex; align-items: center; gap: 16px; align-self: center; padding: 10px 26px 10px 10px; border-radius: 22px;
+  background: var(--card2); border: 1px solid var(--line); color: var(--ink); text-align: left; }
+.cook-video[hidden] { display: none; }
+.cook-video .cv-pic { width: 128px; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: linear-gradient(120deg, #a0522d, #e0a35a); flex: none; }
+.cook-video .cv-pic img { width: 100%; height: 100%; object-fit: cover; }
+.cook-video b { display: block; font-size: 22px; } .cook-video small { font-size: 16px; color: var(--ink3); }
+@media (orientation: portrait) {
+  .vid-ov video { object-fit: contain; } .vid-duck { bottom: 200px; }
+  .mu-chips button { height: 60px; padding: 0 20px; font-size: 19px; }
+}
 @media (orientation: portrait) {
   .mu-now { flex-wrap: wrap; } .mu-ctl { flex: 0 0 100%; justify-content: center; }
   .minutes.mu-timer { grid-template-columns: repeat(2, 1fr); }

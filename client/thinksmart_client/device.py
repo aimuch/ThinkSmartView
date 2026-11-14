@@ -59,6 +59,7 @@ class Screen:
         self.held = None
         self.ringing = False         # an alarm rings: on until it stops, whatever the conversation does
         self.showing = False         # a photo slideshow is open (photos.py): on until it closes
+        self.watching = False        # a video plays (设计画布第 60 块): on until it stops or pauses
         self.dimmed = False
         self.level = 100             # the user's 0-100
         self.sleep_level = None      # the sleep hours' brightness (0-100) while dimmed; None: the blanker's own dim level
@@ -88,6 +89,12 @@ class Screen:
         """A slideshow opens (light the screen, keep it on) or closes (blank after the user's screen-off)."""
         if self.showing != on:
             self.showing = on
+            self._write(activity=True)
+
+    def video(self, on):
+        """A video starts (light the screen, keep it on) or stops / pauses (blank after the user's screen-off)."""
+        if self.watching != on:
+            self.watching = on
             self._write(activity=True)
 
     def sunrise(self, level):
@@ -125,7 +132,7 @@ class Screen:
     def _write(self, activity):
         if activity:
             self._seq += 1
-        hint = {'hold': bool(self.held or self.ringing or self.showing), 'dim': self.dimmed, 'seq': self._seq,
+        hint = {'hold': bool(self.held or self.ringing or self.showing or self.watching), 'dim': self.dimmed, 'seq': self._seq,
                 'brightness': self.level, 'idle': self.idle, 'proximity': self.proximity}
         if self.dimmed and self.sleep_level is not None:
             # the user's sleep brightness instead of the blanker's fixed dim level (设计画布第 29 块)

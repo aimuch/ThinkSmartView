@@ -28,6 +28,8 @@ from thinksmart_client import app, config, kids, mcp, media  # noqa: E402
 
 TRACKS = [{'id': f'n.s{i}', 'title': t, 'artist': '宝宝巴士', 'album': '儿歌', 'duration': 60, 'cover': 'n.al-1'}
           for i, t in enumerate(['两只老虎', '小星星', '小兔子乖乖', '数鸭子'])]
+VIDEOS = [{'id': f'j.e{i}', 'title': f'第 {i} 集', 'artist': 'Peppa Pig', 'duration': 300, 'cover': 'j.series', 'media': 'video'}
+          for i in (1, 2)] + [{'id': 'j.v1', 'title': '红烧肉的做法', 'duration': 600, 'media': 'video'}]
 
 
 def test_queue_modes():
@@ -195,20 +197,33 @@ def make_client(tmp_path, monkeypatch, ffmpeg):
     c.audio = types.SimpleNamespace(background=Background())
     c.media = None
     c.kids = kids.normalize(None)
+    c.publish_cook = lambda: None
     c.kids_seconds = 0
-    c.music_info = {'ready': True, 'tags': {'kids': 1, 'bedtime': 0}}
+    c.music_info = {'ready': True, 'sections': [{'id': 'songs', 'name': '儿歌', 'kid': True, 'play': 'shuffle'}]}
+    c.screen = types.SimpleNamespace(video=lambda on: c.lit.append(on), poke=lambda: None)
+    c.lit = []
+    c.cooking = None
+    c.events.publish = lambda *a: None
     c.asked = []
 
     async def hub_http(path, body=None):
-        c.asked.append(path)
-        if path.startswith('/kiosk/music/find'):
+        c.asked.append((path, body))
+        if path.startswith('/kiosk/media/find'):
             if '%E4%B8%A4' in path:                                    # 两只老虎
                 return {'ok': True, 'tracks': TRACKS[:1], 'match': 'song', 'name': '两只老虎'}
+            if 'video=1' in path:
+                return {'ok': True, 'tracks': VIDEOS[2:], 'match': 'song', 'name': '红烧肉的做法'}
             return {'ok': True, 'tracks': [], 'match': ''}
-        if path.startswith('/kiosk/music/tag/kids'):
-            return {'ok': True, 'tracks': TRACKS, 'name': '儿歌'}
-        if path.startswith('/kiosk/music/tag/bedtime'):
-            return {'ok': True, 'tracks': [], 'error': '还没在网关后台「音乐」页把哪个文件夹或歌单标成「睡前故事」'}
+        if path.startswith('/kiosk/media/section/songs'):
+            return {'ok': True, 'tracks': TRACKS, 'start': 0, 'at': 0, 'section': {'id': 'songs', 'name': '儿歌', 'kid': True, 'play': 'shuffle'}}
+        if path.startswith('/kiosk/media/section/%E8%8B%B1%E8%AF%AD'):   # 英语
+            lesson = 2 if 'lesson=3' in path else 1
+            return {'ok': True, 'tracks': VIDEOS[:2] + TRACKS[:1], 'start': lesson, 'at': 0 if lesson == 2 else 42.0, 'lesson': lesson + 1,
+                    'section': {'id': 'kid_english', 'name': '英语启蒙', 'kid': True, 'play': 'course'}}
+        if path.startswith('/kiosk/media/section/stories'):
+            return {'ok': True, 'tracks': [], 'error': '「睡前故事」还是空的：在网关后台「媒体」页把文件夹或歌单加进去'}
+        if path.startswith('/kiosk/media/info/'):
+            return {'ok': True, 'direct': 'e1' in path}
         return {'ok': True}
     c._hub_http = hub_http
     return c
@@ -231,9 +246,9 @@ def test_music_tool(tmp_path, monkeypatch, ffmpeg):
         assert c.media.now['name'] == '两只老虎' and c.media.now['mode'] == 'loop'
         await asyncio.sleep(0.02)
         url = ffmpeg[-1][ffmpeg[-1].index('-i') + 1]
-        assert url == 'http://127.0.0.1:16688/kiosk/music/stream/n.s0'          # 走网关中转，设备没有密码
-        r = await c.music_control('play', tag='kids', minutes=20)
-        assert r['response'] == '好，放儿歌，第一首' + c.media.now['name'] + '，20 分钟后停。' and c.media.now['mode'] == 'shuffle'
+        assert url == 'http://127.0.0.1:16688/kiosk/media/stream/n.s0'          # 走网关中转，设备没有密码
+        r = await c.music_control('play', tag='kids', minutes=20)                 # 58 块的说法：分区「儿歌」
+        assert r['response'] == '好，放儿歌，第一首' + c.media.now['name'] + '，20 分钟后停。' and c.media.now['section']['id'] == 'songs'
         assert c.media.now['ends'] > time.time() + 19 * 60
         assert (await c.music_control('next'))['response'].startswith('下一首')
         assert (await c.music_control('pause'))['response'] == '好，暂停了。' and c.media.now['paused']
@@ -242,7 +257,7 @@ def test_music_tool(tmp_path, monkeypatch, ffmpeg):
         assert (await c.music_control('status'))['playing'] == c.media.now['name']
         r = await c.music_control('play', query='没有这首')
         assert r['pass'] and '没找到' in r['reason'] and c.media.music_playing()      # 没找到：照旧放着
-        r = await c.music_control('play', tag='bedtime')
+        r = await c.music_control('play', section='stories')
         assert r['pass'] and '睡前故事' in r['reason']
         r = await c.music_control('play', query='东方广播')                          # 电台的名字：放电台
         assert '东方广播' in r['response'] and c.media.now['kind'] == 'radio'
@@ -271,4 +286,62 @@ def test_music_tool_over_mcp_and_kids_bedtime(tmp_path, monkeypatch, ffmpeg):
         await c.media.stop()
     asyncio.run(run())
     v = c.media_view()
-    assert v['music'] == {'ready': True, 'tags': {'kids': 1, 'bedtime': 0}} and [m['id'] for m in v['modes']] == ['loop', 'one', 'shuffle']
+    assert v['music']['ready'] and [m['id'] for m in v['modes']] == ['loop', 'one', 'shuffle']
+
+
+# ---------------------------------------------------------------- 视频、按顺序的分区、做菜的视频（设计画布第 60 块）
+
+def test_video_items_wait_for_the_page(tmp_path, monkeypatch, ffmpeg):
+    ffmpeg.lengths['n.s0'] = 0.3
+    c = make_client(tmp_path, monkeypatch, ffmpeg)
+    reported = []
+
+    async def run():
+        r = await c.music_control('play', section='英语')
+        assert r['response'] == '好，英语启蒙接着上次的，第 2 集。'
+        p = c.media
+        p.on_progress = reported.append
+        now = p.now
+        assert now['media'] == 'video' and now['section']['play'] == 'course' and now['index'] == 2
+        await asyncio.sleep(0.05)
+        v = p.now['video']
+        assert v['src'].endswith('/kiosk/media/stream/j.e2?t=42') and v['base'] == 42 and not v['direct']   # 转码：从 42 秒开始
+        assert c.lit[-1] is True and not ffmpeg                         # 屏幕常亮；视频不走 ffmpeg
+        c.video_event('pos', 100, 300)
+        assert p.position() == 100
+        await p.music_pause()
+        assert p.now['paused'] and p.now['at'] == 100 and c.lit[-1] is False
+        assert reported[-1] == {'section': 'kid_english', 'id': 'j.e2', 'index': 1, 'at': 100, 'duration': 300.0, 'title': '第 2 集'}
+        await p.music_resume()
+        await asyncio.sleep(0.05)
+        assert p.now['video']['src'].endswith('?t=100')
+        c.video_event('ended')                                          # 网页报放完了：记进度、下一个（音频）
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if p.now['media'] == 'audio':
+                break
+        assert reported[-1]['at'] == 300 and p.now['name'] == '两只老虎' and c.lit[-1] is False and ffmpeg
+        await p.stop()
+    asyncio.run(run())
+
+
+def test_lesson_and_cook_video(tmp_path, monkeypatch, ffmpeg):
+    c = make_client(tmp_path, monkeypatch, ffmpeg)
+
+    async def run():
+        r = await c.music_control('play', section='英语', lesson=3)
+        assert r['response'] == '好，英语启蒙第 3 个，两只老虎。'
+        assert any('lesson=3' in a for a, _ in c.asked) and any('device=dev1' in a for a, _ in c.asked)
+        await c.media.stop()
+        assert (await c.music_control('cook_video'))['pass']             # 没在做菜
+        c.cooking = {'title': '红烧肉', 'steps': ['a', 'b'], 'i': 0}
+        await c._cook_video('红烧肉')
+        assert c.cooking['video']['id'] == 'j.v1' and any('section=recipes' in a and 'video=1' in a for a, _ in c.asked)
+        r = await c.music_control('cook_video')
+        assert r['response'] == '好，放红烧肉的做法。' and c.media.now['media'] == 'video'
+        await c.media.stop()
+        c.kids = kids.normalize({'enabled': True, 'bedtime': ''})        # 不管现在几点
+        await c.music_control('play', query='两只老虎')
+        assert 'kids=1' in [a for a, _ in c.asked if a.startswith('/kiosk/media/find')][-1]   # 儿童模式只找儿童区
+        await c.media.stop()
+    asyncio.run(run())

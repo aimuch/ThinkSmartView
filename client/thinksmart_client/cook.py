@@ -3,7 +3,7 @@
 without the wake word and without the hub (only the step's words are synthesised by it)."""
 import re
 
-WORDS = ['下一步', '上一步', '再说一遍', '开始计时', '退出做菜']
+WORDS = ['下一步', '上一步', '再说一遍', '开始计时', '退出做菜', '看视频']
 IDLE_SECONDS = 30 * 60
 _STEP = re.compile(r'^\s*(?:\d+[.、)）]|第[一二三四五六七八九十\d]+步[:：、]?)\s*(.+)$')
 _MINUTES = re.compile(r'(\d+(?:\.\d+)?)\s*(?:分钟|分)')

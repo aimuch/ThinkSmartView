@@ -241,6 +241,16 @@ class Player:
         self.music_info = {'ready': False, 'tags': {}}   # 网关有没有接音乐库、标了哪些（app 定时问）
         self._offset = 0.0  # 这首从第几秒开始放的（暂停后接着放）
         self._pushed = 0    # 这次放出去多少个采样
+        # 视频（设计画布第 60 块）：网页的 <video> 放，放到哪、放完了由网页报回来（video_report）
+        self.video_info = None          # async id → {'direct': bool}：能直接拖动，还是转码（要从中间开始带 ?t=）
+        self.on_video = lambda on: None  # 屏幕常亮
+        self.on_progress = None          # 按顺序的分区：报给网关记进度
+        self.section = None              # 正在放的分区 {'id', 'name', 'play'}
+        self._video = None               # 正在放的视频 {'src', 'seek', 'base'}
+        self._video_pos = 0.0
+        self._video_evt = None
+        self._video_result = None
+        self._reported = 0.0
 
     def view(self):
         return {'playing': self.now, 'stations': [{'id': k, 'name': v[0]} for k, v in STATIONS.items()],
@@ -249,8 +259,13 @@ class Player:
 
     # ---- 音乐 (设计画布第 58 块)
 
+    def is_video(self):
+        return bool(self.queue and self.queue.current.get('media') == 'video')
+
     def position(self):
         """这首放到第几秒。"""
+        if self.is_video():
+            return self._video_pos
         return self._offset + self._pushed / RATE
 
     def _music_now(self, paused=False):
@@ -261,22 +276,26 @@ class Player:
                     'album': t.get('album') or '', 'cover': t.get('cover') or '', 'duration': int(t.get('duration') or 0),
                     'list': getattr(self, '_list_name', ''), 'index': q.pos + 1, 'count': len(q.order), 'mode': q.mode,
                     'next': None if len(q.tracks) < 2 and q.mode != 'one' else {'name': nxt.get('title') or '', 'artist': nxt.get('artist') or ''},
-                    'paused': paused, 'at': round(self.position(), 1), 'since': time.time(), 'ends': ends}
+                    'paused': paused, 'at': round(self.position(), 1), 'since': time.time(), 'ends': ends,
+                    'media': t.get('media') or 'audio', 'section': self.section}
+        if self.is_video() and self._video:
+            self.now['video'] = dict(self._video)
         return self.now
 
-    async def play_music(self, tracks, start=0, mode='loop', name='', minutes=None):
-        """放一串歌（找到的、按标签挑的）。minutes：多久后停（None/0 一直放）。"""
+    async def play_music(self, tracks, start=0, mode='loop', name='', minutes=None, section=None, at=0.0):
+        """放一串歌或视频（找到的、分区里的）。minutes：多久后停（None/0 一直放）。section：按顺序的分区要记进度；
+        at：第一个从第几秒开始（接着上次的）。"""
         if not self.stream_url:
-            raise ValueError('还没连上网关，放不了歌')
+            raise ValueError('还没连上网关，放不了')
         q = Queue(tracks, start, mode or 'loop')
         await self.stop(quiet=True)
-        self.queue, self._list_name = q, name
+        self.queue, self._list_name, self.section = q, name, section
         self.now = {'kind': 'music', 'ends': time.time() + float(minutes) * 60 if minutes else None}
-        self._start_track(0.0)
+        self._start_track(float(at or 0))
         return self.now
 
     def _start_track(self, offset):
-        self._offset, self._pushed = offset, 0
+        self._offset, self._pushed, self._video_pos = offset, 0, offset
         self._music_now()
         self.task = asyncio.create_task(self._music())
         self.on_change(self.view())
@@ -313,6 +332,7 @@ class Player:
         if not self.music_playing() or self.now.get('paused'):
             return self.now
         at = self.position()
+        self.report()
         task, self.task = self.task, None
         if task and not task.done():
             task.cancel()
@@ -322,7 +342,8 @@ class Player:
                 pass
         await self._kill()
         self.background.clear()
-        self._offset, self._pushed = at, 0
+        self._offset, self._pushed, self._video_pos = at, 0, at
+        self.on_video(False)
         self._music_now(paused=True)
         self.on_change(self.view())
         return self.now
@@ -355,6 +376,24 @@ class Player:
         frame = int(RATE * CHUNK) * 2 * 4
         while self.music_playing():
             track = self.queue.current
+            if track.get('media') == 'video':
+                result = await self._play_video(track)
+                if result == 'cut':
+                    break
+                if result == 'error':
+                    failures += 1
+                    if failures >= 3 or failures >= len(self.queue.order):
+                        self.on_error(f"放不了「{track.get('title') or '这个视频'}」：网关或媒体库连不上")
+                        break
+                else:
+                    failures = 0
+                    self.report(done=True)
+                self.queue.advance(auto=True)
+                self._offset, self._pushed, self._video_pos = 0.0, 0, 0.0
+                self._music_now()
+                self.on_change(self.view())
+                continue
+            self.on_video(False)
             url = self.stream_url(track['id'])
             args = ['ffmpeg', '-nostdin', '-loglevel', 'error', '-re']
             if self._offset > 0.5:
@@ -386,6 +425,8 @@ class Player:
                         x *= max(0.0, left / MUSIC_FADE)
                 self.background.push(x)
                 self._pushed += len(x)
+                if time.monotonic() - self._reported > 15:
+                    self.report()
             await self._kill()
             if cut:
                 break
@@ -397,15 +438,79 @@ class Player:
                     break
             else:
                 failures = 0
+                self.report(done=True)
             self.queue.advance(auto=True)
             self._offset, self._pushed = 0.0, 0
             self._music_now()
             self.on_change(self.view())
         if self.now and self.now.get('kind') == 'music':
-            self.now, self.queue = None, None
+            self.on_video(False)
+            self.now, self.queue, self._video = None, None, None
             self.on_change(self.view())
 
+    async def _play_video(self, track):
+        """网页放这一个视频，等它报「放完了」或「放不了」→ 'done' | 'error' | 'cut'（定时到了）。"""
+        offset = self._offset
+        try:
+            info = await self.video_info(track['id']) if self.video_info else {'direct': True}
+        except Exception:  # noqa: BLE001
+            info = {'direct': True}
+        direct = info.get('direct', True)
+        src = self.stream_url(track['id'])
+        if not direct and offset > 1:
+            src += f'?t={offset:.0f}'
+        self._video = {'src': src, 'seek': offset if direct else 0, 'base': 0 if direct else round(offset), 'direct': direct}
+        self._video_evt, self._video_result = asyncio.Event(), None
+        self._video_pos = offset
+        self._music_now()
+        self.on_video(True)
+        self.on_change(self.view())
+        try:
+            while True:
+                ends = self.now.get('ends') if self.now else None
+                if ends and time.time() >= ends:
+                    self.report()
+                    return 'cut'
+                try:
+                    await asyncio.wait_for(self._video_evt.wait(), 1.0)
+                    return self._video_result or 'done'
+                except asyncio.TimeoutError:
+                    continue
+        finally:
+            self._video_evt = None
+
+    def video_report(self, event, at=None, duration=None):
+        """网页报：'pos'（放到第几秒，转码的已经加上了开头）、'ended'、'error'。"""
+        if not self.is_video():
+            return
+        if at is not None:
+            self._video_pos = max(0.0, float(at))
+        if duration and not self.queue.current.get('duration'):
+            self.queue.current['duration'] = int(duration)
+        if event == 'pos' and time.monotonic() - self._reported > 15:
+            self.report()
+        if event in ('ended', 'error') and self._video_evt:
+            self._video_result = 'done' if event == 'ended' else 'error'
+            self._video_evt.set()
+
+    def report(self, done=False):
+        """按顺序的分区：告诉网关这个人放到哪（done：这一个放完了）。"""
+        self._reported = time.monotonic()
+        sec = self.section
+        if not (self.on_progress and sec and sec.get('play') == 'course' and self.queue):
+            return
+        t = self.queue.current
+        dur = float(t.get('duration') or 0)
+        at = dur if done and dur else self.position()
+        try:
+            self.on_progress({'section': sec['id'], 'id': t['id'], 'index': self.queue.order[self.queue.pos], 'at': round(at, 1),
+                              'duration': dur, 'title': t.get('title') or ''})
+        except Exception:  # noqa: BLE001
+            log.exception('media progress')
+
     async def stop(self, quiet=False):
+        if self.music_playing() and not self.now.get('paused'):
+            self.report()
         task, self.task = self.task, None
         if task and not task.done():
             task.cancel()
@@ -415,7 +520,9 @@ class Player:
                 pass
         await self._kill()
         self.background.clear()
-        self.queue = None
+        if self.queue:
+            self.on_video(False)
+        self.queue, self._video = None, None
         if self.now:
             self.now = None
             if not quiet:

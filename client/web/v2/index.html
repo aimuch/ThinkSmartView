@@ -504,15 +504,15 @@
       <p class="opt-note">直接说「把酱油加到购物清单」「购物清单里有什么」「酱油买了」。点「手机看」用手机扫码，在超市边买边划掉。</p>
     </div>
     <div class="alarms-card" id="mediaCard">
-      <div class="bright-head"><b>音乐、电台和助眠声</b><span class="bright-num" id="mediaNow"></span></div>
-      <!-- 音乐（设计画布第 58 块）：正在放的歌、下一首、播放方式、定时停；儿歌、睡前故事、随便听 -->
+      <div class="bright-head"><b>媒体、电台和助眠声</b><span class="bright-num" id="mediaNow"></span></div>
+      <!-- 媒体（设计画布第 58、60 块）：正在放的、下一个、播放方式、定时停；按儿童区、大人区排的分区 -->
       <div class="mu-box" id="musicBox"></div>
       <div class="bright-head"><b class="sub">助眠声</b></div>
       <div class="minutes" id="mediaSounds" style="grid-template-columns:repeat(4,1fr)"></div>
       <div class="minutes" id="mediaMinutes" style="grid-template-columns:repeat(4,1fr)"><button data-min="15">15 分钟</button><button data-min="30" class="on">30 分钟</button><button data-min="60">60 分钟</button><button data-min="0">一直放</button></div>
       <div class="bright-head"><b class="sub">电台</b></div>
       <div class="minutes" id="mediaStations" style="grid-template-columns:repeat(3,1fr)"></div>
-      <p class="opt-note">也可以直接说「放两只老虎」「放几首儿歌」「下一首」「放东方广播」「放雨声，半小时后关」「别放了」。说话时自动变小，闹钟响时静音。歌来自家里 NAS 上的音乐库（网关后台「音乐」页接）；电台用的是公开的直播流，偶尔会连不上。</p>
+      <p class="opt-note">也可以直接说「放两只老虎」「放英语第三课」「接着看动画」「看红烧肉的视频」「下一首」「放东方广播」「放雨声，半小时后关」「别放了」。说话时自动变小，闹钟响时静音。歌和视频来自家里 NAS（网关后台「媒体」页接、分区）；儿童模式只放儿童区的。电台用的是公开的直播流，偶尔会连不上。</p>
     </div>
    </section>
    <section class="set-pane" data-pane="family">
@@ -926,7 +926,20 @@
   <div class="cook-text" id="cookText"></div>
   <div class="cook-btns"><button class="ctl-big" id="cookPrev">上一步</button><button class="ctl-big tmr" id="cookTimer" hidden></button>
     <button class="ctl-big pri" id="cookNext">下一步</button><button class="ctl-big" id="cookExit">退出</button></div>
-  <div class="cook-say">不用叫醒，直接说「下一步」「上一步」「再说一遍」「开始计时」「退出做菜」</div>
+  <button class="cook-video" id="cookVideo" hidden><span class="cv-pic" id="cookVideoPic"></span><span><b>▶ 看视频</b><small id="cookVideoName"></small></span></button>
+  <div class="cook-say" id="cookSay">不用叫醒，直接说「下一步」「上一步」「再说一遍」「开始计时」「退出做菜」</div>
+</div>
+<!-- 放视频（设计画布第 60 块）：铺满屏幕，点一下出控制条，几秒后收起；说话时声音调小，闹钟响时静音 -->
+<div class="vid-ov" id="vidOv" hidden>
+  <video id="vid" playsinline preload="auto"></video>
+  <div class="vid-ui" id="vidUi">
+    <div class="vid-top"><span class="vid-tx"><b id="vidTitle"></b><small id="vidSub"></small></span><button class="vid-x" id="vidClose" aria-label="停下关掉">✕</button></div>
+    <div class="vid-duck" id="vidDuck" hidden>在听你说话，声音调小了</div>
+    <div class="vid-bot"><div class="vid-bar" id="vidBar"><i></i></div><div class="vid-time" id="vidTime"></div>
+      <div class="vid-ctl"><button data-vact="prev" aria-label="上一集">⏮</button><button data-vact="back" aria-label="后退 10 秒">↺10</button>
+        <button class="pp" data-vact="toggle" id="vidPP" aria-label="暂停">❚❚</button><button data-vact="fwd" aria-label="快进 10 秒">10↻</button>
+        <button data-vact="next" aria-label="下一集">⏭</button></div></div>
+  </div>
 </div>
 <!-- 米家传感器告警、翻译模式的横条 -->
 <div class="alert-bar" id="alertBar" hidden><span>⚠</span><b id="alertText"></b><span class="alert-time" id="alertTime"></span>

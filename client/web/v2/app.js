@@ -748,6 +748,8 @@ function musicClick(t) {
   const now = ui.media && ui.media.playing;
   const tg = t.closest('[data-mtag]');
   if (tg) return musicPost({ action: 'play', tag: tg.dataset.mtag }), true;
+  const sc = t.closest('[data-msec]');
+  if (sc) return musicPost({ action: 'play', section: sc.dataset.msec }), true;
   const a = t.closest('[data-mact]');
   if (!a) return false;
   const act = a.dataset.mact;
@@ -757,15 +759,23 @@ function musicClick(t) {
   else musicPost({ action: act });
   return true;
 }
-window.musicApi = { click: musicClick, cover: muCover, progress: muProgress, modes: MU_MODES, at: muAt, time: muTime };
+// 分区按钮（设计画布第 60 块）：儿童区在前；按顺序的写上接着第几个。儿童模式下网关只给儿童区
+function muSections(info, cls) {
+  const secs = (info && info.sections) || [];
+  const btn = x => `<button data-msec="${esc(x.id)}" class="${x.kid ? 'kid' : ''}">${esc(x.name)}${x.lesson ? `<small>第 ${x.lesson} 个</small>` : ''}</button>`;
+  const kid = secs.filter(x => x.kid), adult = secs.filter(x => !x.kid);
+  return [[kid, '儿童'], [adult, '大人']].filter(([l]) => l.length)
+    .map(([l, name]) => `<div class="mu-zone"><span class="mu-zl">${name}</span><div class="${cls}">${l.map(btn).join('')}</div></div>`).join('');
+}
+window.musicApi = { click: musicClick, cover: muCover, progress: muProgress, modes: MU_MODES, at: muAt, time: muTime, sections: muSections };
 function renderMusicBox(m, now) {
   const box = $('musicBox');
-  const info = m.music || {}, tags = info.tags || {};
+  const info = m.music || {};
   const music = now && now.kind === 'music' ? now : null;
-  const quick = info.ready ? `<div class="minutes mu-quick">${tags.kids ? '<button data-mtag="kids">儿歌</button>' : ''}${tags.bedtime ? '<button data-mtag="bedtime">睡前故事</button>' : ''}<button data-mtag="any">随便听</button></div>` : '';
+  const quick = info.ready ? muSections(info, 'mu-chips') : '';
   if (!music) {
-    box.innerHTML = info.ready ? `<div class="bright-head"><b class="sub">音乐</b><span class="bright-num">放起来以后能选播放方式、定时停</span></div>${quick}`
-      : '<div class="bright-head"><b class="sub">音乐</b></div><p class="opt-note mu-none">网关后台「音乐」页接好家里 NAS 上的 Navidrome（或往网关的 music 文件夹传歌）以后，这里能放儿歌、睡前故事和别的歌。</p>';
+    box.innerHTML = info.ready ? `<div class="bright-head"><b class="sub">媒体</b><span class="bright-num">点一下就放；按顺序的从上次的地方接着</span></div>${quick || '<p class="opt-note mu-none">分区都还是空的：在网关后台「媒体」页把文件夹加进去。</p>'}`
+      : '<div class="bright-head"><b class="sub">媒体</b></div><p class="opt-note mu-none">网关后台「媒体」页接好家里 NAS 上的 Navidrome、Jellyfin（或往网关的文件夹传）以后，这里能放儿歌、英语、动画和菜谱视频。</p>';
     return;
   }
   const left = music.ends ? Math.max(0, Math.round((music.ends - Date.now() / 1000) / 60)) : null;
@@ -774,15 +784,78 @@ function renderMusicBox(m, now) {
         <span class="mu-time" data-mu-time></span>${muProgress(music)}</div>
       <div class="mu-ctl"><button data-mact="prev" aria-label="上一首">⏮</button><button class="pp" data-mact="toggle" aria-label="${music.paused ? '继续' : '暂停'}">${music.paused ? '▶' : '❚❚'}</button>
         <button data-mact="next" aria-label="下一首">⏭</button><button data-mact="stop" aria-label="停">■</button></div></div>
-    <div class="mu-next">${music.next ? `下一首 <b>${esc(music.next.name)}</b>` : ''}${music.list ? `<span>${esc(music.list)} · ${music.index}/${music.count}</span>` : `<span>${music.index}/${music.count}</span>`}</div>
+    <div class="mu-next">${music.next ? `下一${music.media === 'video' ? '集' : '首'} <b>${esc(music.next.name)}</b>` : ''}${music.list ? `<span>${esc(music.list)} · ${music.index}/${music.count}</span>` : `<span>${music.index}/${music.count}</span>`}</div>
     <div class="minutes mu-modes">${Object.entries(MU_MODES).map(([k, [ic, n]]) => `<button data-mact="mode" data-mode="${k}" class="${music.mode === k ? 'on' : ''}">${ic} ${n}</button>`).join('')}</div>
     <div class="minutes mu-timer">${[15, 30, 60].map(x => `<button data-mact="timer" data-min="${x}" class="${left !== null && Math.abs(left - x) < 1 ? 'on' : ''}">${x} 分钟后停</button>`).join('')}<button data-mact="timer" data-min="0" class="${left === null ? 'on' : ''}">${left === null ? '不定时' : `还剩 ${left} 分 · 取消`}</button></div>
     ${quick}`;
   muTick();
 }
+/* ---- 放视频（设计画布第 60 块）：网关中转的 H.264；位置、放完了报给客户端（它管顺序、进度和定时） ---- */
+const vd = { src: '', base: 0, uiTimer: null, posTimer: null, id: '' };
+function vidAt() { return vd.base + ($('vid').currentTime || 0); }
+function vidReport(event) {
+  if (DEMO !== null) return;
+  const v = $('vid');
+  postJson('/api/daily/music', { action: 'video', event, at: vidAt(), duration: isFinite(v.duration) ? vd.base + v.duration : null }).catch(() => {});
+}
+function vidShowUi() {
+  $('vidUi').classList.add('on');
+  clearTimeout(vd.uiTimer);
+  vd.uiTimer = setTimeout(() => { if (!$('vid').paused) $('vidUi').classList.remove('on'); }, 4000);
+}
+function vidVolume() {   // 说话时压低，闹钟响时静音（视频的声音不走后台声道）
+  const st = ui.status && ui.status.state, ringing = ui.alarms && ui.alarms.ringing;
+  const talking = ['connecting', 'listening', 'thinking', 'speaking'].includes(st);
+  const v = $('vid');
+  v.volume = ringing ? 0 : talking ? 0.2 : 1;
+  $('vidDuck').hidden = !talking || !!ringing;
+}
+function renderVideo(now) {
+  const on = !!(now && now.kind === 'music' && now.media === 'video' && now.video);
+  const ov = $('vidOv'), v = $('vid');
+  ov.hidden = !on;
+  clearInterval(vd.posTimer);
+  if (!on) {
+    if (vd.src) { v.pause(); v.removeAttribute('src'); v.load(); vd.src = ''; vd.id = ''; }
+    return;
+  }
+  $('vidTitle').textContent = now.name;
+  $('vidSub').textContent = [now.list && `${now.list} · ${now.index}/${now.count}`, now.next && `下一集 ${now.next.name}`].filter(Boolean).join('　');
+  $('vidPP').textContent = now.paused ? '▶' : '❚❚';
+  ov.classList.toggle('seekable', !!now.video.direct);
+  if (DEMO !== null) { $('vidUi').classList.add('on'); return; }
+  const fresh = vd.id !== now.id || (vd.src !== now.video.src && !now.video.direct);
+  if (fresh) {
+    vd.src = now.video.src; vd.base = now.video.base || 0; vd.id = now.id;
+    v.src = now.video.src;
+    if (now.video.seek) v.addEventListener('loadedmetadata', () => { v.currentTime = now.video.seek; }, { once: true });
+    vidShowUi();
+  }
+  vidVolume();
+  if (now.paused) { v.pause(); $('vidUi').classList.add('on'); }
+  else { v.play().catch(() => {}); vd.posTimer = setInterval(() => vidReport('pos'), 5000); }
+}
+$('vid').addEventListener('ended', () => vidReport('ended'));
+$('vid').addEventListener('error', () => { if (vd.src) vidReport('error'); });
+$('vid').addEventListener('timeupdate', () => {
+  const v = $('vid'), d = isFinite(v.duration) ? vd.base + v.duration : 0, at = vidAt();
+  $('vidBar').firstElementChild.style.width = d ? Math.min(100, at / d * 100) + '%' : '0';
+  $('vidTime').textContent = muTime(at) + (d ? ' / ' + muTime(d) : '');
+});
+$('vidOv').addEventListener('click', e => {
+  const b = e.target.closest('[data-vact]');
+  if (!b) { if (!e.target.closest('#vidClose')) vidShowUi(); return; }
+  vidShowUi();
+  const v = $('vid'), act = b.dataset.vact, now = ui.media && ui.media.playing;
+  if (act === 'back' || act === 'fwd') { if (now && now.video && now.video.direct) v.currentTime = Math.max(0, v.currentTime + (act === 'back' ? -10 : 10)); }
+  else if (act === 'toggle') musicPost({ action: now && now.paused ? 'resume' : 'pause' });
+  else musicPost({ action: act });
+});
+$('vidClose').addEventListener('click', () => { vidReport('pos'); dailyPost('media', { stop: true }); });
 function renderMedia() {
   const m = ui.media, now = m && m.playing;
-  $('nowBar').hidden = !now;
+  renderVideo(now);
+  $('nowBar').hidden = !now || (now.kind === 'music' && now.media === 'video');
   clearInterval(nowTimer);
   const music = now && now.kind === 'music';
   $('nowPause').hidden = $('nowNext').hidden = !music;
@@ -907,6 +980,12 @@ function renderCook() {
   $('cookPrev').disabled = c.i === 0;
   $('cookNext').textContent = c.i === c.steps.length - 1 ? '做好了' : '下一步';
   $('cookTimer').hidden = !c.minutes;
+  $('cookVideo').hidden = !c.video;     // 菜谱分区里有这道菜的视频（设计画布第 60 块）
+  if (c.video) {
+    $('cookVideoName').textContent = c.video.title;
+    $('cookVideoPic').innerHTML = c.video.cover ? `<img src="/api/music/cover/${encodeURIComponent(c.video.cover)}" alt="" onerror="this.remove()">` : '';
+  }
+  $('cookSay').textContent = `不用叫醒，直接说「下一步」「上一步」「再说一遍」「开始计时」「退出做菜」${c.video ? '「看视频」' : ''}`;
   if (c.minutes) $('cookTimer').textContent = `⏱ 定 ${c.minutes} 分钟`;
 }
 const cookPost = (path, body) => DEMO === null && postJson(path, body || {}).then(r => { if (!r.ok && r.error) toast(r.error, 'error'); });
@@ -914,6 +993,7 @@ $('cookPrev').addEventListener('click', () => cookPost('/api/cook/go', { by: -1 
 $('cookNext').addEventListener('click', () => ui.cook && ui.cook.i === ui.cook.steps.length - 1 ? cookPost('/api/cook/stop') : cookPost('/api/cook/go', { by: 1 }));
 $('cookExit').addEventListener('click', () => cookPost('/api/cook/stop'));
 $('cookTimer').addEventListener('click', () => cookPost('/api/cook/timer'));
+$('cookVideo').addEventListener('click', () => musicPost({ action: 'cook_video' }));
 
 /* ---- 待机页 and the family album ---- */
 const sb = { last: Date.now(), shown: false, idx: 0, layer: 0, armed: null, timer: null };
@@ -2342,7 +2422,7 @@ const SET_GROUPS = [
   ['设备', [['screen', '屏幕和声音', '屏幕声音', '亮度、音量、熄屏、方向'], ['looks', '外观', '外观', '主题、形象、首页、待机页'],
             ['net', '网络', '网络', 'WiFi、蓝牙音箱、本机 IP'], ['system', '系统', '系统', '性能、更新、关机']]],
   ['日常', [['alarms', '闹钟和作息', '闹钟作息', '闹钟提醒、睡眠时段、天气播报、定时任务'], ['home', '家居', '家居', '米家、场景口令、主动告警'],
-            ['life', '生活', '生活', '清单、音乐、电台和助眠声']]],
+            ['life', '生活', '生活', '清单、媒体、电台和助眠声']]],
   ['家人', [['family', '家人', '家人', '家人声音、留言'], ['kids', '孩子和学习', '孩子学习', '儿童模式、学一学、最近 7 天']]],
   ['智能', [['voice', '语音', '语音', '唤醒词、回答的声音'], ['agent', '智能体', '智能体', '当前模型、可以叫的、聊天记录、大模型费用']]],
 ];
@@ -2575,6 +2655,7 @@ const handlers = {
   },
   state(s) {
     ui.status = s; renderStatus(); markLive(); renderHead();
+    if (!$('vidOv').hidden) vidVolume();
   },
   model(m) {
     server.models = m;
@@ -2597,6 +2678,7 @@ const handlers = {
   },
   alarms(a) {
     ui.alarms = a; renderAlarms();
+    if (!$('vidOv').hidden) vidVolume();
   },
   bluetooth(b) {
     ui.bluetooth = b; renderBluetooth();

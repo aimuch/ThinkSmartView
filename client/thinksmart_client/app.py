@@ -352,7 +352,7 @@ class Client:
             self.kids = kids.normalize(None)
         self.kids_seconds = kids.load_usage(datetime.date.today().isoformat())
         self.kids_clips = {}          # 'limit' / 'bedtime' -> the hub's synthesised words
-        self.music_info = {'ready': False, 'tags': {}}   # 网关的音乐库（refresh_music），播放器共用这个 dict
+        self.music_info = {'ready': False, 'sections': []}   # 网关的媒体库（refresh_music），播放器共用这个 dict
         self.notes = daily.load_notes()
         self.lists = None
         self.photo = None             # the photo question waiting for the phone (photo_start)
@@ -1147,16 +1147,22 @@ class Client:
         return self.media.view() if self.media else {'playing': None,
                                                      'stations': [{'id': k, 'name': v[0]} for k, v in media.STATIONS.items()],
                                                      'sounds': [{'id': k, 'name': v} for k, v in media.SOUNDS.items()],
-                                                     'music': getattr(self, 'music_info', {'ready': False, 'tags': {}}),
+                                                     'music': getattr(self, 'music_info', {'ready': False, 'sections': []}),
                                                      'modes': [{'id': k, 'name': v} for k, v in media.MODES.items()]}
 
     def _media_player(self):
         if self.media is None:
-            self.media = media.Player(self.audio.background, on_change=lambda v: self.events.publish('media', v),
+            self.media = media.Player(self.audio.background, on_change=self._media_changed,
                                       on_error=lambda t: self.events.publish('toast', {'kind': 'error', 'text': t}))
-            self.media.stream_url = lambda sid: f"{self.cfg['hub_http']}/kiosk/music/stream/{urllib.parse.quote(sid, safe='')}"
+            self.media.stream_url = lambda sid: f"{self.cfg['hub_http']}/kiosk/media/stream/{urllib.parse.quote(sid, safe='')}"
             self.media.music_info = self.music_info
+            self.media.video_info = self._video_info
+            self.media.on_video = self.screen.video
+            self.media.on_progress = lambda rec: bg.spawn(self._report_progress(rec), name='media-progress')
         return self.media
+
+    def _media_changed(self, view):
+        self.events.publish('media', view)
 
     def _kids_block(self):
         """儿童模式过了限时、到了睡觉时间：屏幕上点也不放（设计画布第 58 块）。"""
@@ -1164,46 +1170,75 @@ class Client:
         if why:
             raise ValueError(kids.SAY_BEDTIME if why == 'bedtime' else kids.SAY_LIMIT)
 
-    # ---- 音乐 (media.py, 网关 core/agent/music.py; 设计画布第 58 块) ----
+    # ---- 媒体：歌、故事、英语、动画、菜谱视频 (media.py, 网关 core/agent/media.py; 设计画布第 58、60 块) ----
+
+    def _media_query(self, **extra):
+        """问网关时带上这台设备（网关看这一轮是不是孩子在说）和儿童模式（开着只给儿童区）。"""
+        return urllib.parse.urlencode({'device': self.cfg['device_id'], 'kids': '1' if self.kids.get('enabled') else '0',
+                                       **{k: v for k, v in extra.items() if v not in (None, '')}})
 
     async def refresh_music(self):
-        """网关有没有接音乐库、标了儿歌和睡前故事没有（设置页、仪表盘的快捷按钮用）。"""
+        """网关有没有接媒体库、有哪些分区（设置页、仪表盘的按钮用；儿童模式只有儿童区）。"""
         try:
-            data = await self._hub_http('/kiosk/music')
+            data = await self._hub_http('/kiosk/media?' + self._media_query())
         except Exception as e:
-            log.info('music info from the hub: %s', e)
+            log.info('media info from the hub: %s', e)
             return
         if data and data.get('ok'):
-            info = {'ready': bool(data.get('ready')), 'tags': data.get('tags') or {}}
+            info = {'ready': bool(data.get('ready')), 'sections': data.get('sections') or []}
             if info != self.music_info:
                 self.music_info.clear()
                 self.music_info.update(info)
                 self.events.publish('media', self.media_view())
 
-    async def music_control(self, action='play', query=None, tag=None, mode=None, minutes=None):
-        """self.music.play 和屏幕上的按钮。返回 {'success', 'response'}；'pass': True 表示这句不归音乐管
-        （没在放歌却说「暂停」、没找到这首、没标儿歌、没接音乐库）：网关的常用口令就交给大模型。"""
+    async def _video_info(self, sid):
+        data = await self._hub_http(f"/kiosk/media/info/{urllib.parse.quote(sid, safe='')}")
+        return data if data and data.get('ok') else {'direct': True}
+
+    async def _report_progress(self, rec):
+        try:
+            await self._hub_http('/kiosk/media/progress', {'device': self.cfg['device_id'], **rec})
+        except Exception as e:
+            log.info('media progress: %s', e)
+
+    def video_event(self, event, at=None, duration=None):
+        """网页里的 <video> 报：pos（放到第几秒）、ended、error。"""
+        if self.media:
+            self.media.video_report(event, at, duration)
+
+    async def music_control(self, action='play', query=None, tag=None, mode=None, minutes=None, section=None, lesson=None,
+                            video=None):
+        """self.music.play 和屏幕上的按钮。返回 {'success', 'response'}；'pass': True 表示这句不归这里管
+        （没在放却说「暂停」、没找到、分区是空的、没接媒体库）：网关的常用口令就交给大模型。"""
         action = action or 'play'
         p = self._media_player()
         playing = p.music_playing()
-        if action == 'play' or (action == 'resume' and not playing and (query or tag)):
-            return await self._music_start(p, query, tag, mode, minutes)
+        if action == 'cook_video':
+            v = (self.cooking or {}).get('video')
+            if not v:
+                return {'success': False, 'pass': True, 'reason': '没在做菜，或者这道菜没有视频'}
+            action, query, section = 'play', None, None
+            now = await p.play_music([v], 0, 'loop', self.cooking['title'])
+            return {'success': True, 'response': f"好，放{now['name']}。"}
+        if action == 'play' or (action == 'resume' and not playing and (query or tag or section)):
+            return await self._music_start(p, query, tag, mode, minutes, section, lesson, video)
         if action == 'stop':
             await p.stop()
             return {'success': True, 'response': '好，停了。'}
         if action == 'timer':
             if not playing:
-                return {'success': False, 'pass': True, 'reason': '现在没在放歌'}
+                return {'success': False, 'pass': True, 'reason': '现在没在放'}
             p.music_timer(minutes)
             return {'success': True, 'response': f'好，{int(minutes)} 分钟后停。' if minutes else '好，不定时了。'}
         if not playing:
             if action in ('pause', 'resume') and p.now and p.now.get('kind') == 'radio' and action == 'pause':
                 await p.stop()                  # 电台没法暂停：停掉
                 return {'success': True, 'response': '好，电台停了。'}
-            return {'success': False, 'pass': True, 'reason': '现在没在放歌'}
+            return {'success': False, 'pass': True, 'reason': '现在没在放'}
+        what = '集' if p.is_video() else '首'
         if action == 'next':
             now = await p.music_next()
-            return {'success': True, 'response': f"下一首，{now['name']}。"}
+            return {'success': True, 'response': f"下一{what}，{now['name']}。"}
         if action == 'prev':
             now = await p.music_prev()
             return {'success': True, 'response': f"好，{now['name']}。"}
@@ -1224,12 +1259,15 @@ class Client:
         if action == 'status':
             now = p.now
             return {'success': True, 'playing': now['name'], 'artist': now['artist'], 'paused': now['paused'],
-                    'mode': media.MODES[now['mode']], 'next': (now.get('next') or {}).get('name'),
-                    'response': f"正在放{now['name']}" + (f"，{now['artist']}唱的" if now['artist'] else '') + '。'}
+                    'video': now.get('media') == 'video', 'mode': media.MODES[now['mode']], 'next': (now.get('next') or {}).get('name'),
+                    'section': (now.get('section') or {}).get('name'), 'index': now['index'], 'count': now['count'],
+                    'response': f"正在放{now['name']}" + (f"，{now['artist']}" if now['artist'] else '') + '。'}
         raise ValueError(f'不认识的操作：{action}')
 
-    async def _music_start(self, p, query, tag, mode, minutes):
-        if query:
+    async def _music_start(self, p, query, tag, mode, minutes, section=None, lesson=None, video=None):
+        if tag in ('kids', 'bedtime'):           # 58 块的说法
+            section, tag = {'kids': 'songs', 'bedtime': 'stories'}[tag], None
+        if query and not video and not section:
             # 「放雨声」「放东方广播」：先认助眠声和电台（说法和歌名撞了，它们优先；助眠声儿童模式睡觉时间也能放）
             sound = media.find_sound(query)
             if sound:
@@ -1240,37 +1278,63 @@ class Client:
             if key:
                 now = await p.play_radio(key)
                 return {'success': True, 'response': f"好，开始放{now['name']}。"}
-            path = '/kiosk/music/find?' + urllib.parse.urlencode({'q': query, 'n': 30})
+        self._kids_block()
+        if section and not query:
+            path = f"/kiosk/media/section/{urllib.parse.quote(str(section), safe='')}?" + self._media_query(lesson=lesson, n=40)
+        elif query:
+            path = '/kiosk/media/find?' + self._media_query(q=query, n=30, section=section,
+                                                            video={True: '1', False: '0'}.get(video))
         else:
-            self._kids_block()
             path = f"/kiosk/music/tag/{tag or 'any'}?n=40"
         try:
             data = await self._hub_http(path)
         except Exception as e:
-            log.info('music: hub %s', e)
-            return {'success': False, 'pass': True, 'reason': '网关连不上，放不了歌'}
+            log.info('media: hub %s', e)
+            return {'success': False, 'pass': True, 'reason': '网关连不上，放不了'}
         tracks = (data or {}).get('tracks') or []
         if not tracks:
-            reason = (data or {}).get('error') or (f'音乐库里没找到「{query}」' if query else '没有能放的歌')
+            reason = (data or {}).get('error') or (f'媒体库里没找到「{query}」' if query else '没有能放的')
             return {'success': False, 'pass': True, 'reason': reason}
-        name = data.get('name') or ''
-        if query and data.get('match') == 'song':
-            name = ''
-        default_mode = 'shuffle' if tag else 'loop'
-        now = await p.play_music(tracks, 0, mode or default_mode, name, minutes)
+        sec = data.get('section') if isinstance(data.get('section'), dict) else None
         tail = f'，{int(minutes)} 分钟后停' if minutes else ''
-        if tag == 'kids' or tag == 'bedtime':
-            say = f"好，放{data.get('name')}，第一首{now['name']}{tail}。"
-        elif tag:
-            say = f"好，随便放几首，第一首{now['name']}{tail}。"
-        elif data.get('match') == 'artist':
-            say = f"好，放{data.get('name')}的歌，第一首{now['name']}{tail}。"
-        elif data.get('match') == 'album':
-            say = f"好，放专辑{data.get('name')}{tail}。"
+        if sec:
+            course = sec['play'] == 'course'
+            now = await p.play_music(tracks, data.get('start') or 0, mode or 'loop', sec['name'], minutes, section=sec,
+                                     at=data.get('at') or 0)
+            if course and lesson:
+                say = f"好，{sec['name']}第 {lesson} 个，{now['name']}{tail}。"
+            elif course and data.get('at'):
+                say = f"好，{sec['name']}接着上次的，{now['name']}{tail}。"
+            elif course:
+                say = f"好，{sec['name']}第 {data.get('lesson') or 1} 个，{now['name']}{tail}。"
+            else:
+                say = f"好，放{sec['name']}，第一{'集' if now.get('media') == 'video' else '首'}{now['name']}{tail}。"
         else:
-            say = f"好，放{now['name']}{tail}。"
-        log.info('music: %s → %d tracks, first %s', query or tag, len(tracks), now['name'])
+            name = '' if query and data.get('match') == 'song' else (data.get('name') or '')
+            now = await p.play_music(tracks, 0, mode or ('shuffle' if tag else 'loop'), name, minutes)
+            if tag:
+                say = f"好，随便放几首，第一首{now['name']}{tail}。"
+            elif data.get('match') == 'artist':
+                say = f"好，放{data.get('name')}的歌，第一首{now['name']}{tail}。"
+            elif data.get('match') == 'album':
+                say = f"好，放{data.get('name')}{tail}。"
+            else:
+                say = f"好，放{now['name']}{tail}。"
+        log.info('media: %s → %d, first %s (%s)', query or section or tag, len(tracks), now['name'], now.get('media'))
         return {'success': True, 'response': say}
+
+    async def _cook_video(self, title):
+        """做菜模式（设计画布第 60 块）：网关「菜谱」分区里有这道菜的视频，步骤旁边就多一个「看视频」。"""
+        try:
+            data = await self._hub_http('/kiosk/media/find?' + self._media_query(q=title, n=1, section='recipes', video='1'))
+        except Exception as e:
+            log.info('cook video: %s', e)
+            return
+        tracks = (data or {}).get('tracks') or []
+        if tracks and self.cooking and self.cooking['title'] == title:
+            self.cooking['video'] = tracks[0]
+            log.info('cook video for %r: %s', title, tracks[0]['title'])
+            self.publish_cook()
 
     async def media_play(self, kind, name, minutes=None):
         if kind == 'radio':
@@ -1440,7 +1504,9 @@ class Client:
         if not c:
             return {'on': False}
         step = c['steps'][c['i']]
-        return {'on': True, 'title': c['title'], 'steps': c['steps'], 'i': c['i'], 'minutes': cook.minutes(step)}
+        v = c.get('video')
+        return {'on': True, 'title': c['title'], 'steps': c['steps'], 'i': c['i'], 'minutes': cook.minutes(step),
+                'video': {'id': v['id'], 'title': v['title'], 'cover': v.get('cover') or ''} if v else None}
 
     def publish_cook(self):
         self.events.publish('cook', self.cook_view())
@@ -1463,6 +1529,7 @@ class Client:
             await self._rebuild_kws()
         log.info('cooking %r: %d steps', card['text'], len(found))
         self.publish_cook()
+        bg.spawn(self._cook_video(card['text']), name='cook-video')
         if read:
             await self._read_step()
         return self.cook_view()
@@ -1513,6 +1580,10 @@ class Client:
             elif label == '退出做菜':
                 await self.cook_stop()
                 await self._say_local('好，退出做菜模式。')
+            elif label == '看视频':                 # 菜谱分区里有这道菜的视频（设计画布第 60 块）
+                r = await self.music_control('cook_video')
+                if not r.get('success'):
+                    await self._say_local('这道菜没有找到视频。')
         except ValueError as e:
             await self._say_local(str(e))
 
@@ -1672,11 +1743,19 @@ class Client:
                     self.kids_seconds = 0.0
                     self.publish_kids()
                 self._kids_day = today
-                if (self.kids['enabled'] and self.media and self.media.now and self.media.now.get('kind') in ('music', 'radio')
-                        and kids.blocked(self.kids, self.kids_seconds) == 'bedtime'):
-                    log.info('kids mode: bedtime, music stopped')
-                    await self.media.stop()          # 到睡觉时间歌停下（助眠声照放）
-                    self.events.publish('toast', {'kind': 'info', 'text': '到睡觉时间了，歌停下了'})
+                m = self.media
+                watching = bool(m and m.is_video() and not m.now.get('paused'))
+                if self.kids['enabled'] and watching and self.state not in ('listening', 'thinking', 'speaking'):   # 看视频也算孩子的时间（设计画布第 60 块；说话时下面算过了）
+                    before = int(self.kids_seconds // 60)
+                    self.kids_seconds += 5
+                    kids.save_usage(today, self.kids_seconds)
+                    if int(self.kids_seconds // 60) != before:
+                        self.publish_kids()
+                why = kids.blocked(self.kids, self.kids_seconds) if self.kids['enabled'] else None
+                if m and m.now and ((why == 'bedtime' and m.now.get('kind') in ('music', 'radio')) or (why and watching)):
+                    log.info('kids mode: %s, media stopped', why)
+                    await m.stop()                   # 到睡觉时间歌停下（助眠声照放）；过了限时视频停下
+                    self.events.publish('toast', {'kind': 'info', 'text': '到睡觉时间了，先停下吧' if why == 'bedtime' else '今天看得够多啦，明天再看吧'})
                 if self.kids['enabled'] and self.state in ('listening', 'thinking', 'speaking'):
                     before = int(self.kids_seconds // 60)
                     self.kids_seconds += 5
