@@ -1103,9 +1103,10 @@ def s_media(s):
     return s.get("media") or "audio"
 
 
-async def find(q: str, n: int = 20, kid: bool = False, video: bool = None, section: str = None) -> dict:
+async def find(q: str, n: int = 20, kid: bool = False, video: bool = None, section: str = None, allowed: list = None) -> dict:
     """「两只老虎」「小猪佩奇」「红烧肉」→ {"tracks", "match": song|album|artist|"", "name", "section"}。
-    kid：只在儿童区里找；video=True：只要视频；section：只在这个分区（id 或说法）里找。"""
+    kid：只在儿童区里找；video=True：只要视频；section：只在这个分区（id 或说法）里找；
+    allowed：认出的孩子能用的分区 id（「孩子和学习」页设的，None 是儿童区全部）。"""
     q, want = split_query(q)
     if not norm(q):
         return {"tracks": [], "match": "", "name": ""}
@@ -1121,7 +1122,7 @@ async def find(q: str, n: int = 20, kid: bool = False, video: bool = None, secti
     if kid:                                    # 孩子：只在儿童区的东西里比
         pool = []
         for sec in d["sections"]:
-            if sec["kid"] and sec["refs"]:
+            if sec["kid"] and sec["refs"] and (allowed is None or sec["id"] in allowed):
                 try:
                     pool += await section_items(sec, d)
                 except MediaError:
@@ -1165,7 +1166,8 @@ async def find(q: str, n: int = 20, kid: bool = False, video: bool = None, secti
     return {"tracks": out, "match": "song" if out else "", "name": out[0]["title"] if out else ""}
 
 
-async def play_section(word_or_id: str, kid: bool = False, who: str = "", lesson: int = None, n: int = 40) -> dict:
+async def play_section(word_or_id: str, kid: bool = False, who: str = "", lesson: int = None, n: int = 40,
+                       allowed: list = None) -> dict:
     """「放英语」「放英语第三课」「放儿歌」→ {"section", "tracks", "start", "at", "lesson"}。
     随机的：打乱挑 n 个；按顺序的：全部按顺序，从 lesson（第几个）或这个人上次的地方开始。"""
     d = load()
@@ -1176,6 +1178,8 @@ async def play_section(word_or_id: str, kid: bool = False, who: str = "", lesson
         raise MediaError(f"没有「{word_or_id}」这个分区")
     if kid and not sec["kid"]:
         raise MediaError("这个是大人区的，孩子放不了")
+    if kid and allowed is not None and sec["id"] not in allowed:
+        raise MediaError(f"「{sec['name']}」没给{who or '这个孩子'}开：在网关后台「孩子和学习」页勾上")
     if not sec["refs"]:
         if sec["id"] == "music" and sources(d):                # 「放首歌」：音乐区空着就随便放
             r = await random_audio(n)
@@ -1303,12 +1307,12 @@ def view() -> dict:
     }
 
 
-def device_view(who: str = "", kids: bool = False) -> dict:
+def device_view(who: str = "", kids: bool = False, allowed: list = None) -> dict:
     """设备的卡片和设置页：能放的分区（儿童模式只给儿童区）、按顺序的从第几个接着。"""
     d = load()
     secs = []
     for s in d["sections"]:
-        if not s["refs"] or (kids and not s["kid"]):
+        if not s["refs"] or (kids and not s["kid"]) or (kids and allowed is not None and s["id"] not in allowed):
             continue
         item = {"id": s["id"], "name": s["name"], "kid": s["kid"], "play": s["play"]}
         if s["play"] == "course":

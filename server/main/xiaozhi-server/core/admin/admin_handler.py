@@ -30,7 +30,7 @@ from core.admin import auth, brand, catalog, config_store, connections, pages, p
 from core.admin.grokbot import GrokBotAdmin
 from core.admin.status import _claude_version, collect_status
 from core import billing
-from core.agent import chat_history, llm_router, media, photo_ask, reports
+from core.agent import chat_history, family, llm_router, media, photo_ask, reports
 from core.utils import local_voiceprint  # noqa: F401  导入时会初始化日志（asyncio.run），不能放到请求里再导入
 from core.agent.agent_session import ErrorKind
 from core.agent.grokbot_client import GrokBotError
@@ -245,6 +245,12 @@ class AdminHandler:
                 web.post("/kiosk/media/progress", self.handle_kiosk_media_progress),
                 web.get("/kiosk/media/stream/{id}", self.handle_media_stream),
                 web.get("/kiosk/media/cover/{id}", self.handle_media_cover),
+                # 孩子和学习（core/agent/family.py，设计画布第 61 块）
+                web.get("/admin/api/kids", self.handle_kids),
+                web.post("/admin/api/kids", self.handle_kids_save),
+                web.get("/kiosk/kids", self.handle_kiosk_kids),
+                web.get("/kiosk/kids/learn", self.handle_kiosk_kids_learn),
+                web.post("/kiosk/kids/report", self.handle_kiosk_kids_report),
                 # 58 块的客户端（0.1.685）还在用
                 web.get("/kiosk/music", self.handle_kiosk_music),
                 web.get("/kiosk/music/find", self.handle_kiosk_media_find),
@@ -1667,8 +1673,10 @@ class AdminHandler:
         body = await self._read_json(request)
         device = str(body.get("device") or "")
         try:
-            if "kids" in body:
-                await self._blocking(device_prefs.put_kids, device, body.get("kids") or {})
+            if "kids" in body:            # 孩子和学习（设计画布第 61 块）：限时、睡觉时间写成全家最新的
+                kids = await self._blocking(family.from_device, device, body.get("kids") or {})
+                if "translate" not in body:
+                    return self._json({"ok": True, "kids": kids})
             if "translate" in body:
                 await self._blocking(device_prefs.put_translate, device, body.get("translate") or {})
         except (ValueError, TypeError) as e:
@@ -2390,19 +2398,21 @@ class AdminHandler:
         if not self._from_this_machine(request):
             return self._error("仅限本机", 403)
         who, kid = self._media_who(request)
-        return self._json({"ok": True, "who": who, "kid": kid, **(await self._blocking(media.device_view, who, kid))})
+        allowed = await self._blocking(family.allowed_sections, who) if kid else None
+        return self._json({"ok": True, "who": who, "kid": kid, **(await self._blocking(media.device_view, who, kid, allowed))})
 
     async def handle_kiosk_media_find(self, request: web.Request):
         """?q=两只老虎&n=20&video=1&section=recipes&device=&kids= → {"tracks", "match", "name"}；
         没接媒体库、没找到时 ok 照样是 true，tracks 空，error 说原因。"""
         if not self._from_this_machine(request):
             return self._error("仅限本机", 403)
-        _, kid = self._media_who(request)
+        who, kid = self._media_who(request)
         video = {"1": True, "0": False}.get(request.query.get("video") or "")
         try:
             n = max(1, min(50, int(request.query.get("n") or 20)))
+            allowed = await self._blocking(family.allowed_sections, who) if kid else None
             r = await media.find(str(request.query.get("q") or "")[:40], n, kid=kid, video=video,
-                                 section=str(request.query.get("section") or "") or None)
+                                 section=str(request.query.get("section") or "") or None, allowed=allowed)
         except media.MediaError as e:
             return self._json({"ok": True, "tracks": [], "match": "", "error": str(e)})
         except ValueError:
@@ -2417,7 +2427,8 @@ class AdminHandler:
         try:
             lesson = int(request.query.get("lesson") or 0) or None
             n = max(1, min(100, int(request.query.get("n") or 40)))
-            r = await media.play_section(request.match_info["section"], kid=kid, who=who, lesson=lesson, n=n)
+            allowed = await self._blocking(family.allowed_sections, who) if kid else None
+            r = await media.play_section(request.match_info["section"], kid=kid, who=who, lesson=lesson, n=n, allowed=allowed)
         except media.MediaError as e:
             return self._json({"ok": True, "tracks": [], "error": str(e)})
         except ValueError:
@@ -2447,6 +2458,88 @@ class AdminHandler:
         except (media.MediaError, ValueError, TypeError) as e:
             return self._error(str(e) or "参数不对", 400)
         return self._json({"ok": True, "who": who, **rec})
+
+    # ---------- 孩子和学习（core/agent/family.py，设计画布第 61 块） ----------
+
+    async def _kids_view(self) -> dict:
+        from core.utils import device_prefs
+
+        d = await self._blocking(family.load)
+        names = await self._blocking(self._device_names)
+        kids = await self._blocking(family.children, d)
+        mv = await self._blocking(media.view)
+        prog = await self._blocking(media.progress_list)
+        devices = []
+        for dev, name in names.items():
+            k = await self._blocking(device_prefs.get_kids, dev)
+            devices.append({"id": dev, "name": name, "enabled": bool(k.get("enabled")), "age": k.get("age") or 3,
+                            "today": await self._blocking(family.today_talk, dev)})
+        secs = [{"id": s["id"], "name": s["name"], "kid": s["kid"], "play": s["play"], "count": len(s["refs"])} for s in mv["sections"]]
+        for c in kids:
+            c["progress"] = [p for p in prog if p["who"] == c["name"]]
+        return {"ok": True, "children": kids, "rules": d["rules"], "devices": devices, "learn": d["learn"],
+                "math": family.MATH, "sections": secs, "week": await self._blocking(family.week, None, names)}
+
+    async def handle_kids(self, request: web.Request):
+        self._require_login(request)
+        return self._json(await self._kids_view())
+
+    async def handle_kids_save(self, request: web.Request):
+        """{"op": "rules"|"child"|"add_child"|"remove_child"|"learn", ...} / {"op": "device", "id", "enabled", "age"} /
+        {"op": "progress", "name", "section", "lesson"}：调到第几个。"""
+        self._require_login(request)
+        from core.utils import device_prefs
+
+        body = await self._read_json(request)
+        try:
+            if body.get("op") == "device":
+                dev = str(body.get("id") or "")
+                cur = await self._blocking(device_prefs.get_kids, dev)
+                await self._blocking(device_prefs.put_kids, dev, {**cur, **{k: body[k] for k in ("enabled", "age") if k in body}})
+            elif body.get("op") == "progress":
+                lesson = int(body.get("lesson") or 1)
+                sid = str(body.get("section") or "")
+                items = await media.section_items(media.section_of(await self._blocking(media.load), sid) or {"id": sid, "refs": []})
+                if not 1 <= lesson <= max(1, len(items)):
+                    raise ValueError(f"一共 {len(items)} 个")
+                it = items[lesson - 1] if items else {"id": "", "title": ""}
+                await self._blocking(media.save_progress, sid, str(body.get("name") or ""), it["id"], lesson - 1, 0, 0, it["title"])
+            else:
+                await self._blocking(family.apply, body)
+        except media.MediaError as e:
+            return self._error(str(e), 400)
+        except (ValueError, TypeError) as e:
+            return self._error(str(e) or "参数不对", 400)
+        return self._json(await self._kids_view())
+
+    async def handle_kiosk_kids(self, request: web.Request):
+        """?device=：这台设备该用的儿童模式（每台的开关和几岁 + 全家一份的限时、睡觉时间、声音，带 updated）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        return self._json({"ok": True, "kids": await self._blocking(family.device_kids, str(request.query.get("device") or ""))})
+
+    async def handle_kiosk_kids_learn(self, request: web.Request):
+        """?kind=chars|poem|math|why&age=：学一学写进提示词的那一段（后台「孩子和学习」页改的内容）；不认识的给空。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        try:
+            age = int(request.query.get("age") or 6)
+        except ValueError:
+            age = 6
+        text = await self._blocking(family.learn_text, str(request.query.get("kind") or ""), age)
+        return self._json({"ok": True, "text": text})
+
+    async def handle_kiosk_kids_report(self, request: web.Request):
+        """{"device", "kind": talk|learn|study|played, ...}：设备报的记录（只有分钟数、次数和名字）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        body = await self._read_json(request)
+        try:
+            await self._blocking(family.record, str(body.get("device") or ""), str(body.get("kind") or ""), body,
+                                 body.get("date") or None)
+        except (ValueError, TypeError) as e:
+            return self._error(str(e) or "记录不对", 400)
+        return self._json({"ok": True})
 
     async def handle_kiosk_music(self, request: web.Request):
         """58 块的设备（0.1.685）：能不能放、儿歌和睡前故事标了几项。"""

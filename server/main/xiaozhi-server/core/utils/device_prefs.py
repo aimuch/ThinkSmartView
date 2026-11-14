@@ -37,6 +37,14 @@ def kids(device: str):
     return k if k.get("enabled") else None
 
 
+def get_kids(device: str) -> dict:
+    """这台设备的儿童模式原样（开没开都给）：{"enabled", "age", "voice", "updated"}。"""
+    if not device:
+        return {}
+    with _lock:
+        return dict((_load().get(device) or {}).get("kids") or {})
+
+
 def put_kids(device: str, value: dict):
     if not device:
         raise ValueError("缺少设备 ID")
