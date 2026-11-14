@@ -193,6 +193,7 @@ function hubTile(x) {
 }
 // home.js 的 renderHome 调：返回这台设备有没有接入智能中枢；shown：家居页现在在「智能中枢」那一页（设计画布第 45 块）
 window.hubAvailable = () => !!A().smart_hub;
+window.rackAvailable = () => !!A().rack_status;   // 家居的「机柜」分页（home.js，设计画布第 62 块）
 window.hubRender = shown => {
   const box = $('hHub');
   if (!A().smart_hub) { box.hidden = true; return false; }

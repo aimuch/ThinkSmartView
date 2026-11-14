@@ -2632,6 +2632,7 @@ const handlers = {
     if (s.airplay && handlers.airplay) handlers.airplay(s.airplay);
     if (s.intercom && handlers.intercom) handlers.intercom(s.intercom);
     if (s.listen && handlers.listen) handlers.listen(s.listen);
+    if (s.home_tabs && handlers.home_tabs) handlers.home_tabs(s.home_tabs);
     if (s.cook) { ui.cook = s.cook; renderCook(); }
     if (s.media) { ui.media = s.media; renderMedia(); }
     if (s.scenes) { ui.scenes = s.scenes; renderScenes(); }

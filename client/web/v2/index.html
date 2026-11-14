@@ -474,6 +474,13 @@
     </div>
    </section>
    <section class="set-pane" data-pane="home">
+    <div class="alarms-card" id="htCard">
+      <div class="bright-head"><b>家居里显示</b><span class="bright-num">点亮的出现在「家居」顶上的分页里</span></div>
+      <div class="minutes" id="htShow"><button data-t="mi">米家</button><button data-t="hub">智能中枢</button><button data-t="rack">机柜</button></div>
+      <div class="bright-head"><b class="sub">打开「家居」先看</b></div>
+      <div class="minutes" id="htFirst"><button data-t="">上次看的</button><button data-t="mi">米家</button><button data-t="hub">智能中枢</button><button data-t="rack">机柜</button></div>
+      <p class="opt-note" id="htNote">智能中枢和机柜放的是它们自己的网页，和电脑上看到的一样。地址和令牌在网关后台「意图识别 → 插件」的「智能中枢」「机柜状态」里填；经设备不能登录、改密码、动备份和固件。</p>
+    </div>
     <div class="opt">
       <div class="opt-text">
         <b>米家账号</b>
@@ -693,7 +700,7 @@
       <p id="hSub">米家设备</p>
       <div class="h-home-menu" id="hHomeMenu"></div>
     </div>
-    <div class="h-src" id="hSrc" role="tablist" hidden><button data-src="mi" role="tab">米家</button><button data-src="hub" role="tab">智能中枢</button></div>
+    <div class="h-src" id="hSrc" role="tablist" hidden><button data-src="mi" role="tab">米家</button><button data-src="hub" role="tab">智能中枢</button><button data-src="rack" role="tab">机柜</button></div>
     <div class="w-btns">
       <button class="close" id="hRefresh" aria-label="刷新">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
@@ -721,6 +728,8 @@
   <div class="h-msg" id="hMsg"></div>
   <div class="h-rooms" id="hRooms"></div>
   </div>
+  <!-- 智能中枢、机柜自己的网页（设备本机的小代理 appproxy.py → 网关带令牌转过去；设计画布第 62 块） -->
+  <div class="h-app" id="hApp" hidden><p class="h-app-msg" id="hAppMsg"></p></div>
 </div>
 <!-- 智能中枢的灯和电源（work.js，设计画布第 38 块） -->
 <div class="h-detail" id="lDetail">

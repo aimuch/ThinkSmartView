@@ -15,15 +15,64 @@ function setSrc(src) {
   renderHome();
   if (window.dashRender) window.dashRender();
 }
-// 'mi' 或 'hub'：没接入智能中枢就是米家；没选过时米家没登录就先看智能中枢
+// 家居的分页（设计画布第 62 块）：米家、智能中枢、机柜；后两个放它们自己的网页（设备本机的小代理 appproxy.py）。
+// 设置里选显示哪些、先看哪个；网关没给这台设备打开对应插件的不显示
+const tabsCfg = () => ui.home_tabs || { show: ['mi', 'hub', 'rack'], first: '', urls: {} };
+function availableSrcs() {
+  const ok = { mi: true, hub: !!(window.hubAvailable && window.hubAvailable()), rack: !!(window.rackAvailable && window.rackAvailable()) };
+  const list = tabsCfg().show.filter(t => ok[t]);
+  return list.length ? list : ['mi'];
+}
+// 'mi'、'hub' 或 'rack'：没选过时按设置里的「先看」，再按上次看的；米家没登录时先看别的
 function currentSrc() {
-  if (!(window.hubAvailable && window.hubAvailable())) return 'mi';
-  if (mi.src !== 'mi' && mi.src !== 'hub') {
-    const saved = savedSrc(), loggedIn = !!(mi.view && mi.view.account && mi.view.state !== 'expired');
-    mi.src = saved === 'mi' || saved === 'hub' ? saved : (loggedIn ? 'mi' : 'hub');
+  const list = availableSrcs();
+  if (!list.includes(mi.src)) {
+    const first = tabsCfg().first, saved = savedSrc(), loggedIn = !!(mi.view && mi.view.account && mi.view.state !== 'expired');
+    mi.src = list.includes(first) ? first : list.includes(saved) ? saved : (loggedIn || list.length < 2 ? list[0] : list.find(t => t !== 'mi'));
   }
   return mi.src;
 }
+// 智能中枢、机柜自己的网页：只在看那一页时加载，切走或关掉「家居」就卸掉（两个网页都不小）
+let appOn = null;
+function renderApp(app, reload) {
+  const box = $('hApp');
+  box.hidden = !app;
+  if (app === appOn && !reload) return;
+  box.querySelectorAll('iframe').forEach(f => { f.src = 'about:blank'; f.remove(); });
+  appOn = app;
+  $('hAppMsg').textContent = '';
+  if (!app) return;
+  const url = (tabsCfg().urls || {})[app];
+  if (DEMO || !url) { $('hAppMsg').textContent = DEMO ? '演示模式里不加载它的网页' : '客户端还没准备好，稍后再试'; return; }
+  $('hAppMsg').textContent = '正在打开…';
+  const f = document.createElement('iframe');
+  f.title = app === 'hub' ? '智能中枢' : '机柜';
+  f.addEventListener('load', () => { if (appOn === app) $('hAppMsg').textContent = ''; });
+  f.src = url;
+  box.appendChild(f);
+}
+function renderHt() {
+  const c = tabsCfg();
+  $('htShow').querySelectorAll('[data-t]').forEach(b => b.classList.toggle('on', c.show.includes(b.dataset.t)));
+  $('htFirst').querySelectorAll('[data-t]').forEach(b => {
+    b.classList.toggle('on', b.dataset.t === c.first);
+    b.hidden = !!b.dataset.t && !c.show.includes(b.dataset.t);
+  });
+}
+async function sendHt(change) {
+  if (DEMO) { ui.home_tabs = Object.assign({}, tabsCfg(), change); renderHt(); renderHome(); return; }
+  const r = await postJson('/api/home-tabs', change);
+  if (r && r.ok) handlers.home_tabs(r.home_tabs);
+}
+handlers.home_tabs = v => { ui.home_tabs = v; if (!availableSrcs().includes(mi.src)) mi.src = null; renderHt(); renderHome(); };
+$('htShow').addEventListener('click', e => {
+  const b = e.target.closest('[data-t]');
+  if (!b) return;
+  const show = tabsCfg().show.includes(b.dataset.t) ? tabsCfg().show.filter(t => t !== b.dataset.t) : [...tabsCfg().show, b.dataset.t];
+  if (!show.length) return toast('至少留一个', 'info');
+  sendHt({ show });
+});
+$('htFirst').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (b) sendHt({ first: b.dataset.t }); });
 
 async function miFetch(path, body) {
   try {
@@ -37,6 +86,10 @@ async function miFetch(path, body) {
 }
 
 function openHome(on) {
+  if (on && !mi.open) {   // 设置里选了「先看」哪一页：每次打开都从它开始
+    const first = tabsCfg().first;
+    if (first && availableSrcs().includes(first)) mi.src = first;
+  }
   mi.open = on;
   $('home').classList.toggle('on', on);
   if (!on) closeDetail();
@@ -83,19 +136,20 @@ function renderHome() {
   renderMiSettings();
   const loggedIn = !!v.account && v.state !== 'expired';
   // 智能中枢（work.js，设计画布第 38 块）和米家分两页（第 45 块）：没选过时米家没登录就先看智能中枢
-  const hubOn = !!(window.hubAvailable && window.hubAvailable());
-  const onHub = currentSrc() === 'hub';
-  const hub = window.hubRender ? window.hubRender(onHub) : false;
-  $('hSrc').hidden = !hub;
-  $('hSrc').querySelectorAll('[data-src]').forEach(b => b.classList.toggle('on', b.dataset.src === mi.src));
-  $('home').classList.toggle('on-hub', onHub);
+  const src = currentSrc(), list = availableSrcs();
+  const onHub = src !== 'mi';          // 智能中枢、机柜：放它们自己的网页，米家那些都藏起来
+  if (window.hubRender) window.hubRender(false);   // 设备自己画的智能中枢那几块换成了它自己的网页
+  $('hSrc').hidden = list.length < 2;
+  $('hSrc').querySelectorAll('[data-src]').forEach(b => { b.hidden = !list.includes(b.dataset.src); b.classList.toggle('on', b.dataset.src === src); });
+  $('home').classList.toggle('on-app', onHub);
+  renderApp(onHub && mi.open ? src : null);
   const showLogin = !loggedIn && !onHub;
   // only one of the two takes the sheet's height: both flex:1, the QR pane overflowed its half and
   // the empty rooms box above it in the stack swallowed taps on 获取二维码
   $('hLogin').style.display = showLogin ? '' : 'none';
   $('hRooms').style.display = loggedIn && !onHub ? '' : 'none';
   $('hRefresh').style.display = (loggedIn && !onHub) || onHub ? '' : 'none';
-  $('hSub').textContent = onHub ? '智能中枢 · 蓝牙设备' : loggedIn ? `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
+  $('hSub').textContent = onHub ? (src === 'hub' ? '智能中枢 · 和电脑上的网页一样' : '机柜 · rack-screen 概览') : loggedIn ? `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
     : '用米家 App 扫码登录后显示家里的设备';
   // the home: its name with ▾, the others in a menu
   const homes = loggedIn ? v.homes : [];
@@ -304,7 +358,10 @@ function fmt(key, v) {
 $('btnHome').addEventListener('click', () => openHome(true));
 $('hClose').addEventListener('click', () => openHome(false));
 $('hSrc').addEventListener('click', e => { const b = e.target.closest('[data-src]'); if (b && b.dataset.src !== mi.src) setSrc(b.dataset.src); });
-$('hRefresh').addEventListener('click', () => { miFetch('/api/mijia/refresh'); toast('正在刷新'); });
+$('hRefresh').addEventListener('click', () => {
+  if (appOn) return renderApp(appOn, true);     // 智能中枢、机柜：重新载入它的网页（回到默认页）
+  miFetch('/api/mijia/refresh'); toast('正在刷新');
+});
 $('hQrBtn').addEventListener('click', () => miFetch('/api/mijia/login/start', { region: mi.region }));
 $('hRegions').addEventListener('click', e => {
   const b = e.target.closest('button');

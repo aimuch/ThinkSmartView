@@ -52,7 +52,7 @@ import aiohttp
 import numpy as np
 
 from . import bg
-from . import airplay, alarms, intercom, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import airplay, alarms, appproxy, intercom, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -333,6 +333,7 @@ class Client:
                 log.warning('invalid %s %r, using the default', key, cfg.get(key))
                 cfg[key] = config.DEFAULTS[key]
         cfg['home_blocks'] = looks.normalize_blocks(cfg.get('home_blocks'))
+        cfg['home_tabs'] = appproxy.normalize_tabs(cfg.get('home_tabs'))   # 家居的分页（设计画布第 62 块）
         cfg['dash_cards'] = looks.normalize_blocks(cfg.get('dash_cards'), looks.DASH_CARDS)
         try:
             cfg['dash_default'] = looks.normalize_dash_tab(cfg.get('dash_default'))
@@ -395,6 +396,8 @@ class Client:
         self.study = study.Study(cfg.get('study'), STUDY_LOG)                # 学习陪伴（设计画布第 48 块）
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
         self.airplay = airplay.AirPlay(self.audio.airplay, self.events.publish, cfg.get('airplay'))   # 设计画布第 49 块
+        # 机柜和智能中枢自己的网页放在「家居」里：设备本机的小代理（appproxy.py，设计画布第 62 块）
+        self.appproxy = appproxy.AppProxy(cfg['hub_http'], cfg['device_id'])
         self.intercom = intercom.Intercom(   # 视频对讲（设计画布第 51 块）
             cfg['hub_http'], cfg['device_id'], self.audio.call, self.events.publish,
             lambda: camera.ROTATE.get(rotation.current(), camera.ROTATE['normal']), cfg.get('intercom'),
@@ -2160,6 +2163,7 @@ class Client:
         if self.airplay.enabled and self.airplay.installed:
             self.airplay.start()
         self.intercom.start()
+        await self.appproxy.start()
         await self.mijia.start()
         self.rotation.start()
 
@@ -2255,6 +2259,26 @@ class Client:
         return {'audio': bool(self.audio._streams) and all(s.active for s in self.audio._streams),
                 'hub': self.hub_seen > 0 and time.monotonic() - self.hub_seen < 30}
 
+    # ---- 家居的分页：米家、智能中枢、机柜（设计画布第 62 块） ----
+
+    def home_tabs_view(self):
+        return {**self.cfg['home_tabs'], 'urls': {a: appproxy.url(a) for a in appproxy.APPS}}
+
+    async def set_home_tabs(self, show=None, first=None):
+        """Settings page: which tabs 家居 shows and which one it opens on ('' = the one looked at last)."""
+        cur = dict(self.cfg['home_tabs'])
+        if show is not None:
+            if not isinstance(show, list) or not show:
+                raise ValueError('至少留一个')
+            cur['show'] = show
+        if first is not None:
+            cur['first'] = first
+        self.cfg['home_tabs'] = appproxy.normalize_tabs(cur)
+        config.save(home_tabs=self.cfg['home_tabs'])
+        view = self.home_tabs_view()
+        self.events.publish('home_tabs', view)
+        return view
+
     def snapshot(self):
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
                 'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
@@ -2264,7 +2288,7 @@ class Client:
                 'gentle': self.gentle.view(time.time()), 'focus': self.focus.view(), 'study': self.study_view(),
                 'airplay': self.airplay and self.airplay.view(),
                 'intercom': self.intercom and self.intercom.view(),
-                'listen': self.listen_view(),
+                'listen': self.listen_view(), 'home_tabs': self.home_tabs_view(),
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
                 'integrations': self.integrations,

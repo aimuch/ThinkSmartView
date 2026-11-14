@@ -540,6 +540,12 @@ handlers.open_page = ({ page }) => {
   closeAll();
   if (page === 'home' || page === 'close') return;
   const [main, sub] = page.split('.');
+  // 「打开机柜」：家居里有「机柜」那一页（rack-screen 自己的网页）就去那里（设计画布第 62 块）
+  if (page === 'work.rack' && window.miApi && window.rackAvailable && window.rackAvailable() && (ui.home_tabs || { show: ['rack'] }).show.includes('rack')) {
+    window.miApi.setSrc('rack');
+    window.miApi.openHome(true);
+    return;
+  }
   if (main === 'work' && window.openWork) {
     window.openWork(true);
     const sec = { rack: 'wkRack', desk: 'wkDesk', repo: 'wkRepo' }[sub];
