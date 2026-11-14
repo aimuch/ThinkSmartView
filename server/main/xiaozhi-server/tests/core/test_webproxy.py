@@ -116,7 +116,7 @@ async def test_off_for_this_device_and_unreachable(gateway, monkeypatch):
     r = await gateway.get("/kiosk/proxy/rack/setup")
     assert r.status == 404 and "插件" in (await r.json())["error"]
     gateway.state["why"] = None
-    monkeypatch.setattr(webproxy, "_settings", lambda app, device: ({"url": "http://127.0.0.1:9", "token": ""}, None))
+    monkeypatch.setattr(webproxy, "_settings", lambda app, device: ({"url": "http://127.0.0.1:9", "token": "t"}, None))
     r = await gateway.get("/kiosk/proxy/rack/setup")
     assert r.status == 502 and "连不上机柜" in (await r.json())["error"]
     r = await gateway.get("/kiosk/proxy/rack/setup", headers={"Accept": "text/html,*/*"})    # 打开网页：一页看得懂的字
@@ -127,3 +127,13 @@ async def test_only_from_this_machine(gateway):
     r = await gateway.get("/kiosk/proxy/rack/setup", headers={"X-Forwarded-For": "10.0.0.9"})
     assert r.status == 403
     assert (await gateway.get("/kiosk/proxy/nope/x")).status == 404
+
+
+async def test_no_token_says_what_to_fill_in(gateway, monkeypatch, upstream):
+    monkeypatch.setattr(webproxy, "_settings", lambda app, device: ({"url": str(upstream.make_url("")).rstrip("/"), "token": ""}, None))
+    r = await gateway.get("/kiosk/proxy/hub/", headers={"Accept": "text/html"})
+    assert r.status == 409 and "BTROUTER_API_TOKEN" in await r.text()
+    r = await gateway.get("/kiosk/proxy/rack/setup", headers={"Accept": "text/html"})
+    assert r.status == 409 and "preview.token" in await r.text()
+    r = await gateway.get("/kiosk/proxy/rack/api/whatever")          # 接口请求照旧转过去（没令牌时它自己回 401）
+    assert r.status == 200

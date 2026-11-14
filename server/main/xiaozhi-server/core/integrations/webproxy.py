@@ -16,8 +16,12 @@ import re
 from aiohttp import ClientSession, ClientTimeout, web
 
 APPS = {
-    "rack": {"plugin": "rack_status", "label": "机柜"},
-    "hub": {"plugin": "smart_hub", "label": "智能中枢"},
+    "rack": {"plugin": "rack_status", "label": "机柜",
+             "no_token": "网关后台「意图识别 → 插件」的「机柜状态」里还没填 rack-screen 令牌（rack-screen 配置文件里的 preview.token）。"
+                         "填好后点右上角的刷新。"},
+    "hub": {"plugin": "smart_hub", "label": "智能中枢",
+            "no_token": "网关后台「意图识别 → 插件」的「智能中枢」里还没填访问令牌（智能中枢 .env 里的 BTROUTER_API_TOKEN）。"
+                        "填好后点右上角的刷新。"},
 }
 DENY = {
     "rack": [("POST", r"/api/(password|setup-password|login|logout)"), ("*", r"/api/backup(/.*)?"),
@@ -101,6 +105,9 @@ async def handle(request: web.Request):
     s, why = _settings(app, request.headers.get("X-Device-Id", ""))
     if s is None:
         return _fail(request, 404, why + "。在网关后台「意图识别 → 插件」里打开。")
+    if not s.get("token") and request.method == "GET" and "text/html" in request.headers.get("Accept", ""):
+        # 没令牌就只能到它的登录页，而经设备登录不了（登录挡掉了、cookie 也不转）：直接说要填什么
+        return _fail(request, 409, APPS[app]["no_token"])
     headers = {k: v for k, v in request.headers.items() if k.lower() not in DROP_REQ}
     headers.update(auth_headers(app, s))
     body = await request.read() if request.can_read_body else None
