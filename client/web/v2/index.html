@@ -68,7 +68,7 @@
       <button class="study-pill" id="studyPill" hidden aria-label="学习陪伴开着">📷<span>陪伴中</span></button>
       <span class="window-pill" id="windowPill" hidden><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" class="wp-track"/><circle cx="18" cy="18" r="15" class="wp-arc" id="windowArc"/></svg><span>还在听</span><b id="windowLeft"></b></span>
       <div class="clock" id="clock"><span id="time">--:--</span></div>
-      <button class="gear" id="btnPhoto" aria-label="拍照问">
+      <button class="gear ai-ring" id="btnPhoto" aria-label="拍照问">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
       </button>
@@ -356,7 +356,7 @@
     </div>
     <!-- USB 接口（usb.py，设计画布第 46 块）：连电脑（USB 网络）还是接 U 盘；U 盘照片导进相册 -->
     <div class="alarms-card" id="studyCard" hidden>
-      <div class="bright-head"><b>学习陪伴</b><span class="bright-num" id="studySub"></span></div>
+      <div class="bright-head"><b>学习陪伴</b><em class="ai-chip">AI 看图</em><span class="bright-num" id="studySub"></span></div>
       <div class="opt">
         <div class="opt-text"><b>现在打开</b><span>也可以说「打开学习陪伴」，或者专注时顺带打开</span></div>
         <button class="switch" id="studySw" role="switch" aria-checked="false" aria-label="学习陪伴"><i></i></button>
@@ -581,7 +581,7 @@
        <div class="alarms-card" id="voiceCard">
       <div class="bright-head"><b>回答的声音</b><span class="bright-num" id="voiceNow">这台设备</span></div>
       <div class="minutes voice-chips" id="voiceChips"></div>
-      <div class="bright-head" id="cloneHead" hidden><b class="sub">我们的声音</b><span class="bright-num">阿里云百炼 · 复刻</span></div>
+      <div class="bright-head" id="cloneHead" hidden><b class="sub">我们的声音</b><em class="ai-chip">AI 复刻 · 阿里云百炼</em></div>
       <div class="minutes voice-chips" id="cloneChips" hidden></div>
       <p class="opt-note" id="voiceNote">下一次说话起生效。认出是孩子时照样换成童声。</p>
     </div>
@@ -627,7 +627,7 @@
     </div>
     <p class="opt-note">也可以直接说：「<span class="ww-name">小麦小麦</span>，清除聊天记录」，它会再问一遍。<button class="link-btn" id="clearMemBtn">只清除记忆、保留记录</button></p>
     <div class="alarms-card" id="costCard">
-      <div class="bright-head"><b>大模型费用</b><span class="bright-num" id="costNote"></span></div>
+      <div class="bright-head"><b class="ai-ink">大模型费用</b><span class="bright-num" id="costNote"></span></div>
       <div class="cost-row"><div><small>今天</small><b id="costToday">—</b></div><div><small>本月</small><b id="costMonth">—</b></div><div><small>累计</small><b id="costTotal">—</b></div></div>
       <div class="cost-quota" id="costQuota"></div>
       <p class="opt-note">单价、额度和每个模型的明细在网关后台的「费用」页设置和查看。</p>
@@ -865,7 +865,7 @@
       <div class="minutes fz-chips fz-min" id="fzMinutes"></div>
       <div class="opt fz-study" id="fzStudy" hidden>
         <span class="fz-st-ic">📷</span>
-        <div class="opt-text"><b>学习陪伴</b><span id="fzStudySub"></span></div>
+        <div class="opt-text"><b>学习陪伴 <em class="ai-chip">AI 看图</em></b><span id="fzStudySub"></span></div>
         <button class="switch" id="fzStudySw" role="switch" aria-checked="false" aria-label="学习陪伴"><i></i></button>
       </div>
       <div class="fz-btns" id="fzBtns"></div>

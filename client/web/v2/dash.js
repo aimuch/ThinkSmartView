@@ -119,7 +119,7 @@ function nums() {
   const watts = plugs.reduce((a, c) => a + c.state.power_w, 0);
   const k = ui.kids;
   const cells = [];
-  if (D.cost !== null) cells.push(`<div><b>${esc(D.cost)}</b><span class="dm">大模型费用</span></div>`);
+  if (D.cost !== null) cells.push(`<div><b>${esc(D.cost)}</b><span class="dm ai-ink">大模型费用</span></div>`);
   if (k && k.enabled) cells.push(`<div><b>${k.used_minutes}<small> 分</small></b><span class="dm">孩子聊了</span></div>`);
   if (plugs.length) cells.push(`<div><b>${Math.round(watts)}<small> W</small></b><span class="dm">插座正在用电</span></div>`);
   return head('◷', '今天') + (cells.length ? `<div class="d-nums">${cells.join('')}</div>` : '<div class="dm">还没有数字</div>');

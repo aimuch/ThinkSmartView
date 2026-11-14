@@ -68,7 +68,7 @@ function deskHtml() {
     : note('Mac 上还没有试切过的输入源：在 DeskHub 的菜单里先试切一次。'));
   const u = d.usage;
   if (u) {
-    parts.push(`<div class="wk-row"><b>AI 用量${u.provider ? ' · ' + esc([u.provider, u.plan].filter(Boolean).join(' ')) : ''}</b><small>今天 ${u.calls} 次 · ${tokens(u.tokens)} token</small></div>`);
+    parts.push(`<div class="wk-row"><b><span class="ai-ink">AI 用量</span>${u.provider ? ' · ' + esc([u.provider, u.plan].filter(Boolean).join(' ')) : ''}</b><small>今天 ${u.calls} 次 · ${tokens(u.tokens)} token</small></div>`);
     parts.push(u.windows.map(w => `<div class="wk-win"><span>${esc(w.name)}</span>${meter(w.left)}<small>剩 ${w.left}%${w.reset_s ? ' · ' + resetIn(w.reset_s) : ''}</small></div>`).join(''));
   } else if (d.usage_off) parts.push(note('Mac 上读不到 Magpie 的用量（Magpie 没开？）'));
   if (d.todos_off) parts.push(note(d.todos_off === 'access' ? 'DeskHub 没有读提醒事项的权限：在 Mac 的 系统设置 › 隐私与安全性 › 提醒事项 里打开。' : 'DeskHub 里关掉了提醒事项。'));

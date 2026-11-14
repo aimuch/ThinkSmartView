@@ -354,7 +354,7 @@ function renderClone() {
   $('clBtns').innerHTML = {
     idle: '<button class="upd-btn pri" data-ca="start">开始录</button>',
     rec: '<button class="upd-btn" data-ca="restart">重录</button><button class="upd-btn pri" data-ca="stop">念完了</button>',
-    done: `<button class="upd-btn" data-ca="restart">重录</button><button class="upd-btn pri" data-ca="upload" ${cl.name ? '' : 'disabled'}>交给百炼复刻</button>`,
+    done: `<button class="upd-btn" data-ca="restart">重录</button><button class="upd-btn ai-fill" data-ca="upload" ${cl.name ? '' : 'disabled'}>交给百炼复刻</button>`,
     sending: '', sent: '<button class="upd-btn pri" data-ca="close">好的</button>' }[cl.step];
   $('clMsg').textContent = cl.msg;
   $('clMsg').classList.toggle('warn', cl.msg.startsWith('⚠'));

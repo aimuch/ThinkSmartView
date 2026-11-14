@@ -2368,7 +2368,7 @@ async function loadVoice() {
   $('cloneChips').innerHTML = clones.map(c => c.status === 'OK'
     ? `<button data-voice="${esc(c.value)}" class="${c.value === v.current ? 'on' : ''}">${esc(c.name)}</button>`
     : `<button disabled>${esc(c.name)} · ${c.status === 'DEPLOYING' ? '复刻中' : '没通过'}</button>`).join('') +
-    (cl.ready ? '<button class="clone-new" data-clone-new="1">＋ 复刻我的声音</button>' : '');
+    (cl.ready ? '<button class="clone-new ai-ring" data-clone-new="1">＋ 复刻我的声音</button>' : '');
   if (!cl.ready && 'clones' in v) $('voiceNote').textContent += `　复刻声音：${cl.reason || '网关还没准备好'}`;
   else if (cur) $('voiceNote').textContent = '选复刻的声音时，这台设备改用阿里百炼说话；下一次说话起生效。';
   clearTimeout(loadVoice.timer);
