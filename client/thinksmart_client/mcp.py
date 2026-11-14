@@ -293,6 +293,20 @@ DAILY_TOOLS = [
                                                         'kind': {'type': 'string', 'enum': ['radio', 'sound']},
                                                         'name': {'type': 'string'}, 'minutes': {'type': 'number'}}},
     },
+    {
+        'name': 'self.music.play',
+        'description': '放歌、儿歌、睡前故事（家里 NAS 上的音乐库，说话时自动变小，放的时候照样能对话）。'
+                       '「放两只老虎」「我想听晴天」「周杰伦的歌」action="play", query=歌名或「歌手的歌」（模糊匹配）；'
+                       '「放几首儿歌」tag="kids"；「放睡前故事」tag="bedtime"；「随便放点歌」tag="any"；'
+                       '「放儿歌，二十分钟后停」加 minutes=20；正在放时「半小时后停」action="timer", minutes=30（0 取消定时）。'
+                       '「下一首」next，「上一首」prev，「暂停」pause，「继续」resume，「停」stop，「现在放的是什么歌」status；'
+                       '「单曲循环」action="mode", mode="one"，「列表循环」mode="loop"，「随机播放」mode="shuffle"。'
+                       '调用后照着返回的 response 说一句就行。没找到、没接音乐库时如实说原因；电台和助眠声用 self.media.play。',
+        'inputSchema': {'type': 'object', 'properties': {
+            'action': {'type': 'string', 'enum': ['play', 'next', 'prev', 'pause', 'resume', 'stop', 'mode', 'timer', 'status']},
+            'query': {'type': 'string'}, 'tag': {'type': 'string', 'enum': ['kids', 'bedtime', 'any']},
+            'mode': {'type': 'string', 'enum': ['loop', 'one', 'shuffle']}, 'minutes': {'type': 'number'}}},
+    },
 ]
 FOCUS_TOOLS = [   # 专注计时（focus.py，设计画布第 47 块）
     {
@@ -596,6 +610,17 @@ async def handle(payload, client=None):
                     text = _dumps(await _daily(client, name, args))
                 except ValueError as e:
                     text = _dumps({'success': False, 'reason': str(e)})
+            elif name == 'self.music.play' and client:
+                try:
+                    minutes = args.get('minutes')
+                    r = await client.music_control(args.get('action') or 'play', str(args.get('query') or '').strip() or None,
+                                                   args.get('tag') or None, args.get('mode') or None,
+                                                   minutes if isinstance(minutes, (int, float)) and minutes > 0 else None)
+                except ValueError as e:
+                    r = {'success': False, 'reason': str(e)}
+                if r.get('success') and r.get('response') and set(r) <= {'success', 'response'}:
+                    r = {'action': 'RESPONSE', 'response': r['response']}
+                text = _dumps(r)
             elif name == 'self.focus.control' and client:
                 action = args.get('action') or 'status'
                 sounds = args.get('sounds')

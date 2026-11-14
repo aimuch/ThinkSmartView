@@ -1,5 +1,10 @@
-"""网络电台和助眠声 (设计画布第 11 块): both play through the background channel (audio.Background), like a
-phone's music over Bluetooth: lowered while talking, muted while an alarm rings. One at a time.
+"""网络电台、助眠声和音乐 (设计画布第 11、58 块): all play through the background channel (audio.Background),
+like a phone's music over Bluetooth: lowered while talking, muted while an alarm rings. One at a time.
+
+Music (设计画布第 58 块): songs from the family's own library (Navidrome on the NAS, or the hub's music folder),
+always through the hub's relay /kiosk/music/stream/<id>: the device never holds the library's password.
+A Queue keeps the order (列表循环 / 单曲循环 / 随机); pausing remembers where it was and resumes with
+ffmpeg -ss (the hub passes Range on). A timer stops it like the sleep sounds, fading the last seconds.
 
 Radio: the system's ffmpeg decodes a public live stream (-re: read at its own pace) to 48 kHz stereo
 float. The stations are ones tried on this device (2026-11-09); a stream that stops answering is
@@ -163,6 +168,66 @@ class Mix:
         return np.clip(x, -0.9, 0.9).astype(np.float32)
 
 
+MODES = {'loop': '列表循环', 'one': '单曲循环', 'shuffle': '随机播放'}
+MUSIC_FADE = 8.0      # 定时停：最后几秒渐弱
+
+
+class Queue:
+    """播放顺序：order 是 tracks 的下标排出来的顺序，pos 指着现在这首。随机播放就是把 order 打乱（现在这首排第一）。"""
+
+    def __init__(self, tracks, start=0, mode='loop', rng=None):
+        if not tracks:
+            raise ValueError('没有歌')
+        self.tracks = list(tracks)
+        self.rng = rng or np.random.default_rng()
+        self.mode = 'loop'
+        self.order = list(range(len(self.tracks)))
+        self.pos = max(0, min(int(start or 0), len(self.tracks) - 1))
+        self.set_mode(mode)
+
+    @property
+    def current(self):
+        return self.tracks[self.order[self.pos]]
+
+    def set_mode(self, mode):
+        if mode not in MODES:
+            raise ValueError(f"播放方式只有：{'、'.join(MODES.values())}")
+        cur = self.order[self.pos]
+        if mode == 'shuffle':
+            rest = [i for i in range(len(self.tracks)) if i != cur]
+            self.rng.shuffle(rest)
+            self.order = [cur] + rest
+            self.pos = 0
+        elif self.mode == 'shuffle' or mode == 'loop':
+            self.order = list(range(len(self.tracks)))
+            self.pos = cur
+        self.mode = mode
+
+    def upcoming(self, auto=True):
+        """下一首是哪首（只看不动）。单曲循环自己接着放时还是这首。"""
+        if auto and self.mode == 'one':
+            return self.current
+        return self.tracks[self.order[(self.pos + 1) % len(self.order)]]
+
+    def advance(self, auto=False):
+        """换到下一首。auto：这首放完了自己往下走（单曲循环就不动）。随机放完一轮重新打乱，不连着放同一首。"""
+        if auto and self.mode == 'one':
+            return self.current
+        self.pos += 1
+        if self.pos >= len(self.order):
+            self.pos = 0
+            if self.mode == 'shuffle' and len(self.order) > 2:
+                last = self.order[-1]
+                rest = [i for i in range(len(self.tracks)) if i != last]
+                self.rng.shuffle(rest)
+                self.order = rest + [last]
+        return self.current
+
+    def back(self):
+        self.pos = (self.pos - 1) % len(self.order)
+        return self.current
+
+
 class Player:
     def __init__(self, background, on_change=None, on_error=None):
         self.background = background
@@ -170,11 +235,175 @@ class Player:
         self.on_error = on_error or (lambda text: None)
         self.task = None
         self.proc = None
-        self.now = None     # {'kind': 'radio'|'sound', 'id', 'name', 'ends'}
+        self.now = None     # {'kind': 'radio'|'sound'|'music'|…, 'id', 'name', 'ends'}；音乐另有 artist、cover、next…
+        self.queue = None   # 音乐的播放顺序（Queue）
+        self.stream_url = None      # 歌 id → 网关中转地址（app 设）
+        self.music_info = {'ready': False, 'tags': {}}   # 网关有没有接音乐库、标了哪些（app 定时问）
+        self._offset = 0.0  # 这首从第几秒开始放的（暂停后接着放）
+        self._pushed = 0    # 这次放出去多少个采样
 
     def view(self):
         return {'playing': self.now, 'stations': [{'id': k, 'name': v[0]} for k, v in STATIONS.items()],
-                'sounds': [{'id': k, 'name': v} for k, v in SOUNDS.items()]}
+                'sounds': [{'id': k, 'name': v} for k, v in SOUNDS.items()], 'music': self.music_info,
+                'modes': [{'id': k, 'name': v} for k, v in MODES.items()]}
+
+    # ---- 音乐 (设计画布第 58 块)
+
+    def position(self):
+        """这首放到第几秒。"""
+        return self._offset + self._pushed / RATE
+
+    def _music_now(self, paused=False):
+        q = self.queue
+        t, nxt = q.current, q.upcoming()
+        ends = self.now.get('ends') if self.now and self.now.get('kind') == 'music' else None
+        self.now = {'kind': 'music', 'id': t['id'], 'name': t.get('title') or '', 'artist': t.get('artist') or '',
+                    'album': t.get('album') or '', 'cover': t.get('cover') or '', 'duration': int(t.get('duration') or 0),
+                    'list': getattr(self, '_list_name', ''), 'index': q.pos + 1, 'count': len(q.order), 'mode': q.mode,
+                    'next': None if len(q.tracks) < 2 and q.mode != 'one' else {'name': nxt.get('title') or '', 'artist': nxt.get('artist') or ''},
+                    'paused': paused, 'at': round(self.position(), 1), 'since': time.time(), 'ends': ends}
+        return self.now
+
+    async def play_music(self, tracks, start=0, mode='loop', name='', minutes=None):
+        """放一串歌（找到的、按标签挑的）。minutes：多久后停（None/0 一直放）。"""
+        if not self.stream_url:
+            raise ValueError('还没连上网关，放不了歌')
+        q = Queue(tracks, start, mode or 'loop')
+        await self.stop(quiet=True)
+        self.queue, self._list_name = q, name
+        self.now = {'kind': 'music', 'ends': time.time() + float(minutes) * 60 if minutes else None}
+        self._start_track(0.0)
+        return self.now
+
+    def _start_track(self, offset):
+        self._offset, self._pushed = offset, 0
+        self._music_now()
+        self.task = asyncio.create_task(self._music())
+        self.on_change(self.view())
+
+    async def _restart(self, offset=0.0):
+        task, self.task = self.task, None
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        await self._kill()
+        self.background.clear()
+        self._start_track(offset)
+
+    def music_playing(self):
+        return bool(self.now and self.now.get('kind') == 'music' and self.queue)
+
+    async def music_next(self):
+        self.queue.advance()
+        await self._restart()
+        return self.now
+
+    async def music_prev(self):
+        if self.position() > 5:            # 放了一会儿：回到这首开头（和手机一样）
+            await self._restart()
+        else:
+            self.queue.back()
+            await self._restart()
+        return self.now
+
+    async def music_pause(self):
+        if not self.music_playing() or self.now.get('paused'):
+            return self.now
+        at = self.position()
+        task, self.task = self.task, None
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        await self._kill()
+        self.background.clear()
+        self._offset, self._pushed = at, 0
+        self._music_now(paused=True)
+        self.on_change(self.view())
+        return self.now
+
+    async def music_resume(self):
+        if not self.music_playing() or not self.now.get('paused'):
+            return self.now
+        ends = self.now.get('ends')
+        if ends and ends <= time.time():
+            self.now['ends'] = None          # 定时已经过了：接着放就不再定时
+        self._start_track(self._offset)
+        return self.now
+
+    async def music_mode(self, mode):
+        self.queue.set_mode(mode)
+        self._music_now(paused=bool(self.now.get('paused')))
+        self.on_change(self.view())
+        return self.now
+
+    def music_timer(self, minutes):
+        """定时停：minutes 分钟后（0 / None 取消定时）。"""
+        if not self.music_playing():
+            raise ValueError('现在没在放歌')
+        self.now['ends'] = time.time() + float(minutes) * 60 if minutes else None
+        self.on_change(self.view())
+        return self.now
+
+    async def _music(self):
+        failures = 0
+        frame = int(RATE * CHUNK) * 2 * 4
+        while self.music_playing():
+            track = self.queue.current
+            url = self.stream_url(track['id'])
+            args = ['ffmpeg', '-nostdin', '-loglevel', 'error', '-re']
+            if self._offset > 0.5:
+                args += ['-ss', f'{self._offset:.1f}']
+            try:
+                self.proc = await asyncio.create_subprocess_exec(
+                    *args, '-i', url, '-vn', '-sn', '-dn', '-f', 'f32le', '-ac', '2', '-ar', str(RATE), '-',
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+            except FileNotFoundError:
+                self.on_error('这台设备上没有 ffmpeg，放不了歌')
+                break
+            got, cut = 0, False
+            while True:
+                data = await self.proc.stdout.read(frame)
+                if not data:
+                    break
+                usable = len(data) // 8 * 8
+                if not usable:
+                    continue
+                got += usable
+                x = np.frombuffer(data[:usable], dtype='<f4').reshape(-1, 2).copy()
+                ends = self.now.get('ends') if self.now else None
+                if ends:
+                    left = ends - time.time()
+                    if left <= 0:
+                        cut = True
+                        break
+                    if left < MUSIC_FADE:
+                        x *= max(0.0, left / MUSIC_FADE)
+                self.background.push(x)
+                self._pushed += len(x)
+            await self._kill()
+            if cut:
+                break
+            if got < RATE * 8:             # 一秒都没放出来：这首放不了（文件坏了、网关连不上）
+                failures += 1
+                log.info('music: %s gave %d bytes', track.get('title'), got)
+                if failures >= 3 or failures >= len(self.queue.order):
+                    self.on_error(f"放不了「{track.get('title') or '这首歌'}」：网关或音乐库连不上")
+                    break
+            else:
+                failures = 0
+            self.queue.advance(auto=True)
+            self._offset, self._pushed = 0.0, 0
+            self._music_now()
+            self.on_change(self.view())
+        if self.now and self.now.get('kind') == 'music':
+            self.now, self.queue = None, None
+            self.on_change(self.view())
 
     async def stop(self, quiet=False):
         task, self.task = self.task, None
@@ -186,6 +415,7 @@ class Player:
                 pass
         await self._kill()
         self.background.clear()
+        self.queue = None
         if self.now:
             self.now = None
             if not quiet:

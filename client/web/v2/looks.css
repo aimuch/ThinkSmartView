@@ -191,6 +191,15 @@ body.net-off .welcome { top: 92px; justify-content: flex-start; padding-top: 12p
 .now-bar b { font-size: 21px; }
 .now-sub { color: var(--ink2); font-size: 17px; }
 .now-x { width: 48px; height: 48px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); font-size: 20px; color: var(--ink2); }
+/* 放歌时的播放条：封面、歌名和下一首、暂停、下一首、停（设计画布第 58 块） */
+.now-tx { display: flex; align-items: baseline; gap: 14px; min-width: 0; }
+.now-bar.music { padding-left: 8px; max-width: min(900px, 94vw); }
+.now-bar.music .now-tx { flex-direction: column; gap: 0; } .now-bar.music b { font-size: 19px; line-height: 1.2; }
+.now-bar.music .now-sub { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 460px; }
+.now-bar .now-x[hidden] { display: none; }
+body.dash-on.dash-media[data-dash="home"] .now-bar.music { display: none; }   /* 仪表盘首页的卡片里就有 */
+.now-cover { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; flex: none; display: grid; place-items: center; }
+.mu-nocv { background: linear-gradient(135deg, #ffd36b, #ff9ad5); color: #ffffffcc; font-size: 22px; display: grid; place-items: center; }
 .home-notes { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; max-width: 640px; }
 .home-notes:empty { display: none; }
 .sticky { display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px 16px 22px; border-radius: 20px; background: #ffe9a8; color: #3a2a00; text-align: left; }
@@ -553,6 +562,36 @@ body.dash-on[data-state="listening"] .dash-ask .d-orb, body.dash-on[data-state="
 .d-chips button, .da-chips button { height: 44px; padding: 0 16px; border-radius: 999px; background: var(--card2); font-size: 16px; color: var(--ink2); white-space: nowrap; }
 .dm-row { display: flex; align-items: center; gap: 12px; } .dm-row b { font-size: 17px; color: var(--ink); }
 .dm-cover { width: 54px; height: 54px; border-radius: 14px; flex: none; background: linear-gradient(135deg, #4c5fd8, var(--accent2)); }
+img.dm-cover { object-fit: cover; background: var(--card2); } .dm-cover.mu-nocv { background: linear-gradient(135deg, #ffd36b, #ff9ad5); }
+.dm-tx { min-width: 0; } .dm-tx b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dm-tx .dm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-prog { height: 4px; border-radius: 2px; background: var(--card2); overflow: hidden; } .mu-prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8ff0ff, #8fa6ff); transition: width 1s linear; }
+.dm-ctl { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.dm-ctl button { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: var(--card2); color: var(--ink2); font-size: 16px; }
+.dm-ctl button.pp, .mu-ctl button.pp { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #8ff0ff, #8fa6ff); color: #081024; font-size: 18px; }
+.dm-ctl button:active, .mu-ctl button:active { transform: scale(.94); }
+.dm-next { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .dm-next b { color: var(--ink2); font-weight: 500; }
+/* 设置页「音乐、电台和助眠声」的音乐部分 */
+.mu-box { display: flex; flex-direction: column; gap: 14px; }
+.mu-box:empty { display: none; }
+.mu-now { display: flex; align-items: center; gap: 18px; }
+.mu-cover { width: 96px; height: 96px; border-radius: 20px; object-fit: cover; flex: none; box-shadow: 0 8px 22px #0003; }
+.mu-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.mu-tx b { font-size: 26px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-tx span { font-size: 17px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-tx .mu-time { font-variant-numeric: tabular-nums; font-size: 15px; } .mu-tx .mu-prog { margin-top: 4px; }
+.mu-ctl { display: flex; align-items: center; gap: 10px; flex: none; }
+.mu-ctl button { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--card2); border: 1px solid var(--line); color: var(--ink2); font-size: 20px; }
+.mu-ctl button.pp { width: 76px; height: 76px; border: 0; font-size: 22px; }
+.mu-next { display: flex; gap: 16px; align-items: baseline; font-size: 18px; color: var(--ink3); } .mu-next b { color: var(--ink2); font-weight: 600; } .mu-next span { margin-left: auto; }
+.minutes.mu-modes, .minutes.mu-quick { grid-template-columns: repeat(3, 1fr); } .minutes.mu-timer { grid-template-columns: repeat(4, 1fr); }
+.minutes.mu-timer button { font-size: 18px; }
+.mu-none { margin: 0; }
+@media (orientation: portrait) {
+  .mu-now { flex-wrap: wrap; } .mu-ctl { flex: 0 0 100%; justify-content: center; }
+  .minutes.mu-timer { grid-template-columns: repeat(2, 1fr); }
+  .now-bar.music .now-sub { max-width: 300px; }
+}
 .d-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; }
 .d-nums b { font-size: 26px; color: var(--ink); font-variant-numeric: tabular-nums; } .d-nums small { font-size: 15px; color: var(--ink3); }
 .d-empty { text-align: left; font-size: 16px; color: var(--accent-text, var(--accent)); padding: 12px 0; }

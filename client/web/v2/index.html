@@ -496,13 +496,15 @@
       <p class="opt-note">直接说「把酱油加到购物清单」「购物清单里有什么」「酱油买了」。点「手机看」用手机扫码，在超市边买边划掉。</p>
     </div>
     <div class="alarms-card" id="mediaCard">
-      <div class="bright-head"><b>电台和助眠声</b><span class="bright-num" id="mediaNow"></span></div>
+      <div class="bright-head"><b>音乐、电台和助眠声</b><span class="bright-num" id="mediaNow"></span></div>
+      <!-- 音乐（设计画布第 58 块）：正在放的歌、下一首、播放方式、定时停；儿歌、睡前故事、随便听 -->
+      <div class="mu-box" id="musicBox"></div>
       <div class="bright-head"><b class="sub">助眠声</b></div>
       <div class="minutes" id="mediaSounds" style="grid-template-columns:repeat(4,1fr)"></div>
       <div class="minutes" id="mediaMinutes" style="grid-template-columns:repeat(4,1fr)"><button data-min="15">15 分钟</button><button data-min="30" class="on">30 分钟</button><button data-min="60">60 分钟</button><button data-min="0">一直放</button></div>
       <div class="bright-head"><b class="sub">电台</b></div>
       <div class="minutes" id="mediaStations" style="grid-template-columns:repeat(3,1fr)"></div>
-      <p class="opt-note">也可以直接说「放东方广播」「放雨声，半小时后关」「别放了」。说话时自动变小，闹钟响时静音。电台用的是公开的直播流，偶尔会连不上。</p>
+      <p class="opt-note">也可以直接说「放两只老虎」「放几首儿歌」「下一首」「放东方广播」「放雨声，半小时后关」「别放了」。说话时自动变小，闹钟响时静音。歌来自家里 NAS 上的音乐库（网关后台「音乐」页接）；电台用的是公开的直播流，偶尔会连不上。</p>
     </div>
    </section>
    <section class="set-pane" data-pane="family">
@@ -922,8 +924,9 @@
 <div class="alert-bar" id="alertBar" hidden><span>⚠</span><b id="alertText"></b><span class="alert-time" id="alertTime"></span>
   <button id="alertOk">知道了</button></div>
 <div class="tr-bar" id="trBar" hidden><span>🌐</span><b id="trText"></b><span class="tr-sub">不用叫醒，直接说</span><button id="trExit">退出</button></div>
-<!-- 电台、助眠声的播放条 -->
-<div class="now-bar" id="nowBar" hidden><span id="nowIcon"></span><b id="nowName"></b><span class="now-sub" id="nowSub"></span>
+<!-- 音乐、电台、助眠声的播放条 -->
+<div class="now-bar" id="nowBar" hidden><span id="nowIcon"></span><span class="now-tx"><b id="nowName"></b><span class="now-sub" id="nowSub"></span></span>
+  <button class="now-x" id="nowPause" aria-label="暂停" hidden>❚❚</button><button class="now-x" id="nowNext" aria-label="下一首" hidden>⏭</button>
   <button class="now-x" id="nowStop" aria-label="停止">✕</button></div>
 <!-- 一个二维码（清单「手机看」） -->
 <!-- 机身摄像头拍照问（camera.py，设计画布第 27 块）：实时画面、倒数、拍 -->

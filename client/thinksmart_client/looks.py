@@ -14,7 +14,7 @@ THEMES = {'night': '星夜', 'dawn': '晨光', 'lavender': '薰衣草', 'forest'
 LAYOUTS = {'chat': '对话', 'dashboard': '仪表盘'}
 # 仪表盘首页的卡片（设计画布第 36 块）：能开关、能排序。早安小结和常用设备是宽卡片（横屏在中间那一列）
 DASH_CARDS = {'wx': '时钟和天气', 'brief': '早安小结', 'dev': '常用设备', 'todo': '待办', 'alarm': '闹钟和提醒',
-              'scene': '场景', 'media': '电台和助眠', 'nums': '今天的数字', 'work': '工作台', 'lights': '蓝牙灯'}
+              'scene': '场景', 'media': '音乐和电台', 'nums': '今天的数字', 'work': '工作台', 'lights': '蓝牙灯'}
 DASH_TABS = {'home': '首页', 'smart': '家居', 'plan': '日程', 'chat': '对话'}   # 打开时先看哪一页
 AUTO_DAY = (7, 19)          # 'auto': 晨光 from 7:00 to 19:00, 星夜 otherwise
 AVATARS = {'orb': '光球'}

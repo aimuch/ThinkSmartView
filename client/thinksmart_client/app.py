@@ -232,7 +232,7 @@ class Client:
     photo = photo_task = photo_card = None   # 拍照问答 (set in __init__ too; tests build bare clients)
     kids = kids.DEFAULT                       # 儿童模式 (kids.py), likewise
     cooking = None                            # 做菜模式 (cook.py)
-    media = None                              # 电台、助眠声 (media.py)
+    media = None                              # 电台、助眠声、音乐 (media.py)
     gentle = gentle.Gentle()                  # 温柔叫醒 (gentle.py), likewise
     focus = focus.Focus()                     # 专注计时 (focus.py), likewise
     study = study.Study()                     # 学习陪伴 (study.py), likewise
@@ -352,6 +352,7 @@ class Client:
             self.kids = kids.normalize(None)
         self.kids_seconds = kids.load_usage(datetime.date.today().isoformat())
         self.kids_clips = {}          # 'limit' / 'bedtime' -> the hub's synthesised words
+        self.music_info = {'ready': False, 'tags': {}}   # 网关的音乐库（refresh_music），播放器共用这个 dict
         self.notes = daily.load_notes()
         self.lists = None
         self.photo = None             # the photo question waiting for the phone (photo_start)
@@ -1144,15 +1145,135 @@ class Client:
         # 播放器第一次放的时候才建；在那之前设置页也要能列出电台和助眠声（以前是空的，屏幕上点不了）
         return self.media.view() if self.media else {'playing': None,
                                                      'stations': [{'id': k, 'name': v[0]} for k, v in media.STATIONS.items()],
-                                                     'sounds': [{'id': k, 'name': v} for k, v in media.SOUNDS.items()]}
+                                                     'sounds': [{'id': k, 'name': v} for k, v in media.SOUNDS.items()],
+                                                     'music': getattr(self, 'music_info', {'ready': False, 'tags': {}}),
+                                                     'modes': [{'id': k, 'name': v} for k, v in media.MODES.items()]}
 
     def _media_player(self):
         if self.media is None:
             self.media = media.Player(self.audio.background, on_change=lambda v: self.events.publish('media', v),
                                       on_error=lambda t: self.events.publish('toast', {'kind': 'error', 'text': t}))
+            self.media.stream_url = lambda sid: f"{self.cfg['hub_http']}/kiosk/music/stream/{urllib.parse.quote(sid, safe='')}"
+            self.media.music_info = self.music_info
         return self.media
 
+    def _kids_block(self):
+        """儿童模式过了限时、到了睡觉时间：屏幕上点也不放（设计画布第 58 块）。"""
+        why = kids.blocked(self.kids, self.kids_seconds)
+        if why:
+            raise ValueError(kids.SAY_BEDTIME if why == 'bedtime' else kids.SAY_LIMIT)
+
+    # ---- 音乐 (media.py, 网关 core/agent/music.py; 设计画布第 58 块) ----
+
+    async def refresh_music(self):
+        """网关有没有接音乐库、标了儿歌和睡前故事没有（设置页、仪表盘的快捷按钮用）。"""
+        try:
+            data = await self._hub_http('/kiosk/music')
+        except Exception as e:
+            log.info('music info from the hub: %s', e)
+            return
+        if data and data.get('ok'):
+            info = {'ready': bool(data.get('ready')), 'tags': data.get('tags') or {}}
+            if info != self.music_info:
+                self.music_info.clear()
+                self.music_info.update(info)
+                self.events.publish('media', self.media_view())
+
+    async def music_control(self, action='play', query=None, tag=None, mode=None, minutes=None):
+        """self.music.play 和屏幕上的按钮。返回 {'success', 'response'}；'pass': True 表示这句不归音乐管
+        （没在放歌却说「暂停」、没找到这首、没标儿歌、没接音乐库）：网关的常用口令就交给大模型。"""
+        action = action or 'play'
+        p = self._media_player()
+        playing = p.music_playing()
+        if action == 'play' or (action == 'resume' and not playing and (query or tag)):
+            return await self._music_start(p, query, tag, mode, minutes)
+        if action == 'stop':
+            await p.stop()
+            return {'success': True, 'response': '好，停了。'}
+        if action == 'timer':
+            if not playing:
+                return {'success': False, 'pass': True, 'reason': '现在没在放歌'}
+            p.music_timer(minutes)
+            return {'success': True, 'response': f'好，{int(minutes)} 分钟后停。' if minutes else '好，不定时了。'}
+        if not playing:
+            if action in ('pause', 'resume') and p.now and p.now.get('kind') == 'radio' and action == 'pause':
+                await p.stop()                  # 电台没法暂停：停掉
+                return {'success': True, 'response': '好，电台停了。'}
+            return {'success': False, 'pass': True, 'reason': '现在没在放歌'}
+        if action == 'next':
+            now = await p.music_next()
+            return {'success': True, 'response': f"下一首，{now['name']}。"}
+        if action == 'prev':
+            now = await p.music_prev()
+            return {'success': True, 'response': f"好，{now['name']}。"}
+        if action == 'pause':
+            if p.now.get('paused'):
+                return {'success': True, 'response': '已经暂停了，说「继续」接着放。'}
+            await p.music_pause()
+            return {'success': True, 'response': '好，暂停了。'}
+        if action == 'resume':
+            if not p.now.get('paused'):
+                return {'success': False, 'pass': True, 'reason': '正在放，没有暂停'}
+            self._kids_block()
+            await p.music_resume()
+            return {'success': True, 'response': '好，接着放。'}
+        if action == 'mode':
+            now = await p.music_mode(mode)
+            return {'success': True, 'response': f"好，{media.MODES[now['mode']]}。"}
+        if action == 'status':
+            now = p.now
+            return {'success': True, 'playing': now['name'], 'artist': now['artist'], 'paused': now['paused'],
+                    'mode': media.MODES[now['mode']], 'next': (now.get('next') or {}).get('name'),
+                    'response': f"正在放{now['name']}" + (f"，{now['artist']}唱的" if now['artist'] else '') + '。'}
+        raise ValueError(f'不认识的操作：{action}')
+
+    async def _music_start(self, p, query, tag, mode, minutes):
+        if query:
+            # 「放雨声」「放东方广播」：先认助眠声和电台（说法和歌名撞了，它们优先；助眠声儿童模式睡觉时间也能放）
+            sound = media.find_sound(query)
+            if sound:
+                now = await p.play_sound(sound, 30 if minutes is None else minutes)
+                return {'success': True, 'response': f"好，开始放{now['name']}。"}
+            self._kids_block()
+            key = media.find_station(query)
+            if key:
+                now = await p.play_radio(key)
+                return {'success': True, 'response': f"好，开始放{now['name']}。"}
+            path = '/kiosk/music/find?' + urllib.parse.urlencode({'q': query, 'n': 30})
+        else:
+            self._kids_block()
+            path = f"/kiosk/music/tag/{tag or 'any'}?n=40"
+        try:
+            data = await self._hub_http(path)
+        except Exception as e:
+            log.info('music: hub %s', e)
+            return {'success': False, 'pass': True, 'reason': '网关连不上，放不了歌'}
+        tracks = (data or {}).get('tracks') or []
+        if not tracks:
+            reason = (data or {}).get('error') or (f'音乐库里没找到「{query}」' if query else '没有能放的歌')
+            return {'success': False, 'pass': True, 'reason': reason}
+        name = data.get('name') or ''
+        if query and data.get('match') == 'song':
+            name = ''
+        default_mode = 'shuffle' if tag else 'loop'
+        now = await p.play_music(tracks, 0, mode or default_mode, name, minutes)
+        tail = f'，{int(minutes)} 分钟后停' if minutes else ''
+        if tag == 'kids' or tag == 'bedtime':
+            say = f"好，放{data.get('name')}，第一首{now['name']}{tail}。"
+        elif tag:
+            say = f"好，随便放几首，第一首{now['name']}{tail}。"
+        elif data.get('match') == 'artist':
+            say = f"好，放{data.get('name')}的歌，第一首{now['name']}{tail}。"
+        elif data.get('match') == 'album':
+            say = f"好，放专辑{data.get('name')}{tail}。"
+        else:
+            say = f"好，放{now['name']}{tail}。"
+        log.info('music: %s → %d tracks, first %s', query or tag, len(tracks), now['name'])
+        return {'success': True, 'response': say}
+
     async def media_play(self, kind, name, minutes=None):
+        if kind == 'radio':
+            self._kids_block()
         p = self._media_player()
         if kind == 'radio':
             key = media.find_station(name)
@@ -1550,6 +1671,11 @@ class Client:
                     self.kids_seconds = 0.0
                     self.publish_kids()
                 self._kids_day = today
+                if (self.kids['enabled'] and self.media and self.media.now and self.media.now.get('kind') in ('music', 'radio')
+                        and kids.blocked(self.kids, self.kids_seconds) == 'bedtime'):
+                    log.info('kids mode: bedtime, music stopped')
+                    await self.media.stop()          # 到睡觉时间歌停下（助眠声照放）
+                    self.events.publish('toast', {'kind': 'info', 'text': '到睡觉时间了，歌停下了'})
                 if self.kids['enabled'] and self.state in ('listening', 'thinking', 'speaking'):
                     before = int(self.kids_seconds // 60)
                     self.kids_seconds += 5
@@ -1646,6 +1772,7 @@ class Client:
         while True:
             await self.refresh_today()
             await self.refresh_radio()
+            await self.refresh_music()
             for _ in range(40):              # 20 minutes; the 'auto' theme is checked every 30 s
                 await asyncio.sleep(30)
                 theme = looks.theme_now(self.cfg['theme'])

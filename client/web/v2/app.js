@@ -704,29 +704,98 @@ function renderTranslate() {
 }
 $('trExit').addEventListener('click', () => proPost('translate', { enabled: false }));
 
-/* ---- 电台和助眠声、场景、留言、清单 (media.py, daily.py; 设计画布第 11 块) ---- */
+/* ---- 音乐、电台和助眠声、场景、留言、清单 (media.py, daily.py; 设计画布第 11、58 块) ---- */
 let mediaMinutes = 30, nowTimer = null;
 const dailyPost = (kind, body) => DEMO === null ? postJson('/api/daily/' + kind, body).then(r => { if (!r.ok && r.error) toast(r.error, 'error'); return r; }) : Promise.resolve({});
+const musicPost = body => dailyPost('music', body);
+const MU_MODES = { loop: ['⇄', '列表循环'], one: ['↻', '单曲循环'], shuffle: ['⤮', '随机播放'] };
+const muTime = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+// 歌的进度：now.at 是 since 那一刻放到的秒数；暂停时不走。仪表盘、设置页、播放条里带 data-mu 的进度条每秒对一次
+function muAt(now) { return Math.max(0, now.at + (now.paused ? 0 : Date.now() / 1000 - now.since)); }
+function muProgress(now) {
+  const at = muAt(now), d = now.duration;
+  return `<div class="mu-prog" data-mu="1"><i style="width:${d ? Math.min(100, at / d * 100) : 0}%"></i></div>`;
+}
+function muCover(now, cls) {
+  return now.cover ? `<img class="${cls}" src="/api/music/cover/${encodeURIComponent(now.cover)}" alt="" onerror="this.outerHTML='<span class=&quot;${cls} mu-nocv&quot;>♪</span>'">`
+    : `<span class="${cls} mu-nocv">♪</span>`;
+}
+function muTick() {
+  const now = ui.media && ui.media.playing;
+  if (!now || now.kind !== 'music') return;
+  const at = muAt(now);
+  document.querySelectorAll('[data-mu]').forEach(el => { if (now.duration) el.firstElementChild.style.width = Math.min(100, at / now.duration * 100) + '%'; });
+  document.querySelectorAll('[data-mu-time]').forEach(el => { el.textContent = muTime(Math.min(at, now.duration || at)) + (now.duration ? ' / ' + muTime(now.duration) : ''); });
+}
+setInterval(muTick, 1000);
+// 音乐的按钮：仪表盘卡片、设置页、播放条共用（data-mact="next|prev|toggle|stop|mode"，data-mtag="kids|bedtime|any"）
+function musicClick(t) {
+  const now = ui.media && ui.media.playing;
+  const tg = t.closest('[data-mtag]');
+  if (tg) return musicPost({ action: 'play', tag: tg.dataset.mtag }), true;
+  const a = t.closest('[data-mact]');
+  if (!a) return false;
+  const act = a.dataset.mact;
+  if (act === 'toggle') musicPost({ action: now && now.paused ? 'resume' : 'pause' });
+  else if (act === 'mode') musicPost({ action: 'mode', mode: a.dataset.mode || ({ loop: 'one', one: 'shuffle', shuffle: 'loop' })[now ? now.mode : 'loop'] });
+  else if (act === 'timer') musicPost({ action: 'timer', minutes: Number(a.dataset.min) });
+  else musicPost({ action: act });
+  return true;
+}
+window.musicApi = { click: musicClick, cover: muCover, progress: muProgress, modes: MU_MODES, at: muAt, time: muTime };
+function renderMusicBox(m, now) {
+  const box = $('musicBox');
+  const info = m.music || {}, tags = info.tags || {};
+  const music = now && now.kind === 'music' ? now : null;
+  const quick = info.ready ? `<div class="minutes mu-quick">${tags.kids ? '<button data-mtag="kids">儿歌</button>' : ''}${tags.bedtime ? '<button data-mtag="bedtime">睡前故事</button>' : ''}<button data-mtag="any">随便听</button></div>` : '';
+  if (!music) {
+    box.innerHTML = info.ready ? `<div class="bright-head"><b class="sub">音乐</b><span class="bright-num">放起来以后能选播放方式、定时停</span></div>${quick}`
+      : '<div class="bright-head"><b class="sub">音乐</b></div><p class="opt-note mu-none">网关后台「音乐」页接好家里 NAS 上的 Navidrome（或往网关的 music 文件夹传歌）以后，这里能放儿歌、睡前故事和别的歌。</p>';
+    return;
+  }
+  const left = music.ends ? Math.max(0, Math.round((music.ends - Date.now() / 1000) / 60)) : null;
+  box.innerHTML = `<div class="mu-now">${muCover(music, 'mu-cover')}
+      <div class="mu-tx"><b>${esc(music.name)}</b><span>${esc([music.artist, music.album].filter(Boolean).join(' · '))}</span>
+        <span class="mu-time" data-mu-time></span>${muProgress(music)}</div>
+      <div class="mu-ctl"><button data-mact="prev" aria-label="上一首">⏮</button><button class="pp" data-mact="toggle" aria-label="${music.paused ? '继续' : '暂停'}">${music.paused ? '▶' : '❚❚'}</button>
+        <button data-mact="next" aria-label="下一首">⏭</button><button data-mact="stop" aria-label="停">■</button></div></div>
+    <div class="mu-next">${music.next ? `下一首 <b>${esc(music.next.name)}</b>` : ''}${music.list ? `<span>${esc(music.list)} · ${music.index}/${music.count}</span>` : `<span>${music.index}/${music.count}</span>`}</div>
+    <div class="minutes mu-modes">${Object.entries(MU_MODES).map(([k, [ic, n]]) => `<button data-mact="mode" data-mode="${k}" class="${music.mode === k ? 'on' : ''}">${ic} ${n}</button>`).join('')}</div>
+    <div class="minutes mu-timer">${[15, 30, 60].map(x => `<button data-mact="timer" data-min="${x}" class="${left !== null && Math.abs(left - x) < 1 ? 'on' : ''}">${x} 分钟后停</button>`).join('')}<button data-mact="timer" data-min="0" class="${left === null ? 'on' : ''}">${left === null ? '不定时' : `还剩 ${left} 分 · 取消`}</button></div>
+    ${quick}`;
+  muTick();
+}
 function renderMedia() {
   const m = ui.media, now = m && m.playing;
   $('nowBar').hidden = !now;
   clearInterval(nowTimer);
+  const music = now && now.kind === 'music';
+  $('nowPause').hidden = $('nowNext').hidden = !music;
+  $('nowBar').classList.toggle('music', !!music);
   if (now) {
-    $('nowIcon').textContent = now.kind === 'radio' ? '📻' : '🌙';
+    if (music) $('nowIcon').innerHTML = muCover(now, 'now-cover');
+    else $('nowIcon').textContent = now.kind === 'radio' ? '📻' : '🌙';
     $('nowName').textContent = now.name;
+    if (music) $('nowPause').textContent = now.paused ? '▶' : '❚❚';
     const tick = () => {
       const left = now.ends ? Math.max(0, Math.round((now.ends - Date.now() / 1000) / 60)) : null;
-      $('nowSub').textContent = now.kind === 'radio' ? '正在播放' : left !== null ? `还剩 ${left} 分钟` : '一直放';
+      $('nowSub').textContent = music ? [now.artist, now.next ? `下一首 ${now.next.name}` : '', now.paused ? '暂停了' : ''].filter(Boolean).join(' · ')
+        : now.kind === 'radio' ? '正在播放' : left !== null ? `还剩 ${left} 分钟` : '一直放';
     };
     tick(); nowTimer = setInterval(tick, 30000);
   }
+  if (window.dashMedia) window.dashMedia();        // 仪表盘的「音乐和电台」卡片马上跟着变
   if (!m) return;
   $('mediaNow').textContent = now ? `正在放：${now.name}` : '';
+  renderMusicBox(m, now);
   $('mediaSounds').innerHTML = m.sounds.map(x => `<button data-sound="${x.id}" class="${now && now.id === x.id ? 'on' : ''}">${esc(x.name)}</button>`).join('');
   $('mediaStations').innerHTML = m.stations.map(x => `<button data-station="${x.id}" class="${now && now.id === x.id ? 'on' : ''}">${esc(x.name)}</button>`).join('');
   for (const b of $('mediaMinutes').children) b.classList.toggle('on', Number(b.dataset.min) === mediaMinutes);
 }
 $('nowStop').addEventListener('click', () => dailyPost('media', { stop: true }));
+$('nowPause').addEventListener('click', () => musicPost({ action: ui.media && ui.media.playing && ui.media.playing.paused ? 'resume' : 'pause' }));
+$('nowNext').addEventListener('click', () => musicPost({ action: 'next' }));
+$('musicBox').addEventListener('click', e => musicClick(e.target));
 $('mediaMinutes').addEventListener('click', e => { const b = e.target.closest('[data-min]'); if (b) { mediaMinutes = Number(b.dataset.min); renderMedia(); } });
 $('mediaSounds').addEventListener('click', e => {
   const b = e.target.closest('[data-sound]');
@@ -2258,7 +2327,7 @@ const SET_GROUPS = [
   ['设备', [['screen', '屏幕和声音', '屏幕声音', '亮度、音量、熄屏、方向'], ['looks', '外观', '外观', '主题、形象、首页、待机页'],
             ['net', '网络', '网络', 'WiFi、蓝牙音箱、本机 IP'], ['system', '系统', '系统', '性能、更新、关机']]],
   ['日常', [['alarms', '闹钟和作息', '闹钟作息', '闹钟提醒、睡眠时段、天气播报、定时任务'], ['home', '家居', '家居', '米家、场景口令、主动告警'],
-            ['life', '生活', '生活', '清单、电台和助眠声']]],
+            ['life', '生活', '生活', '清单、音乐、电台和助眠声']]],
   ['家人', [['family', '家人', '家人', '家人声音、留言'], ['kids', '孩子和学习', '孩子学习', '儿童模式、学一学、最近 7 天']]],
   ['智能', [['voice', '语音', '语音', '唤醒词、回答的声音'], ['agent', '智能体', '智能体', '当前模型、可以叫的、聊天记录、大模型费用']]],
 ];

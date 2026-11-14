@@ -4,7 +4,9 @@ import json
 import logging
 import re
 import time
+import urllib.parse
 
+import aiohttp
 from aiohttp import web
 
 from . import bg
@@ -803,6 +805,14 @@ def make_app(client: Client):
                 if body.get('op') == 'refresh':
                     return {'lists': await client.refresh_lists()}
                 return {'lists': await client.list_change(body.get('op'), body.get('name'), body.get('items') or [], body.get('done'))}
+            if kind == 'music':           # 屏幕上的音乐按钮（设计画布第 58 块）
+                minutes = body.get('minutes')
+                r = await client.music_control(body.get('action') or 'play', body.get('query') or None, body.get('tag') or None,
+                                               body.get('mode') or None,
+                                               minutes if isinstance(minutes, (int, float)) and minutes > 0 else None)
+                if r.get('success') is False:
+                    raise ValueError(r.get('reason') or '放不了')
+                return {'media': client.media_view()}
             if body.get('stop'):
                 return {'media': await client.media_stop()}
             await client.media_play(body.get('kind'), body.get('name'), body.get('minutes'))
@@ -841,6 +851,24 @@ def make_app(client: Client):
 
     app.router.add_post('/api/voices/{act}', voices)
     app.router.add_post('/api/proactive/{kind}', proactive_set)
+    async def music_cover(request):
+        """专辑封面：从网关中转（/kiosk/music/cover/<id>），设备上缓存一天。"""
+        sid = request.match_info['id']
+        if not re.fullmatch(r'[nl]\.[\w\-=./]{0,400}', sid):
+            raise web.HTTPNotFound()
+        url = f"{client.cfg['hub_http']}/kiosk/music/cover/{urllib.parse.quote(sid, safe='')}?size=300"
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
+                async with s.get(url) as r:
+                    if r.status != 200 or not r.content_type.startswith('image/'):
+                        raise web.HTTPNotFound()
+                    body = await r.read()
+                    ctype = r.content_type
+        except aiohttp.ClientError:
+            raise web.HTTPNotFound()
+        return web.Response(body=body, content_type=ctype, headers={'Cache-Control': 'max-age=86400'})
+
+    app.router.add_get('/api/music/cover/{id}', music_cover)
     app.router.add_post('/api/daily/{kind}', daily_set)
     app.router.add_post('/api/cook/start', cook_start)
     app.router.add_post('/api/cook/go', cook_go)
