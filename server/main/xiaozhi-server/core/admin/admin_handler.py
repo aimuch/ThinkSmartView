@@ -87,6 +87,8 @@ class AdminHandler:
         self.data_dir = data_dir
         self.started_at = time.time()
         self.sessions = auth.SessionStore(kept_path=data_dir / ".admin-sessions-kept.json")
+        from core.agent.intercom import Intercom
+        self.intercom = Intercom()        # 视频对讲（设计画布第 51 块）
         self.sessions_handover = data_dir / ".admin-sessions.json"
         if self.sessions.restore(self.sessions_handover):
             logger.bind(tag=TAG).info("更新网关后沿用了更新前的后台登录")
@@ -221,6 +223,13 @@ class AdminHandler:
                 web.post("/admin/api/voice-clones/test", self.handle_clone_test),
                 web.post("/admin/api/voice-clones/apply", self.handle_clone_apply),
                 web.post("/kiosk/voice/clone", self.handle_kiosk_voice_clone),
+                # 视频对讲（core/agent/intercom.py，设计画布第 51 块）：手机页只认 Tailscale 转来、带登录身份的请求
+                web.get("/call", self.handle_call_page),
+                web.get("/call/devices", self.handle_call_devices),
+                web.get("/call/ws", self.handle_call_ws),
+                web.get("/kiosk/call/wait", self.handle_kiosk_call_wait),
+                web.post("/kiosk/call/event", self.handle_kiosk_call_event),
+                web.get("/kiosk/call/info", self.handle_kiosk_call_info),
                 web.post("/admin/api/vision", self.handle_vision_save),
                 web.post("/admin/api/vision/test", self.handle_vision_test),
                 web.post("/admin/api/models/list", self.handle_models_list),
@@ -1924,6 +1933,101 @@ class AdminHandler:
         if not path or not os.path.isfile(path):
             return self._error("没有这张", 404)
         return web.FileResponse(path, headers={"Content-Type": "image/jpeg", "Cache-Control": "no-store"})
+
+    # ---------- 视频对讲（core/agent/intercom.py，设计画布第 51 块） ----------
+
+    @staticmethod
+    def _from_tailnet(request: web.Request):
+        """tailscale serve 在本机转来、带登录身份的请求 → (显示名, 登录名)；否则 (None, None)。
+        局域网直接来的请求（来源不是本机）带了这个头也不认。"""
+        from core.agent.intercom import caller_of
+        if request.remote not in ("127.0.0.1", "::1"):
+            return None, None
+        return caller_of(request.headers)
+
+    async def handle_call_page(self, request: web.Request):
+        name, _ = self._from_tailnet(request)
+        if not name:
+            return web.Response(status=403, content_type="text/html", text=(
+                '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+                '<body style="font-family:system-ui;padding:32px;line-height:1.7"><h2>只能在 Tailscale 里打开</h2>'
+                '<p>手机装上 Tailscale、登进家里的网络，再用网关的 ts.net 地址打开这一页。</p></body>'))
+        html = (STATIC_DIR / "call.html").read_text(encoding="utf-8")
+        return web.Response(text=html, content_type="text/html",
+                            headers={**SECURITY_HEADERS, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+    async def handle_call_devices(self, request: web.Request):
+        name, _ = self._from_tailnet(request)
+        if not name:
+            return self._error("只能在 Tailscale 里打开", 403)
+        names = await self._blocking(self._device_names)
+        seen = set(self.intercom.seen) | set(names)
+        devices = [{"id": d, "name": names.get(d) or "小麦", "ready": self.intercom.ready(d), "busy": self.intercom.busy(d)}
+                   for d in sorted(seen, key=lambda d: (not self.intercom.ready(d), names.get(d) or d))]
+        return self._json({"ok": True, "me": name, "devices": devices})
+
+    async def handle_call_ws(self, request: web.Request):
+        """手机：{"type": "call", "device", "sdp"} → ringing / answer / ended；{"type": "hangup"}。"""
+        name, login = self._from_tailnet(request)
+        if not name:
+            return self._error("只能在 Tailscale 里打开", 403)
+        ws = web.WebSocketResponse(heartbeat=20, max_msg_size=64 * 1024)
+        await ws.prepare(request)
+        call = None
+
+        async def send(msg):
+            if not ws.closed:
+                await ws.send_json(msg)
+        try:
+            async for msg in ws:
+                if msg.type != web.WSMsgType.TEXT:
+                    continue
+                try:
+                    data = json.loads(msg.data)
+                except ValueError:
+                    continue
+                if data.get("type") == "call" and (call is None or call.state == "ended"):
+                    try:
+                        call = await self.intercom.start(str(data.get("device") or ""), name, login,
+                                                         str(data.get("sdp") or ""), send)
+                    except (LookupError, ValueError) as e:
+                        await send({"type": "ended", "reason": "error", "error": str(e)})
+                        continue
+                    self.logger.bind(tag=TAG).info(f"视频对讲：{login} 呼叫 {call.device}")
+                    await send({"type": "ringing", "id": call.id})
+                elif data.get("type") == "hangup" and call:
+                    await self.intercom.phone_hangup(call.id)
+        finally:
+            if call:
+                await self.intercom.phone_hangup(call.id)
+        return ws
+
+    async def handle_kiosk_call_wait(self, request: web.Request):
+        """[xiaozhi-hub] 设备长轮询来电事件（最多 25 秒）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        device = request.query.get("device") or ""
+        if not device:
+            return self._error("缺少 device", 400)
+        return self._json({"ok": True, "events": await self.intercom.wait(device)})
+
+    async def handle_kiosk_call_event(self, request: web.Request):
+        """[xiaozhi-hub] {"device", "id", "type": answer|decline|busy|hangup, "sdp"?}"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        body = await self._read_json(request)
+        ok = await self.intercom.device_event(str(body.get("device") or ""), str(body.get("id") or ""),
+                                              str(body.get("type") or ""), body.get("sdp"))
+        return self._json({"ok": ok})
+
+    async def handle_kiosk_call_info(self, request: web.Request):
+        """[xiaozhi-hub] 设备设置页显示「手机打开哪个地址」。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.agent.intercom import tailnet_url
+        url = await tailnet_url()
+        return self._json({"ok": True, "url": url,
+                           "reason": None if url else "网关上还没装好 Tailscale（装好、登录、打开 tailscale serve 之后这里会显示地址）"})
 
     async def handle_photo_page(self, request: web.Request):
         html = (STATIC_DIR / "photo.html").read_text(encoding="utf-8")
