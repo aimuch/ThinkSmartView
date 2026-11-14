@@ -195,8 +195,17 @@ async def _list(conn, client, plan, device):
     return f"有 {len(items)} 个：" + "；".join(parts) + more
 
 
-STEPS = {"volume": _volume, "mute": _mute, "unmute": _unmute, "cancel_one": _cancel_one, "list": _list}
+async def _music(conn, client, plan, device):
+    """放歌（设计画布第 58 块）：设备说 pass（没在放歌却说「暂停」、音乐库里没找到、没标儿歌）就交给大模型。"""
+    data = await _call(conn, client, "self.music.play", plan.args)
+    if data.get("pass"):
+        return None
+    return _said(data) or "好的"
+
+
+STEPS = {"volume": _volume, "mute": _mute, "unmute": _unmute, "cancel_one": _cancel_one, "list": _list, "music": _music}
 STEP_TOOLS = {"volume": ["self.audio_speaker.get_volume", "self.audio_speaker.set_volume"],
               "mute": ["self.audio_speaker.get_volume", "self.audio_speaker.set_volume"],
               "unmute": ["self.audio_speaker.set_volume"],
-              "cancel_one": ["self.alarm.list", "self.alarm.cancel"], "list": ["self.alarm.list"]}
+              "cancel_one": ["self.alarm.list", "self.alarm.cancel"], "list": ["self.alarm.list"],
+              "music": ["self.music.play"]}

@@ -259,6 +259,35 @@
     .sv-row { grid-template-columns: 22px 12px minmax(0, 1fr); } .sv-row .sv-st, .sv-row .sv-acts { grid-column: 3; text-align: left; justify-content: flex-start; }
     .sv-line { margin-left: 0; } .sv-add { flex-wrap: wrap; } .sv-add .in.nm { flex: 1 1 100%; }
   }
+  /* 音乐（设计画布第 58 块） */
+  .mu-form { display: grid; grid-template-columns: 1.5fr 1fr 1fr auto auto; gap: 10px; align-items: end; margin-top: 8px; }
+  .mu-form label { font-size: 12px; color: var(--muted); } .mu-form .in { margin-top: 4px; }
+  .mu-tags { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+  .mu-tag { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--soft); border: 1px solid var(--line); }
+  .mu-tag > b { flex: 0 0 100%; font-size: 13px; }
+  .mu-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; font-size: 12px; background: var(--warn-soft); color: var(--warn); }
+  .mu-chip.bedtime { background: var(--accent-soft); color: var(--accent); } .mu-chip small { opacity: .75; }
+  .mu-chip button { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 6px; font-size: 11px; opacity: .7; } .mu-chip button:hover { opacity: 1; }
+  .mu-seg { display: inline-flex; gap: 6px; margin-left: auto; }
+  .mu-tabs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 8px 0; } .mu-tabs .in { flex: 1; min-width: 160px; margin: 0 0 0 auto; max-width: 300px; padding: 5px 10px; }
+  .mu-local { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; } .mu-local label.btn { cursor: pointer; }
+  .mu-crumb { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 13px; color: var(--muted); padding: 6px 0; } .mu-crumb b { color: var(--text); font-weight: 600; }
+  .mu-crumb a { color: var(--accent); text-decoration: none; } .mu-crumb .mu-here { margin-left: auto; }
+  .mu-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 48px auto; gap: 12px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
+  .mu-row.now .mu-t b { color: var(--accent); }
+  .mu-cv { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--soft); border: 1px solid var(--line); box-sizing: border-box; }
+  .mu-ico { display: grid; place-items: center; color: var(--muted); font-size: 16px; }
+  .mu-t { min-width: 0; } .mu-t b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mu-t small { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mu-d { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  .btn.mu-on { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  #mu-audio, .mu-audio { display: block; width: 100%; margin-top: 10px; } #mu-audio.hidden { display: none; }
+  .sv-music { display: flex; align-items: center; gap: 12px; } .sv-music a { margin-left: auto; }
+  @media (max-width: 760px) {
+    .mu-form, .mu-tags { grid-template-columns: 1fr; }
+    .mu-row { grid-template-columns: 40px minmax(0, 1fr); } .mu-row .mu-d { display: none; } .mu-row .sv-acts { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
+    .mu-crumb .mu-here { margin-left: 0; flex: 0 0 100%; }
+  }
   /* 认人打招呼（设计画布第 57 块） */
   .gr-card { margin-bottom: 16px; } .gr-body.off { opacity: .5; }
   .gr-def { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; } .gr-def textarea { min-height: 70px; resize: vertical; }
@@ -857,6 +886,7 @@
       <button data-page="intent"><span class="ico">⚙</span>意图识别</button>
       <button data-page="commands"><span class="ico">⚡</span>口令</button>
       <button data-page="services"><span class="ico">☁</span>外部服务</button>
+      <button data-page="music"><span class="ico">♫</span>音乐</button>
       <button data-page="update"><span class="ico">⟳</span>更新网关</button>
     </nav>
     <div class="side-foot"><div class="sf-box">
@@ -1096,7 +1126,7 @@ function renderPasswordDrawer(body) {
 
 $("logout").onclick = async () => { if (!confirmLeave()) return; page.dirty = null; await api("logout", {}); await route(); };
 
-const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, devices: renderDeviceSettings, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, commands: renderCommands, services: renderServices, update: renderUpdate };
+const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, devices: renderDeviceSettings, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, commands: renderCommands, services: renderServices, music: renderMusic, update: renderUpdate };
 const page = { name: "", dirty: null, timer: null };
 function currentPage() { const p = location.hash.slice(1); return PAGES[p] ? p : "status"; }
 function confirmLeave() { return !(page.dirty && page.dirty()) || confirm("当前页面有修改还没保存，确定离开吗？"); }
@@ -2646,7 +2676,8 @@ async function renderServices(root) {
   const tag = (custom) => `<span class="sv-tag ${custom ? "me" : "pre"}">${custom ? "自己加的" : "预设"}</span>`;
   let lineEdit = false;
   function counts() {
-    const all = [...d.weather.filter((w) => !qwSkip(w)), ...d.radio, ...d.news.map((n) => ({ ...n, on: true })), { ...d.geoip }];
+    const all = [...d.weather.filter((w) => !qwSkip(w)), ...d.radio, ...d.news.map((n) => ({ ...n, on: true })), { ...d.geoip },
+                 ...(d.music && d.music.configured ? [d.music] : [])];
     const on = all.filter((x) => x.on !== false);
     return { ok: on.filter((x) => x.status && x.status.ok).length, bad: on.filter((x) => x.status && x.status.at && !x.status.ok).length,
              off: all.length - on.length };
@@ -2696,6 +2727,10 @@ async function renderServices(root) {
           <span class="sv-name"><b>${esc(d.geoip.name)}</b><small>设备没设住宅地址时，查天气用它猜在哪个城市；设了就用不到</small>${st(d.geoip.status, d.geoip.on)}</span>
           <span class="sv-acts"><button class="btn sm" data-test="geoip" data-id="geoip">测试</button>${sw("geoip", "geoip", d.geoip.on)}</span></div></div>
     </div>
+    ${d.music ? `<div class="card panel sv-sec" style="margin-top:16px"><div class="sv-head"><b>音乐</b><span class="muted small">放儿歌、放音乐用的家里音乐库，在「音乐」页填和管</span></div>
+      <div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">${d.music.configured ? dot(d.music.status, d.music.on) : '<span class="sv-dot none"></span>'}
+        <span class="sv-name"><b>${esc(d.music.name)}</b><small class="${d.music.url ? "mono" : ""}">${d.music.url ? esc(d.music.url.replace(/^https?:\/\//, "")) : "还没填地址"}${d.music.local ? ` · 网关本机文件夹 ${d.music.local} 首` : ""}</small>${d.music.configured ? st(d.music.status, d.music.on) : ""}</span>
+        <span class="sv-acts">${d.music.configured ? '<button class="btn sm" data-test="music" data-id="music">测试</button>' : ""}<a class="btn sm" href="#music" style="text-decoration:none">去「音乐」页</a></span></div></div>` : ""}
     <div class="card panel sv-sec" style="margin-top:16px"><div class="sv-head"><b>AI 服务</b><span class="muted small">在各自的页面里选和改</span></div>
       <div class="sv-ai"><a href="#llm"><span>大模型</span> <b>${esc(d.ai.llm || "没选")}</b> ›</a><a href="#asr"><span>语音识别</span> <b>${esc(d.ai.asr || "没选")}</b> ›</a>
         <a href="#tts"><span>语音合成</span> <b>${esc(d.ai.tts || "没选")}</b> ›</a><a href="#tts"><span>声音复刻</span> <b>百炼</b> ›</a></div></div>
@@ -2725,6 +2760,159 @@ async function renderServices(root) {
     $("sv-r-add").onclick = () => op({ op: "add", group: "radio", name: $("sv-r-name").value, url: $("sv-r-url").value.trim() }, "加好了：设备下次连网关时就能放");
   }
   draw();
+}
+
+// ---------- [xiaozhi-hub] 音乐（设计画布第 58 块，core/agent/music.py）：Navidrome、本机 music 文件夹、儿歌和睡前故事 ----------
+async function renderMusic(root) {
+  let d = await api("music");
+  const hm = (t) => new Date(t * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  const ms = (v) => (v == null ? "" : v < 1000 ? `${v} 毫秒` : `${(v / 1000).toFixed(1)} 秒`);
+  const dur = (s) => (s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : "");
+  const TYPE_NAME = { folder: "文件夹", playlist: "歌单", album: "专辑", artist: "歌手" };
+  const nav = { src: null, tab: "albums", q: "", stack: [], data: null, loading: false, playing: "" };
+  let tested = null;
+  const srcs = () => [d.navidrome.url && d.navidrome.has_password ? "n" : null, d.local.count || d.local.on ? "l" : null].filter(Boolean);
+  if (!nav.src) nav.src = srcs()[0] || "l";
+  const tagged = (id) => Object.keys(d.tag_names).filter((k) => (d.tags[k] || []).some((r) => r.id === id));
+  function navStatus() {
+    const s = d.navidrome.status || {};
+    if (tested) return tested.ok ? `<span class="sv-st ok">能用 · ${esc(tested.server || "")} ${esc(tested.version || "")}${tested.libraries && tested.libraries.length ? " · " + esc(tested.libraries.join("、")) : ""}</span>`
+      : `<span class="sv-st bad">${esc(tested.error || "没连上")}</span>`;
+    if (!d.navidrome.url) return '<span class="sv-st">还没填</span>';
+    if (!s.at) return '<span class="sv-st">还没用过</span>';
+    return s.ok ? `<span class="sv-st ok">能用 · ${ms(s.ms)} · ${hm(s.at)}</span>` : `<span class="sv-st bad">${esc(s.err || "没连上")} · ${hm(s.at)}</span>`;
+  }
+  const dotOf = () => { const s = tested || d.navidrome.status || {}; return !d.navidrome.url ? "none" : tested ? (tested.ok ? "ok" : "bad") : !s.at ? "none" : s.ok ? "ok" : "bad"; };
+  function tagButtons(ref) {
+    return Object.entries(d.tag_names).map(([k, name]) => {
+      const on = tagged(ref.id).includes(k);
+      return `<button class="btn sm ${on ? "mu-on" : ""}" data-tag="${k}" data-ref='${esc(JSON.stringify(ref))}' data-tag-on="${on ? 0 : 1}">${on ? "✓ 已标成" : "标成"}${esc(name)}</button>`;
+    }).join("");
+  }
+  function rows() {
+    const x = nav.data;
+    if (nav.loading) return '<p class="muted small">读取中…</p>';
+    if (!x) return "";
+    if (x.error) return `<p class="banner err">${esc(x.error)}</p>`;
+    const local = nav.src === "l";
+    const items = (x.items || []).map((it) => `<div class="mu-row">
+        ${it.cover ? `<img class="mu-cv" loading="lazy" onerror="this.outerHTML='<span class=&quot;mu-cv mu-ico&quot;>♪</span>'" src="/admin/api/music/cover/${encodeURIComponent(it.cover)}?size=96" alt="">` : `<span class="mu-cv mu-ico">${it.type === "playlist" ? "≡" : it.type === "artist" ? "☺" : "▤"}</span>`}
+        <span class="mu-t"><b>${esc(it.name)}</b><small>${esc(TYPE_NAME[it.type] || "")}${it.sub ? " · " + esc(it.sub) : ""}</small></span><span></span>
+        <span class="sv-acts"><button class="btn sm" data-open="${esc(it.id)}" data-type="${it.type}" data-name="${esc(it.name)}">打开</button>${tagButtons({ type: it.type, id: it.id, name: it.name })}${local ? `<button class="btn sm danger" data-del="${esc(it.id)}">删除</button>` : ""}</span></div>`).join("");
+    const songs = (x.songs || []).map((s) => `<div class="mu-row ${nav.playing === s.id ? "now" : ""}">
+        ${s.cover ? `<img class="mu-cv" loading="lazy" onerror="this.outerHTML='<span class=&quot;mu-cv mu-ico&quot;>♪</span>'" src="/admin/api/music/cover/${encodeURIComponent(s.cover)}?size=96" alt="">` : '<span class="mu-cv mu-ico">♪</span>'}
+        <span class="mu-t"><b>${esc(s.title)}</b><small>${esc([s.artist, s.album].filter(Boolean).join(" · "))}</small></span><span class="mu-d">${dur(s.duration)}</span>
+        <span class="sv-acts"><button class="btn sm" data-play="${esc(s.id)}" data-title="${esc(s.title)}">${nav.playing === s.id ? "❚❚ 停" : "▶ 试听"}</button>${local ? `<button class="btn sm danger" data-del="${esc(s.id)}">删除</button>` : ""}</span></div>`).join("");
+    return items + songs || '<p class="muted small">这里没有东西</p>';
+  }
+  function crumb() {
+    const top = { albums: "专辑", playlists: "歌单", folders: "文件夹", random: "随便听听", search: `搜「${nav.q}」` }[nav.tab];
+    if (!nav.stack.length) return `<b>${esc(top)}</b>`;
+    const cur = nav.stack[nav.stack.length - 1];
+    return `<a href="#" data-up="0">${esc(top)}</a>` + nav.stack.map((s, i) => i === nav.stack.length - 1 ? ` › <b>${esc(s.name)}</b>` : ` › <a href="#" data-up="${i + 1}">${esc(s.name)}</a>`).join("")
+      + `<span class="sv-acts mu-here">${tagButtons({ type: cur.type, id: cur.id, name: cur.name })}</span>`;
+  }
+  function tagsHtml() {
+    return Object.entries(d.tag_names).map(([k, name]) => `<div class="mu-tag"><b>${esc(name)}</b>${(d.tags[k] || []).length
+      ? (d.tags[k] || []).map((r) => `<span class="mu-chip ${k}" title="${esc(TYPE_NAME[r.type] || "")}">${esc(r.name || r.id)}<small>${esc(TYPE_NAME[r.type] || "")}${r.id.startsWith("l.") ? " · 本机" : ""}</small><button data-untag="${k}" data-ref='${esc(JSON.stringify(r))}' title="去掉" aria-label="去掉">✕</button></span>`).join("")
+      : `<span class="muted small">还没标：在下面打开一个文件夹或歌单，点「标成${esc(name)}」</span>`}</div>`).join("");
+  }
+  function draw() {
+    const ready = srcs();
+    root.innerHTML = `
+    <div class="page-head"><div><h1>音乐</h1><p class="sub">设备上说「放儿歌」「放两只老虎」「下一首」时放这里的歌。只接自己家里的音乐：NAS 上的 Navidrome，或者网关本机的 music 文件夹。</p></div></div>
+    <div class="card panel sv-sec"><div class="sv-head"><span class="sv-dot ${dotOf()}"></span><b>Navidrome</b><span class="muted small">家里 NAS 上的音乐服务器（Subsonic 接口）</span>
+        <span class="sv-acts">${navStatus()}${d.navidrome.url ? `<label class="switch" style="margin:0" title="${d.navidrome.on ? "不用它" : "用它"}"><input type="checkbox" data-src-on="navidrome" ${d.navidrome.on ? "checked" : ""}></label>` : ""}</span></div>
+      <div class="mu-form"><label>地址<input class="in mono" id="mu-url" value="${esc(d.navidrome.url)}" placeholder="http://NAS 的地址:4533" autocomplete="off"></label>
+        <label>用户名<input class="in" id="mu-user" value="${esc(d.navidrome.user)}" autocomplete="off"></label>
+        <label>密码<input class="in" id="mu-pass" type="password" autocomplete="new-password" placeholder="${d.navidrome.has_password ? "已存（不显示），要改再填" : "Navidrome 的登录密码"}"></label>
+        <button class="btn" id="mu-test">测试</button><button class="btn primary" id="mu-save">保存</button></div>
+      <p class="muted small" style="margin:8px 0 0">密码只用来算 Subsonic 的 token（md5(密码 + 随机 salt)），网关存 token 不存密码，也不记进日志；改了用户名要重新填密码。设备放歌走网关中转，拿不到密码。</p></div>
+    <div class="card panel sv-sec"><div class="sv-head"><span class="sv-dot ${d.local.on && d.local.count ? "ok" : "none"}"></span><b>网关本机 music 文件夹</b>
+        <span class="muted small">没有 NAS 时用 · ${d.local.count} 首 · <span class="mono">${esc(d.local.dir)}</span></span>
+        <span class="sv-acts"><label class="switch" style="margin:0" title="${d.local.on ? "不用它" : "用它"}"><input type="checkbox" data-src-on="local" ${d.local.on ? "checked" : ""}></label></span></div></div>
+    <div class="card panel sv-sec"><div class="sv-head"><b>标签</b><span class="muted small">说「放几首儿歌」「放睡前故事」时从标好的里打乱挑；没标的话这句照常交给大模型</span></div>
+      <div class="mu-tags">${tagsHtml()}</div></div>
+    <div class="card panel sv-sec"><div class="sv-head"><b>浏览和试听</b>
+        ${ready.length > 1 ? `<span class="mu-seg">${ready.map((s) => `<button class="btn sm ${nav.src === s ? "primary" : ""}" data-src="${s}">${s === "n" ? "Navidrome" : "本机文件夹"}</button>`).join("")}</span>` : ""}</div>
+      ${!ready.length && !d.local.on ? '<p class="muted small">先填好 Navidrome，或者打开本机文件夹。</p>' : `
+      <div class="mu-tabs">${(nav.src === "l" ? [["folders", "文件夹"], ["albums", "专辑"]] : [["albums", "专辑"], ["playlists", "歌单"], ["folders", "文件夹"], ["random", "随便听听"]])
+        .map(([k, n]) => `<button class="btn sm ${nav.tab === k && !nav.stack.length ? "primary" : ""}" data-tab="${k}">${n}</button>`).join("")}
+        <input class="in" id="mu-q" placeholder="搜歌名、专辑、歌手" value="${esc(nav.q)}"><button class="btn sm" id="mu-search">搜</button></div>
+      ${nav.src === "l" ? `<div class="mu-local"><label class="btn sm">上传歌<input type="file" id="mu-files" multiple accept="audio/*,.mp3,.m4a,.flac,.ogg,.opus,.wav,.aac,image/jpeg,image/png" hidden></label>
+        <button class="btn sm" id="mu-mkdir">新建文件夹</button><span class="muted small">传到：${esc(nav.stack.length ? nav.stack[nav.stack.length - 1].name : "music")}；文件夹里放一张 cover.jpg 就是封面</span><span id="mu-up" class="muted small"></span></div>` : ""}
+      <div class="mu-crumb">${crumb()}</div>
+      <div class="mu-list">${rows()}</div>
+      <audio id="mu-audio" controls preload="none" class="${nav.playing ? "" : "hidden"}"></audio>`}</div>`;
+    bind();
+  }
+  async function load() {
+    nav.loading = true; draw();
+    const cur = nav.stack[nav.stack.length - 1];
+    const qs = cur ? `type=${cur.type}&id=${encodeURIComponent(cur.id)}` : `src=${nav.src}&type=${nav.tab}` + (nav.tab === "search" ? `&q=${encodeURIComponent(nav.q)}` : "");
+    try { nav.data = await api("music/browse?" + qs); } catch (e) { nav.data = { error: e.message }; }
+    nav.loading = false; draw();
+  }
+  const save = async (body, msg) => { try { d = await api("music", body); tested = null; draw(); if (msg) toast(msg); return true; } catch (e) { toast(e.message, true); return false; } };
+  function bind() {
+    const form = () => ({ url: $("mu-url").value.trim(), user: $("mu-user").value.trim(), password: $("mu-pass").value });
+    $("mu-test").onclick = (e) => busy(e.target, async () => {
+      try { tested = await api("music/test", { source: "navidrome", ...form() }); } catch (err) { tested = { ok: false, error: err.message }; }
+      const keep = form(); draw(); $("mu-url").value = keep.url; $("mu-user").value = keep.user; $("mu-pass").value = keep.password;
+    });
+    $("mu-save").onclick = (e) => busy(e.target, async () => {
+      if (await save({ op: "navidrome", ...form() }, "保存好了")) { if (srcs().includes("n")) { nav.src = "n"; nav.tab = "albums"; nav.stack = []; load(); } }
+    });
+    root.querySelectorAll("[data-src-on]").forEach((i) => (i.onchange = () => save({ op: "toggle", source: i.dataset.srcOn, on: i.checked })));
+    root.querySelectorAll("[data-tag]").forEach((b) => (b.onclick = () => save({ op: "tag", tag: b.dataset.tag, ref: JSON.parse(b.dataset.ref), on: b.dataset.tagOn === "1" },
+      b.dataset.tagOn === "1" ? `标好了：说「放${d.tag_names[b.dataset.tag]}」就放` : "去掉了")));
+    root.querySelectorAll("[data-untag]").forEach((b) => (b.onclick = () => save({ op: "tag", tag: b.dataset.untag, ref: JSON.parse(b.dataset.ref), on: false }, "去掉了")));
+    root.querySelectorAll("[data-src]").forEach((b) => (b.onclick = () => { nav.src = b.dataset.src; nav.tab = nav.src === "l" ? "folders" : "albums"; nav.stack = []; load(); }));
+    root.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { nav.tab = b.dataset.tab; nav.stack = []; load(); }));
+    root.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { nav.stack.push({ type: b.dataset.type, id: b.dataset.open, name: b.dataset.name }); load(); }));
+    root.querySelectorAll("[data-up]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); nav.stack = nav.stack.slice(0, +a.dataset.up); load(); }));
+    const search = () => { const q = $("mu-q").value.trim(); if (!q) return; nav.q = q; nav.tab = "search"; nav.stack = []; load(); };
+    if ($("mu-search")) { $("mu-search").onclick = search; $("mu-q").onkeydown = (e) => { if (e.key === "Enter") search(); }; }
+    const player = $("mu-audio");
+    if (player && audio && nav.playing) { player.replaceWith(audio); audio.id = "mu-audio"; }
+    root.querySelectorAll("[data-play]").forEach((b) => (b.onclick = () => {
+      if (audio) { audio.pause(); }
+      if (nav.playing === b.dataset.play) { nav.playing = ""; audio = null; draw(); return; }
+      nav.playing = b.dataset.play;
+      audio = new Audio("/admin/api/music/stream/" + encodeURIComponent(b.dataset.play));
+      audio.controls = true; audio.className = "mu-audio";
+      audio.onended = () => { nav.playing = ""; draw(); };
+      audio.onerror = () => { toast(`「${b.dataset.title}」放不了：浏览器不支持这个格式，或者 Navidrome 连不上`, true); nav.playing = ""; draw(); };
+      audio.play().catch(() => {});
+      draw();
+    }));
+    root.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
+      if (!confirm("从网关本机删掉这一项？删了就没了。")) return;
+      try { await api("music/local", { op: "delete", id: b.dataset.del }); d = await api("music"); load(); toast("删掉了"); } catch (e) { toast(e.message, true); }
+    }));
+    if ($("mu-mkdir")) $("mu-mkdir").onclick = async () => {
+      const name = prompt("新文件夹的名字（比如「儿歌」）"); if (!name) return;
+      const cur = nav.stack[nav.stack.length - 1];
+      try { await api("music/local", { op: "mkdir", dir: cur ? cur.id : "l.", name }); load(); } catch (e) { toast(e.message, true); }
+    };
+    if ($("mu-files")) $("mu-files").onchange = async (e) => {
+      const files = [...e.target.files], cur = nav.stack[nav.stack.length - 1], dir = cur ? cur.id : "l.";
+      let done = 0;
+      for (const f of files) {
+        $("mu-up").textContent = `正在传 ${done + 1}/${files.length}：${f.name}`;
+        try {
+          const r = await fetch(`/admin/api/music/upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}`, { method: "POST", body: f });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || j.ok === false) throw new Error(j.error || "上传失败：" + r.status);
+          done++;
+        } catch (err) { toast(`${f.name}：${err.message}`, true); }
+      }
+      toast(`传好了 ${done} 个`);
+      d = await api("music"); load();
+    };
+  }
+  draw();
+  if (srcs().length || d.local.on) load();
 }
 
 // ---------- [xiaozhi-hub] 认人打招呼（设计画布第 57 块，core/agent/greetings.py） ----------
@@ -3755,7 +3943,8 @@ function applyUi() {
   const col = $("side-col"); if (col) { const rail = ui.side === "rail"; col.textContent = rail ? "››" : "‹‹"; col.title = rail ? "展开侧栏" : "收起侧栏"; }
   const nav = $("nav"), buttons = [...nav.querySelectorAll("button[data-page]")];
   const order = ui.nav.filter((p) => buttons.some((b) => b.dataset.page === p));
-  buttons.map((b) => b.dataset.page).forEach((p) => { if (!order.includes(p)) order.push(p); });
+  const all = buttons.map((b) => b.dataset.page);   // 新加的页面（比如「音乐」）插在默认顺序里它前一项的后面，不是排到最后
+  all.forEach((p, i) => { if (!order.includes(p)) { const prev = all.slice(0, i).reverse().find((x) => order.includes(x)); order.splice(prev ? order.indexOf(prev) + 1 : order.length, 0, p); } });
   order.forEach((p) => { const b = buttons.find((x) => x.dataset.page === p); nav.appendChild(b); b.hidden = ui.hidden.includes(p) && page.name !== p; b.title = b.textContent.trim(); });
 }
 function saveUi(change) { Object.assign(ui, change); store.set(UI_KEY, ui); applyUi(); }
@@ -3776,6 +3965,7 @@ const NAV_ICONS = {
   tts: '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
   intent: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
   update: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
 };
 document.querySelectorAll("#nav button[data-page] .ico").forEach((el) => {
   const d = NAV_ICONS[el.parentElement.dataset.page];

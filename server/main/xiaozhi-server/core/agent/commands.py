@@ -59,12 +59,12 @@ def to_digits(text: str) -> str:
     return CN_RUN.sub(sub, text)
 
 
-def clean(text: str) -> str:
-    """去标点、开头的「帮我」「请」、结尾的「一下」「吧」，中文数字换成阿拉伯数字。"""
+def clean(text: str, digits: bool = True) -> str:
+    """去标点、开头的「帮我」「请」、结尾的「一下」「吧」，中文数字换成阿拉伯数字（digits=False 不换：歌名用）。"""
     t = PUNCT.sub("", str(text or ""))
     t = LEAD.sub("", t)
     t = TAIL.sub("", t)
-    return to_digits(t)
+    return to_digits(t) if digits else t
 
 
 # ---------------------------------------------------------------- 时长、钟点、日期
@@ -209,6 +209,7 @@ CATEGORIES = [
     ("volume", "音量、静音", "大点声 · 小点声 · 音量调到{数字} · 最大声 · 静音 · 取消静音", "音量 {音量}"),
     ("screen", "亮度、睡眠", "屏幕亮一点 · 调暗 · 亮度调到{数字} · 开启睡眠模式 · 关闭睡眠模式", "好的"),
     ("media", "播放、学习陪伴", "停止播放 · 别放了 · 打开学习陪伴 · 关掉学习陪伴", "好的"),
+    ("music", "放歌", "放儿歌 · 放睡前故事 · 放{歌名} · 下一首 · 上一首 · 暂停 · 继续 · 单曲循环 · 随机播放", "（按结果说）"),
 ]
 CATEGORY_IDS = [c[0] for c in CATEGORIES]
 
@@ -230,8 +231,8 @@ KIND_NAME = {"alarm": "闹钟", "timer": "倒计时", "reminder": "提醒"}
 TIMER_WORDS = r"(?:倒计时|计时器?|定时器?)"
 
 
-def _builtin(t: str, now: datetime.datetime):
-    """内置口令：认出来返回 Plan；认不出 None。t 是 clean 过的整句。"""
+def _builtin(t: str, now: datetime.datetime, raw: str = ""):
+    """内置口令：认出来返回 Plan；认不出 None。t 是 clean 过的整句，raw 是没换数字的（歌名用）。"""
     # ---- 日期时间
     if re.fullmatch(r"(?:现在)?(?:几点了?|几点钟|什么时间|几点几分)|现在时间|报时", t):
         return Plan("datetime", "answer", f"现在是 {now.hour}:{now.minute:02d}")
@@ -311,13 +312,61 @@ def _builtin(t: str, now: datetime.datetime):
     if re.fullmatch(r"(?:关闭|关掉|退出|关)睡眠模式", t):
         return Plan("screen", "tool", "好的，睡眠模式关了", tool="self.sleep_mode.set", args={"enabled": False})
 
+    # ---- 放歌（设计画布第 58 块）：设备上没在放歌、音乐库没接、没找到时设备回 pass，照常交给大模型
+    plan = _music(t, raw)
+    if plan:
+        return plan
+
     # ---- 播放、学习陪伴
-    if re.fullmatch(r"(?:停止|关掉|关闭|停)(?:播放|音乐|电台|广播|收音机|助眠声|雨声|白噪音)|别放了|停止播放|不听了", t):
+    if re.fullmatch(r"(?:停止|关掉|关闭|停)(?:播放|音乐|电台|广播|收音机|助眠声|雨声|白噪音|歌|儿歌|故事)|别放了|停止播放|不听了|别唱了|停|停下|停下来", t):
         return Plan("media", "tool", "好的", tool="self.media.play", args={"action": "stop"})
     if re.fullmatch(r"(?:打开|开启|开)学习陪伴|看着我写作业", t):
         return Plan("media", "tool", "{结果}", tool="self.study.control", args={"action": "on"})
     if re.fullmatch(r"(?:关闭|关掉|关)学习陪伴", t):
         return Plan("media", "tool", "{结果}", tool="self.study.control", args={"action": "off"})
+    return None
+
+
+PLAY = r"(?:播放|放|播|我要听|我想听|想听|要听|听|来)"
+SONG_VERB = r"(?:播放|放|播|我要听|我想听|想听|要听|听)"
+# 「放」后面跟这些不是歌名：电台、助眠声交给原来的说法（大模型调 self.media.play），别的照常聊
+NOT_SONG = re.compile(r"电台|广播|之声|收音机|雨声|海浪|风扇|白噪|噪音|鸟叫|助眠|新闻|天气|闹钟|视频|电视|动画|照片|相册|声音|音量|"
+                      r"^(?:心|假|学|弃|松|屁|鞭炮|烟花|风筝|羊|牛|电影|大点|大一点|大声|小点|小一点|小声|慢点|快点)")
+
+
+def _music(t: str, raw: str = ""):
+    """放歌的说法 → Plan（steps="music"，参数原样给设备的 self.music.play）。raw 是没把中文数字换成阿拉伯数字的
+    （歌名里的「两只老虎」不能变成「2只老虎」）。"""
+    raw = raw or t
+
+    def mk(args, note):
+        return Plan("music", "steps", "", steps="music", args=args, note=note)
+    if re.fullmatch(r"下1首|下首|下1曲|换1首|换首歌?|切歌|跳过这首|不听这首", t):
+        return mk({"action": "next"}, "下一首")
+    if re.fullmatch(r"上1首|上首|上1曲|前1首|刚才那首|再放1遍刚才那首", t):
+        return mk({"action": "prev"}, "上一首")
+    if re.fullmatch(r"暂停(?:播放|音乐|1下)?|先暂停", t):
+        return mk({"action": "pause"}, "暂停（没在放歌就交给大模型）")
+    if re.fullmatch(r"继续(?:播放|放|听|唱)?|接着放|接着播|接着听|恢复播放", t):
+        return mk({"action": "resume"}, "继续（没暂停就交给大模型）")
+    if re.fullmatch(r"单曲循环|循环(?:这首|播放这首)|1直放这首|重复这首", t):
+        return mk({"action": "mode", "mode": "one"}, "单曲循环")
+    if re.fullmatch(r"列表循环|顺序播放|全部循环|循环播放", t):
+        return mk({"action": "mode", "mode": "loop"}, "列表循环")
+    if re.fullmatch(r"随机播放|随机放|乱序播放|打乱(?:顺序|播放)?", t):
+        return mk({"action": "mode", "mode": "shuffle"}, "随机播放")
+    if re.fullmatch(rf"{PLAY}(?:几首|1首|首|1些|些|点|1点|几个)?儿歌(?:吧|听听|给宝宝听|给孩子听)?|唱(?:1?首|个)?儿歌", t):
+        return mk({"action": "play", "tag": "kids"}, "放标成儿歌的")
+    if re.fullmatch(rf"(?:{PLAY}|讲)(?:1个|个|几个|1段|段|点)?(?:睡前)?故事(?:吧|听听)?", t):
+        return mk({"action": "play", "tag": "bedtime"}, "放标成睡前故事的（没标就让大模型讲）")
+    if re.fullmatch(rf"{PLAY}(?:点|1点|些|几首|1首|首)?(?:音乐|歌|歌曲)(?:吧|听听)?|随便放(?:点|几首)?(?:歌|音乐)?", t):
+        return mk({"action": "play", "tag": "any"}, "随便放")
+    m = (re.fullmatch(rf"{SONG_VERB}(?:一首|首|一下)?(.{{2,20}}?)(?:这首歌|那首歌|这首|吧|听听|给我听)?", raw)
+         or re.fullmatch(r"(?:来一首|来首|唱一首|唱首)(.{2,20}?)(?:这首歌|吧|听听)?", raw))
+    if m:
+        name = m.group(1)
+        if not NOT_SONG.search(name) and not re.search(r"[\d一二两三四五六七八九十半]+(?:分钟?|小时|秒)", name):
+            return mk({"action": "play", "query": name}, f"找「{name}」放（没找到交给大模型）")
     return None
 
 
@@ -529,18 +578,18 @@ def match(text: str, cfg: dict = None, now: datetime.datetime = None):
     """→ (Plan 或 None, 整理后的句子)。先自定义，再内置；内置的类别关了就跳过。"""
     cfg = cfg or load()
     now = now or datetime.datetime.now()
-    t = clean(text)
+    t, raw = clean(text), clean(text, digits=False)
     if not t or len(t) > 40:
         return None, t
     for a in cfg.get("aliases") or []:               # 别名：整句换成另一句再认
         if clean(a["say"]) == t:
-            t = clean(a["means"])
+            t, raw = clean(a["means"]), clean(a["means"], digits=False)
             break
     plan = _custom(t, cfg.get("custom") or [])
     if plan:
         return plan, t
     builtin = cfg.get("builtin") or {}
-    plan = _builtin(t, now)
+    plan = _builtin(t, now, raw)
     if plan and not (builtin.get(plan.rule) or {}).get("enabled", True):
         return None, t
     override = (builtin.get(plan.rule) or {}).get("reply") if plan else ""
