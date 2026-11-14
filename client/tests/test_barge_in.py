@@ -417,8 +417,68 @@ async def test_a_nearer_device_answers(monkeypatch):
     calls.clear()
     c.verifier = None
 
-    async def woke(source='button', chimed=False):
+    async def woke(source='button', chimed=False, greet=None):
         calls.append(source)
+        if greet is not None:
+            greet.cancel()
     c.wake = woke
+
+    async def nobody(audio):
+        return None
+    c._ask_greeting = nobody
     await c.voice_wake('小麦小麦', np.zeros(16000, np.float32))
     assert calls == ['voice']
+
+
+def _wav_bytes(seconds=0.3, rate=24000):
+    import io
+    import wave
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes((np.ones(int(rate * seconds)) * 3000).astype('<i2').tobytes())
+    return buf.getvalue()
+
+
+def test_talking_right_after_the_wake_word():
+    """「小麦小麦，明天天气」一口气说的：不打招呼（开头 0.6 秒是「叮」的回声，不算）。"""
+    c = make_client()
+    quiet, loud = np.zeros(320, np.float32), np.full(320, 0.2, np.float32)
+    c.wake_ref = -12.0
+    c.backlog = [loud] * 30 + [quiet] * 40               # 只有「叮」的回声
+    assert not c.talking_since_wake()
+    c.backlog = [quiet] * 30 + [loud] * 20               # 0.4 秒在说话
+    assert c.talking_since_wake()
+    c.backlog = None
+    assert not c.talking_since_wake()
+
+
+@pytest.mark.asyncio
+async def test_wake_greeting_is_said_then_listening_starts():
+    import base64
+    c = make_client()
+    pushed, shown = [], []
+    c.audio.player = types.SimpleNamespace(push=pushed.append, buffered=lambda: 0.0, trim=lambda keep: None)
+    c.add_message = lambda role, text, **k: shown.append((role, text))
+    c.wake_ref = -12.0
+    c.backlog = [np.zeros(320, np.float32)] * 60
+    fut = asyncio.get_running_loop().create_future()
+    fut.set_result({'id': 'ab12', 'speaker': '宝宝', 'text': '你好呀，小宝', 'wav': base64.b64encode(_wav_bytes()).decode()})
+    extra = await c._greet(fut)
+    assert extra == {'greet_id': 'ab12', 'greet_said': True} and len(pushed) == 1 and shown == [('bot', '你好呀，小宝')]
+    assert c.backlog == []                                # 念的时候录到的是自己：不送去识别
+    await c.start_listening('realtime', **extra)
+    start = [m for m in c.hub.sent if m.get('type') == 'listen'][-1]
+    assert start['greet_id'] == 'ab12' and start['greet_said'] is True
+    # 接着就说了：不念，但告诉网关
+    c.backlog = [np.zeros(320, np.float32)] * 30 + [np.full(320, 0.2, np.float32)] * 20
+    assert await c._greet(fut) == {'greet_id': 'ab12', 'greet_said': False} and len(pushed) == 1
+    # 网关没认出 / 没回
+    none = asyncio.get_running_loop().create_future()
+    none.set_result({'id': 'cd34', 'text': ''})
+    assert await c._greet(none) == {'greet_id': 'cd34', 'greet_said': False}
+    gone = asyncio.get_running_loop().create_future()
+    gone.set_result(None)
+    assert await c._greet(gone) == {}

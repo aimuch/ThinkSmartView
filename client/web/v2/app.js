@@ -604,7 +604,7 @@ function renderVoices() {
   const v = ui.voices || { people: [], sentences: [], available: true };
   $('voicesCount').textContent = v.people.length ? `${v.people.length} 个人` : '';
   $('voicesList').innerHTML = v.people.map(p => `<div class="al"><div class="al-text"><b>${esc(p.name)}${p.child ? '（孩子）' : ''}</b>` +
-    `<span>录了 ${p.samples} 段</span></div><button class="al-del ${vc.armed === p.name ? 'armed' : ''}" data-vdel="${esc(p.name)}">${vc.armed === p.name ? '确认删除' : '删除'}</button></div>`).join('');
+    `<span>录了 ${p.samples} 段${p.here === false && p.devices && p.devices.length ? ` · 在${esc(p.devices.join('、'))}录的` : ''}</span></div><button class="al-del ${vc.armed === p.name ? 'armed' : ''}" data-vdel="${esc(p.name)}">${vc.armed === p.name ? '确认删除' : '删除'}</button></div>`).join('');
   const on = !!vc.step;
   $('voicesPre').hidden = !on;
   $('voicesDots').innerHTML = on && vc.step !== 'name' ? [0, 1, 2].map(i => `<i class="${i < vc.n ? 'on' : ''}"></i>`).join('') : '';

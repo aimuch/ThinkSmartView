@@ -34,6 +34,7 @@ States shown to the page: idle, connecting, listening, thinking, speaking.
   end of the reply, muted while an alarm rings (the phone is asked to pause then and is not resumed).
 """
 import asyncio
+import base64
 import datetime
 import io
 import json
@@ -2047,8 +2048,10 @@ class Client:
         the chime still comes at once, but connecting and listening wait for its answer: what is
         said meanwhile is kept (backlog) and sent on, and a false wake ends quietly instead of
         with the hub answering the TV or a "didn't catch that"."""
+        # 认人打招呼（设计画布第 57 块）：唤醒词那几秒的声音同时送网关认人，和复核一起进行
+        greet = asyncio.create_task(self._ask_greeting(audio)) if self.ring is None and not self.in_turn() else None
         if not self.verifier:
-            await self.wake('voice')
+            await self.wake('voice', greet=greet)
         elif self.in_turn():
             # don't cut a reply off for what may not be the wake word
             if (await self._check_wake(label, audio))['ok']:
@@ -2058,7 +2061,7 @@ class Client:
             self.chime('voice')
             self.set_state('connecting')
             if (await self._check_wake(label, audio))['ok']:
-                await self.wake('voice', chimed=True)
+                await self.wake('voice', chimed=True, greet=greet)
             else:
                 log.info('not the wake word after all: back to idle')
                 self.set_state('idle')
@@ -2084,6 +2087,65 @@ class Client:
     async def _check_wake(self, label, audio):
         return await asyncio.get_running_loop().run_in_executor(None, self.verifier.check, audio, label)
 
+    async def _ask_greeting(self, audio):
+        """网关认出是家里的谁、要念哪句（带合成好的 WAV）；家里没录声音、认不出、连不上时 None 或 text 为空。"""
+        self.wake_ref = wake_loudness(audio)
+        pcm = np.clip(audio * 32768, -32768, 32767).astype('<i2').tobytes()
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2.5)) as s:
+                async with s.post(f"{self.cfg['hub_http']}/kiosk/wake/greet?" + urllib.parse.urlencode({'device': self.cfg['device_id']}),
+                                  data=pcm, headers={'Content-Type': 'audio/L16; rate=16000'}) as r:
+                    data = await r.json(content_type=None)
+        except Exception as e:
+            log.info('wake greeting: no answer from the hub (%s)', type(e).__name__)
+            return None
+        if data.get('id'):
+            log.info('wake greeting: %s %s -> %r', data.get('speaker') or 'nobody', data.get('score'), data.get('text'))
+        return data
+
+    def talking_since_wake(self):
+        """喊完唤醒词接着就说了（「小麦小麦，明天天气」）：这时不打招呼。看唤醒以后录下的声音，跳过开头 0.6 秒
+        （「叮」的回声），有 0.25 秒以上和唤醒词差不多响（差 18 dB 以内）就算在说话。"""
+        blocks = list(self.backlog or [])
+        if not blocks:
+            return False
+        n, skip, loud = len(blocks[0]) or 320, 0.6 * 16000, 0
+        ref = max(getattr(self, 'wake_ref', -40.0) - 18, -50.0)
+        for i, b in enumerate(blocks):
+            if i * n < skip:
+                continue
+            if 20 * np.log10(float(np.sqrt(np.mean(b ** 2))) + 1e-9) > ref:
+                loud += len(b)
+        return loud >= 0.25 * 16000
+
+    async def _greet(self, greet):
+        """等认人的结果（一般复核完它早到了），能念就念完再开始听。返回给网关的 {greet_id, greet_said}。"""
+        try:
+            g = await asyncio.wait_for(asyncio.shield(greet), 1.0)
+        except Exception:
+            return {}
+        if not g or not g.get('id'):
+            return {}
+        said = False
+        if g.get('text') and g.get('wav') and not self.talking_since_wake():
+            try:
+                clip = load_wav(io.BytesIO(base64.b64decode(g['wav'])))
+            except Exception as e:
+                log.warning('wake greeting: bad audio (%s)', e)
+                clip = None
+            if clip is not None:
+                self.audio.player.push(clip)
+                self.add_message('bot', g['text'])
+                self.set_state('speaking')
+                end = time.monotonic() + len(clip) / OUT_RATE + 1.0
+                await asyncio.sleep(0.1)
+                while self.audio.player.buffered() > 0.05 and time.monotonic() < end:
+                    await asyncio.sleep(0.05)
+                if self.backlog is not None:
+                    self.backlog = []          # 念的时候麦克风听到的是自己：不送去识别
+                said = True
+        return {'greet_id': g['id'], 'greet_said': said}
+
     def chime(self, source):
         self.play('wake')
         self.events.publish('woke', {'source': source})
@@ -2092,7 +2154,7 @@ class Client:
         """The hub is recognising, thinking or speaking: the wake word interrupts it."""
         return (self.state in ('thinking', 'speaking') or self.vad_ended) and self.hub.connected
 
-    async def wake(self, source='button', chimed=False):
+    async def wake(self, source='button', chimed=False, greet=None):
         self.screen.poke()
         if self.ring:
             await self.stop_alarm()   # the wake word stops a ring (no snooze: "再睡 10 分钟" is said next)
@@ -2111,14 +2173,17 @@ class Client:
         if not await self.ensure_connected():
             await self.offline_start()
             return
-        await self.start_listening('realtime')
+        extra = await self._greet(greet) if greet is not None else {}
+        await self.start_listening('realtime', **extra)
         self.heard = False
         self.deadline = time.monotonic() + self.follow_up_seconds()
 
-    async def start_listening(self, mode, follow_up=False):
+    async def start_listening(self, mode, follow_up=False, greet_id=None, greet_said=False):
         msg = {'type': 'listen', 'state': 'start', 'mode': mode}
         if follow_up:   # 回答完接着听：网关只认这一轮先问的那个人（开着的话），见 hub 的 turn_filter
             msg.update(follow_up=True, lock=self.cfg.get('follow_lock', True) is not False)
+        if greet_id:    # 认人打招呼：念没念（念了的那句网关记进对话）
+            msg.update(greet_id=greet_id, greet_said=bool(greet_said))
         await self.hub.send(msg)
         self.uploading = True
         self.listen_mode = mode
