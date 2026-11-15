@@ -26,6 +26,7 @@ def blanker(tmp_path, monkeypatch):
     ib.BACKLIGHT_PATH, ib.HINT_PATH, ib.ALS_PATH = str(backlight), hint, str(tmp_path / 'als')
     ib.open_input_devices = lambda: [touch_r]
     ib.FREEZE_DELAY = float(os.environ.get('TEST_FREEZE_DELAY', '0.1'))
+    ib.FREEZE_WEB = os.environ.get('TEST_FREEZE_WEB', '1') == '1'     # the stop/continue tests turn it on
     ib.signal.signal = lambda *a: None
     sent = []                                       # (pid, signal) to the page renderers
     ib.web_pids = lambda: [4242]
@@ -161,8 +162,8 @@ def test_a_voice_wake_continues_the_page(blanker):
     assert blanker.signals[-1] == (4242, blanker.CONT)
 
 
-def test_page_stopped_only_after_it_painted_itself_black(tmp_path, monkeypatch, request):
-    """BLANK_BRIGHTNESS still shows a faint picture on some panels: the page gets FREEZE_DELAY seconds to go black."""
+def test_page_stopped_only_after_the_delay(tmp_path, monkeypatch, request):
+    """THINKSMART_FREEZE_WEB=1: the page is stopped FREEZE_DELAY seconds after blanking, not at once."""
     monkeypatch.setenv('TEST_FREEZE_DELAY', '1.0')
     b = request.getfixturevalue('blanker')
     b.hint(hold=False, idle=1, after=1)
@@ -170,3 +171,13 @@ def test_page_stopped_only_after_it_painted_itself_black(tmp_path, monkeypatch, 
     assert (4242, b.STOP) not in b.signals
     time.sleep(1.2)
     assert b.signals[-1] == (4242, b.STOP)
+
+
+def test_page_keeps_running_while_dark_by_default(monkeypatch, request):
+    """默认不暂停网页：息屏时（背光最低还看得见）时间和内容照样更新。"""
+    monkeypatch.setenv('TEST_FREEZE_WEB', '0')
+    b = request.getfixturevalue('blanker')
+    b.hint(hold=False, idle=1, after=1)
+    assert b.blanked_within(2)
+    time.sleep(0.4)
+    assert (4242, b.STOP) not in b.signals

@@ -399,7 +399,7 @@ class Client:
         self.hub_album = hub_album.HubAlbum(HUB_ALBUM, lambda: self.cfg['hub_http'], cfg['device_id'], ALBUM, on_change=self.publish_standby)
         self.album_now = None   # 待机页正在放的那张（网关相册的 id），「这张是哪年的」「别放这张了」用
         self.album_want = 0     # 说了「放相册」：对话结束后进待机页
-        self.dark = False       # 息屏了：页面涂黑（_dark_loop）
+        self.dark = False       # 息屏了：页面停装饰动画（_dark_loop）
         self.focus = focus.Focus(cfg.get('focus'))                           # 专注计时（设计画布第 47 块）
         self.study = study.Study(cfg.get('study'), STUDY_LOG)                # 学习陪伴（设计画布第 48 块）
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
@@ -1705,8 +1705,7 @@ class Client:
                 pass
 
     async def _dark_loop(self):
-        """息屏了（背光降到 10）就告诉页面：涂成全黑。有的屏 10 还能隐约看见，idle-blanker 3 秒后才暂停网页，
-        不涂黑的话玻璃上留着一张不走的钟和天气。亮回来时也说一声（页面醒来自己也会发现）。"""
+        """息屏了（背光降到 10，这块屏还看得见）就告诉页面：停掉装饰动画省电，时间和内容照常更新；亮回来再开。"""
         if not BACKLIGHT.exists():
             return
         while True:

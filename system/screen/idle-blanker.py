@@ -17,13 +17,15 @@ Input-idle screen blanker + ALS auto-brightness for CD-18781Y.
   "idle": seconds (optional) is the user's auto screen-off, used instead of IDLE_TIMEOUT for
   touch and conversations alike (the client sends the same value in "after"); 0 = never blank.
   Without it (older clients) IDLE_TIMEOUT and "after" work as before.
-- While the screen is dark the kiosk's page renderer (WebKitWebProcess) is stopped (SIGSTOP): it kept
+- THINKSMART_FREEZE_WEB=1 only (off by default since system 0.2.16): the backlight's darkest level still
+  shows the page on these panels, and a stopped page left a clock that never moved, so the page keeps
+  running and pauses its own animations while dark (thinksmart-client watches the backlight). When on:
+  while the screen is dark the kiosk's page renderer (WebKitWebProcess) is stopped (SIGSTOP): it kept
   animating at ~30% CPU behind a dark panel. Every way back (touch, voice, proximity, motion, anyone
   else lighting the panel) continues it first (SIGCONT); so do startup (a blanker that died while it
   was stopped) and exit. The page notices the gap and reloads its state. THINKSMART_FREEZE_WEB=0 turns
   this off. (Idea from fubin0478/thinksmart-view, MIT.) It is stopped FREEZE_DELAY seconds after the
-  backlight goes down, not at once: BLANK_BRIGHTNESS still shows a faint picture on some panels, and the
-  voice client tells the page in that time to paint itself black, so no frozen clock is left on the glass.
+  backlight goes down, not at once.
 
 Deploy to /usr/local/bin/idle-blanker.py
 Service: ~/.config/systemd/user/idle-blanker.service
@@ -58,9 +60,9 @@ ALS_PATH       = "/tmp/als_lux"
 ALS_INTERVAL   = 10.0      # seconds between ALS adjustments
 ALS_WAKE_COOL  = 30.0      # seconds after wake before ALS kicks in
 ALS_DEADBAND   = 150       # only adjust if target differs by this much
-FREEZE_WEB     = os.environ.get("THINKSMART_FREEZE_WEB", "1") != "0"
+FREEZE_WEB     = os.environ.get("THINKSMART_FREEZE_WEB", "0") == "1"   # 默认不暂停：息屏时时间和内容照样更新
 WEB_COMM       = "WebKitWebProces"   # /proc/<pid>/comm keeps 15 characters
-FREEZE_DELAY   = 3.0      # seconds between blanking and stopping the page (it paints itself black first)
+FREEZE_DELAY   = 3.0      # seconds between blanking and stopping the page (THINKSMART_FREEZE_WEB=1 only)
 kill           = os.kill             # tests replace it
 
 
@@ -319,7 +321,7 @@ def run():
                     blanked = True
                     blanked_at = time.monotonic()
 
-        # stop the page a little after blanking: it has painted itself black by then
+        # THINKSMART_FREEZE_WEB=1: stop the page a little after blanking
         if blanked and not frozen and time.monotonic() - blanked_at >= FREEZE_DELAY:
             freeze_web(True)
             frozen = True

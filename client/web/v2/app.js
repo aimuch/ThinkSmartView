@@ -145,7 +145,7 @@ function setCorona(state) {
     if (isLive(state)) drawLive(.7, 1.2);
     return;
   }
-  if (!level.raf) {
+  if (!level.raf && !document.body.classList.contains('screen-dark')) {
     level.last = performance.now() - 34;
     level.raf = requestAnimationFrame(levelLoop);
   }
@@ -2774,7 +2774,7 @@ const handlers = {
     ui.standby = st; renderStandbyCard();
   },
   album_next() { albumNext(); },   // 「别放这张了」：马上换下一张
-  dark(d) { setDark(d.dark); },     // 息屏了：涂黑（不留一张不走的钟在玻璃上）
+  dark(d) { setDark(d.dark); },     // 息屏了：停掉装饰动画省电，时间和内容照常更新
   gentle(g) {
     ui.gentle = g; renderGentle();
   },
@@ -2841,18 +2841,24 @@ function connectEvents() {
 }
 // 息屏时网页进程被暂停（idle-blanker 的 SIGSTOP）：醒来后这个计时器一下子跳过了很久，期间被丢掉的推送补不回来，
 // 重新连一次拿完整的快照
-// 息屏时整页涂黑（客户端看背光，idle-blanker 3 秒后才暂停网页）；醒来时计时器一下子跳过很久：马上去掉黑幕、重连拿快照
+// 息屏时（背光降到最低，这块屏还看得见）：网页照常跑，时间、天气、待机页照常更新，只停掉光球和 CSS 的装饰动画省电。
+// 客户端看背光告诉我们；万一网页被暂停过（旧的系统层），醒来时计时器一下子跳过很久：马上刷新、重连拿快照
 function setDark(on) {
-  document.body.classList.toggle('blackout', !!on);
-  if (!on && document.body.classList.contains('was-dark')) { tick(); if (sb.shown) renderClock(); }
-  document.body.classList.toggle('was-dark', !!on);
+  on = !!on;
+  if (on === document.body.classList.contains('screen-dark')) return;
+  document.body.classList.toggle('screen-dark', on);
+  if (on) { cancelAnimationFrame(level.raf); level.raf = 0; }
+  else {
+    if (!STILL && level.state && !level.raf) { level.last = performance.now() - 34; level.raf = requestAnimationFrame(levelLoop); }
+    tick(); if (sb.shown) renderClock();
+  }
 }
 let eventsTick = Date.now(), wakeTick = Date.now();
 setInterval(() => {
   const now = Date.now(), gap = now - wakeTick;
   wakeTick = now;
   if (gap > 2500) {
-    setDark(false);
+    tick(); if (sb.shown) renderClock();
     if (!DEMO && events && gap > 20000) { eventsTick = now; connectEvents(); }
   }
 }, 500);
