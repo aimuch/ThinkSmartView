@@ -53,11 +53,11 @@ import aiohttp
 import numpy as np
 
 from . import bg
-from . import airplay, alarms, appproxy, intercom, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, hub_album, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import airplay, alarms, appproxy, intercom, broadcast, bt, camera, hub_node, config, cook, perf, daily, focus, gentle, hub_album, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
-from .device import BLANK_LEVELS, DIM_LEVEL, STATE_PATH, Keys, Screen, normalize_screen_off, proximity_status
+from .device import BLANK_LEVELS, DARK_LUX, DIM_LEVEL, STATE_PATH, Keys, Screen, normalize_screen_off, proximity_status
 from .hub import Hub
 from .kws import Kws
 from .opus import Decoder, Encoder
@@ -379,6 +379,7 @@ class Client:
         self.screen.idle = self._screen_off_seconds()   # written by start()'s release()
         self.screen.proximity = self.screen_off['proximity']
         self.screen.blank = BLANK_LEVELS[self.screen_off['blank']]
+        self.screen.dark_lux = DARK_LUX[self.screen_off['dark_level']] if self.screen_off['dark'] else None
         self.reports = 0              # pending on the hub
         self.hub_seen = 0.0           # monotonic: last answer from the hub's HTTP side (health check)
         self.keys = Keys(on_step=self.volume_step, on_mic=self._on_mic)
@@ -405,6 +406,8 @@ class Client:
         self.study = study.Study(cfg.get('study'), STUDY_LOG)                # 学习陪伴（设计画布第 48 块）
         self.study.restore(cfg.get('study_on'), time.time())   # 开着时重启（升级、音频看门狗）照样开着
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
+        # 当智能中枢的蓝牙节点（设计画布第 73 块）：开关在「接入的服务」里，连法和令牌问网关
+        self.hub_node = hub_node.HubNode(self._hub_http, cfg['device_id'], __version__, self.events.publish, bool(cfg.get('hub_node')))
         self.airplay = airplay.AirPlay(self.audio.airplay, self.events.publish, cfg.get('airplay'))   # 设计画布第 49 块
         # 机柜和智能中枢自己的网页放在「家居」里：设备本机的小代理（appproxy.py，设计画布第 62 块）
         self.appproxy = appproxy.AppProxy(cfg['hub_http'], cfg['device_id'])
@@ -2007,7 +2010,14 @@ class Client:
             log.info('no weather for the home page: %s', e)
             return
         if data and data.get('ok'):
-            self.today = {k: data.get(k) for k in ('lunar', 'weather', 'weather_error')}
+            today = {k: data.get(k) for k in ('lunar', 'weather', 'weather_error')}
+            old = (self.today or {}).get('weather')
+            if not today['weather'] and old and time.time() - old.get('_at', 0) < 12 * 3600:
+                # 网关这次没取到（天气服务偶尔超时）：接着显示上一次的，标上是几分钟前的，不让首页、待机页的天气消失
+                today['weather'] = dict(old, stale_min=int((time.time() - old['_at']) // 60))
+            elif today['weather']:
+                today['weather'] = dict(today['weather'], _at=time.time() - 60 * (today['weather'].get('stale_min') or 0))
+            self.today = today
             self.events.publish('today', self.today)
             if self.airplay:
                 await self.airplay.set_device_name(data.get('device_name') or '')
@@ -2030,7 +2040,10 @@ class Client:
             await self.refresh_radio()
             await self.refresh_kids()
             await self.refresh_music()
-            for _ in range(40):              # 20 minutes; the 'auto' theme is checked every 30 s
+            for i in range(40):              # 20 minutes; the 'auto' theme is checked every 30 s
+                w = (self.today or {}).get('weather')
+                if i == 4 and (not w or w.get('stale_min')):
+                    break                    # no weather, or only an old one: ask again after 2 minutes
                 await asyncio.sleep(30)
                 theme = looks.theme_now(self.cfg['theme'])
                 if theme != last_theme:
@@ -2269,6 +2282,7 @@ class Client:
         bg.spawn(self._dark_loop())
         bg.spawn(self._offline_clips_loop())
         await self.bt.start()
+        self.hub_node.start()
         bg.spawn(self._bluetooth_loop())
         if self.airplay.enabled and self.airplay.installed:
             self.airplay.start()
@@ -2374,8 +2388,9 @@ class Client:
     def home_tabs_view(self):
         return {**self.cfg['home_tabs'], 'urls': {a: appproxy.url(a) for a in appproxy.APPS}}
 
-    async def set_home_tabs(self, show=None, first=None):
-        """Settings page: which tabs 家居 shows and which one it opens on ('' = the one looked at last)."""
+    async def set_home_tabs(self, show=None, first=None, work=None):
+        """Settings page: which tabs 家居 shows and which one it opens on ('' = the one looked at last);
+        work: the page 工作台 opens on (设计画布第 71 块)."""
         cur = dict(self.cfg['home_tabs'])
         if show is not None:
             if not isinstance(show, list) or not show:
@@ -2383,6 +2398,8 @@ class Client:
             cur['show'] = show
         if first is not None:
             cur['first'] = first
+        if work is not None:
+            cur['work'] = work
         self.cfg['home_tabs'] = appproxy.normalize_tabs(cur)
         config.save(home_tabs=self.cfg['home_tabs'])
         view = self.home_tabs_view()
@@ -2391,6 +2408,7 @@ class Client:
 
     def snapshot(self):
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
+                'hub_node': self.hub_node.view(),
                 'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
                 'broadcast': self.broadcast_view(), 'photo': self.photo_view(), 'slides': self.slides_view(),
                 'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),
@@ -3245,6 +3263,7 @@ class Client:
         config.save(screen_off=self.screen_off)
         self.screen.blank_after(self._screen_off_seconds())
         self.screen.proximity_wake(self.screen_off['proximity'])
+        self.screen.dark_at(DARK_LUX[self.screen_off['dark_level']] if self.screen_off['dark'] else None)
         log.info('screen-off: %s', self.screen_off)
         self.set_state(self.state)
         return self.screen_off
@@ -3574,6 +3593,12 @@ class Client:
         view = await self.airplay.set(enabled, name)
         config.save(airplay=self.airplay.saved())
         return view
+
+    async def set_hub_node(self, on):
+        """「接入的服务」里的「当智能中枢的蓝牙节点」开关（设计画布第 73 块）：存下来，开了就去连智能中枢。"""
+        config.save(hub_node=bool(on))
+        self.cfg['hub_node'] = bool(on)
+        return await self.hub_node.set_enabled(on)
 
     async def bluetooth(self, enabled=None, window=None, remove=None, disconnect=None):
         """The page's Bluetooth controls: the switch (stored), the "add a phone" window, forgetting a phone."""

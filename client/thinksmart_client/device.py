@@ -39,11 +39,16 @@ EVENT = struct.Struct('qqHHi')   # struct input_event on 64-bit: timeval, type, 
 EVIOCGSW = (2 << 30) | (8 << 16) | (ord('E') << 8) | 0x1b
 
 
+DARK_LUX = (0.3, 1.0, 3.0)          # 关灯熄屏 (设计画布第 74 块): what counts as dark, in lux at the sensor
+DARK_NAMES = ('全黑', '很暗', '偏暗')
+
+
 def normalize_screen_off(setting, changes=None):
     """A complete, valid screen-off setting: {'enabled': bool, 'minutes': one of SCREEN_OFF_MINUTES,
     'proximity': bool (走近亮屏: the proximity sensor wakes the dark screen), 'blank': 0-4 (熄屏后的亮度,
-    an index into BLANK_LEVELS)}. Raises ValueError for other minutes or levels."""
-    s = {'enabled': True, 'minutes': 5, 'proximity': True, 'blank': 0}
+    an index into BLANK_LEVELS), 'dark': bool (关灯熄屏: the room's light blanks and wakes the screen),
+    'dark_level': 0-2 (an index into DARK_LUX)}. Raises ValueError for other minutes or levels."""
+    s = {'enabled': True, 'minutes': 5, 'proximity': True, 'blank': 0, 'dark': False, 'dark_level': 1}
     s.update({k: v for k, v in (setting or {}).items() if k in s})
     s.update({k: v for k, v in (changes or {}).items() if k in s and v is not None})
     s['enabled'] = bool(s['enabled'])
@@ -54,6 +59,10 @@ def normalize_screen_off(setting, changes=None):
     if isinstance(s['blank'], bool) or s['blank'] not in range(len(BLANK_LEVELS)):
         raise ValueError(f'blank must be 0-{len(BLANK_LEVELS) - 1}, got {s["blank"]!r}')
     s['blank'] = int(s['blank'])
+    s['dark'] = bool(s['dark'])
+    if isinstance(s['dark_level'], bool) or s['dark_level'] not in range(len(DARK_LUX)):
+        raise ValueError(f'dark_level must be 0-{len(DARK_LUX) - 1}, got {s["dark_level"]!r}')
+    s['dark_level'] = int(s['dark_level'])
     return s
 
 
@@ -76,6 +85,7 @@ class Screen:
         self.dawn = None             # 温柔叫醒 (设计画布第 46 块): 0-100 while it brightens before an alarm, else None
         self.blank = BLANK_LEVELS[0] # 熄屏后的背光（设计画布第 69 块）
         self._preview = None         # (level, until): the settings page shows a screen-off level for a moment
+        self.dark_lux = None         # 关灯熄屏 (设计画布第 74 块): lux at or below which the room is dark; None: off
         self._seq = time.time_ns()   # unique across client restarts
 
     def hold(self):
@@ -144,6 +154,12 @@ class Screen:
         self._preview = (level, time.time() + seconds)
         self._write(activity=False)
 
+    def dark_at(self, lux):
+        """关灯熄屏: the light level (lux) at or below which the room counts as dark; None: off."""
+        if self.dark_lux != lux:
+            self.dark_lux = lux
+            self._write(activity=False)
+
     def blank_after(self, seconds):
         if self.idle != seconds:
             self.idle = seconds
@@ -154,6 +170,8 @@ class Screen:
             self._seq += 1
         hint = {'hold': bool(self.held or self.ringing or self.showing or self.watching), 'dim': self.dimmed, 'seq': self._seq,
                 'brightness': self.level, 'idle': self.idle, 'proximity': self.proximity, 'blank': self.blank}
+        if self.dark_lux:
+            hint['dark_lux'] = self.dark_lux
         if self._preview and self._preview[1] > time.time():
             hint['preview'] = {'level': self._preview[0], 'until': round(self._preview[1], 2)}
         if self.dimmed and self.sleep_level is not None:

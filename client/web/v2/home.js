@@ -17,13 +17,13 @@ function setSrc(src) {
 }
 // 家居的分页（设计画布第 62 块）：米家、智能中枢、机柜；后两个放它们自己的网页（设备本机的小代理 appproxy.py）。
 // 设置里选显示哪些、先看哪个；网关没给这台设备打开对应插件的不显示
-const tabsCfg = () => ui.home_tabs || { show: ['mi', 'hub', 'rack'], first: '', urls: {} };
+const tabsCfg = () => ui.home_tabs || { show: ['mi', 'hub'], first: '', work: '', urls: {} };
 function availableSrcs() {
-  const ok = { mi: true, hub: !!(window.hubAvailable && window.hubAvailable()), rack: !!(window.rackAvailable && window.rackAvailable()) };
+  const ok = { mi: true, hub: !!(window.hubAvailable && window.hubAvailable()) };   // 机柜挪到了工作台（设计画布第 71 块）
   const list = tabsCfg().show.filter(t => ok[t]);
   return list.length ? list : ['mi'];
 }
-// 'mi'、'hub' 或 'rack'：没选过时按设置里的「先看」，再按上次看的；米家没登录时先看别的
+// 'mi' 或 'hub'：没选过时按设置里的「先看」，再按上次看的；米家没登录时先看别的
 function currentSrc() {
   const list = availableSrcs();
   if (!list.includes(mi.src)) {

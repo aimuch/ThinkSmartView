@@ -16,6 +16,7 @@ const ICON = {
   light: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
   group: '<path d="M12 3l2.2 5.6L20 9l-4.5 3.8L17 19l-5-3.2L7 19l1.5-6.2L4 9l5.8-.4z"/>',
   psu: '<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
+  ir: '<rect x="7" y="2" width="10" height="20" rx="3"/><path d="M10 7h4M12 11v.01M10 15h.01M14 15h.01M10 18h.01M14 18h.01"/>',
 };
 const svg = (k, s = 24) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k] || ICON.light}</svg>`;
 
@@ -36,11 +37,20 @@ async function refresh() {
 }
 
 /* ---------------- 工作台 ---------------- */
-function openWork(on) {   // 也给「打开页面」用（wf.js，设计画布第 53 块）
+// 工作台分三页（设计画布第 71 块）：智能桌面、机柜、仓库同步，每页占满；只显示这台设备接入了的
+const WK = [['desk', '智能桌面', 'desk', 'wkDesk', 'desk_hub'], ['rack', '机柜', 'rack', 'wkRack', 'rack_status'], ['repo', '仓库同步', 'repo', 'wkRepo', 'repo_status']];
+const wkTabs = () => { const on = WK.filter(w => A()[w[4]]); return on.length ? on : WK; };
+function lastTab() { try { return localStorage.getItem('wkTab') || ''; } catch (e) { return ''; } }
+function pickTab(...wants) {
+  const keys = wkTabs().map(w => w[0]);
+  return wants.find(k => k && keys.includes(k)) || keys[0];
+}
+function openWork(on, want) {   // 也给「打开页面」用（wf.js，设计画布第 53 块）；want：直接到哪页
   ig.open = on;
   $('work').classList.toggle('on', on);
   if (!DEMO) postJson('/api/integrations/visible', { visible: on || ig.homeOpen });
-  if (on) { renderWork(); refresh(); }
+  if (on) { ig.tab = pickTab(want, (ui.home_tabs || {}).work, lastTab()); renderWork(); refresh(); }
+  else renderScreen();
 }
 const secHead = (k, title, small = '') => `<div class="wk-h"><span class="wk-ic">${svg(k, 22)}</span><b>${title}</b>${small ? `<small>${esc(small)}</small>` : ''}</div>`;
 const note = text => `<p class="wk-note">${esc(text)}</p>`;
@@ -59,27 +69,29 @@ function resetIn(s) { return !s ? '' : s < 3600 ? `${Math.max(1, Math.round(s / 
 function deskHtml() {
   if (!A().desk_hub) return secHead('desk', '智能桌面') + note(NOT_YET('智能桌面（DeskHub）'));
   const d = ig.data.desk_hub || {};
-  if (!d.seen) return secHead('desk', '智能桌面') + note('还没有 Mac 连上来：在 Mac 上的 DeskHub App 里打开 设置 › 小麦网关，填网关地址和后台里的同一串口令。');
-  const parts = [secHead('desk', '智能桌面', `${d.name} · ${d.online ? ago(d.seen) : '上次 ' + hm(d.seen)}`)];
-  if (!d.online) parts.push(note(`Mac 上的 DeskHub 没连网关（上次 ${hm(d.seen)}）。下面是上次的内容，现在点了不会生效。`));
+  if (!d.seen) return secHead('desk', '智能桌面') + note('还没有 Mac 连上来：在 Mac 上的 DeskHub App（0.4.5 起）里打开 设置 › 控制终端，点「添加一个控制终端」，填网关地址和后台里的同一串口令。');
+  const head = secHead('desk', '智能桌面', `${d.name} · ${d.online ? ago(d.seen) : '上次 ' + hm(d.seen)}`);
+  const left = [], right = [];
+  if (!d.online) left.push(note(`Mac 上的 DeskHub 没连网关（上次 ${hm(d.seen)}）。下面是上次的内容，现在点了不会生效。`));
   const srcs = d.sources || [];
-  parts.push(srcs.length ? `<div class="wk-srcs">${srcs.map(s => `<button class="wk-src${s.id === d.current ? ' on' : ''}${ig.busy[s.id] ? ' busy' : ''}" data-src="${esc(s.id)}">` +
+  left.push(`<div class="wk-sub">显示器输入源</div>`);
+  left.push(srcs.length ? `<div class="wk-srcs">${srcs.map(s => `<button class="wk-src${s.id === d.current ? ' on' : ''}${ig.busy[s.id] ? ' busy' : ''}" data-src="${esc(s.id)}">` +
       `<b>${esc(s.name)}</b><small>${s.id === d.current ? '当前' : esc(s.port || '')}</small></button>`).join('')}</div>`
     : note('Mac 上还没有试切过的输入源：在 DeskHub 的菜单里先试切一次。'));
   const u = d.usage;
   if (u) {
-    parts.push(`<div class="wk-row"><b><span class="ai-ink">AI 用量</span>${u.provider ? ' · ' + esc([u.provider, u.plan].filter(Boolean).join(' ')) : ''}</b><small>今天 ${u.calls} 次 · ${tokens(u.tokens)} token</small></div>`);
-    parts.push(u.windows.map(w => `<div class="wk-win"><span>${esc(w.name)}</span>${meter(w.left)}<small>剩 ${w.left}%${w.reset_s ? ' · ' + resetIn(w.reset_s) : ''}</small></div>`).join(''));
-  } else if (d.usage_off) parts.push(note('Mac 上读不到 Magpie 的用量（Magpie 没开？）'));
-  if (d.todos_off) parts.push(note(d.todos_off === 'access' ? 'DeskHub 没有读提醒事项的权限：在 Mac 的 系统设置 › 隐私与安全性 › 提醒事项 里打开。' : 'DeskHub 里关掉了提醒事项。'));
+    left.push(`<div class="wk-row"><b><span class="ai-ink">AI 用量</span>${u.provider ? ' · ' + esc([u.provider, u.plan].filter(Boolean).join(' ')) : ''}</b><small>今天 ${u.calls} 次 · ${tokens(u.tokens)} token</small></div>`);
+    left.push(u.windows.map(w => `<div class="wk-win"><span>${esc(w.name)}</span>${meter(w.left)}<small>剩 ${w.left}%${w.reset_s ? ' · ' + resetIn(w.reset_s) : ''}</small></div>`).join(''));
+  } else if (d.usage_off) left.push(note('Mac 上读不到 Magpie 的用量（Magpie 没开？）'));
+  if (d.todos_off) right.push(note(d.todos_off === 'access' ? 'DeskHub 没有读提醒事项的权限：在 Mac 的 系统设置 › 隐私与安全性 › 提醒事项 里打开。' : 'DeskHub 里关掉了提醒事项。'));
   else {
     const todos = d.todos || [];
-    parts.push(`<div class="wk-row"><b>电脑上的待办</b><small>${todos.length < d.todos_total ? `${todos.length} / ${d.todos_total}` : todos.length ? `${todos.length} 条` : ''}</small></div>`);
-    parts.push(todos.length ? `<div class="wk-todos">${todos.slice(0, 12).map(t => `<div class="wk-todo">` +
+    right.push(`<div class="wk-row"><b>电脑上的待办</b><small>${todos.length < d.todos_total ? `${todos.length} / ${d.todos_total}` : todos.length ? `${todos.length} 条` : ''}</small></div>`);
+    right.push(todos.length ? `<div class="wk-todos">${todos.slice(0, 30).map(t => `<div class="wk-todo">` +
         `<button class="wk-check${ig.busy[t.id] ? ' busy' : ''}" data-todo="${esc(t.id)}" ${d.allow_todo ? '' : 'disabled'} aria-label="完成"></button>` +
         `<span>${esc(t.title)}</span>${t.when ? `<em class="k-${esc(t.kind)}">${esc(t.when)}</em>` : ''}</div>`).join('')}</div>` : note('没有未完成的待办'));
   }
-  return parts.join('');
+  return head + `<div class="wk-split"><div class="wk-col">${left.join('')}</div><div class="wk-col wk-card">${right.join('')}</div></div>`;
 }
 
 function rackHtml() {
@@ -104,25 +116,77 @@ function repoHtml() {
   const r = ig.data.repo_status || {};
   if (r.error) return secHead('repo', '仓库同步') + note(`读不到 repo-manager：${r.error}`);
   const ev = r.last_event;
-  const parts = [secHead('repo', '仓库同步', ev && ev.at ? ev.at.slice(5, 16).replace('T', ' ') : '')];
-  parts.push(`<div class="wk-nums"><div><b>${r.total}</b><small>仓库</small></div><div class="ok"><b>${r.synced}</b><small>已同步</small></div>` +
-    `<div class="${r.failed ? 'bad' : ''}"><b>${r.failed}</b><small>失败</small></div><div class="${r.suspect7 ? 'bad' : ''}"><b>${r.suspect7}</b><small>疑似删库</small></div></div>`);
-  const w = r.watches || {};
-  if (w.running) parts.push(note(`${w.running} 个同步任务正在跑`));
-  if ((r.attention || []).length) parts.push(`<div class="wk-att">${r.attention.map(a => `<div><b>${esc(a.name)}</b><small>${esc([a.why, a.host].filter(Boolean).join(' · '))}</small></div>`).join('')}` +
-    (r.attention_total > r.attention.length ? `<small class="wk-more">还有 ${r.attention_total - r.attention.length} 个需要处理，在 repo-manager 网页里看</small>` : '') + '</div>');
-  if (ev && ev.msg) parts.push(`<p class="wk-note">${esc(ev.msg)}</p>`);
-  return parts.join('');
+  const head = secHead('repo', '仓库同步', ev && ev.at ? ev.at.slice(5, 16).replace('T', ' ') : '');
+  const nums = `<div class="wk-nums four"><div><b>${r.total}</b><small>仓库</small></div><div class="ok"><b>${r.synced}</b><small>已同步</small></div>` +
+    `<div class="${r.failed ? 'bad' : ''}"><b>${r.failed}</b><small>失败</small></div><div class="${r.suspect7 ? 'bad' : ''}"><b>${r.suspect7}</b><small>疑似删库</small></div></div>`;
+  const att = (r.attention || []).length ? `<div class="wk-row"><b>要处理的</b><small>${r.attention_total || r.attention.length} 个</small></div><div class="wk-att">${r.attention.map(a => `<div><b>${esc(a.name)}</b>` +
+      `${a.why ? `<em class="wk-why">${esc(a.why)}</em>` : ''}<small>${esc(a.host || '')}</small></div>`).join('')}` +
+    (r.attention_total > r.attention.length ? `<small class="wk-more">还有 ${r.attention_total - r.attention.length} 个，在 repo-manager 网页里看</small>` : '') + '</div>'
+    : note('没有要处理的仓库');
+  const w = r.watches || {}, side = [];
+  side.push(`<div class="wk-row"><b>正在同步</b><small>${w.running ? `${w.running} 个` : '没有'}</small></div>`);
+  if (ev && ev.msg) side.push(`<div class="wk-row"><b><span class="ai-ink">最近的事</span></b></div><p class="wk-msg">${esc(ev.msg)}</p>`);
+  return head + nums + `<div class="wk-split"><div class="wk-col wk-card">${att}</div><div class="wk-col wk-card">${side.join('')}</div></div>`;
 }
 
+function renderTabs() {
+  const tabs = wkTabs(), r = ig.data && ig.data.rack_status, p = ig.data && ig.data.repo_status;
+  const badge = { rack: r && !r.error && r.problems.length ? `<em class="w">${r.problems.length}</em>` : '',
+                  repo: p && !p.error && p.failed ? `<em>${p.failed}</em>` : '', desk: '' };
+  $('wkTabs').hidden = tabs.length < 2;
+  set('wkTabs', tabs.map(([k, name, ic]) => `<button role="tab" data-wtab="${k}" class="${k === ig.tab ? 'on' : ''}" aria-selected="${k === ig.tab}">${svg(ic, 20)}<span>${name}</span>${badge[k]}</button>`).join(''));
+}
+// 机柜那页：网关说能放 rack-screen 的画面（填了登录密码、登得上）就放它的 /kiosk，不然放 Prometheus 摘要
+const rackScreen = () => !!(ig.open && ig.tab === 'rack' && A().rack_status && ig.data.rack_status && ig.data.rack_status.screen && !DEMO
+  && ui.home_tabs && ui.home_tabs.urls && ui.home_tabs.urls.rack);
+function renderScreen() {
+  const box = $('wkScreen'), on = !!(ig.data && rackScreen());
+  box.hidden = !on;
+  const f = box.querySelector('iframe');
+  if (!on) { if (f) { f.src = 'about:blank'; f.remove(); } return; }
+  if (!f) {
+    $('wkScreenMsg').textContent = '正在打开 rack-screen 的画面…';
+    const n = document.createElement('iframe');
+    n.title = '机柜';
+    n.addEventListener('load', () => { $('wkScreenMsg').textContent = ''; });
+    n.src = ui.home_tabs.urls.rack;
+    box.appendChild(n);
+  }
+}
 function renderWork() {
   if (!ig.open) return;
   if (!ig.data) { set('wkDesk', note('正在连小麦网关…')); return; }
-  set('wkDesk', deskHtml());
-  set('wkRack', rackHtml());
-  set('wkRepo', repoHtml());
+  ig.tab = pickTab(ig.tab);
+  renderTabs();
+  const screen = rackScreen();
+  for (const [k, , , id] of WK) $(id).hidden = k !== ig.tab || (k === 'rack' && screen);
+  if (ig.tab === 'desk') set('wkDesk', deskHtml());
+  if (ig.tab === 'rack' && !screen) set('wkRack', rackHtml() + (A().rack_status && !(ig.data.rack_status || {}).screen
+    ? note('在网关后台「外部服务 › 家里的系统 › 机柜 › 设置」里填 rack-screen 的登录密码，这一页就换成和机柜屏一样的画面。') : ''));
+  if (ig.tab === 'repo') set('wkRepo', repoHtml());
+  renderScreen();
   $('wkSub').textContent = ig.data.at ? `经小麦网关 · ${hm(ig.data.at)} 更新` : '经小麦网关';
 }
+$('wkTabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-wtab]');
+  if (!b || b.dataset.wtab === ig.tab) return;
+  ig.tab = b.dataset.wtab;
+  try { localStorage.setItem('wkTab', ig.tab); } catch (err) { /* 只是记一下上次看的 */ }
+  renderWork();
+});
+function renderWkFirst() {
+  const w = (ui.home_tabs || {}).work || '';
+  $('wkFirst').querySelectorAll('[data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === w));
+}
+$('wkFirst').addEventListener('click', async e => {
+  const b = e.target.closest('[data-t]');
+  if (!b) return;
+  if (DEMO) { ui.home_tabs = Object.assign({}, ui.home_tabs, { work: b.dataset.t }); return renderWkFirst(); }
+  const r = await postJson('/api/home-tabs', { work: b.dataset.t });
+  if (r && r.ok) handlers.home_tabs(r.home_tabs); else toast((r && r.error) || '没保存上', 'error');
+});
+const prevHomeTabs = handlers.home_tabs;
+handlers.home_tabs = v => { if (prevHomeTabs) prevHomeTabs(v); else ui.home_tabs = v; renderWkFirst(); };
 
 async function deskDo(op, id, label) {
   if (ig.busy[id]) return;
@@ -184,12 +248,47 @@ $('homeWork').addEventListener('click', () => openWork(true));
 /* ---------------- 家居页里的智能中枢 ---------------- */
 const hubDevices = () => (ig.data && ig.data.smart_hub && ig.data.smart_hub.devices) || [];
 const findDev = id => hubDevices().find(x => x.id === id);
+// 智能中枢的设备块（设计画布第 72 块）：按灯、可调电源、红外分组；连不上说网关翻好的中文原因，不显示 MAC 和英文报错
+const POWER_SVG = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3.5v8M7 6.3a7.5 7.5 0 1 0 10 0"/></svg>';
+const NODE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="2.5"/><path d="M5 5l4.5 4.5M19 5l-4.5 4.5M5 19l4.5-4.5M19 19l-4.5-4.5"/></svg>';
+const f2 = v => (v === null || v === undefined ? '—' : v.toFixed(2));
 function hubTile(x) {
-  const on = x.on === true, power = x.kind !== 'psu' && (x.actions.includes('toggle') || x.actions.includes('on'));
-  return `<div class="h-tile hub${on ? ' on' : ''}${x.kind === 'psu' && x.online === false ? ' offline' : ''}" data-hub="${esc(x.id)}">
-    <div class="h-ic">${svg(x.kind === 'psu' ? 'psu' : x.group ? 'group' : 'light', 30)}</div>` +
-    (power ? `<button class="h-power${on ? ' on' : ''}" data-hpower="${esc(x.id)}" aria-label="开关"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3.5v8M7 6.3a7.5 7.5 0 1 0 10 0"/></svg></button>` : '') +
-    `<b>${esc(x.name)}</b><span>${esc(x.summary || '')}${x.via ? ` · 经 ${esc(x.via)}` : ''}</span></div>`;
+  const on = x.on === true, off = x.online === false;
+  const power = x.kind === 'light' || (x.kind === 'other' && (x.actions.includes('toggle') || x.actions.includes('on')));
+  const via = x.via && !off ? `<em class="h-via">${NODE_SVG}${esc(x.via)}</em>` : '';
+  let body = '';
+  if (x.kind === 'psu' && !off && on) {
+    body = `<div class="h-read"><b>${f2(x.v_out)}<small>V</small></b><b>${f2(x.i_out)}<small>A</small></b></div>` +
+      `<span>${x.p_out !== null && x.p_out !== undefined ? x.p_out.toFixed(1) + ' W · ' : ''}${x.mode === 'cc' ? '稳流' : '稳压'} · 输出开</span>`;
+  } else if (x.kind === 'ir' && !off) {
+    body = `<span>红外</span><div class="h-keys">${(x.buttons || []).slice(0, 3).map(b => `<button data-hpress="${esc(x.id)}" data-btn="${esc(b.id)}"${ig.busy[x.id] ? ' disabled' : ''}>${esc(b.name)}</button>`).join('')}</div>`;
+  } else {
+    body = `<span>${esc(x.summary || '')}</span>` + (off && (x.tried || []).length ? `<span class="h-tried">${x.tried.length} 个节点试过 · 点开看</span>` : '');
+  }
+  const bar = x.kind === 'light' && on && x.brightness !== null && x.brightness !== undefined ? `<div class="h-bar"><i style="width:${Math.round(x.brightness)}%"></i></div>` : '';
+  return `<div class="h-tile hub k-${esc(x.kind)}${on && !off ? ' on' : ''}${off ? ' offline' : ''}${via ? ' has-via' : ''}" data-hub="${esc(x.id)}">
+    <div class="h-ic">${svg(x.kind === 'psu' ? 'psu' : x.kind === 'ir' ? 'ir' : x.group ? 'group' : 'light', 30)}</div>` +
+    (power ? `<button class="h-power${on ? ' on' : ''}" data-hpower="${esc(x.id)}" aria-label="开关">${POWER_SVG}</button>` : '') +
+    `<b>${esc(x.name)}</b>${body}${bar}${via}</div>`;
+}
+const HUB_GROUPS = [['light', '灯', 'light'], ['psu', '可调电源', 'psu'], ['ir', '红外', 'ir'], ['other', '其他', 'light']];
+function hubSummary(devs) {
+  const n = k => devs.filter(x => x.kind === k), lights = n('light').filter(x => !x.group), psus = n('psu'), irs = n('ir');
+  const down = psus.filter(x => x.online === false).length;
+  return [lights.length ? `${lights.length} 盏灯` + (lights.some(x => x.on) ? `（${lights.filter(x => x.on).length} 盏开着）` : '') : '',
+    psus.length ? `${psus.length} 台电源` + (down ? (down === psus.length ? '（都连不上）' : `（${down} 台连不上）`) : '') : '',
+    irs.length ? `${irs.length} 个红外设备` : ''].filter(Boolean).join(' · ');
+}
+function hubGrid(devs) {
+  return HUB_GROUPS.map(([k, name, ic]) => {
+    const list = devs.filter(x => (x.kind === k) || (k === 'other' && !['light', 'psu', 'ir'].includes(x.kind)));
+    return list.length ? `<div class="h-grp"><div class="h-gh">${svg(ic, 16)}${name}</div><div class="h-tiles">${list.map(hubTile).join('')}</div></div>` : '';
+  }).join('');
+}
+function hubHtml() {
+  const s = (ig.data && ig.data.smart_hub) || {}, devs = s.devices || [];
+  return s.error ? `<p class="h-msg bad">${esc('读不到智能中枢：' + s.error)}</p>`
+    : devs.length ? `<p class="h-sum">${esc(hubSummary(devs))}</p>${hubGrid(devs)}` : '<p class="h-msg">智能中枢里还没有设备</p>';
 }
 // home.js 的 renderHome 调：返回这台设备有没有接入智能中枢；shown：家居页现在在「智能中枢」那一页（设计画布第 45 块）
 window.hubAvailable = () => !!A().smart_hub;
@@ -197,10 +296,7 @@ window.rackAvailable = () => !!A().rack_status;   // 家居的「机柜」分页
 window.hubRender = shown => {
   const box = $('hHub');
   if (!A().smart_hub) { box.hidden = true; return false; }
-  const s = ig.data.smart_hub || {};
-  const devs = s.devices || [];
-  const html = s.error ? `<p class="h-msg bad">${esc('读不到智能中枢：' + s.error)}</p>`
-    : devs.length ? `<div class="h-tiles">${devs.map(hubTile).join('')}</div>` : '<p class="h-msg">智能中枢里还没有设备</p>';
+  const html = hubHtml();
   box.hidden = !shown;
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
   return true;
@@ -223,7 +319,15 @@ function toggle(x) {
   if (x.actions.includes('toggle')) return hubAct(x.id, 'toggle');
   return hubAct(x.id, x.on ? 'off' : 'on');
 }
+function hubClick(e) {
+  const k = e.target.closest('[data-hpress]');
+  const kx = k ? findDev(k.dataset.hpress) : null;
+  if (kx) { hubAct(kx.id, 'press', k.dataset.btn); return true; }
+  return false;
+}
+window.hubClick = hubClick;
 $('hHub').addEventListener('click', e => {
+  if (hubClick(e)) return;
   const p = e.target.closest('[data-hpower]');
   const x = p ? findDev(p.dataset.hpower) : null;
   if (x) return toggle(x);
@@ -246,17 +350,29 @@ function renderLight(first) {
   const x = findDev(ig.light);
   if (!x) return closeLight();
   $('ldName').textContent = x.name;
-  $('ldSum').textContent = (x.summary || '') + (x.via ? ` · 经 ${x.via} 节点` : '');
+  $('ldSum').textContent = (x.summary || '') + (x.via && x.online !== false ? ` · 经 ${x.via} 节点` : '');
   const box = $('ldControls');
   if (!first && box.contains(document.activeElement) && document.activeElement.type === 'range') return;
   const parts = [], has = a => x.actions.includes(a);
+  if (x.online === false) {   // 连不上（设计画布第 72 块）：一句中文原因，再列出哪些节点试过、各自为什么不行
+    if ((x.tried || []).length) parts.push(`<div class="h-triedlist">${x.tried.map(n => `<div><b>${esc(n.node)}</b><span>${esc(n.why)}</span></div>`).join('')}</div>`);
+    parts.push('<p class="opt-note">电源要开着，并且离某个节点（ESP32 或打开了「当智能中枢的蓝牙节点」的屏）不太远。</p>');
+    box.innerHTML = parts.join('');
+    return;
+  }
+  if (x.kind === 'ir') {
+    parts.push(`<div class="h-keys big">${(x.buttons || []).map(b => `<button data-hpress="${esc(x.id)}" data-btn="${esc(b.id)}">${esc(b.name)}</button>`).join('')}</div>`);
+    parts.push(`<p class="opt-note">点一个键，经${x.via ? ` ${esc(x.via)} ` : '能发红外的'}节点发出去。</p>`);
+    box.innerHTML = parts.join('');
+    return;
+  }
   if (x.kind === 'psu') {
     parts.push(`<div class="opt"><div class="opt-text"><b>输出</b><span>开关输出要确认</span></div>
       <button class="switch" data-lop="psu" role="switch" aria-checked="${x.on ? 'true' : 'false'}"><i></i></button></div>`);
     const r = [['设定', x.v_set, 'V'], ['设定', x.i_set, 'A'], ['输出', x.v_out, 'V'], ['输出', x.i_out, 'A'], ['功率', x.p_out, 'W']]
       .filter(([, v]) => v !== null && v !== undefined).map(([k, v, u]) => `<span>${k}：${v.toFixed(u === 'W' ? 1 : 2)} ${u}</span>`);
     if (x.model) r.push(`<span>型号：${esc(x.model)}</span>`);
-    if (x.error) r.push(`<span>${esc(x.error)}</span>`);
+
     parts.push(`<div class="h-readings">${r.join('')}</div><p class="opt-note">电压、电流在智能中枢的网页上调。</p>`);
   } else {
     if (has('toggle') || has('on')) parts.push(`<div class="opt"><div class="opt-text"><b>开关</b></div>
@@ -278,6 +394,7 @@ function renderLight(first) {
 $('ldClose').addEventListener('click', closeLight);
 $('lDetail').addEventListener('click', e => { if (e.target === $('lDetail')) closeLight(); });
 $('ldControls').addEventListener('click', e => {
+  if (window.hubClick && window.hubClick(e)) return;
   const b = e.target.closest('[data-lop]');
   const x = ig.light && findDev(ig.light);
   if (!b || !x || b.type === 'range') return;
@@ -319,17 +436,16 @@ window.igApi = {
   toggleLight: id => { const x = findDev(id); if (x) toggle(x); },
   openLight,
   // 仪表盘「家居」的智能中枢那一页（设计画布第 45 块）：和家居页同样的设备块
-  hubTiles() {
-    const s = (ig.data && ig.data.smart_hub) || {}, devs = s.devices || [];
-    return s.error ? `<p class="h-msg bad">${esc('读不到智能中枢：' + s.error)}</p>`
-      : devs.length ? `<div class="h-tiles">${devs.map(hubTile).join('')}</div>` : '<p class="h-msg">智能中枢里还没有设备</p>';
-  },
+  hubTiles: hubHtml,
+  hubSummary: () => hubSummary(hubDevices()),
 };
 
 /* ---------------- 设置 › 智能体 › 接入的服务（设计画布第 40 块） ---------------- */
 const SVC = [['desk_hub', '智能桌面（DeskHub）', '连接口令'], ['rack_status', '机柜', ''], ['repo_status', '仓库同步', ''], ['smart_hub', '蓝牙灯（智能中枢）', '访问令牌']];
 function renderSvc() {
   const P = ig.data && ig.data.plugins;
+  renderWkFirst();
+  $('wkFirstHead').hidden = $('wkFirst').hidden = WK.filter(w => A()[w[4]]).length < 2;
   set('svcList', SVC.map(([k, label, need]) => {
     const s = P && P[k], g = s && (s.global ? '开' : '关');
     const sub = !s ? '—'
@@ -338,9 +454,34 @@ function renderSvc() {
       : `这台单独${s.own ? '开着' : '关了'}<button class="link-btn" data-svc-reset="${k}">改回跟着网关（${g}）</button>`;
     return `<div class="opt rot-auto svc-row"><div class="opt-text"><b>${esc(label)}</b><span>${sub}</span></div>`
       + `<button class="switch${s && !s.ready && need ? ' dim' : ''}" role="switch" data-svc="${k}" aria-checked="${!!(s && s.on)}" aria-label="${esc(label)}"${s && !ig.busy['svc:' + k] ? '' : ' disabled'}><i></i></button></div>`;
-  }).join(''));
+  }).join('') + hubNodeRow());
   $('svcNote').textContent = P ? '关掉后，顶栏的工作台按钮、首页和仪表盘上的那一块、语音命令都一起没有。只影响这台设备；别的插件在网关后台的「设备」页改。'
     : '连不上小麦网关，过一会儿再试。';
+}
+// 当智能中枢的蓝牙节点（设计画布第 73 块）：这台的蓝牙替智能中枢连灯和电源；接了智能中枢才显示
+function hubNodeRow() {
+  const P = ig.data && ig.data.plugins, s = P && P.smart_hub;
+  if (!s || !s.on) return '';
+  const n = ui.hub_node || { on: false, state: 'off' };
+  const sub = !n.on ? '用这台的蓝牙替智能中枢连灯和电源，和 ESP32 节点一样出现在它的「节点管理」里'
+    : n.state === 'online' ? `已连上智能中枢 · 节点 ${esc(n.node)}${n.conns ? ` · 现在连着 ${n.conns} 个设备` : ''}`
+    : n.state === 'connecting' ? '正在连智能中枢…'
+    : `<em class="svc-warn">${esc(n.error || '还没连上')}</em>`;
+  return `<div class="opt rot-auto svc-row"><div class="opt-text"><b>当智能中枢的蓝牙节点</b><span>${sub}</span></div>`
+    + `<button class="switch" role="switch" data-hubnode="1" aria-checked="${!!n.on}" aria-label="当智能中枢的蓝牙节点"${ig.busy.hubnode ? ' disabled' : ''}><i></i></button></div>`;
+}
+handlers.hub_node = v => { ui.hub_node = v; renderSvc(); };
+handlers.identify = ({ ms, by }) => {   // 智能中枢在「节点管理」里点了「识别」：整块屏闪几秒
+  document.body.classList.remove('identify'); void document.body.offsetWidth; document.body.classList.add('identify');
+  toast(`${by || '智能中枢'}在找这台设备`, 'info');
+  setTimeout(() => document.body.classList.remove('identify'), ms || 5000);
+};
+async function setHubNode(on) {
+  ig.busy.hubnode = true; renderSvc();
+  const r = await postJson('/api/hub-node', { on });
+  ig.busy.hubnode = false;
+  if (r.ok) ui.hub_node = r.hub_node; else toast(r.error || '没改成', 'error');
+  renderSvc();
 }
 async function setSvc(k, on) {
   if (ig.busy['svc:' + k]) return;
@@ -354,6 +495,8 @@ async function setSvc(k, on) {
 $('svcList').addEventListener('click', e => {
   const sw = e.target.closest('[data-svc]'), reset = e.target.closest('[data-svc-reset]');
   const P = ig.data && ig.data.plugins;
+  const hn = e.target.closest('[data-hubnode]');
+  if (hn && !hn.disabled) return setHubNode(hn.getAttribute('aria-checked') !== 'true');
   if (sw && !sw.disabled) setSvc(sw.dataset.svc, sw.getAttribute('aria-checked') !== 'true');
   else if (reset && P && P[reset.dataset.svcReset]) setSvc(reset.dataset.svcReset, !!P[reset.dataset.svcReset].global);
 });
@@ -372,6 +515,7 @@ const baseSnapshot = handlers.snapshot;
 handlers.snapshot = s => {
   baseSnapshot(s);
   if (s.integrations) ig.data = s.integrations;
+  if (s.hub_node) ui.hub_node = s.hub_node;
   renderAll();
 };
 handlers.integrations = d => { ig.data = d; renderAll(); };

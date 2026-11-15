@@ -199,9 +199,9 @@ function smart() {
   const sw = hubOn ? `<div class="h-src d-src">${[['mi', '米家'], ['hub', '智能中枢']].map(([k, n]) =>
     `<button data-src="${k}" class="${k === src ? 'on' : ''}">${n}</button>`).join('')}</div>` : '';
   if (src === 'hub') {
-    set('dHomeRooms', sw + '<b class="dh-name">智能中枢</b><span class="dm">蓝牙灯和电源</span>');
+    set('dHomeRooms', sw + '<b class="dh-name">智能中枢</b><span class="dm">灯、电源和红外</span>');
     set('dKinds', ''); set('dSceneBar', ''); $('dSceneBar').hidden = true;
-    set('dRooms', `<div class="dc d-roomcard"><div class="dc-h"><b>蓝牙设备</b></div>${window.igApi ? window.igApi.hubTiles() : ''}</div>`);
+    set('dRooms', `<div class="dc d-roomcard d-hub">${window.igApi ? window.igApi.hubTiles() : ''}</div>`);
     return;
   }
   if (!v || !v.account) {
@@ -372,6 +372,7 @@ $('dash').addEventListener('click', e => {
   const t = e.target;
   const sb = t.closest('.d-src [data-src]');
   if (sb && window.miApi) return window.miApi.setSrc(sb.dataset.src);
+  if (t.closest('[data-hpress]') && window.hubClick) return window.hubClick({ target: t });
   const hp = t.closest('[data-hpower]');
   if (hp && window.igApi) return window.igApi.toggleLight(hp.dataset.hpower);
   const hb = t.closest('[data-hub]');

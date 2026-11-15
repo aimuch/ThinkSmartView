@@ -807,3 +807,72 @@ body.screen-dark * { animation-play-state: paused !important; }
 .blank-card .bright-head { display: flex; align-items: center; gap: 14px; }
 .blank-card .bright-head .upd-btn { margin-left: auto; }
 #blankLevels { grid-template-columns: repeat(5, 1fr); }
+
+/* 智能中枢的设备块（设计画布第 72 块）：分组、电源读数、红外按键、经哪个节点 */
+.h-sum { margin: 0 0 14px; font-size: 16px; color: var(--ink3); }
+.h-grp + .h-grp { margin-top: 20px; }
+.h-gh { display: flex; align-items: center; gap: 8px; margin: 0 0 10px 4px; font-size: 15px; color: var(--ink3); }
+.h-tile.k-psu.on { border-color: #5ee0ff66; background: linear-gradient(150deg, #5ee0ff1f, #6c8cff0a); }
+.h-tile.k-psu.on .h-ic { color: #04202a; background: linear-gradient(135deg, #b8f4ff, var(--accent2)); }
+.h-read { display: flex; gap: 14px; align-items: baseline; }
+.h-read b { margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.h-read small { font-size: 14px; font-weight: 400; color: var(--ink3); margin-left: 2px; }
+.h-tile.k-psu.on > b { margin-top: 4px; }
+.h-keys { display: flex; flex-wrap: wrap; gap: 8px; }
+.h-keys button { padding: 8px 14px; border-radius: 999px; background: var(--card2); color: var(--ink); font-size: 15px; border: 1px solid var(--line); }
+.h-keys button:active { transform: scale(.94); background: var(--accent); }
+.h-keys button:disabled { opacity: .5; }
+.h-keys.big { gap: 12px; margin: 6px 0 4px; }
+.h-keys.big button { padding: 14px 22px; font-size: 18px; border-radius: 16px; }
+.h-bar { height: 6px; border-radius: 6px; background: var(--card2); overflow: hidden; }
+.h-bar i { display: block; height: 100%; border-radius: 6px; background: var(--warn); }
+.h-via { position: absolute; right: 16px; bottom: 14px; display: flex; align-items: center; gap: 4px; font-style: normal; font-size: 12px; color: var(--ink3); }
+.h-tile .h-tried { font-size: 13px; color: var(--warn); -webkit-line-clamp: 1; }
+.h-tile.offline { opacity: .62; }
+.h-why { margin: 4px 0 12px; font-size: 20px; font-weight: 600; }
+.h-triedlist { display: grid; gap: 2px; margin-bottom: 10px; border-radius: 14px; overflow: hidden; }
+.h-triedlist div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; background: var(--card); font-size: 15px; }
+.h-triedlist span { color: var(--ink3); }
+
+/* 工作台分三页（设计画布第 71 块）：顶上胶囊分页，每页占满；机柜那页放 rack-screen 的 /kiosk */
+.wk-tabs { display: inline-flex; flex: none; gap: 4px; padding: 5px; margin: 0 auto 0 28px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+.wk-tabs[hidden] { display: none; }
+.wk-tabs button { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 22px; border-radius: 999px; font-size: 19px; font-weight: 700; color: var(--ink3); }
+.wk-tabs button.on { background: var(--card2); color: var(--ink); box-shadow: 0 2px 10px #0003; }
+.wk-tabs em { font-style: normal; font-size: 13px; min-width: 22px; padding: 0 7px; line-height: 22px; border-radius: 999px; text-align: center; background: var(--bad); color: #fff; }
+.wk-tabs em.w { background: var(--warn); color: #2a1800; }
+.sheet.work .wk-cols { display: flex; flex-direction: column; position: relative; }
+.sheet.work .wk-page { flex: 1; min-height: 0; }
+.sheet.work .wk-page[hidden] { display: none; }
+.wk-split { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.05fr 1fr; gap: 18px; }
+.wk-col { min-height: 0; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 14px; }
+.wk-col::-webkit-scrollbar { display: none; }
+.wk-card { padding: 16px 18px; border-radius: 20px; background: var(--card); border: 1px solid var(--line); }
+.wk-sub { font-size: 16px; color: var(--ink3); margin-top: 2px; }
+.wk-page .wk-srcs { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.wk-page .wk-src { min-height: 110px; align-items: flex-start; padding: 16px 20px; }
+.wk-page .wk-src b { font-size: 24px; }
+.wk-nums.four { grid-template-columns: repeat(4, 1fr); flex: none; }
+.wk-att div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+.wk-att div:first-child { border-top: 0; }
+.wk-att div small { grid-column: 1 / -1; font-size: 14px; color: var(--ink3); }
+.wk-why { font-style: normal; font-size: 13px; padding: 2px 10px; border-radius: 999px; background: #ff6b8129; color: var(--bad); align-self: center; }
+.wk-msg { margin: 0; font-size: 16px; line-height: 1.6; color: var(--ink2); word-break: break-all; }
+.wk-screen { position: absolute; inset: 0; border-radius: 22px; overflow: hidden; background: #000; }
+.wk-screen[hidden] { display: none; }
+.wk-screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.wk-screen-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; color: #9aa4c8; font-size: 18px; }
+@media (orientation: portrait) {
+  .wk-tabs { margin: 0 auto 0 16px; } .wk-tabs button { padding: 0 14px; font-size: 17px; height: 48px; }
+  .wk-tabs button svg { display: none; }
+  .sheet.work .sheet-bar { flex-wrap: wrap; row-gap: 14px; }
+  .sheet.work .wk-tabs { order: 3; width: 100%; margin: 0; justify-content: space-between; }
+  .wk-split { grid-template-columns: 1fr; }
+  .wk-col { overflow: visible; }
+  .sheet.work .wk-page { overflow-y: auto; }
+}
+.h-tile.has-via { padding-bottom: 38px; }
+/* 智能中枢在「节点管理」里点了「识别」（设计画布第 73 块）：屏幕四周闪几下 */
+body.identify::after { content: ""; position: fixed; inset: 0; z-index: 9999; pointer-events: none; border: 10px solid var(--accent2);
+  animation: identify 0.8s ease-in-out infinite; }
+@keyframes identify { 50% { border-color: transparent; } }

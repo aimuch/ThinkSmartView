@@ -540,22 +540,8 @@ handlers.open_page = ({ page }) => {
   closeAll();
   if (page === 'home' || page === 'close') return;
   const [main, sub] = page.split('.');
-  // 「打开机柜」：家居里有「机柜」那一页（rack-screen 自己的网页）就去那里（设计画布第 62 块）
-  if (page === 'work.rack' && window.miApi && window.rackAvailable && window.rackAvailable() && (ui.home_tabs || { show: ['rack'] }).show.includes('rack')) {
-    window.miApi.setSrc('rack');
-    window.miApi.openHome(true);
-    return;
-  }
-  if (main === 'work' && window.openWork) {
-    window.openWork(true);
-    const sec = { rack: 'wkRack', desk: 'wkDesk', repo: 'wkRepo' }[sub];
-    if (sec) setTimeout(() => {           // 内容画好以后再滚过去、亮一下边框
-      const el = $(sec);
-      if (!el) return;
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      el.classList.remove('wk-flash'); void el.offsetWidth; el.classList.add('wk-flash');
-    }, 250);
-  } else if (main === 'weather') window.openWeather(true);
+  if (main === 'work' && window.openWork) window.openWork(true, sub);   // 「打开机柜」「看看仓库同步」：直接到那一页（设计画布第 71 块）
+  else if (main === 'weather') window.openWeather(true);
   else if (main === 'focus') openFocus(true);
   else if (main === 'study') openStudyDay(true);
   else if (main === 'smart' && window.miApi) window.miApi.openHome(true);

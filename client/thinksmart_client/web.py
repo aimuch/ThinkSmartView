@@ -12,6 +12,7 @@ from aiohttp import web
 from . import bg
 from . import __version__, camera, kiosk_watch, looks, photos, update
 from .app import ALBUM, PHOTOS, ROOT, Client, local_ip
+from .device import proximity_status
 
 log = logging.getLogger(__name__)
 WEB = ROOT / 'web'
@@ -101,15 +102,26 @@ def make_app(client: Client):
         body = await request.json()
         try:
             value = await client.set_screen_off(preview=bool(body.get('preview')),
-                                                **{k: body.get(k) for k in ('enabled', 'minutes', 'proximity', 'blank')})
+                                                **{k: body.get(k) for k in ('enabled', 'minutes', 'proximity', 'blank', 'dark', 'dark_level')})
         except ValueError as e:
             return web.json_response({'ok': False, 'error': str(e)}, status=400)
         return web.json_response({'ok': True, 'screen_off': value})
 
+    async def hub_node_switch(request):
+        body = await request.json()
+        return web.json_response({'ok': True, 'hub_node': await client.set_hub_node(bool(body.get('on')))})
+
+    async def screen_light(_request):
+        """关灯熄屏的设置卡片：传感器现在读到的光照（接近传感器那个程序每 2 秒写一次；系统层 0.2.19 起）。"""
+        p = proximity_status() or {}
+        lux, at = p.get('lux'), p.get('lux_at')
+        fresh = isinstance(lux, (int, float)) and isinstance(at, (int, float)) and time.time() - at < 40
+        return web.json_response({'ok': True, 'lux': lux if fresh else None})
+
     async def home_tabs(request):
         body = await request.json()
         try:
-            value = await client.set_home_tabs(body.get('show'), body.get('first'))
+            value = await client.set_home_tabs(body.get('show'), body.get('first'), body.get('work'))
         except ValueError as e:
             return web.json_response({'ok': False, 'error': str(e)}, status=400)
         return web.json_response({'ok': True, 'home_tabs': value})
@@ -428,6 +440,8 @@ def make_app(client: Client):
     app.router.add_post('/api/sleep', sleep_setting)
     app.router.add_post('/api/brightness', brightness)
     app.router.add_post('/api/screen-off', screen_off)
+    app.router.add_get('/api/screen-light', screen_light)
+    app.router.add_post('/api/hub-node', hub_node_switch)
     app.router.add_post('/api/home-tabs', home_tabs)
     app.router.add_post('/api/volume', volume)
     app.router.add_post('/api/alarm-volume', alarm_volume)

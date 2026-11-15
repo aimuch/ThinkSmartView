@@ -19,10 +19,11 @@ def free_port():
 
 
 def test_tabs_setting():
-    assert appproxy.normalize_tabs(None) == {'show': ['mi', 'hub', 'rack'], 'first': ''}
-    assert appproxy.normalize_tabs({'show': ['rack', 'mi', 'x'], 'first': 'rack'}) == {'show': ['mi', 'rack'], 'first': 'rack'}
-    assert appproxy.normalize_tabs({'show': ['hub'], 'first': 'rack'}) == {'show': ['hub'], 'first': ''}   # 先看的那个没显示
-    assert appproxy.normalize_tabs({'show': []}) == {'show': ['mi'], 'first': ''}
+    assert appproxy.normalize_tabs(None) == {'show': ['mi', 'hub'], 'first': '', 'work': ''}
+    assert appproxy.normalize_tabs({'show': ['rack', 'hub', 'mi', 'x'], 'first': 'hub'}) == {'show': ['mi', 'hub'], 'first': 'hub', 'work': ''}
+    assert appproxy.normalize_tabs({'show': ['hub'], 'first': 'mi'}) == {'show': ['hub'], 'first': '', 'work': ''}   # 先看的那个没显示
+    assert appproxy.normalize_tabs({'show': []}) == {'show': ['mi'], 'first': '', 'work': ''}
+    assert appproxy.normalize_tabs({'work': 'rack'})['work'] == 'rack' and appproxy.normalize_tabs({'work': 'x'})['work'] == ''
     assert appproxy.url('rack') == 'http://127.0.0.1:8091/kiosk' and appproxy.url('hub').endswith(':8092/#/')
 
 

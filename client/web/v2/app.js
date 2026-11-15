@@ -409,8 +409,30 @@ const offEdit = {};   // a change on its way
 const BLANK_NAMES = ['最暗', '很暗', '暗', '稍暗', '看得清'];   // 熄屏后的亮度（device.BLANK_NAMES）
 function offSetting() {
   const e = Object.assign({}, offEdit); delete e.preview;
-  return Object.assign({ enabled: true, minutes: 5, proximity: true, blank: 0 }, ui.status.screen_off || {}, e);
+  return Object.assign({ enabled: true, minutes: 5, proximity: true, blank: 0, dark: false, dark_level: 1 }, ui.status.screen_off || {}, e);
 }
+// 关灯熄屏（设计画布第 74 块）：三档「多暗算关灯」，和传感器现在的读数放在一起，开着灯时一看就知道选哪档
+const DARK_LUX = [0.3, 1, 3], DARK_NAMES = ['全黑', '很暗', '偏暗'];
+let darkLux = null, darkTimer = null;
+const luxText = v => v === null || v === undefined ? '' : `${v < 10 ? v.toFixed(1) : Math.round(v)} lux`;
+function renderDark() {
+  const s = offSetting(), lv = s.dark_level ?? 1;
+  $('darkSwitch').setAttribute('aria-checked', String(!!s.dark));
+  $('darkCard').hidden = !s.dark;
+  $('darkLevels').innerHTML = DARK_NAMES.map((n, i) => `<button data-dark="${i}" class="${i === lv ? 'on' : ''}">${n} ≤ ${DARK_LUX[i]} lux</button>`).join('');
+  $('darkNow').textContent = darkLux === null ? '' : `现在 ${luxText(darkLux)}`;
+  $('darkNote').textContent = darkLux === null ? '读不到光线传感器（系统层 0.2.19 起才有）；读数要等几秒。'
+    : darkLux <= DARK_LUX[lv] ? `现在算「关灯」：一分钟没人碰就会熄屏。开着灯时如果也是这样，选暗一档。` : `现在屋里算亮着。关灯以后读数降到 ${DARK_LUX[lv]} lux 以下，一分钟后熄屏。`;
+}
+async function pollDark() {
+  clearTimeout(darkTimer); darkTimer = null;
+  if (!$('settings').classList.contains('on') || !offSetting().dark || DEMO) return;
+  try { darkLux = (await (await fetch('/api/screen-light')).json()).lux ?? null; } catch (e) { darkLux = null; }
+  renderDark();
+  darkTimer = setTimeout(pollDark, 2000);
+}
+$('darkSwitch').addEventListener('click', () => { sendScreenOff({ dark: !offSetting().dark }).then(pollDark); });
+$('darkLevels').addEventListener('click', e => { const b = e.target.closest('[data-dark]'); if (b) sendScreenOff({ dark_level: Number(b.dataset.dark) }); });
 // 走近亮屏（设计画布第 59 块）：接近传感器上次熄屏时量的「没人时的读数」和门槛
 function proxNote(on) {
   if (!on) return '关着：熄屏以后走近不会亮';
@@ -434,6 +456,8 @@ function renderScreenOff() {
   $('blankNow').textContent = BLANK_NAMES[bl];
   $('proxSwitch').setAttribute('aria-checked', String(s.proximity !== false));
   $('proxNote').textContent = proxNote(s.proximity !== false);
+  renderDark();
+  if (s.dark && !darkTimer) pollDark();
 }
 async function sendScreenOff(changes) {
   Object.assign(offEdit, changes);

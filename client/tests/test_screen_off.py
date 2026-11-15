@@ -22,10 +22,10 @@ def hint(tmp_path, monkeypatch):
 
 
 def test_normalize():
-    assert device.normalize_screen_off(None) == {'enabled': True, 'minutes': 5, 'proximity': True, 'blank': 0}
-    assert device.normalize_screen_off({'enabled': False, 'minutes': 30, 'x': 1}) == {'enabled': False, 'minutes': 30, 'proximity': True, 'blank': 0}
+    assert device.normalize_screen_off(None) == {'enabled': True, 'minutes': 5, 'proximity': True, 'blank': 0, 'dark': False, 'dark_level': 1}
+    assert device.normalize_screen_off({'enabled': False, 'minutes': 30, 'x': 1}) == {'enabled': False, 'minutes': 30, 'proximity': True, 'blank': 0, 'dark': False, 'dark_level': 1}
     assert device.normalize_screen_off({'minutes': 10}, {'enabled': False, 'minutes': None}) == \
-        {'enabled': False, 'minutes': 10, 'proximity': True, 'blank': 0}
+        {'enabled': False, 'minutes': 10, 'proximity': True, 'blank': 0, 'dark': False, 'dark_level': 1}
     for bad in (2, 0, True, '5', 60):
         with pytest.raises(ValueError):
             device.normalize_screen_off(None, {'minutes': bad})
@@ -50,16 +50,16 @@ async def test_set_screen_off_saves_and_hints(hint, monkeypatch):
     c = app.Client.__new__(app.Client)
     c.screen, c.screen_off, c.state = device.Screen(), device.normalize_screen_off(None), 'idle'
     c.set_state = lambda state: None
-    assert await c.set_screen_off(minutes=1) == {'enabled': True, 'minutes': 1, 'proximity': True, 'blank': 0}
-    assert hint()['idle'] == 60 and saved['screen_off'] == {'enabled': True, 'minutes': 1, 'proximity': True, 'blank': 0}
+    assert await c.set_screen_off(minutes=1) == {'enabled': True, 'minutes': 1, 'proximity': True, 'blank': 0, 'dark': False, 'dark_level': 1}
+    assert hint()['idle'] == 60 and saved['screen_off'] == {'enabled': True, 'minutes': 1, 'proximity': True, 'blank': 0, 'dark': False, 'dark_level': 1}
     # 走近亮屏（设计画布第 59 块）：关掉写进给熄屏程序和接近传感器的提示里
     assert hint()['proximity'] is True
     assert (await c.set_screen_off(proximity=False))['proximity'] is False and hint()['proximity'] is False
-    assert await c.set_screen_off(enabled=False) == {'enabled': False, 'minutes': 1, 'proximity': False, 'blank': 0}
+    assert await c.set_screen_off(enabled=False) == {'enabled': False, 'minutes': 1, 'proximity': False, 'blank': 0, 'dark': False, 'dark_level': 1}
     assert hint()['idle'] == 0
     with pytest.raises(ValueError):
         await c.set_screen_off(minutes=7)
-    assert c.screen_off == {'enabled': False, 'minutes': 1, 'proximity': False, 'blank': 0}
+    assert c.screen_off == {'enabled': False, 'minutes': 1, 'proximity': False, 'blank': 0, 'dark': False, 'dark_level': 1}
 
 
 @pytest.mark.asyncio
@@ -112,3 +112,22 @@ def test_proximity_status(tmp_path):
     assert device.proximity_status(p)['threshold'] == 252
     p.write_text('[1]')
     assert device.proximity_status(p) is None
+
+
+
+@pytest.mark.asyncio
+async def test_dark_setting_goes_to_the_hint(hint, monkeypatch):
+    """关灯熄屏（设计画布第 74 块）：开了就在 hint 里写 dark_lux（三档之一），关了就不写。"""
+    saved = {}
+    monkeypatch.setattr(config, 'save', lambda **kw: saved.update(kw))
+    c = app.Client.__new__(app.Client)
+    c.screen, c.screen_off, c.state = device.Screen(), device.normalize_screen_off(None), 'idle'
+    c.set_state = lambda state: None
+    v = await c.set_screen_off(dark=True, dark_level=0)
+    assert v['dark'] is True and v['dark_level'] == 0 and hint()['dark_lux'] == 0.3
+    await c.set_screen_off(dark_level=2)
+    assert hint()['dark_lux'] == 3.0
+    await c.set_screen_off(dark=False)
+    assert 'dark_lux' not in hint() and saved['screen_off']['dark'] is False
+    with pytest.raises(ValueError):
+        await c.set_screen_off(dark_level=7)

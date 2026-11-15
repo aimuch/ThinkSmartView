@@ -282,6 +282,19 @@
       <button class="switch" id="proxSwitch" role="switch" aria-checked="true" aria-label="走近亮屏"><i></i></button>
     </div>
     <p class="opt-note" id="proxNote"></p>
+    <!-- 关灯熄屏（设计画布第 74 块）：机身的光线传感器；和自动熄屏是两个开关 -->
+    <div class="opt" id="darkRow">
+      <div class="opt-text">
+        <b>关灯熄屏</b>
+        <span>屋里关了灯、一分钟没人碰，就熄屏；开灯就亮。用的是机身的光线传感器，和上面的自动熄屏各管各的。</span>
+      </div>
+      <button class="switch" id="darkSwitch" role="switch" aria-checked="false" aria-label="关灯熄屏"><i></i></button>
+    </div>
+    <div class="blank-card" id="darkCard" hidden>
+      <div class="bright-head"><b>多暗算关灯</b><span class="bright-num" id="darkNow"></span></div>
+      <div class="minutes" id="darkLevels" style="grid-template-columns:repeat(3,1fr)"></div>
+      <p class="opt-note" id="darkNote"></p>
+    </div>
     <div class="alarms-card" id="rotCard">
       <div class="bright-head"><b>屏幕方向</b><span class="bright-num" id="rotNow"></span></div>
       <div class="minutes" id="rotChoices"></div>
@@ -485,10 +498,10 @@
    <section class="set-pane" data-pane="home">
     <div class="alarms-card" id="htCard">
       <div class="bright-head"><b>家居里显示</b><span class="bright-num">点亮的出现在「家居」顶上的分页里</span></div>
-      <div class="minutes" id="htShow"><button data-t="mi">米家</button><button data-t="hub">智能中枢</button><button data-t="rack">机柜</button></div>
+      <div class="minutes" id="htShow"><button data-t="mi">米家</button><button data-t="hub">智能中枢</button></div>
       <div class="bright-head"><b class="sub">打开「家居」先看</b></div>
-      <div class="minutes" id="htFirst"><button data-t="">上次看的</button><button data-t="mi">米家</button><button data-t="hub">智能中枢</button><button data-t="rack">机柜</button></div>
-      <p class="opt-note" id="htNote">智能中枢和机柜放的是它们自己的网页，和电脑上看到的一样。地址和令牌在网关后台「外部服务 → 家里的系统」的「智能中枢」「机柜」里填；经设备不能登录、改密码、动备份和固件。</p>
+      <div class="minutes" id="htFirst"><button data-t="">上次看的</button><button data-t="mi">米家</button><button data-t="hub">智能中枢</button></div>
+      <p class="opt-note" id="htNote">智能中枢放的是它自己的网页，和电脑上看到的一样；地址和令牌在网关后台「外部服务 → 家里的系统」的「智能中枢」里填，经设备不能登录、改密码、动备份和固件。机柜挪到了工作台。</p>
     </div>
     <div class="opt">
       <div class="opt-text">
@@ -643,6 +656,8 @@
     <div class="alarms-card" id="svcCard">
       <div class="bright-head"><b>接入的服务</b><span class="bright-num">网关「外部服务 › 家里的系统」，只改这台</span></div>
       <div class="alarm-list" id="svcList"></div>
+      <div class="bright-head" id="wkFirstHead"><b class="sub">打开工作台先看</b></div>
+      <div class="minutes" id="wkFirst"><button data-t="">上次看的</button><button data-t="desk">智能桌面</button><button data-t="rack">机柜</button><button data-t="repo">仓库同步</button></div>
       <p class="opt-note" id="svcNote">关掉后，顶栏的工作台按钮、首页和仪表盘上的那一块、语音命令都一起没有。只影响这台设备；别的插件在网关后台的「设备」页改。</p>
     </div>
     <div class="opt">
@@ -709,7 +724,7 @@
       <p id="hSub">米家设备</p>
       <div class="h-home-menu" id="hHomeMenu"></div>
     </div>
-    <div class="h-src" id="hSrc" role="tablist" hidden><button data-src="mi" role="tab">米家</button><button data-src="hub" role="tab">智能中枢</button><button data-src="rack" role="tab">机柜</button></div>
+    <div class="h-src" id="hSrc" role="tablist" hidden><button data-src="mi" role="tab">米家</button><button data-src="hub" role="tab">智能中枢</button></div>
     <div class="w-btns">
       <button class="close" id="hRefresh" aria-label="刷新">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
@@ -761,15 +776,18 @@
 <div class="sheet work" id="work">
   <div class="sheet-bar">
     <div><h2>工作台</h2><p id="wkSub">经小麦网关</p></div>
+    <div class="wk-tabs" id="wkTabs" role="tablist"></div>
     <div class="w-btns">
       <button class="close" id="wkRefresh" aria-label="刷新"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
       <button class="close" id="wkClose" aria-label="关闭"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
   </div>
+  <!-- 工作台分三页（设计画布第 71 块）：每页占满；机柜那页是 rack-screen 自己的画面（/kiosk） -->
   <div class="wk-cols" id="wkCols">
-    <section class="wk-sec" id="wkDesk"></section>
-    <section class="wk-sec" id="wkRack"></section>
-    <section class="wk-sec" id="wkRepo"></section>
+    <section class="wk-sec wk-page" id="wkDesk"></section>
+    <section class="wk-sec wk-page" id="wkRack"></section>
+    <section class="wk-sec wk-page" id="wkRepo"></section>
+    <div class="wk-screen" id="wkScreen" hidden><p class="wk-screen-msg" id="wkScreenMsg"></p></div>
   </div>
 </div>
 <div class="h-detail" id="hDetail">

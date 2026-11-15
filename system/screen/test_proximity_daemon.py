@@ -69,3 +69,24 @@ def test_screen_off_comes_from_the_blankers_state(tmp_path):
     assert m.screen_blanked(400, str(state))
     state.write_text(json.dumps({"blanked": False, "blank": 400}))
     assert not m.screen_blanked(10, str(state))
+
+
+def test_light_readings_go_to_the_status_file(tmp_path, monkeypatch):
+    """关灯熄屏（设计画布第 74 块）：光照每 2 秒读一次，变了（或满 30 秒）才写进状态文件；第一次先打开光照传感器。"""
+    m = load()
+    status = tmp_path / 'prox.json'
+    monkeypatch.setattr(m, 'STATUS_PATH', str(status))
+    monkeypatch.setattr(m.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(m.signal, 'signal', lambda *a: None)
+    s = m.ProximitySensor()
+    writes, counts = [], iter([30, 31, 900])
+    s.i2c_set_word = lambda reg, val: writes.append((reg, val)) or True
+    s.i2c_get = lambda reg: next(counts)
+    monkeypatch.setattr(m, 'write_status', lambda st, path=None: status.write_text(json.dumps(st)))
+    s.report_lux(100.0)
+    assert writes == [(m.ALS_CONF_REG, m.ALS_CONF_ON)] and json.loads(status.read_text())['lux'] == 0.72
+    s.report_lux(101.0)                       # 不到 2 秒：不读
+    s.report_lux(102.5)                       # 31 和 30 差不多：不写
+    assert json.loads(status.read_text())['lux_at'] == 100.0
+    s.report_lux(105.0)
+    assert json.loads(status.read_text())['lux'] == 21.6 and len(writes) == 1

@@ -25,6 +25,8 @@ def blanker(tmp_path, monkeypatch):
     touch_r, touch_w = os.pipe()
     ib.BACKLIGHT_PATH, ib.HINT_PATH, ib.ALS_PATH = str(backlight), hint, str(tmp_path / 'als')
     ib.STATE_PATH = tmp_path / 'state.json'
+    ib.PROX_STATUS = tmp_path / 'prox.json'          # the proximity daemon's light readings (关灯熄屏)
+    ib.DARK_SECONDS, ib.LIGHT_SECONDS = 0.6, 0.3
     ib.open_input_devices = lambda: [touch_r]
     ib.FREEZE_DELAY = float(os.environ.get('TEST_FREEZE_DELAY', '0.1'))
     ib.FREEZE_WEB = os.environ.get('TEST_FREEZE_WEB', '1') == '1'     # the stop/continue tests turn it on
@@ -43,6 +45,9 @@ def blanker(tmp_path, monkeypatch):
             Blanker.seq += activity
             hint.write_text(json.dumps({'seq': Blanker.seq, **fields}))
             time.sleep(0.4)
+
+        def light(self, lux):
+            (tmp_path / 'prox.json').write_text(json.dumps({'lux': lux, 'lux_at': time.time()}))
 
         def touch(self):
             os.write(touch_w, b'x')
@@ -225,3 +230,40 @@ def test_preview_shows_the_level_then_the_normal_one(blanker):
     assert blanker.level() == 400 and blanker.state()["blanked"] is False
     time.sleep(1.0)
     assert blanker.level() == normal
+
+
+def test_light_gate():
+    """关灯熄屏（设计画布第 74 块）：暗够 DARK_SECONDS 才算关灯；明显亮了 LIGHT_SECONDS 才算开灯；闪一下不算。"""
+    spec = importlib.util.spec_from_file_location('idle_blanker_gate', SCRIPT)
+    ib = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ib)
+    g = ib.LightGate(1.0)
+    assert g.feed(0.5, 0) is None and g.feed(0.5, 30) is None and g.feed(0.5, 60) == "dark" and g.feed(0.4, 70) is None
+    assert g.feed(2.5, 71) is None                     # 亮了一点，不够 3 lux：不算开灯
+    assert g.feed(20, 80) is None and g.feed(0.5, 81) is None and g.feed(20, 82) is None   # 手机亮了一下又暗
+    assert g.feed(20, 85) == "light" and g.dark is False
+    assert g.feed(None, 90) is None and g.feed(0.5, 91) is None and g.feed(0.5, 120) is None   # 没读数：从头算
+
+
+def test_room_goes_dark_blanks_and_light_wakes(blanker):
+    blanker.light(30)
+    blanker.hint(hold=False, idle=600, dark_lux=1.0)
+    time.sleep(0.8)
+    assert blanker.level() != blanker.BLANK                 # 屋里亮着：不熄
+    for _ in range(12):
+        blanker.light(0.4); time.sleep(0.2)
+    assert blanker.blanked_within(1.5) and blanker.state()["blanked"] is True
+    for _ in range(14):
+        blanker.light(40); time.sleep(0.2)
+    assert blanker.state()["blanked"] is False and blanker.level() > 1300
+
+
+def test_dark_does_nothing_without_the_setting_or_during_a_conversation(blanker):
+    blanker.hint(hold=True, idle=600, dark_lux=1.0)
+    for _ in range(12):
+        blanker.light(0.2); time.sleep(0.2)
+    assert blanker.level() != blanker.BLANK
+    blanker.hint(hold=False, idle=600)
+    for _ in range(12):
+        blanker.light(0.2); time.sleep(0.2)
+    assert blanker.level() != blanker.BLANK

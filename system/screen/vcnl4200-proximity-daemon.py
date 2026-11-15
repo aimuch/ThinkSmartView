@@ -13,6 +13,11 @@ again within a second of every blank. The level then follows slow drift while th
 
 The voice client can turn this off: "proximity": false in its screen hint (HINT_PATH, the file the
 idle blanker reads). What was measured goes to STATUS_PATH for the client's settings page.
+
+The same chip measures ambient light (system 0.2.19, 设计画布第 74 块): every ALS_EVERY seconds the reading in
+lux goes to STATUS_PATH as "lux" (with "lux_at"), screen on or off. The idle blanker reads it for 关灯熄屏
+(the room went dark: blank; the light came back: wake). The backlight doesn't reach the sensor (the same
+reading at levels 10 and 1300), so the screen doesn't see its own light.
 """
 
 import json
@@ -29,6 +34,10 @@ I2C_ADDR = 0x51
 PS_CONF1_REG = 0x03
 PS_DATA_REG = 0x08
 ALS_CONF_REG = 0x00
+ALS_DATA_REG = 0x09
+ALS_CONF_ON = 0x0100       # ALS_IT 50 ms, ALS_SD 0 (on); the high byte reads 0x01 on these units and stays so
+LUX_PER_COUNT = 0.024      # at ALS_IT 50 ms (datasheet)
+ALS_EVERY = 2.0            # seconds between light readings
 
 # PS_CONF1 (VCNL4200 layout: bits 7:6 PS_DUTY, 5:4 PS_PERS, 3:1 PS_IT, 0 PS_SD):
 # 0xCA = PS_DUTY 1/1280, PS_PERS 1, PS_IT 9T, PS_SD=0 (active)
@@ -148,6 +157,8 @@ class ProximitySensor:
         self._last_wake_time = 0.0     # time of last wake trigger (for cooldown)
         self.gate = Gate()
         self.status = {"enabled": True, "baseline": None, "threshold": None, "measured": None, "last_wake": None}
+        self.als_on = False            # the ambient light sensor was switched on (read_lux)
+        self._lux_read = 0.0
         self.bus = None                # smbus2.SMBus, opened on first use
         self.bus_failed = False
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -263,6 +274,27 @@ class ProximitySensor:
         write_status(self.status)
         logger.info(f"nobody-here level {base} (readings {readings}), wake above {self.gate.threshold}")
 
+    def read_lux(self):
+        """Ambient light in lux, or None. Switches the light sensor on the first time."""
+        if not self.als_on:
+            self.als_on = self.i2c_set_word(ALS_CONF_REG, ALS_CONF_ON)
+            time.sleep(0.12)
+        val = self.i2c_get(ALS_DATA_REG)
+        return None if val is None else round((val & 0xFFFF) * LUX_PER_COUNT, 2)
+
+    def report_lux(self, now):
+        """Every ALS_EVERY seconds: the reading to STATUS_PATH (only when it changed, or every 30 s)."""
+        if now - self._lux_read < ALS_EVERY:
+            return
+        self._lux_read = now
+        lux = self.read_lux()
+        if lux is None:
+            return
+        old = self.status.get("lux")
+        if old is None or abs(lux - old) > max(0.05, old * 0.1) or now - (self.status.get("lux_at") or 0) >= 30:
+            self.status.update(lux=lux, lux_at=round(now, 1))
+            write_status(self.status)
+
     def read_proximity(self):
         """Read proximity data"""
         val = self.i2c_get(PS_DATA_REG)
@@ -340,6 +372,8 @@ class ProximitySensor:
                     else:
                         if self.sensor_enabled:
                             self.disable_sensor()
+
+                self.report_lux(time.time())
 
                 time.sleep(POLLING_INTERVAL)
 

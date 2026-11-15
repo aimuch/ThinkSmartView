@@ -23,6 +23,10 @@ Input-idle screen blanker + ALS auto-brightness for CD-18781Y.
   (the settings page's 「看一下」); afterwards the normal level comes back. Whether the screen is off and at
   which level goes to STATE_PATH, so the proximity and touch/motion wake daemons and the client don't
   have to guess it from the backlight (a brighter screen-off level would look "on" to them).
+- "dark_lux": a number (system 0.2.19, 设计画布第 74 块): 关灯熄屏. The proximity daemon writes the room's light
+  to PROX_STATUS ("lux", "lux_at"); at or below dark_lux for DARK_SECONDS, with nobody touching the screen for as
+  long and no conversation, the screen blanks; when the light comes back (LightGate) the screen wakes, whatever
+  blanked it. Without the key (or an older client) light does nothing.
 - THINKSMART_FREEZE_WEB=1 only (off by default since system 0.2.16): the backlight's darkest level still
   shows the page on these panels, and a stopped page left a clock that never moved, so the page keeps
   running and pauses its own animations while dark (thinksmart-client watches the backlight). When on:
@@ -73,6 +77,57 @@ FREEZE_WEB     = os.environ.get("THINKSMART_FREEZE_WEB", "0") == "1"   # 默认�
 WEB_COMM       = "WebKitWebProces"   # /proc/<pid>/comm keeps 15 characters
 FREEZE_DELAY   = 3.0      # seconds between blanking and stopping the page (THINKSMART_FREEZE_WEB=1 only)
 kill           = os.kill             # tests replace it
+PROX_STATUS    = HINT_PATH.with_name("thinksmart-proximity.json")   # the proximity daemon's light readings
+DARK_SECONDS   = 60.0     # 关灯熄屏: this long at or below the user's dark level
+LIGHT_SECONDS  = 3.0      # and this long clearly brighter before the screen wakes again
+LUX_STALE      = 20.0     # readings older than this don't count (the daemon writes at least every 30 s, more on change)
+
+
+class LightGate:
+    """关灯熄屏 from the light readings: feed(lux, now) -> "dark" once when the room stayed at or below the dark
+    level for DARK_SECONDS, "light" once when it is clearly brighter again (3x the level and 2 lux more, for
+    LIGHT_SECONDS) after a dark; else None. A lamp switched on for a moment, or a phone screen, doesn't count."""
+
+    def __init__(self, dark_lux):
+        self.dark_lux = dark_lux
+        self.dark = False
+        self.below = None
+        self.above = None
+
+    def light_lux(self):
+        return max(self.dark_lux * 3, self.dark_lux + 2)
+
+    def feed(self, lux, now):
+        if lux is None:
+            self.below = self.above = None
+            return None
+        if lux <= self.dark_lux:
+            self.above = None
+            self.below = self.below if self.below is not None else now
+            if not self.dark and now - self.below >= DARK_SECONDS:
+                self.dark = True
+                return "dark"
+        elif lux >= self.light_lux():
+            self.below = None
+            self.above = self.above if self.above is not None else now
+            if self.dark and now - self.above >= LIGHT_SECONDS:
+                self.dark = False
+                return "light"
+        else:
+            self.below = self.above = None
+        return None
+
+
+def read_lux(path=None, now=None):
+    """The latest light reading from the proximity daemon, or None (missing, old, or an older system layer)."""
+    try:
+        data = json.loads(Path(path or PROX_STATUS).read_text())
+        lux, at = data.get("lux"), data.get("lux_at")
+        if isinstance(lux, (int, float)) and isinstance(at, (int, float)) and (now or time.time()) - at <= LUX_STALE:
+            return float(lux)
+    except (OSError, ValueError, AttributeError):
+        pass
+    return None
 
 
 # stdout goes to the journal (persistent, size-capped); a log file of its own grew without bound
@@ -240,6 +295,8 @@ def run():
     manual        = None           # the user's backlight level (hint "brightness"), None: auto
     idle_timeout  = IDLE_TIMEOUT   # the user's screen-off (hint "idle"), 0: never
     timeout       = IDLE_TIMEOUT   # shortened after a conversation, back to normal on touch
+    gate          = None           # 关灯熄屏 (hint "dark_lux"): LightGate, None when off
+    last_lux      = 0.0
 
     def handle_signal(sig, frame):
         logger.info("Signal — restoring brightness and exiting")
@@ -295,6 +352,11 @@ def run():
             preview = None
             if isinstance(p, dict) and isinstance(p.get("until"), (int, float)) and p["until"] > time.time():
                 preview = (blank_level(p.get("level")), float(p["until"]))
+            dl = hint.get("dark_lux")
+            dl = float(dl) if isinstance(dl, (int, float)) and not isinstance(dl, bool) and dl > 0 else None
+            if dl != (gate.dark_lux if gate else None):
+                gate = LightGate(dl) if dl else None
+                logger.info(f"Voice client: 关灯熄屏 at {dl} lux" if dl else "Voice client: 关灯熄屏 off")
             new_idle = hint.get("idle", IDLE_TIMEOUT)
             if isinstance(new_idle, bool) or not isinstance(new_idle, int) or new_idle < 0:
                 new_idle = IDLE_TIMEOUT
@@ -373,6 +435,27 @@ def run():
                     blanked = True
                     blanked_at = time.monotonic()
                     write_state(True, blank)
+
+        # 关灯熄屏: the room went dark (and nobody touched the screen meanwhile): blank; the light came back: wake
+        if gate is not None and gate.dark and not blanked:
+            gate.dark, gate.below = False, time.monotonic()   # woken in the dark (touch, voice, walking up): blank again after a quiet minute
+        if gate is not None and time.monotonic() - last_lux >= 1.0:
+            last_lux = time.monotonic()
+            lux = read_lux()
+            what = gate.feed(lux, time.monotonic())
+            if what == "dark" and not blanked and not hold and previewing is None and idle_secs >= DARK_SECONDS:
+                logger.info(f"Room dark ({lux} lux ≤ {gate.dark_lux}) — blanking screen")
+                if set_brightness(blank):
+                    blanked = True
+                    blanked_at = time.monotonic()
+                    write_state(True, blank)
+            elif what == "dark" and not blanked:
+                gate.dark = False          # someone is using it: try again after another DARK_SECONDS of dark
+                gate.below = time.monotonic()
+            elif what == "light" and blanked:
+                last_input = time.monotonic()
+                timeout = idle_timeout
+                wake(f"Light on ({lux} lux)")
 
         # THINKSMART_FREEZE_WEB=1: stop the page a little after blanking
         if blanked and not frozen and time.monotonic() - blanked_at >= FREEZE_DELAY:
