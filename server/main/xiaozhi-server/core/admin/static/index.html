@@ -98,6 +98,44 @@
   .pill.ai-soft, #cn-models .chip.on { background: var(--ai-soft); color: var(--ai-soft-ink); border-color: var(--ai-soft-line); }
   .btn.primary.ai { background: var(--ai-fill); border-color: transparent; }
   .btn.primary.ai:hover:not(:disabled) { filter: brightness(1.08); }
+  /* 后台全局评审（设计画布第 64 块）：侧栏分组、二级标签、可折叠的段 */
+  .nav-g { font-size: 11px; line-height: 1.4; letter-spacing: .08em; color: #64708f; margin: 10px 10px 3px; user-select: none; }
+  .nav-g:first-child { margin-top: 0; }
+  @media (min-width: 901px) {   /* 分组以后项多了：紧凑一点，还放不下时菜单自己滚，底部的设备状态一直看得见 */
+    .nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #ffffff22 transparent; margin-right: -6px; padding-right: 6px; }
+    .nav button { padding: 4px 8px; margin-bottom: 1px; }
+    .nav .ico { width: 26px; height: 26px; border-radius: 8px; }
+    .nav .ico svg { width: 16px; height: 16px; }
+  }
+  :root[data-side="rail"] .nav-g { font-size: 0; height: 1px; margin: 8px 10px; background: #ffffff1a; }
+  .subtabs { position: sticky; top: 0; z-index: 6; display: flex; gap: 2px; margin: -6px 0 18px; padding: 6px 0 0; background: var(--bg);
+    border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+  .subtabs::-webkit-scrollbar { display: none; }
+  .subtabs button { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 0; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; background: none; color: var(--muted); font: inherit; cursor: pointer; white-space: nowrap; }
+  .subtabs button:hover { color: var(--text); }
+  .subtabs button.on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+  .subtabs i { font-style: normal; font-size: 11px; line-height: 1.5; padding: 0 6px; border-radius: 999px; background: var(--soft); color: var(--muted); font-weight: 600; }
+  .subtabs i.bad { background: color-mix(in srgb, var(--err) 18%, transparent); color: var(--err); }
+  [data-tab][hidden] { display: none !important; }
+  .fold-h { cursor: pointer; user-select: none; }
+  .fold-cv { flex: none; display: inline-block; width: 16px; align-self: center; font-size: 14px; line-height: 1; color: var(--muted); transition: transform .15s; }
+  .fold-cv::before { content: "▾"; }
+  .fold.folded .fold-cv { transform: rotate(-90deg); }
+  .fold.folded > :not(.fold-h) { display: none !important; }
+  .fold.folded { padding-bottom: 14px; }
+  .fold.folded > .fold-h { margin-bottom: 0; }
+  .fold-sum { display: none; margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 400; align-items: center; gap: 6px; }
+  .fold.folded .fold-sum { display: inline-flex; }
+  .fold.folded .fold-h > .sv-acts, .fold.folded .fold-h > .muted.small { display: none; }
+  .fold-solo .fold-cv { display: none; } .fold-solo > .fold-h { cursor: default; }
+  .fold-sum .sv-dot { position: static; }
+  .ps-fields { display: flex; flex-direction: column; gap: 12px; }
+  .drawer-body .actions { position: sticky; bottom: -28px; background: var(--card); padding: 12px 0 4px; margin-top: auto; }
+  @media (max-width: 600px) {
+    body .drawer { top: auto; left: 0; width: 100%; height: 86vh; border-left: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; transform: translateY(105%); }
+    body .drawer.open { transform: none; }
+  }
   /* AI 彩色补齐二（设计画布第 63 块）：和模型、智能体有关的次要按钮描渐变边、字也用渐变；侧栏的大模型、称呼、智能体图标用渐变 */
   .ag-add.ai-ring { border-style: solid; }
   .btn.ai-ring, .ag-add.ai-ring { border-color: transparent; background: linear-gradient(var(--card), var(--card)) padding-box, var(--ai) border-box; }
@@ -516,6 +554,7 @@
     .nav button { width: auto; white-space: nowrap; margin: 0; padding: 7px 10px; }
     .nav button.active { box-shadow: inset 0 -2px 0 #818cf8; }
     .nav .ico { display: none; }
+    .nav .nav-g { display: none; }
     .side-foot { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; white-space: nowrap; flex: none; }
     .side-foot .row { margin: 0; }
     .side-foot #logout, .hb-txt { display: none; }
@@ -1181,17 +1220,76 @@ $("logout").onclick = async () => { if (!confirmLeave()) return; page.dirty = nu
 
 const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, devices: renderDeviceSettings, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, commands: renderCommands, services: renderServices, kids: renderKids, media: renderMedia, music: renderMedia, update: renderUpdate };
 const page = { name: "", dirty: null, timer: null };
-function currentPage() { const p = location.hash.slice(1); return PAGES[p] ? p : "status"; }
+function currentPage() { const p = location.hash.slice(1).split("/")[0]; return PAGES[p] ? p : "status"; }
 function confirmLeave() { return !(page.dirty && page.dirty()) || confirm("当前页面有修改还没保存，确定离开吗？"); }
+
+// ---- 二级标签、可折叠的段（设计画布第 64 块） ----
+// 标签：页面里的段标 data-tab="id"（几个用空格隔开），tabify 在页头下面放一排标签，只显示当前标签的段。
+// 地址带标签（#services/radio），也记在这个浏览器里。all: true 的标签（总览）显示全部，段默认收起。
+// 侧栏按用途分组（组内的顺序还是在「界面」里拖）
+const NAV_GROUPS = [["概览", ["status", "devices", "how"]], ["家人", ["kids"]], ["模型", ["llm", "calls", "agents", "memory", "cost"]],
+  ["语音", ["asr", "tts", "commands"]], ["服务", ["services", "media", "intent"]], ["系统", ["update"]]];
+const navGroup = (p) => { const i = NAV_GROUPS.findIndex((g) => g[1].includes(p)); return i < 0 ? NAV_GROUPS.length : i; };
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+function hashTab() { const h = location.hash.slice(1), i = h.indexOf("/"); return i < 0 ? "" : decodeURIComponent(h.slice(i + 1)); }
+function tabify(root, tabs) {
+  const name = page.name, has = (id) => tabs.some((t) => t.id === id);
+  const cur = [hashTab(), lsGet("adm-tab:" + name)].find(has) || (tabs.find((t) => t.def) || tabs[0]).id;
+  let bar = root.querySelector(":scope > .subtabs");
+  if (!bar) {
+    bar = document.createElement("div"); bar.className = "subtabs"; bar.setAttribute("role", "tablist");
+    const head = root.querySelector(":scope > .page-head");
+    if (head) head.after(bar); else root.prepend(bar);
+  }
+  bar.innerHTML = tabs.map((t) => `<button type="button" role="tab" data-subtab="${esc(t.id)}">${esc(t.label)}${t.badge ? `<i class="${t.bad ? "bad" : ""}">${esc(t.badge)}</i>` : ""}</button>`).join("");
+  const show = (id) => {
+    if (!has(id)) id = tabs[0].id;
+    const t = tabs.find((x) => x.id === id);
+    bar.querySelectorAll("[data-subtab]").forEach((b) => { const on = b.dataset.subtab === id; b.classList.toggle("on", on); b.setAttribute("aria-selected", String(on)); });
+    root.querySelectorAll("[data-tab]").forEach((el) => { el.hidden = !(t.all || el.dataset.tab.split(" ").includes(id)); });
+    root.dataset.subtab = id;
+    initFolds(root, !t.all);
+    const b = bar.querySelector(".on"); if (b && b.scrollIntoView && bar.scrollWidth > bar.clientWidth) b.scrollIntoView({ block: "nearest", inline: "nearest" });
+  };
+  bar.querySelectorAll("[data-subtab]").forEach((b) => (b.onclick = () => {
+    const id = b.dataset.subtab;
+    history.replaceState(null, "", `#${name}/${encodeURIComponent(id)}`); lsSet("adm-tab:" + name, id);
+    show(id);
+    if (bar.getBoundingClientRect().top <= 1) bar.scrollIntoView({ block: "start" });
+  }));
+  page.tab = (id) => show(id);
+  show(cur);
+}
+// 可折叠的段：带 data-fold="key" 的元素，第一层的 .fold-h 是标题行，.fold-sum 是收起时的摘要。
+// 收起状态记在这个浏览器里；data-bad 的（有红点）总是展开；一个标签里只有一段时不能折叠（solo）。
+function initFolds(root, solo) {
+  const all = [...root.querySelectorAll("[data-fold]")].filter((x) => !x.closest("[hidden]"));
+  const single = solo || all.length === 1;
+  all.forEach((sec) => {
+    const h = sec.querySelector(":scope > .fold-h");
+    if (!h) return;
+    const key = `adm-fold:${page.name}:${sec.dataset.fold}`, saved = lsGet(key);
+    const closed = !single && !sec.dataset.bad && (saved != null ? saved === "1" : sec.dataset.foldDefault === "closed" || root.dataset.subtab === (sec.dataset.foldIn || "overview"));
+    sec.classList.add("fold"); sec.classList.toggle("fold-solo", single); sec.classList.toggle("folded", closed);
+    if (!h.querySelector(":scope > .fold-cv")) h.insertAdjacentHTML("afterbegin", '<span class="fold-cv" aria-hidden="true"></span>');
+    h.setAttribute("aria-expanded", String(!closed));
+    if (single) { h.removeAttribute("role"); h.removeAttribute("tabindex"); h.onclick = h.onkeydown = null; return; }
+    h.setAttribute("role", "button"); h.tabIndex = 0;
+    const toggle = () => { const c = !sec.classList.contains("folded"); sec.classList.toggle("folded", c); h.setAttribute("aria-expanded", String(!c)); lsSet(key, c ? "1" : "0"); };
+    h.onclick = (e) => { if (!e.target.closest("button, a, input, select, label, textarea")) toggle(); };
+    h.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === h) { e.preventDefault(); toggle(); } };
+  });
+}
 
 async function openPage(name, force) {
   if (!force && name === page.name) return;
   if (!force && !confirmLeave()) { history.replaceState(null, "", "#" + page.name); return; }
-  clearInterval(page.timer); page.timer = null; page.dirty = null; page.name = name;
+  clearInterval(page.timer); page.timer = null; page.dirty = null; page.name = name; page.tab = null;
   closeDevicePop();
   applyBrand();   // 浏览器标签上的标题跟着页面变
   if (audio) { audio.pause(); audio = null; }
-  if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
+  if (location.hash.slice(1).split("/")[0] !== name) history.replaceState(null, "", "#" + name);
   const navName = name === "grokbot" ? "agents" : name;   // Grok Bot 页从「智能体」进去
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.page === navName));
   applyUi();  // 隐藏了的菜单项，正在看的那一页照样显示
@@ -1202,7 +1300,7 @@ async function openPage(name, force) {
   if (!force) window.scrollTo(0, 0);
 }
 document.querySelectorAll("#nav button").forEach((b) => (b.onclick = () => openPage(b.dataset.page)));
-window.addEventListener("hashchange", () => openPage(currentPage()));
+window.addEventListener("hashchange", () => { const p = currentPage(); if (p === page.name && page.tab) page.tab(hashTab()); else openPage(p); });
 window.addEventListener("beforeunload", (e) => { if (page.dirty && page.dirty()) { e.preventDefault(); e.returnValue = ""; } });
 
 // devices 为 null 表示查不到（连不上服务、登录过期）：不能停在上一次的结果上，否则服务停了还显示"1 台设备在线"
@@ -1613,7 +1711,7 @@ async function renderLLM(root) {
     ${d.kind === "other" ? `<div class="banner warn">当前默认的 ${esc(d.selected)} 不在后台管理范围内（可能是手动改了配置文件）。在下面选择一种并点"保存并设为默认"即可切换。</div>` : ""}
     ${d.running && d.running !== d.selected ? `<div class="banner warn">配置里的默认模型是 ${esc(d.selected)}，但服务仍在用 ${esc(d.running)}。</div>` : ""}
 
-    <div class="section-title">本地 CLI 与智能体 · 用你自己的账号，不走下面的 API Key</div>
+    <div data-tab="local"><div class="section-title" style="margin-top:0">本地 CLI 与智能体 · 用你自己的账号，不走云端 API 的 Key</div>
     <div class="choices three">
       <div class="choice ${agentView === "claude" ? "on" : ""}" data-agent="claude" style="cursor:pointer">
         ${logoTile(d.logos.claude_cli, "C", "lg")}
@@ -1686,11 +1784,11 @@ async function renderLLM(root) {
       </div>` : '<div class="muted">配置文件里没有 ClaudeCLI 条目，请重新运行安装脚本生成配置。</div>'}
     </div>
 
-    <div class="section-title">API Key · 云端模型，统一走 OpenAI 协议</div>
+    </div><div data-tab="api"><div class="section-title" style="margin-top:0">云端模型 · 填 API Key，统一走 OpenAI 协议</div>
     <div class="vendors">${d.vendors.map((x) => `<button class="vendor ${x.id === llmVendor ? "on" : ""} ${d.vendor === x.id ? "using" : ""}" data-vendor="${x.id}">
       <i class="${x.configured ? "set" : ""}"></i>${logoTile(x.logo, x.label)}<span><b>${esc(x.label)}</b>
       <small>${d.vendor === x.id ? "✓ 默认" : x.configured ? (d.callable[x.entry] ? `称呼：${esc(d.callable[x.entry][0])}` : "已配置") : "未配置"}</small></span></button>`).join("")}</div>
-    <div class="card panel" id="api-form"></div>`;
+    <div class="card panel" id="api-form"></div></div>`;
 
   $("grok-choice").onclick = () => openPage("grokbot");
   root.querySelectorAll("[data-agent]").forEach((b) => (b.onclick = () => {
@@ -1806,8 +1904,13 @@ async function renderLLM(root) {
   renderApi();
   page.dirty = () => cliDirty() || apiDirty() || visionDirty();
   const box = document.createElement("div");
+  box.dataset.tab = "vision";
   root.appendChild(box);
   renderVision(box);
+  // 二级标签（设计画布第 64 块）：标签上标出默认模型在哪一类
+  const localDef = ["cli", "dsh", "grok"].includes(d.kind);
+  tabify(root, [{ id: "local", label: "本地和智能体", badge: localDef ? "默认" : "", def: localDef },
+    { id: "api", label: "云端 API", badge: d.kind === "api" ? "默认" : "", def: !localDef }, { id: "vision", label: "看图模型" }]);
 }
 
 // 看图模型（拍照问答，core/agent/photo_ask.py；设计画布第 15 块 A）。「大模型」里填过 Key 的同一家直接沿用
@@ -1823,7 +1926,7 @@ async function renderVision(box) {
     : x.own_key ? '<span class="pill">已配置</span>' : x.shared_key ? '<span class="pill ok">已有 Key</span>' : x.local ? '<span class="pill">本机/局域网</span>' : "";
   const customModel = p.model && !p.models.includes(p.model);
   box.innerHTML = `
-    <div class="card panel" style="margin-top:20px">
+    <div class="card panel">
       <h2 style="margin:0 0 6px">看图模型 ${d.ready ? '<span class="pill ok">可以用</span>' : '<span class="pill warn">还没配好</span>'}</h2>
       <p class="muted small" style="margin:0 0 14px">设备上说“帮我看下这是什么”，手机扫码拍照，照片交给这里选的模型。「大模型」里填过 Key 的同一家直接沿用（标「已有 Key」）。DeepSeek 只有 V4.1 Flash 能看图。</p>
       <div class="choices three vgrid">${d.providers.map((x) => `
@@ -1906,7 +2009,7 @@ async function renderASR(root) {
       <span class="pill ok">当前：${esc(d.selected)}</span></div>
     ${d.choice === "other" ? `<div class="banner warn">当前使用的 ${esc(d.selected)} 不在后台管理范围内（可能是手动改了配置文件）。在下面选择一种并使用即可切换。</div>` : ""}
     ${d.running && d.running !== d.selected ? `<div class="banner warn">配置里选的是 ${esc(d.selected)}，但服务仍在使用 ${esc(d.running)}，重启服务后生效。</div>` : ""}
-    <h3 class="asr-group">本地模型</h3>
+    <div data-tab="engine"><h3 class="asr-group" style="margin-top:0">本地模型</h3>
     <div class="choices">
       <button class="choice ${asrView === "local" ? "on" : ""}" data-asr="local">
         <div class="mark" style="background:var(--accent-soft);color:var(--accent)">X</div>
@@ -1924,11 +2027,10 @@ async function renderASR(root) {
     </div>
     ${(d.providers || []).some((x) => x.group === "lan") ? `<h3 class="asr-group">局域网服务 <span class="muted small" style="font-weight:400">家里另一台电脑上的识别服务（OpenAI 兼容）</span></h3>
     <div class="choices">${(d.providers || []).filter((x) => x.group === "lan").map(provChoice).join("")}</div>` : ""}
-    <div class="card panel" id="asr-form"></div>
-    ${vadCard(d.vad)}
-    ${hotwordsCard(d.hotwords)}
-    <div class="card" style="margin-top:16px" id="cor-card"></div>
-    ${recentCard(d.recent)}
+    <div class="card panel" id="asr-form"></div></div>
+    <div data-tab="words">${vadCard(d.vad)}${hotwordsCard(d.hotwords)}</div>
+    <div data-tab="fix"><div class="card" id="cor-card"></div></div>
+    <div data-tab="recent">${recentCard(d.recent)}</div>
     `;
   let formDirty = () => false;
   const use = (btn, choice, before) => busy(btn, async () => {
@@ -2058,6 +2160,8 @@ async function renderASR(root) {
   asrChecks = [() => formDirty(), bindVad(d.vad), bindHotwords(d.hotwords), bindCorrections(d.corrections)];
   page.dirty = () => asrChecks.some((f) => f && f());
   bindRecent(root);
+  tabify(root, [{ id: "engine", label: "识别引擎" }, { id: "words", label: "断句和热词" }, { id: "fix", label: "纠错" },
+    { id: "recent", label: "最近识别", badge: (d.recent || []).length || "" }]);
 }
 
 // 各卡片分别保存；保存后重新打开本页，显示服务端整理后的结果。own 是这张卡片的“有没有修改”检查
@@ -2263,11 +2367,11 @@ async function renderTTS(root) {
     <div class="page-head"><div><h1>语音合成</h1><p class="sub">把回复转成语音。一次只用一种，选好引擎和音色后保存即可切换。</p></div>
       <span class="pill ok">当前：${esc(curEngine ? curEngine.label : d.selected)}${cur ? ` · ${esc(cur.name)}` : ""}</span></div>
     ${d.engine === "other" ? `<div class="banner warn">当前使用的 ${esc(d.selected)} 不在后台管理范围内（可能是手动改了配置文件）。在下面选一种并保存即可切换。</div>` : ""}
-    <div class="choices">${(d.engines || []).map((x) => `
+    <div class="choices" data-tab="voice">${(d.engines || []).map((x) => `
       <button class="choice ${ttsView === x.id ? "on" : ""}" data-engine="${esc(x.id)}">
         <div class="mark" style="background:${x.id === "edge" ? "var(--accent-soft);color:var(--accent)" : "#fff7ed;color:#c2410c"}">${x.id === "edge" ? "E" : x.custom ? "LAN" : "千"}</div>
         <div><b>${esc(x.label)}</b> ${tag(x)}<small>${esc(x.mark)} · ${esc(x.desc)}</small></div></button>`).join("")}</div>
-    <div class="card panel">
+    <div class="card panel" data-tab="voice">
       ${e.conflict ? `<div class="banner err">配置里已有一个叫 ${esc(e.entry)} 的条目，但类型不对，请在配置文件里改名或删掉它。</div>` : ""}
       ${isQwen ? `<div class="grid2"><label class="f">百炼 API Key
           <input class="in mono" id="tts-key" type="password" autocomplete="off"
@@ -2338,6 +2442,7 @@ async function renderTTS(root) {
     } catch (err) { toast(err.message, true); }
   });
   renderClones(root);
+  tabify(root, [{ id: "voice", label: "声音" }, { id: "clone", label: "声音复刻" }]);
 }
 
 // 声音复刻（设计画布第 50 块）：家里人的声音交给阿里云百炼复刻，设备在「回答的声音」里选；这里也能直接给设备用
@@ -2345,6 +2450,7 @@ const CLONE_STATUS = { OK: ["ok", "可以用了"], DEPLOYING: ["warn", "正在�
 async function renderClones(root) {
   const card = document.createElement("div");
   card.className = "card panel clone-card";
+  card.dataset.tab = "clone";
   root.appendChild(card);
   let d;
   try { d = await api("voice-clones"); } catch (err) { card.innerHTML = `<p class="muted">${esc(err.message)}</p>`; return; }
@@ -2428,11 +2534,11 @@ async function renderCommands(root) {
       <div class="cmd-head-acts"><label class="switch" style="margin:0"><input type="checkbox" id="cmd-on" ${cfg.enabled ? "checked" : ""}><b>常用口令不走大模型</b></label>
         <button class="btn" id="cmd-save">保存</button></div></div>
     ${cfg.enabled ? "" : '<div class="banner info">总开关关着：所有句子都交给大模型，和以前一样（下面单独设成「开」的设备除外）。</div>'}
-    <div class="card panel"><div class="section-title" style="margin-top:0">设备</div>
+    <div class="card panel" data-tab="builtin"><div class="section-title" style="margin-top:0">设备</div>
       <div class="cmd-devs">${(d.devices || []).map((x) => `<label class="cmd-dev"><span>${esc(x.name || x.id)}</span><select class="in" data-dev="${esc(x.id)}">
         <option value="" ${devSel(x.id) === "" ? "selected" : ""}>跟着总开关（${cfg.enabled ? "开" : "关"}）</option><option value="on" ${devSel(x.id) === "on" ? "selected" : ""}>开</option>
         <option value="off" ${devSel(x.id) === "off" ? "selected" : ""}>关（全走大模型）</option></select></label>`).join("") || '<p class="muted small">还没有设备。</p>'}</div></div>
-    <div class="card panel"><div class="section-title" style="margin-top:0">内置口令<span class="muted small" style="font-weight:400">每类可以单独关；回复里能用 {时长} {when} {音量} {结果}</span></div>
+    <div class="card panel" data-tab="builtin"><div class="section-title" style="margin-top:0">内置口令<span class="muted small" style="font-weight:400">每类可以单独关；回复里能用 {时长} {when} {音量} {结果}</span></div>
       ${d.categories.map((c) => { const b = cfg.builtin[c.id] || {}; return `<div class="cmd-cat">
         <label class="switch" style="margin:0"><input type="checkbox" data-cat="${c.id}" ${b.enabled !== false ? "checked" : ""}><b>${esc(c.label)}</b></label>
         <span class="muted small">${esc(c.examples)}</span>
@@ -2441,19 +2547,21 @@ async function renderCommands(root) {
       ${(cfg.aliases || []).map((a, i) => `<div class="cmd-alias"><input class="in" data-al="${i}" data-k="say" value="${esc(a.say)}" placeholder="新说法"><span>当作</span>
         <input class="in" data-al="${i}" data-k="means" value="${esc(a.means)}" placeholder="已有说法，例如 静音"><button class="btn danger sm" data-aldel="${i}">删除</button></div>`).join("")}
       <button class="btn sm" id="cmd-alias-add">＋ 别名</button></div>
-    <div class="card panel"><div class="section-title" style="margin-top:0">自定义口令<button class="btn primary sm" id="cmd-add" style="margin-left:auto">＋ 新口令</button></div>
+    <div class="card panel" data-tab="custom"><div class="section-title" style="margin-top:0">自定义口令<button class="btn primary sm" id="cmd-add" style="margin-left:auto">＋ 新口令</button></div>
       ${(cfg.custom || []).map(ruleHtml).join("") || '<p class="muted small">还没有自定义口令。</p>'}
       ${d.tools.length ? "" : '<p class="muted small">「设备工具」的清单从在线设备读，现在没有设备在线。</p>'}</div>
-    <div class="card panel"><div class="section-title" style="margin-top:0">试一试<span class="muted small" style="font-weight:400">按还没保存的设置试</span></div>
+    <div class="card panel" data-tab="try"><div class="section-title" style="margin-top:0">试一试<span class="muted small" style="font-weight:400">按还没保存的设置试</span></div>
       <div class="cmd-try"><input class="in" id="cmd-text" placeholder="例如：明天早上七点半叫我"><button class="btn primary" id="cmd-test">试</button></div>
       <div id="cmd-result"></div></div>
-    <div class="card panel"><div class="section-title" style="margin-top:0">最近 7 天</div>
+    <div class="card panel" data-tab="stats"><div class="section-title" style="margin-top:0">最近 7 天</div>
       <div class="cmd-stats"><div><small class="muted">不走大模型</small><b>${s.fast || 0} 句</b></div><div class="ai"><small>交给大模型</small><b>${s.llm || 0} 句</b></div></div>
       ${(s.misses || []).length ? `<div class="section-title">常没认出来的短句<span class="muted small" style="font-weight:400">点「加成口令」做成自定义口令</span></div>
         ${s.misses.map((m) => `<div class="cmd-miss"><span>${esc(m.text)}</span><span class="muted small">× ${m.count}</span><button class="btn sm" data-miss="${esc(m.text)}">加成口令</button></div>`).join("")}` : ""}
       ${(s.recent || []).length ? `<div class="section-title">最近<span class="muted small" style="font-weight:400">网关重启后从头记</span></div>
         ${s.recent.slice(0, 12).map((r) => `<div class="cmd-recent"><span class="pill ${r.outcome === "fast" ? "ok" : "ai-soft"}">${r.outcome === "fast" ? "口令" : "大模型"}</span><span>${esc(r.text)}</span><small class="muted">${esc(r.rule || "")}</small></div>`).join("")}` : ""}</div>`;
     wire();
+    tabify(root, [{ id: "builtin", label: "内置和别名" }, { id: "custom", label: "自定义", badge: (cfg.custom || []).length || "" },
+      { id: "try", label: "试一试" }, { id: "stats", label: "最近 7 天", badge: (s.misses || []).length ? `${s.misses.length} 句没认出` : "" }]);
   }
   function wire() {
     root.querySelector("#cmd-on").onchange = (e) => { cfg.enabled = e.target.checked; mark(); draw(); mark(); };
@@ -2531,7 +2639,6 @@ async function renderIntent(root) {
       ${(d.home || []).length ? `<p class="muted small" style="margin:12px 0 0">${esc(d.home.join("、"))}在<a href="#services">「外部服务 → 家里的系统」</a>里设置和开关 ›</p>` : ""}
       ${d.extra.length ? `<p class="muted small" style="margin:12px 0 0">另外保留了配置文件里手动添加的：${esc(d.extra.join("、"))}</p>` : ""}
     </div>
-    <div class="card panel hidden" id="plugin-settings" style="margin-top:12px"></div>
     <div class="actions"><button class="btn primary" id="intent-save">保存</button></div>`;
   const values = () => ({ mode, functions: [...root.querySelectorAll("[data-fn]:checked")].map((i) => i.dataset.fn) });
   root.querySelectorAll("[data-pd]").forEach((box) => renderDeviceChips(box, d));
@@ -2612,35 +2719,35 @@ function openDevicePop(anchor, box, d) {
   document.addEventListener("keydown", esc_);
 }
 
-// 插件设置：按接口给的字段列表生成表单，显示在意图识别页插件列表下面
+// 插件设置：按接口给的字段列表生成表单，在右边的抽屉里（设计画布第 64 块；手机上从下面升起）
 let pluginSettingsDirty = () => false;
 async function openPluginSettings(id, label, onSaved) {
   const d = await api("plugin-settings/" + encodeURIComponent(id));
-  const box = $("plugin-settings");
-  box.classList.remove("hidden");
+  if (!drawerOpen() || $("drawer-title").textContent !== `${label} · 设置`) openDrawer(`${label} · 设置`, "");
+  const box = $("drawer-body");
   const input = (f) => f.type === "secret"
     ? `<input class="in mono" data-k="${esc(f.key)}" type="password" autocomplete="off" placeholder="${f.set ? `已配置 ${esc(f.hint_set)}，留空表示不改` : "未配置，粘贴后保存"}">`
     : `<input class="in ${f.type === "number" ? "" : "mono"}" data-k="${esc(f.key)}" ${f.type === "number" ? `type="number" min="${f.min ?? ""}" max="${f.max ?? ""}"` : ""}
         value="${esc(f.value ?? "")}" placeholder="${f.default !== undefined ? "留空用默认：" + esc(f.default) : ""}">`;
   box.innerHTML = `
-    <div class="section-title" style="margin-top:0">${esc(label)} · 设置 ${d.configured ? '<span class="pill ok">已配置</span>' : '<span class="pill warn">还没配置</span>'}</div>
+    <div>${d.configured ? '<span class="pill ok">已配置</span>' : '<span class="pill warn">还没配置</span>'}</div>
     ${d.note ? `<div class="banner info">${esc(d.note)}</div>` : ""}
     ${d.legacy_note ? `<div class="banner warn">${esc(d.legacy_note)}</div>` : ""}
-    <div class="grid2">
+    <div class="ps-fields">
       ${d.fields.map((f) => `<label class="f ${f.type === "text" ? "full" : ""}">${esc(f.label)}${f.hint ? `<span class="hint">${esc(f.hint)}</span>` : ""}${input(f)}</label>`).join("")}
     </div>
     <p class="muted small" style="margin:8px 0 0">${d.fields.some((f) => f.type === "secret") ? "密钥只保存在网关的配置文件里，页面上只显示首尾 4 位。" : ""}保存后马上生效，不用重启。</p>
     <div class="actions"><span class="result" id="ps-result"></span>
-      <button class="btn" id="ps-close">收起</button>
+      <button class="btn" id="ps-close">关闭</button>
       ${d.testable ? '<button class="btn" id="ps-test">测试</button>' : ""}
       <button class="btn primary" id="ps-save">保存设置</button></div>`;
-  box.scrollIntoView({ behavior: "smooth", block: "nearest" });
   const values = () => Object.fromEntries([...box.querySelectorAll("[data-k]")].map((i) => [i.dataset.k, i.value.trim()]));
   const dirty = snapshot(values);
   const result = (html) => ($("ps-result").innerHTML = html);
   const bad = (msg) => result(`<span style="color:var(--err)">${esc(msg)}</span>`);
-  pluginSettingsDirty = () => !box.classList.contains("hidden") && dirty();
-  $("ps-close").onclick = () => { box.classList.add("hidden"); box.innerHTML = ""; };
+  pluginSettingsDirty = () => drawerOpen() && !!box.querySelector("[data-k]") && dirty();
+  openDrawer.onclose = () => { pluginSettingsDirty = () => false; };
+  $("ps-close").onclick = () => closeDrawer();
   if ($("ps-test")) $("ps-test").onclick = (e) => busy(e.target, async () => {
     result(`<span class="muted">${id === "web_search" ? "正在真搜一次" : "正在试"}，最多等 30 秒…</span>`);
     try {
@@ -2654,7 +2761,7 @@ async function openPluginSettings(id, label, onSaved) {
       toast(r.note);
       // 不整页刷新，免得丢掉还没保存的插件勾选；只更新这个插件的"还没配置"标记
       document.querySelectorAll(`[data-settings="${CSS.escape(id)}"]`).forEach((b) => {
-        const pill = b.closest(".plugin").querySelector(".pill.warn");
+        const pill = b.closest(".plugin") && b.closest(".plugin").querySelector(".pill.warn");
         if (r.configured && pill) pill.remove();
       });
       if (onSaved) onSaved(r.configured);
@@ -2758,10 +2865,28 @@ async function renderServices(root) {
         <span class="sv-acts"><button class="btn sm" data-test="radio" data-id="${esc(r.id)}">测试</button>${r.custom ? `<button class="btn sm danger" data-del="radio" data-id="${esc(r.id)}">删除</button>` : ""}${sw("radio", r.id, r.on)}</span></div>`).join("");
   }
   // 家里的系统（设计画布第 63 块）：智能中枢、机柜、仓库同步、智能桌面。还是大模型能调的插件，总开关改的是意图识别的插件列表
+  // 每段收起时的一行摘要（设计画布第 64 块）
+  const tally = (xs) => { const on = xs.filter((x) => x.on !== false), bad = on.filter((x) => x.status && x.status.at && !x.status.ok).length;
+    return { n: xs.length, off: xs.length - on.length, bad, ok: on.filter((x) => x.status && x.status.ok).length }; };
+  const sumHtml = (t, extra) => `<span class="fold-sum"><span class="sv-dot ${t.bad ? "bad" : t.ok ? "ok" : "none"}"></span>${t.bad ? `${t.bad} 个上次没连上`
+    : t.ok && t.ok === t.n - t.off ? (t.n - t.off > 1 ? `${t.ok} 个 · 都能用` : "能用") : t.ok ? `${t.ok} 个能用` : "还没用过"}${t.off ? ` · ${t.off} 个关着` : ""}${extra || ""}</span>`;
+  const homeSum = () => { const P = d.home.plugins, on = P.filter((p) => p.enabled && !p.needs_config).length, todo = P.filter((p) => p.needs_config).length;
+    return `<span class="fold-sum"><span class="sv-dot ${on ? "ok" : "none"}"></span>${on} 个开着${todo ? ` · ${todo} 个还没填` : ""}</span>`; };
+  const media = () => (d.media || []).filter((m) => m.configured);
+  const newsT = () => tally([...d.news.map((n) => ({ ...n, on: true })), d.geoip]);
+  function tabs() {
+    const bad = (xs) => tally(xs).bad || "";
+    const T = [{ id: "overview", label: "总览", all: true }, { id: "weather", label: "天气", badge: bad(d.weather.filter((w) => !qwSkip(w))) },
+      { id: "radio", label: "电台", badge: bad(d.radio) }, { id: "news", label: "新闻和定位", badge: bad([...d.news.map((n) => ({ ...n, on: true })), d.geoip]) }];
+    if (d.home && d.home.plugins.length) T.push({ id: "home", label: "家里的系统", badge: d.home.plugins.filter((p) => p.enabled && p.needs_config).length || "" });
+    if (d.media) T.push({ id: "media", label: "媒体", badge: bad(media()) });
+    T.forEach((t) => { if (t.badge) t.bad = true; });
+    return T;
+  }
   function homeHtml() {
     const H = d.home;
     if (!H || !H.plugins.length) return "";
-    return `<div class="card panel sv-sec" style="margin-top:16px" id="sv-home"><div class="sv-head"><b>家里的系统</b><span class="muted small">大模型能直接用（开灯、查机柜、看仓库同步），设备屏幕上的工作台和蓝牙灯也用${H.intent === "function_call" ? "" : "；<b>意图识别现在是「不用插件」，选了「用插件」才生效</b>"}</span></div>
+    return `<div class="card panel sv-sec" id="sv-home" data-tab="home" data-fold="home"><div class="sv-head fold-h"><b>家里的系统</b>${homeSum()}<span class="muted small">大模型能直接用（开灯、查机柜、看仓库同步），设备屏幕上的工作台和蓝牙灯也用${H.intent === "function_call" ? "" : "；<b>意图识别现在是「不用插件」，选了「用插件」才生效</b>"}</span></div>
       ${H.plugins.map((p) => `<div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">
         <span class="sv-dot ${p.needs_config ? "none" : p.enabled ? "ok" : ""}"></span>
         <span class="sv-name"><b>${esc(p.label)}</b>${p.needs_config ? ' <span class="pill warn">还没填</span>' : ""}<small>${esc(p.desc)}</small>
@@ -2774,36 +2899,33 @@ async function renderServices(root) {
     root.innerHTML = `
     <div class="page-head"><div><h1>外部服务</h1><p class="sub">网关和设备要连的外网服务。绿点能用、红点上次没连上；真用的时候会顺便记下，点「测试」马上试一次。</p></div>
       <button class="btn primary" id="sv-all">全部测一遍</button></div>
-    <div class="sv-sum"><div class="ok"><small>能用</small><b>${c.ok}</b></div><div class="${c.bad ? "bad" : ""}"><small>上次没连上</small><b>${c.bad}</b></div>
+    <div class="sv-sum" data-tab="overview"><div class="ok"><small>能用</small><b>${c.ok}</b></div><div class="${c.bad ? "bad" : ""}"><small>上次没连上</small><b>${c.bad}</b></div>
       <div><small>关掉的</small><b>${c.off}</b></div><div><small>上次全部测试</small><b style="font-size:16px;line-height:33px">${d.checked_at ? hm(d.checked_at) : "还没测过"}</b></div></div>
-    <div class="card panel sv-sec"><div class="sv-head"><b>天气</b><span class="muted small">从上往下试，连不上换下一个；设备上的天气卡片、详情页和语音问天气都用这个顺序</span></div>
+    <div class="card panel sv-sec" data-tab="weather" data-fold="weather" ${tally(d.weather.filter((w) => !qwSkip(w))).bad ? "data-bad" : ""}><div class="sv-head fold-h"><b>天气</b>${sumHtml(tally(d.weather.filter((w) => !qwSkip(w))), d.weather.some(qwSkip) ? " · 和风天气没填 Key，跳过" : "")}<span class="muted small">从上往下试，连不上换下一个；设备上的天气卡片、详情页和语音问天气都用这个顺序</span></div>
       ${weatherRows()}
       <div class="sv-add"><input class="in nm" id="sv-w-name" maxlength="20" placeholder="名字（比如 家里 NAS）"><input class="in mono" id="sv-w-url" placeholder="Open-Meteo 兼容的预报地址：https://…/v1/forecast"><button class="btn" id="sv-w-add">添加</button></div></div>
-    <div class="card panel sv-sec"><div class="sv-head"><b>电台</b><span class="muted small">设备连上网关时取这个清单（要客户端 0.1.682 以上）；关掉的不出现在设备上</span>
+    <div class="card panel sv-sec" data-tab="radio" data-fold="radio" ${tally(d.radio).bad ? "data-bad" : ""}><div class="sv-head fold-h"><b>电台</b>${sumHtml(tally(d.radio))}<span class="muted small">设备连上网关时取这个清单（要客户端 0.1.682 以上）；关掉的不出现在设备上</span>
       <span class="sv-acts"><button class="btn sm" id="sv-r-all">测全部电台</button></span></div>
       ${radioRows()}
       <div class="sv-add"><input class="in nm" id="sv-r-name" maxlength="20" placeholder="台名，比如 上海交通广播"><input class="in mono" id="sv-r-url" placeholder="直播流地址：http://…/playlist.m3u8（也可以是 mp3、aac）"><button class="btn" id="sv-r-add">添加</button></div></div>
-    <div class="grid2" style="gap:16px;align-items:start">
-      <div class="card panel sv-sec" style="margin:0"><div class="sv-head"><b>新闻</b><span class="muted small">地址在插件设置里改</span></div>
-        ${d.news.map((n) => `<div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">${dot(n.status)}
-          <span class="sv-name"><b>${esc(n.name)}</b><small class="mono">${esc(n.url.replace(/^https?:\/\//, ""))}</small>${st(n.status)}</span>
-          <span class="sv-acts"><button class="btn sm" data-test="news" data-id="${n.id}">测试</button><button class="btn sm" data-plugin="${esc(n.plugin)}" data-label="${esc(n.label)}">改地址</button></span></div>`).join("")}</div>
-      <div class="card panel sv-sec" style="margin:0"><div class="sv-head"><b>定位</b></div>
-        <div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">${dot(d.geoip.status, d.geoip.on)}
-          <span class="sv-name"><b>${esc(d.geoip.name)}</b><small>设备没设住宅地址时，查天气用它猜在哪个城市；设了就用不到</small>${st(d.geoip.status, d.geoip.on)}</span>
-          <span class="sv-acts"><button class="btn sm" data-test="geoip" data-id="geoip">测试</button>${sw("geoip", "geoip", d.geoip.on)}</span></div></div>
-    </div>
+    <div class="card panel sv-sec" data-tab="news" data-fold="news" ${newsT().bad ? "data-bad" : ""}><div class="sv-head fold-h"><b>新闻和定位</b>${sumHtml(newsT())}<span class="muted small">新闻地址在插件设置里改；定位只在设备没设住宅地址时用</span></div>
+      ${d.news.map((n) => `<div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">${dot(n.status)}
+        <span class="sv-name"><b>${esc(n.name)}</b><small class="mono">${esc(n.url.replace(/^https?:\/\//, ""))}</small>${st(n.status)}</span>
+        <span class="sv-acts"><button class="btn sm" data-test="news" data-id="${n.id}">测试</button><button class="btn sm" data-plugin="${esc(n.plugin)}" data-label="${esc(n.label)}">改地址</button></span></div>`).join("")}
+      <div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">${dot(d.geoip.status, d.geoip.on)}
+        <span class="sv-name"><b>${esc(d.geoip.name)}</b><small>设备没设住宅地址时，查天气用它猜在哪个城市；设了就用不到</small>${st(d.geoip.status, d.geoip.on)}</span>
+        <span class="sv-acts"><button class="btn sm" data-test="geoip" data-id="geoip">测试</button>${sw("geoip", "geoip", d.geoip.on)}</span></div></div>
     ${homeHtml()}
-    ${d.media ? `<div class="card panel sv-sec" style="margin-top:16px"><div class="sv-head"><b>媒体</b><span class="muted small">放歌、儿歌、英语、动画、菜谱视频用的家里 NAS，在「媒体」页填和分区</span>
+    ${d.media ? `<div class="card panel sv-sec" data-tab="media" data-fold="media" ${tally(media()).bad ? "data-bad" : ""}><div class="sv-head fold-h"><b>媒体</b>${sumHtml(tally(media()), d.media.length > media().length ? ` · ${d.media.length - media().length} 个没填` : "")}<span class="muted small">放歌、儿歌、英语、动画、菜谱视频用的家里 NAS，在「媒体」页填和分区</span>
         <span class="sv-acts"><a class="btn sm" href="#media" style="text-decoration:none">去「媒体」页</a></span></div>
       ${d.media.map((m) => `<div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">${m.configured ? dot(m.status, m.on) : '<span class="sv-dot none"></span>'}
         <span class="sv-name"><b>${esc(m.name)}</b><small class="${m.url ? "mono" : ""}">${m.url ? esc(m.url.replace(/^https?:\/\//, "")) : "还没填地址"}${m.local ? ` · 网关本机文件夹 ${m.local} 个` : ""}</small>${m.configured ? st(m.status, m.on) : ""}</span>
         <span class="sv-acts">${m.configured ? `<button class="btn sm" data-test="${m.id}" data-id="${m.id}">测试</button>` : ""}</span></div>`).join("")}</div>` : ""}
-    <div class="card panel sv-sec" style="margin-top:16px"><div class="sv-head"><b>AI 服务</b><span class="muted small">在各自的页面里选和改</span></div>
+    <div class="card panel sv-sec" data-tab="overview"><div class="sv-head"><b>AI 服务</b><span class="muted small">在各自的页面里选和改</span></div>
       <div class="sv-ai"><a href="#llm"><span>大模型</span> <b>${esc(d.ai.llm || "没选")}</b> ›</a><a href="#asr"><span>语音识别</span> <b>${esc(d.ai.asr || "没选")}</b> ›</a>
-        <a href="#tts"><span>语音合成</span> <b>${esc(d.ai.tts || "没选")}</b> ›</a><a href="#tts"><span>声音复刻</span> <b>百炼</b> ›</a></div></div>
-    <div class="card panel hidden" id="plugin-settings" style="margin-top:12px"></div>`;
+        <a href="#tts"><span>语音合成</span> <b>${esc(d.ai.tts || "没选")}</b> ›</a><a href="#tts/clone"><span>声音复刻</span> <b>百炼</b> ›</a></div></div>`;
     bind();
+    tabify(root, tabs());
   }
   const op = async (body, msg) => { try { d = await api("services", body); draw(); if (msg) toast(msg); } catch (err) { toast(err.message, true); } };
   const test = (btn, body) => busy(btn, async () => { try { d = await api("services/test", body); draw(); } catch (err) { toast(err.message, true); } });
@@ -2818,8 +2940,8 @@ async function renderServices(root) {
       [ids[i], ids[j]] = [ids[j], ids[i]];
       op({ op: "order", ids });
     }));
-    root.querySelectorAll("[data-plugin]").forEach((b) => (b.onclick = () => openPluginSettings(b.dataset.plugin, b.dataset.label, async () => { d = await api("services"); })
-      .then(() => $("plugin-settings").scrollIntoView({ behavior: "smooth", block: "nearest" })).catch((err) => toast(err.message, true))));
+    root.querySelectorAll("[data-plugin]").forEach((b) => (b.onclick = () => openPluginSettings(b.dataset.plugin, b.dataset.label, async () => { d = await api("services"); draw(); })
+      .catch((err) => toast(err.message, true))));
     if (d.home) root.querySelectorAll("#sv-home [data-pd]").forEach((box) => renderDeviceChips(box, d.home));
     root.querySelectorAll("[data-home]").forEach((i) => (i.onchange = () => {
       const p = d.home.plugins.find((x) => x.name === i.dataset.home);
@@ -2928,13 +3050,13 @@ async function renderMedia(root) {
     const r = ready();
     root.innerHTML = `
     <div class="page-head"><div><h1>媒体</h1><p class="sub">设备上说「放儿歌」「放英语第三课」「看红烧肉的视频」「下一首」时放这里的。只接自己家里的：NAS 上的 Navidrome、飞牛影视、Jellyfin、Emby，或者网关本机的文件夹；用哪几个就填哪几个。</p></div></div>
-    <div class="md-srcs">${srcCard("navidrome")}${srcCard("fnvideos")}${srcCard("jellyfin")}${srcCard("emby")}
+    <div class="md-srcs" data-tab="src">${srcCard("navidrome")}${srcCard("fnvideos")}${srcCard("jellyfin")}${srcCard("emby")}
       <div class="md-src"><div class="sv-head"><span class="sv-dot ${d.local.on && d.local.count ? "ok" : "none"}"></span><b>网关本机文件夹</b><span class="muted small">没有 NAS 时用</span>
         <span class="sv-acts"><label class="switch" style="margin:0" title="${d.local.on ? "不用它" : "用它"}"><input type="checkbox" data-src-on="local" ${d.local.on ? "checked" : ""}></label></span></div>
         <div class="md-line">${d.local.count} 个 · 网关那台机器${d.local.host ? `（${esc(d.local.host)}）` : ""}上的 <span class="mono">${esc(d.local.dir)}</span></div><p class="muted small" style="margin:6px 0 0">在下面「浏览」切到「本机」上传，音频视频都行。</p></div></div>
-    <div class="card panel sv-sec"><div class="sv-head"><b>分区</b><span class="muted small">按用途分，不按来源。说分区的名字就放它：随机的打乱放；按顺序的记住每个人（认不出按设备）放到哪，「放英语第三课」数第几个；按名字找的用来找菜谱这类</span></div>
+    <div class="card panel sv-sec" data-tab="sec"><div class="sv-head"><b>分区</b><span class="muted small">按用途分，不按来源。说分区的名字就放它：随机的打乱放；按顺序的记住每个人（认不出按设备）放到哪，「放英语第三课」数第几个；按名字找的用来找菜谱这类</span></div>
       ${zone(true)}${zone(false)}</div>
-    <div class="card panel sv-sec"><div class="sv-head"><b>浏览和试听</b>
+    <div class="card panel sv-sec" data-tab="browse"><div class="sv-head"><b>浏览和试听</b>
         ${r.length ? `<span class="mu-seg">${r.map((s) => `<button class="btn sm ${nav.src === s ? "primary" : ""}" data-src="${s}">${s === "l" ? "本机" : SRC[s][1]}</button>`).join("")}</span>` : ""}</div>
       ${!r.length ? '<p class="muted small">先填好 Navidrome 或 Jellyfin，或者打开本机文件夹。</p>' : `
       <div class="mu-tabs">${tabs()}<input class="in" id="mu-q" placeholder="搜名字、专辑、剧集" value="${esc(nav.q)}"><button class="btn sm" id="mu-search">搜</button></div>
@@ -2944,6 +3066,8 @@ async function renderMedia(root) {
       <div class="mu-list">${rows()}</div>
       <div id="md-player" class="${nav.playing ? "" : "hidden"}"></div>`}</div>`;
     bind();
+    const srcBad = ["navidrome", "fnvideos", "jellyfin", "emby"].filter((w) => dotOf(w) === "bad").length;
+    tabify(root, [{ id: "src", label: "来源", badge: srcBad || "", bad: !!srcBad }, { id: "sec", label: "分区" }, { id: "browse", label: "浏览和试听" }]);
   }
   async function load() {
     nav.loading = true; draw();
@@ -3076,11 +3200,11 @@ async function renderKids(root) {
     const r = d.rules, L = d.learn;
     root.innerHTML = `
     <div class="page-head"><div><h1>孩子和学习</h1><p class="sub">每个孩子能用哪些媒体分区、学到哪；全家的儿童模式；学一学的内容；这周的记录。设备上的「孩子和学习」和这里是同一份。</p></div></div>
-    <div class="card panel sv-sec"><div class="sv-head"><b>孩子</b><span class="muted small">「家人声音」里标了孩子的人自动出现；认出是他在说时用他的称呼、只放他能用的分区、按他记进度</span>
+    <div class="card panel sv-sec" data-fold="children"><div class="sv-head fold-h"><b>孩子</b><span class="fold-sum">${d.children.length ? d.children.map((c) => esc(c.call || c.name)).join("、") : "还没有"}</span><span class="muted small">「家人声音」里标了孩子的人自动出现；认出是他在说时用他的称呼、只放他能用的分区、按他记进度</span>
       <span class="sv-acts"><button class="btn sm" id="kd-add">＋ 手动加一个</button></span></div>
       ${d.children.length ? `<div class="kd-kids">${d.children.map(kidCard).join("")}</div>` : '<p class="muted small">还没有孩子：在设备的「设置 → 家人声音」录孩子的声音时勾上「孩子」，或者在这里手动加。</p>'}</div>
     <div class="grid2" style="gap:16px;align-items:start">
-    <div class="card panel sv-sec" style="margin:0"><div class="sv-head"><b>儿童模式</b><span class="muted small">全家一份，每台设备取；设备上改了也写回这里，谁新听谁的</span></div>
+    <div class="card panel sv-sec" style="margin:0" data-fold="rules"><div class="sv-head fold-h"><b>儿童模式</b><span class="fold-sum">${d.devices.filter((x) => x.enabled).length} 台开着 · ${r.daily_minutes ? `每天 ${r.daily_minutes} 分钟` : "不限时"}${r.bedtime ? ` · ${esc(r.bedtime)} 后不陪聊` : ""}</span><span class="muted small">全家一份，每台设备取；设备上改了也写回这里，谁新听谁的</span></div>
       <div class="kd-rules"><label>每天最多聊<select class="in" id="kd-min">${[0, 15, 20, 30, 45, 60, 90, 120].map((m) => `<option value="${m}" ${r.daily_minutes === m ? "selected" : ""}>${m ? m + " 分钟" : "不限"}</option>`).join("")}
           ${[0, 15, 20, 30, 45, 60, 90, 120].includes(r.daily_minutes) ? "" : `<option value="${r.daily_minutes}" selected>${r.daily_minutes} 分钟</option>`}</select></label>
         <label>几点后不陪聊<input class="in" id="kd-bed" type="time" value="${esc(r.bedtime)}"></label>
@@ -3089,16 +3213,17 @@ async function renderKids(root) {
       ${d.devices.map((x) => `<div class="kd-dev"><b>${esc(x.name)}</b><span class="muted small">${x.enabled ? `${x.age} 岁 · 今天聊了 ${x.today} 分` : "没开"}</span>
         ${x.enabled ? `<input class="in kd-devage" type="number" min="1" max="14" value="${x.age}" data-devage="${esc(x.id)}" title="几岁">` : ""}
         <label class="switch" style="margin:0 0 0 auto"><input type="checkbox" data-dev="${esc(x.id)}" ${x.enabled ? "checked" : ""}></label></div>`).join("") || '<p class="muted small">还没有设备连过网关。</p>'}</div>
-    <div class="card panel sv-sec" style="margin:0"><div class="sv-head"><b>学一学的内容</b><span class="pill ai-soft">AI 出题</span><span class="muted small">设备点「学一学」时用；网关连不上时用设备自带的</span></div>
+    <div class="card panel sv-sec" style="margin:0" data-fold="learn"><div class="sv-head fold-h"><b>学一学的内容</b><span class="pill ai-soft">AI 出题</span><span class="fold-sum">认字卡出到第 ${(L.char_pos || 0) + 1} 个 · 古诗 ${L.poems.length} 首</span><span class="muted small">设备点「学一学」时用；网关连不上时用设备自带的</span></div>
       <label class="kd-lab">认字卡（按顺序出，现在出到第 ${(L.char_pos || 0) + 1} 个）<textarea class="in kd-ta" id="kd-chars" rows="3">${esc(L.chars)}</textarea></label>
       <label class="kd-lab">古诗（一行一首，一轮里不重复）<textarea class="in kd-ta" id="kd-poems" rows="3">${esc(L.poems.join("\n"))}</textarea></label>
       <label class="kd-lab">口算<select class="in" id="kd-math">${Object.entries(d.math).map(([k, n]) => `<option value="${k}" ${L.math === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <label class="kd-lab">十万个为什么（一行一个，随机挑）<textarea class="in kd-ta" id="kd-why" rows="3">${esc(L.why.join("\n"))}</textarea></label>
       <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn primary" id="kd-learn-save">保存</button></div></div>
     </div>
-    <div class="card panel sv-sec" style="margin-top:16px"><div class="sv-head"><b>这周</b><span class="muted small">设备报上来的：聊了多久、学一学、学习陪伴、看了听了什么（只有分钟数、次数和名字，没有照片和聊天内容）</span></div>
+    <div class="card panel sv-sec" style="margin-top:16px" data-fold="week"><div class="sv-head fold-h"><b>这周</b><span class="fold-sum">聊了 ${d.week.talk} 分钟${d.week.study ? ` · 学习陪伴 ${d.week.study} 分钟` : ""}</span><span class="muted small">设备报上来的：聊了多久、学一学、学习陪伴、看了听了什么（只有分钟数、次数和名字，没有照片和聊天内容）</span></div>
       ${weekHtml()}</div>`;
     bind();
+    initFolds(root, false);
   }
   function bind() {
     $("kd-add").onclick = () => { const name = prompt("孩子的名字（还没录声音的也行）"); if (name && name.trim()) save({ op: "add_child", name: name.trim() }, "加好了"); };
@@ -4155,7 +4280,22 @@ function applyUi() {
   const order = ui.nav.filter((p) => buttons.some((b) => b.dataset.page === p));
   const all = buttons.map((b) => b.dataset.page);   // 新加的页面（比如「音乐」）插在默认顺序里它前一项的后面，不是排到最后
   all.forEach((p, i) => { if (!order.includes(p)) { const prev = all.slice(0, i).reverse().find((x) => order.includes(x)); order.splice(prev ? order.indexOf(prev) + 1 : order.length, 0, p); } });
-  order.forEach((p) => { const b = buttons.find((x) => x.dataset.page === p); nav.appendChild(b); b.hidden = ui.hidden.includes(p) && page.name !== p; b.title = b.textContent.trim(); });
+  order.sort((a, b) => navGroup(a) - navGroup(b));   // 稳定排序：组内保持拖出来的顺序
+  nav.querySelectorAll(".nav-g").forEach((x) => x.remove());
+  let last = -1, head = null, shown = false;
+  const close = () => { if (head) head.hidden = !shown; };
+  order.forEach((p) => {
+    const g = navGroup(p);
+    if (g !== last) {
+      close(); last = g; shown = false;
+      head = g < NAV_GROUPS.length ? Object.assign(document.createElement("div"), { className: "nav-g", textContent: NAV_GROUPS[g][0] }) : null;
+      if (head) { head.setAttribute("aria-hidden", "true"); nav.appendChild(head); }
+    }
+    const b = buttons.find((x) => x.dataset.page === p); nav.appendChild(b);
+    b.hidden = ui.hidden.includes(p) && page.name !== p; b.title = b.textContent.trim();
+    if (!b.hidden) shown = true;
+  });
+  close();
 }
 function saveUi(change) { Object.assign(ui, change); store.set(UI_KEY, ui); applyUi(); }
 
@@ -4231,7 +4371,7 @@ function renderUiDrawer(body) {
     <label class="ui-field">内容宽度${seg("width", [["fixed", "固定 1080"], ["fluid", "自适应铺满"]])}</label>
     <label class="ui-field">侧栏${seg("side", [["full", "展开"], ["rail", "图标"], ["drawer", "抽屉"]])}<span class="small">窗口窄于 900px 时侧栏变成顶部的一排。</span></label>
     <label class="ui-field">密度${seg("density", [["comfy", "舒适"], ["compact", "紧凑"]])}</label>
-    <div class="ui-field">菜单顺序（拖动排序，点 ⊘ 隐藏，当前页总会显示）<div class="nav-order" id="nav-order">${order.map((p) =>
+    <div class="ui-field">菜单顺序（拖动排序，只在组内排；点 ⊘ 隐藏，当前页总会显示）<div class="nav-order" id="nav-order">${order.map((p) =>
       `<div draggable="true" data-p="${p}" class="${ui.hidden.includes(p) ? "off" : ""}">⋮⋮ ${esc(labels[p])}<button data-hide="${p}" title="${ui.hidden.includes(p) ? "显示" : "隐藏"}">${ui.hidden.includes(p) ? "◎" : "⊘"}</button></div>`).join("")}</div></div>
     <div class="actions" style="justify-content:flex-start;gap:8px"><button class="btn sm" id="ui-reset">界面恢复默认</button><button class="btn sm" id="tables-reset">表格恢复默认</button></div>`;
   body.querySelectorAll(".seg[data-ui] button").forEach((b) => (b.onclick = () => { saveUi({ [b.closest(".seg").dataset.ui]: b.dataset.v }); renderUiDrawer(body); }));
