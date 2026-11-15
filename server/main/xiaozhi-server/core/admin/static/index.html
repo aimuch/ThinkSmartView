@@ -3044,7 +3044,7 @@ async function renderMedia(root) {
   function tabs() {
     const list = nav.src === "l" ? [["folders", "文件夹"], ["albums", "专辑"]] : "jef".includes(nav.src) ? [["folders", "媒体库"], ["albums", "剧集和专辑"], ["playlists", "播放列表"]]
       : [["folders", "文件夹"], ["albums", "专辑"], ["playlists", "歌单"], ["random", "随便听听"]];
-    return list.map(([k, n]) => `<button class="btn sm ${nav.tab === k && !nav.stack.length ? "primary" : ""}" data-tab="${k}">${n}</button>`).join("");
+    return list.map(([k, n]) => `<button class="btn sm ${nav.tab === k && !nav.stack.length ? "primary" : ""}" data-mtab="${k}">${n}</button>`).join("");
   }
   function draw() {
     const r = ready();
@@ -3116,7 +3116,7 @@ async function renderMedia(root) {
     }));
     root.querySelectorAll("[data-del-sec]").forEach((b) => (b.onclick = () => { if (confirm("删掉这个分区？里面的歌和视频不会删，只是不在这个分区了。")) save({ op: "delete_section", id: b.dataset.delSec }, "删掉了"); }));
     root.querySelectorAll("[data-src]").forEach((b) => (b.onclick = () => { nav.src = b.dataset.src; nav.tab = "folders"; nav.stack = []; load(); }));
-    root.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { nav.tab = b.dataset.tab; nav.stack = []; load(); }));
+    root.querySelectorAll("[data-mtab]").forEach((b) => (b.onclick = () => { nav.tab = b.dataset.mtab; nav.stack = []; load(); }));
     root.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { nav.stack.push({ type: b.dataset.type, id: b.dataset.open, name: b.dataset.name }); load(); }));
     root.querySelectorAll("[data-up]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); nav.stack = nav.stack.slice(0, +a.dataset.up); load(); }));
     const search = () => { const q = $("mu-q").value.trim(); if (!q) return; nav.q = q; nav.tab = "search"; nav.stack = []; load(); };

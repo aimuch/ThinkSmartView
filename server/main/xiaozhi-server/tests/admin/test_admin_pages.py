@@ -1399,3 +1399,12 @@ async def test_wake_greeting(kiosk, tmp_path, monkeypatch):
     assert (await (await kiosk.post("/kiosk/wake/greet?device=dev-1", data=pcm)).json())["text"] == ""
     await kiosk.post("/admin/api/logout", json={})
     assert (await kiosk.get("/admin/api/greetings")).status == 401
+
+
+def test_subtab_attribute_is_reserved_for_tabify():
+    """data-tab 只给 tabify 标段用：页面里别的按钮再用它，点一下就会被当成「换标签」重画（飞牛影视填不进去）。"""
+    import re
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[2] / "core/admin/static/index.html").read_text(encoding="utf-8")
+    assert html.count('querySelectorAll("[data-tab]")') == 1
+    assert not re.search(r'<button[^>]*\sdata-tab=', html)
