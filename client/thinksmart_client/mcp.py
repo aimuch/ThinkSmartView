@@ -331,7 +331,7 @@ PAGE_TOOLS = [   # 打开设备上的页面（设计画布第 53 块）
     {
         'name': 'self.screen.open_page',
         'description': '在设备屏幕上打开一个页面：「打开机柜」「看看机柜」page="work.rack"；「打开工作台」work；「仓库同步」work.repo；'
-                       '「DeskHub」「桌面」work.desk；「打开天气」weather；「专注」focus；「学习记录」study；「家居」「米家」smart；'
+                       '「DeskHub」「桌面」「智能桌面」work.desk；「打开天气」weather；「专注」focus；「学习记录」study；「家居」「米家」smart；'
                        '「打开设置」settings，设置里的分类 settings.screen（屏幕和声音）/ settings.looks（外观）/ settings.net（网络）/ '
                        'settings.system（系统）/ settings.alarms（闹钟和作息）/ settings.family（家人）/ settings.voice（语音）；'
                        '「回首页」home；「关掉」「退出这个页面」close。打开后只说一句「好的」。',

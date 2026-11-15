@@ -1,5 +1,5 @@
 // 工作台和智能中枢的蓝牙灯（设计画布第 38 块）。数据都经小麦网关（/kiosk/integrations）：
-// 桌面 = Mac 上的 DeskHub App（切显示器输入源、AI 用量、提醒事项），机柜 = Prometheus 和 rack-screen，仓库 = repo-manager，
+// 智能桌面 = Mac 上的 DeskHub App（切显示器输入源、AI 用量、提醒事项），机柜 = Prometheus 和 rack-screen，仓库 = repo-manager，
 // 蓝牙灯 = 智能中枢。网关上没接入、或这台设备关着对应插件的，这里什么都不显示。
 // 在 home.js 之后、dash.js 之前加载；用 app.js 的 $、esc、toast、handlers、ui，home.js 的 window.miApi。
 (() => {
@@ -44,7 +44,7 @@ function openWork(on) {   // 也给「打开页面」用（wf.js，设计画布�
 }
 const secHead = (k, title, small = '') => `<div class="wk-h"><span class="wk-ic">${svg(k, 22)}</span><b>${title}</b>${small ? `<small>${esc(small)}</small>` : ''}</div>`;
 const note = text => `<p class="wk-note">${esc(text)}</p>`;
-const NOT_YET = name => `还没接入：在小麦网关后台「意图识别 › 插件」里打开「${name}」并点「设置」。`;
+const NOT_YET = name => `还没接入：在小麦网关后台「外部服务 › 家里的系统」里打开「${name}」并点「设置」。`;
 
 function ago(t) {
   const s = Math.max(0, Date.now() / 1000 - t);
@@ -57,10 +57,10 @@ function tokens(n) { return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `
 function resetIn(s) { return !s ? '' : s < 3600 ? `${Math.max(1, Math.round(s / 60))} 分钟后` : s < 86400 ? `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, '0')} 后` : `${Math.round(s / 86400)} 天后`; }
 
 function deskHtml() {
-  if (!A().desk_hub) return secHead('desk', '桌面') + note(NOT_YET('桌面（DeskHub）'));
+  if (!A().desk_hub) return secHead('desk', '智能桌面') + note(NOT_YET('智能桌面（DeskHub）'));
   const d = ig.data.desk_hub || {};
-  if (!d.seen) return secHead('desk', '桌面') + note('还没有 Mac 连上来：在 Mac 上的 DeskHub App 里打开 设置 › 小麦网关，填网关地址和后台里的同一串口令。');
-  const parts = [secHead('desk', '桌面', `${d.name} · ${d.online ? ago(d.seen) : '上次 ' + hm(d.seen)}`)];
+  if (!d.seen) return secHead('desk', '智能桌面') + note('还没有 Mac 连上来：在 Mac 上的 DeskHub App 里打开 设置 › 小麦网关，填网关地址和后台里的同一串口令。');
+  const parts = [secHead('desk', '智能桌面', `${d.name} · ${d.online ? ago(d.seen) : '上次 ' + hm(d.seen)}`)];
   if (!d.online) parts.push(note(`Mac 上的 DeskHub 没连网关（上次 ${hm(d.seen)}）。下面是上次的内容，现在点了不会生效。`));
   const srcs = d.sources || [];
   parts.push(srcs.length ? `<div class="wk-srcs">${srcs.map(s => `<button class="wk-src${s.id === d.current ? ' on' : ''}${ig.busy[s.id] ? ' busy' : ''}" data-src="${esc(s.id)}">` +
@@ -83,7 +83,7 @@ function deskHtml() {
 }
 
 function rackHtml() {
-  if (!A().rack_status) return secHead('rack', '机柜') + note(NOT_YET('机柜状态'));
+  if (!A().rack_status) return secHead('rack', '机柜') + note(NOT_YET('机柜'));
   const r = ig.data.rack_status || {};
   if (r.error) return secHead('rack', '机柜') + note(`读不到 Prometheus：${r.error}`);
   const hosts = r.hosts || [];
@@ -327,7 +327,7 @@ window.igApi = {
 };
 
 /* ---------------- 设置 › 智能体 › 接入的服务（设计画布第 40 块） ---------------- */
-const SVC = [['desk_hub', '桌面（DeskHub）', '连接口令'], ['rack_status', '机柜', ''], ['repo_status', '仓库同步', ''], ['smart_hub', '蓝牙灯（智能中枢）', '访问令牌']];
+const SVC = [['desk_hub', '智能桌面（DeskHub）', '连接口令'], ['rack_status', '机柜', ''], ['repo_status', '仓库同步', ''], ['smart_hub', '蓝牙灯（智能中枢）', '访问令牌']];
 function renderSvc() {
   const P = ig.data && ig.data.plugins;
   set('svcList', SVC.map(([k, label, need]) => {
