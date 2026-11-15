@@ -207,7 +207,7 @@ async def _test_integration(name: str, values: dict) -> dict:
             return {"message": f"{v['name']} 正连着网关：{len(v['sources'])} 个输入源，{len(v['todos'])} 条待办"}
         if v.get("seen"):
             return {"message": f"口令已保存。{v['name']} 上次连网关是 {time.strftime('%H:%M', time.localtime(v['seen']))}，现在没连上"}
-        return {"message": "口令已保存。还没有 Mac 连上来：在 DeskHub App 的 设置 › 小麦网关 里填网关地址和这串口令"}
+        return {"message": "口令已保存。还没有 Mac 连上来：在 DeskHub App（0.4.5 起）的 设置 › 控制终端 里添加一个，填网关地址和这串口令"}
     except common.IntegrationError as e:
         raise ValueError(str(e))
 

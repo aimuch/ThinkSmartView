@@ -376,7 +376,7 @@ PLUGIN_SETTINGS.update({
         ],
     },
     "desk_hub": {
-        "note": "Mac 上的 DeskHub App 主动连网关（Mac 不用开端口）：在 App 的 设置 › 小麦网关 里填网关地址"
+        "note": "Mac 上的 DeskHub App 主动连网关（Mac 不用开端口）：在 App（0.4.5 起）的 设置 › 控制终端 里点「添加一个控制终端」，填网关地址"
                 "（http://网关的局域网 IP:16688）和这里的同一串口令。切显示器照样只走 App 菜单里试切过的输入源。",
         "fields": [
             {"key": "token", "label": "连接口令", "type": "secret", "required": True,
