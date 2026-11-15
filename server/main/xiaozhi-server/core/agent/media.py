@@ -192,6 +192,8 @@ def _norm_url(url: str, strip=("/rest",)) -> str:
             url = url[:-len(s)]
     if url.endswith("/web") or "/web/" in url:            # 从浏览器地址栏复制的 Jellyfin 地址
         url = url.split("/web")[0]
+    if url.endswith("/v") or re.search(r"://[^/]+/v/", url):   # 飞牛影视网页在 /v 下，接口在根上
+        url = url.split("/v/")[0] if "/v/" in url else url[:-2]
     if url and not re.match(r"^https?://[^\s/]+", url):
         raise MediaError("地址要以 http:// 或 https:// 开头，比如 http://10.10.10.88:4533")
     return url
@@ -629,7 +631,12 @@ class Jellyfin(Source):
                         raise MediaError("用户名或密码不对")
                     if r.status != 200:
                         raise MediaError(f"返回 {r.status}" + (f"（地址不对？填 {cls.name} 网页的地址，比如 http://NAS:8096）" if r.status == 404 else ""))
-                    data = await r.json(content_type=None)
+                    if "html" in (r.headers.get("Content-Type") or ""):
+                        raise MediaError(f"这个地址返回的是网页，不是 {cls.name} 的接口：地址只填到端口，比如 http://10.10.10.88:8005")
+                    try:
+                        data = await r.json(content_type=None)
+                    except ValueError:
+                        raise MediaError(f"返回的不是 {cls.name} 的接口：地址只填到端口") from None
         except MediaError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -652,7 +659,7 @@ class Jellyfin(Source):
                     try:
                         data = await r.json(content_type=None)
                     except ValueError:
-                        raise MediaError("返回的不是 Jellyfin 接口")
+                        raise MediaError(f"返回的不是 {self.name} 的接口：地址只填到端口") from None
         except Exception as e:  # noqa: BLE001
             if record:
                 services.record(self.sid, False, (time.monotonic() - t0) * 1000, _safe(e))

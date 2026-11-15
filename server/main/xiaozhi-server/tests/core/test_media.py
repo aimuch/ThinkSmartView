@@ -612,3 +612,19 @@ async def test_fnvideos_has_its_own_card(tmp_path, jf, client):
     assert v["fnvideos"]["has_password"] and "host" in v["local"]
     await music.apply_async({"op": "fnvideos", "url": ""})
     assert not music.load()["fnvideos"]["token"]
+
+
+def test_fnvideos_browser_url_is_trimmed():
+    """从浏览器复制的飞牛影视地址（/v/...）只留到端口：/v 下面是网页，登录会拿到 HTML。"""
+    for raw in ("http://10.10.10.88:8005/v", "http://10.10.10.88:8005/v/", "http://10.10.10.88:8005/v/home?x=1", "http://10.10.10.88:8005"):
+        assert music._norm_url(raw) == "http://10.10.10.88:8005"
+    assert music._norm_url("http://nas:8096/videos") == "http://nas:8096/videos"
+
+
+async def test_login_page_instead_of_api():
+    """地址填成网页（回 200 的 HTML）：说清楚是地址的问题，不是 JSONDecodeError。"""
+    app = web.Application()
+    app.router.add_post("/Users/AuthenticateByName", lambda r: web.Response(text="<!doctype html><html></html>", content_type="text/html"))
+    async with TestServer(app) as srv:
+        with pytest.raises(music.MediaError, match="网页"):
+            await music.FnVideos.login(str(srv.make_url("")).rstrip("/"), "andy", "x", "dev")
