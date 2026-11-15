@@ -1162,8 +1162,12 @@ async def test_kiosk_today(kiosk, tmp_path, monkeypatch):
     h = kiosk.handler
     for k, (t, v) in list(h._today_cache.items()):
         h._today_cache[k] = (t - 1800, v)
+    h._save_today_weather()
     data = await (await kiosk.get("/kiosk/today?device=dev-1")).json()
     assert data["weather"]["temp"] == 10.7 and data["weather"]["stale_min"] == 30 and "连不上" in data["weather_error"]
+    h._today_cache = None    # 网关重启了（部署）：上一次的天气从 data/.today-weather.json 读回来
+    data = await (await kiosk.get("/kiosk/today?device=dev-1")).json()
+    assert data["weather"]["temp"] == 10.7 and data["weather"]["stale_min"] == 30
     # 地名查不到不算连不上：不拿旧的顶替
     async def nowhere(place=None, location=None):
         raise open_meteo.PlaceNotFound("没找到")

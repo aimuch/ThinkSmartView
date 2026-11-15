@@ -354,6 +354,11 @@ PLUGIN_SETTINGS.update({
             {"key": "url", "label": "地址", "type": "text", "default": "http://127.0.0.1:8780",
              "hint": "智能中枢和网关在同一台机器上时不用改"},
             {"key": "token", "label": "访问令牌", "type": "secret", "required": True},
+            {"key": "node_token", "label": "节点令牌（选填）", "type": "secret",
+             "hint": "智能中枢配置文件里 nodes.token 那一行。填了，设备上「接入的服务」里能打开「当智能中枢的蓝牙节点」"},
+            {"key": "node_host", "label": "节点连的地址（选填）", "type": "text",
+             "hint": "留空用网关这台机器的局域网地址；智能中枢不在网关这台机器上时才要填"},
+            {"key": "node_port", "label": "节点端口", "type": "number", "default": 7766, "min": 1, "max": 65535},
         ],
     },
     "rack_status": {

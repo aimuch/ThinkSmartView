@@ -284,6 +284,7 @@ async def test_rack_logs_in_with_the_password(upstream):
     s = {"prometheus": base, "url": base, "token": "", "password": "rack-pass"}
     d = await rack.summary(s, fresh=True)
     assert [m["name"] for m in d["monitors"]] == ["家庭影院", "博客"] and d["monitor_error"] is None
+    assert d["screen"] is True
     key = (base, hash("rack-pass"))
     rack._sessions[key] = "stale"                      # 过期的 cookie：401 后重新登录
     d = await rack.summary(s, fresh=True)
@@ -291,7 +292,21 @@ async def test_rack_logs_in_with_the_password(upstream):
     rack._sessions.clear()
     d = await rack.summary({**s, "password": "wrong"}, fresh=True)
     assert "登录密码不对" in d["monitor_error"]
+    assert d["screen"] is False
     rack._sessions.clear()
     d = await rack.summary({**s, "token": "rack-pass"}, fresh=True)   # 两个都填了（令牌填错）：用密码
     assert d["monitor_error"] is None and len(d["monitors"]) == 2
     rack._sessions.clear()
+
+
+async def test_hubnode_settings_for_the_device(client):
+    """设备当智能中枢的蓝牙节点（设计画布第 73 块）：没填节点令牌说清楚；填了给连法，节点名带设备号的末 4 位。"""
+    d = await (await client.get("/kiosk/hubnode?device=22:1d:e1:e9:2d:43")).json()
+    assert d["ok"] is False and "节点令牌" in d["error"]
+    text = client.cfg_path.read_text(encoding="utf-8").replace("smart_hub: {", "smart_hub: {node_token: nodetok, node_host: 10.0.0.5, ", 1)
+    client.cfg_path.write_text(text, encoding="utf-8")
+    d = await (await client.get("/kiosk/hubnode?device=22:1d:e1:e9:2d:43")).json()
+    assert d["ok"] and d["token"] == "nodetok" and d["host"] == "10.0.0.5" and d["port"] == 7766 and d["node"] == "thinksmart-2d43"
+    ds.put("living", {"plugins": ["get_weather"]}, config_store.load_merged(custom_path=client.cfg_path))
+    d = await (await client.get("/kiosk/hubnode?device=living")).json()
+    assert d["ok"] is False and "没给这台设备接入" in d["error"]

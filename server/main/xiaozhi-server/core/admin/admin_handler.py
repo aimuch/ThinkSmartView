@@ -77,6 +77,24 @@ def _wav(pcm: bytes, rate: int) -> bytes:
     return out.getvalue()
 
 
+
+def _lan_ip() -> str:
+    """网关这台机器的局域网地址（设备直连智能中枢的节点端口用）：问一下去局域网网关的路由走哪个地址，不真发包。"""
+    import socket
+
+    for target in ("10.255.255.255", "192.168.255.255", "8.8.8.8"):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect((target, 9))
+                ip = s.getsockname()[0]
+                if ip and not ip.startswith("127."):
+                    return ip
+        except OSError:
+            continue
+    return "127.0.0.1"
+
+TODAY_STALE_MAX = 12 * 3600   # 天气服务连不上时，上一次的天气最多再用多久
+
 class AdminHandler:
     def __init__(self, config: dict, ws_server=None, config_path: Path = None, grokbot_credentials: Path = None,
                  gateway_updater: "updater.Updater" = None):
@@ -100,7 +118,9 @@ class AdminHandler:
         self.updater = gateway_updater or updater.Updater()
         self._emotion_runs = {}  # session_id -> {"task", "index", "total", "emotion"}
         self._voice_samples = {}  # 音色 -> mp3 字节（试听缓存）
-        self._today_cache = {}    # 设备首页的天气（/kiosk/today）：地点 -> (时间, 数据)
+        self._today_cache = None  # 设备首页的天气（/kiosk/today）：地点 -> (时间, 数据)；存在 data/.today-weather.json，
+        # 网关重启（部署）以后第一次碰上天气服务超时，也还有上一次的天气给设备
+        self._detail_cache = {}   # 设备天气详情页（/kiosk/weather）：只在内存里
         self.logger = logger
         self.grokbot = GrokBotAdmin(grokbot_credentials, logger=logger.bind(tag=TAG))
 
@@ -192,6 +212,7 @@ class AdminHandler:
                 web.get("/kiosk/weather", self.handle_kiosk_weather),
                 web.post("/kiosk/study/check", self.handle_kiosk_study),
                 web.get("/kiosk/integrations", self.handle_kiosk_integrations),
+                web.get("/kiosk/hubnode", self.handle_kiosk_hubnode),
                 web.post("/kiosk/smarthub", self.handle_kiosk_smarthub),
                 web.post("/kiosk/deskhub", self.handle_kiosk_deskhub),
                 web.post("/kiosk/plugin", self.handle_kiosk_plugin),
@@ -1785,20 +1806,40 @@ class AdminHandler:
             if not name:
                 out["weather_error"] = "还没设住宅地址"
                 return self._json(out)
-        key = (home and (home["latitude"], home["longitude"])) or name
-        hit = self._today_cache.get(key)
+        key = json.dumps(home and [home["latitude"], home["longitude"]] or name, ensure_ascii=False)
+        cache = await self._blocking(self._today_weather)
+        hit = cache.get(key)
         if hit and time.time() - hit[0] < 1200:
             out["weather"] = hit[1]
             return self._json(out)
         try:
             out["weather"] = open_meteo.brief(*await open_meteo.fetch(home, None if home else name))
-            self._today_cache[key] = (time.time(), out["weather"])
+            cache[key] = (time.time(), out["weather"])
+            await self._blocking(self._save_today_weather)
         except open_meteo.WeatherError as e:
             out["weather_error"] = str(e)
-            # 天气服务都连不上：照旧给上一次查到的，标上是几分钟前的（设计画布第 56 块）
-            if hit and not isinstance(e, open_meteo.PlaceNotFound):
+            # 天气服务都连不上：照旧给上一次查到的（12 小时内），标上是几分钟前的（设计画布第 56 块）
+            if hit and time.time() - hit[0] < TODAY_STALE_MAX and not isinstance(e, open_meteo.PlaceNotFound):
                 out["weather"] = dict(hit[1], stale_min=int((time.time() - hit[0]) // 60))
         return self._json(out)
+
+    def _today_weather(self) -> dict:
+        if self._today_cache is None:
+            try:
+                raw = json.loads((self.data_dir / ".today-weather.json").read_text(encoding="utf-8"))
+                self._today_cache = {k: (float(v[0]), v[1]) for k, v in raw.items() if isinstance(v, list) and len(v) == 2}
+            except (OSError, ValueError, TypeError):
+                self._today_cache = {}
+        return self._today_cache
+
+    def _save_today_weather(self):
+        path = self.data_dir / ".today-weather.json"
+        try:
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({k: list(v) for k, v in self._today_cache.items()}, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, path)
+        except OSError as e:
+            self.logger.bind(tag=TAG).warning(f"首页天气存不下来：{e}")
 
     async def handle_kiosk_weather(self, request: web.Request):
         """[xiaozhi-hub] ?device=&city=：设备天气详情页（设计画布第 47 块）。city 为空是这台设备的住宅地址（同 /kiosk/today），
@@ -1817,7 +1858,7 @@ class AdminHandler:
                 if not name:
                     return self._json({"ok": False, "error": "还没设住宅地址"})
         key = ("detail", place["latitude"], place["longitude"]) if place else ("detail", name)
-        hit = self._today_cache.get(key)
+        hit = self._detail_cache.get(key)
         if hit and time.time() - hit[0] < 1200:
             return self._json({"ok": True, "weather": hit[1]})
         try:
@@ -1827,7 +1868,7 @@ class AdminHandler:
                 return self._json({"ok": True, "weather": dict(hit[1], stale_min=int((time.time() - hit[0]) // 60)),
                                    "error": str(e)})
             return self._json({"ok": False, "error": str(e)})
-        self._today_cache[key] = (time.time(), data)
+        self._detail_cache[key] = (time.time(), data)
         return self._json({"ok": True, "weather": data})
 
     async def handle_kiosk_study(self, request: web.Request):
@@ -1881,6 +1922,25 @@ class AdminHandler:
         merged = await self._blocking(self._merged)
         data = await kiosk.overview(merged, request.query.get("device") or "", request.query.get("fresh") == "1")
         return self._json({"ok": True, **data})
+
+    async def handle_kiosk_hubnode(self, request: web.Request):
+        """?device=：设备当智能中枢的蓝牙节点（设计画布第 73 块）要的连法：{host, port, token, node, name}。
+        这台设备没接入智能中枢、或后台没填节点令牌时 ok 为 false，带一句为什么。令牌只给本机来的请求（经设备的隧道）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.integrations import common
+
+        device = request.query.get("device") or ""
+        merged = await self._blocking(self._merged)
+        if not common.enabled_for(merged, device, "smart_hub"):
+            return self._json({"ok": False, "error": "网关后台没给这台设备接入智能中枢"})
+        s = common.settings(merged, "smart_hub")
+        if not s.get("node_token"):
+            return self._json({"ok": False, "error": "网关后台「外部服务 › 家里的系统 › 智能中枢 › 设置」里还没填节点令牌"})
+        name = (await self._blocking(self._device_names)).get(device, "") or "ThinkSmart"
+        tail = re.sub(r"[^0-9a-f]", "", device.lower())[-4:] or "0000"
+        return self._json({"ok": True, "host": str(s.get("node_host") or "").strip() or _lan_ip(), "port": int(s.get("node_port") or 7766),
+                           "token": s["node_token"], "node": f"thinksmart-{tail}", "name": name})
 
     async def handle_kiosk_plugin(self, request: web.Request):
         """{"device", "name", "on"}：设备设置里「接入的服务」的开关（设计画布第 40 块），只改这台设备、只能改四个接入。

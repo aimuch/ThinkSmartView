@@ -161,6 +161,9 @@ async def summary(s: dict, fresh: bool = False) -> dict:
         problems += [f"Ping {p['name']} 不通" for p in probes if not p["up"]]
         problems += [f"{m['name']}检测失败" for m in out["monitors"] if m["state"] == "down"]
         out.update(problems=problems, up=sum(h["up"] for h in hosts), total=len(hosts))
+        # 设备工作台「机柜」那页能不能放 rack-screen 自己的画面（/kiosk，设计画布第 71 块）：填了地址和登录密码、登得上
+        out["screen"] = bool(s.get("url") and (s.get("password") or s.get("token"))
+                             and not (out["monitor_error"] and ("密码不对" in out["monitor_error"] or "401" in out["monitor_error"])))
         out["alerts"] = alert_keys(out)
         return out
     if fresh:

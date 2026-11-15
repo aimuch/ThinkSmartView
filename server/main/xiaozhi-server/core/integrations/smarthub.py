@@ -9,7 +9,7 @@ import re
 from core.integrations.common import Cache, IntegrationError, request
 
 _cache = Cache(5)
-ACTIONS = {"on", "off", "toggle", "brightness", "cct", "set"}
+ACTIONS = {"on", "off", "toggle", "brightness", "cct", "set", "press"}
 
 
 def _headers(s: dict) -> dict:
@@ -18,6 +18,47 @@ def _headers(s: dict) -> dict:
 
 def _num(v):
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _node_why(text: str) -> str:
+    t = text.lower()
+    if "unavailable" in t:
+        return "节点不在线"
+    if "not advertising" in t:
+        return "没听到它（没开机或太远）"
+    if "timeout" in t or "timed out" in t:
+        return "超时"
+    if "connect failed" in t:
+        return "连接失败"
+    return text.strip()[:60]
+
+
+def reason(error) -> tuple:
+    """智能中枢的英文报错 -> (一句中文, [{node, why}])（设计画布第 72 块）：卡片上说人话，详情里列各节点为什么不行。
+    MAC 地址不往外给。"""
+    text = str(error or "").strip()
+    if not text:
+        return "", []
+    if "dial in" in text:
+        return "等它自己连上 Wi‑Fi", []
+    tried, m = [], re.search(r"\((.*)\)\s*$", text)
+    for part in (m.group(1).split(";") if m else []):
+        part = part.strip()
+        hit = re.match(r"node:([\w.-]+):\s*(.*)$", part)
+        if hit:
+            tried.append([hit.group(1), hit.group(2)])
+        elif tried:                       # 「…; not advertising (…)」接在上一个节点后面
+            tried[-1][1] += "; " + part
+    tried = [{"node": n, "why": _node_why(w)} for n, w in tried]
+    if "unreachable" in text or tried:
+        if tried and all(x["why"] == "节点不在线" for x in tried):
+            return "能连它的节点都不在线", tried
+        if "not advertising" in text:
+            return "没开机，或者离节点太远", tried
+        return "连不上", tried
+    if "offline" in text:
+        return "不在线", tried
+    return "连不上", tried
 
 
 def tidy(d: dict) -> dict:
@@ -36,7 +77,14 @@ def tidy(d: dict) -> dict:
     elif kind == "psu":
         out.update(on=state.get("output"), online=state.get("online"), v_set=_num(state.get("v_set")), i_set=_num(state.get("i_set")),
                    v_out=_num(state.get("v_out")), i_out=_num(state.get("i_out")), p_out=_num(state.get("p_out")),
-                   error=state.get("error"), model=meta.get("model"), v_max=_num(meta.get("v_max")), i_max=_num(meta.get("i_max")))
+                   error=state.get("error"), model=meta.get("model"), v_max=_num(meta.get("v_max")), i_max=_num(meta.get("i_max")),
+                   mode=state.get("mode"))
+        out["reason"], out["tried"] = reason(state.get("error")) if state.get("online") is False else ("", [])
+    elif kind == "ir":
+        out.update(online=state.get("online"), on=None,
+                   buttons=[{"id": str(b.get("id")), "name": str(b.get("name") or b.get("id"))}
+                            for b in (state.get("buttons") or []) if isinstance(b, dict) and b.get("id")][:12])
+        out["reason"], out["tried"] = reason(state.get("error")) if state.get("online") is False else ("", [])
     else:
         out["on"] = state.get("on")
     out["summary"] = summary(out)
@@ -57,13 +105,15 @@ def summary(d: dict) -> str:
         return " · ".join(parts)
     if d["kind"] == "psu":
         if d.get("online") is False:
-            return "连不上" + (f"：{d['error']}" if d.get("error") else "")
+            return d.get("reason") or "连不上"
         if d.get("on") is False:
             return f"输出关 · 设 {d['v_set']:.2f} V" if d.get("v_set") is not None else "输出关"
         bits = [f"{d[k]:.2f} {u}" for k, u in (("v_out", "V"), ("i_out", "A")) if d.get(k) is not None]
         if d.get("p_out") is not None:
             bits.append(f"{d['p_out']:.1f} W")
         return " · ".join(bits) or "输出开"
+    if d["kind"] == "ir":
+        return ("红外 · " + "、".join(b["name"] for b in d["buttons"][:3])) if d.get("online") is not False else (d.get("reason") or "没有能发红外的节点")
     return {True: "开", False: "关"}.get(d.get("on"), "")
 
 
@@ -98,6 +148,11 @@ def _params(device: dict, action: str, value) -> dict:
         if not out:
             raise IntegrationError("要给出电压或电流")
         return out
+    if action == "press":
+        button = value.get("button") if isinstance(value, dict) else value
+        if not any(b["id"] == button for b in device.get("buttons") or []):
+            raise IntegrationError("没有这个按键")
+        return {"button": button}
     raise IntegrationError(f"不支持的动作：{action}")
 
 
@@ -119,6 +174,8 @@ async def act(s: dict, device_id: str, action: str, value=None) -> dict:
         raise IntegrationError(str(data.get("error") or "智能中枢说没做成"))
     state = (data or {}).get("state") if isinstance(data, dict) else None
     if isinstance(state, dict):
+        if device["kind"] == "ir" and "buttons" not in state:
+            state = dict(state, buttons=device.get("buttons") or [])
         raw = {"id": device_id, "name": device["name"], "type": "", "actions": {a: "" for a in device["actions"]},
                "state": state, "meta": {"kind": device["kind"], "group": device["group"],
                                         "cct_min": device.get("cct_min"), "cct_max": device.get("cct_max")}}
