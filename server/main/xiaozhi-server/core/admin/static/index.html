@@ -952,6 +952,24 @@
   .hdetail .btn { margin-left: auto; }
   /* 工作原理泳道图（设计画布第 67 块）：设备、网关、云端三条道，节点放在它发生的那条道上 */
   main:has(.swim) { max-width: 1320px; }
+  .tm .h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; } .tm .h > span { color: var(--muted, #8e98c0); font-size: 13px; font-weight: 400; }
+  .card.tm { padding-bottom: 16px; margin-bottom: 18px !important; }
+  .tm > .tm-bar, .tm > .tm-cards, .tm > .tm-recent, .tm > p { margin-left: 16px; margin-right: 16px; }
+  .tm-total { font-size: 26px; } .tm-tabs { margin-left: auto; display: flex; gap: 6px; } .tm-tabs .pill { cursor: pointer; } .tm-tabs .pill.on { border-color: var(--accent); color: var(--accent); }
+  .tm-bar { display: flex; gap: 2px; height: 32px; border-radius: 9px; overflow: hidden; margin: 12px 0; }
+  .tm-bar i { display: flex; align-items: center; padding: 0 10px; font-style: normal; font-size: 12px; font-weight: 600; color: #0b1230; white-space: nowrap; overflow: hidden; }
+  .tm-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .tm-card { text-align: left; display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line, #ffffff1a); background: var(--card2, #ffffff08); color: inherit; cursor: pointer; font: inherit; }
+  .tm-card.slow { border-color: #f59e0b88; background: #f59e0b12; }
+  .tm-k { display: flex; align-items: center; gap: 6px; font-size: 12.5px; opacity: .8; } .tm-k u { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .tm-k em { font-style: normal; font-size: 10.5px; padding: 0 6px; border-radius: 999px; background: #f59e0b33; color: #f59e0b; }
+  .tm-card b { font-size: 22px; } .tm-card small { font-size: 11.5px; opacity: .7; }
+  .tm-recent { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+  .tm-row { display: grid; grid-template-columns: 96px 1fr 64px; gap: 10px; align-items: center; font-size: 12px; }
+  .tm-row > span { opacity: .75; } .tm-row b { text-align: right; }
+  .tm-mini { display: flex; gap: 1px; height: 12px; border-radius: 4px; overflow: hidden; } .tm-mini i { display: block; height: 100%; }
+  .st-chip { font-style: normal; font-weight: 600; font-size: 10.5px; margin-left: 6px; white-space: nowrap; padding: 0 6px; border-radius: 999px; color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
+  @media (max-width: 760px) { .tm-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tm-bar { height: 14px; } .tm-bar i { font-size: 0; padding: 0; } .tm-row { grid-template-columns: 84px 1fr 44px; } }
   .swim { position: relative; display: grid; grid-template-columns: 92px repeat(var(--cols), minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(118px, auto));
     column-gap: 44px; padding-right: 22px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin: 6px 18px 14px; }
   .swim .lane { grid-column: 1 / -1; border-top: 1px solid var(--line); } .swim .lane:first-of-type { border-top: 0; }
@@ -1840,6 +1858,40 @@ function renderDeviceDrawer(dev) {
 
 const SOURCE_PILL = { "服务端": "ok", "Claude Code": "warn" };
 let selStage = "llm";   // 默认选中「大模型」
+// 工作原理：说完到开始回话每段花了多久（设计画布第 78 块）
+const STAGE_META = [["asr", "识别", "#38bdf8", "asr"], ["prep", "理解", "#a78bfa", "commands"], ["llm", "大模型", "#f59e0b", "llm"], ["tts", "合成", "#34d399", "tts"]];
+let timingWin = "day";
+const secs = (ms) => (ms == null ? "—" : ms < 1000 ? `${ms} 毫秒` : `${(ms / 1000).toFixed(1)}s`);
+function stageChip(timing, id) {
+  const k = { asr: "asr", llm: "llm", tts: "tts", q: "prep", cmd: "prep" }[id];
+  const s = k && timing && timing[timingWin] && timing[timingWin].stages[k];
+  if (!s || s.median == null) return "";
+  const m = STAGE_META.find((x) => x[0] === k);
+  return `<em class="st-chip" style="--c:${m[2]}">${(s.median / 1000).toFixed(1)}s</em>`;
+}
+function timingHtml(timing, by) {
+  const w = timing && timing[timingWin];
+  const tabs = `<span class="tm-tabs">${[["day", "24 小时"], ["week", "7 天"]].map(([k, n]) => `<button class="pill ${k === timingWin ? "on" : ""}" data-twin="${k}">${n}</button>`).join("")}</span>`;
+  if (!w || !w.n) return `<div class="card u-panel tm"><div class="h">说完到开始回话<span>每段花了多久</span>${tabs}</div>
+    <p class="muted small" style="margin:0">${timingWin === "day" ? "最近 24 小时" : "最近 7 天"}还没有对话记录（升级网关以后的对话才分段记）。说几句话再来看。</p></div>`;
+  const S = w.stages, med = STAGE_META.map(([k]) => S[k].median || 0), sum = med.reduce((a, b) => a + b, 0) || 1;
+  const slow = STAGE_META.reduce((a, m, i) => (med[i] > med[a] ? i : a), 0);
+  const bar = `<div class="tm-bar">${STAGE_META.map(([k, n, c], i) => med[i] ? `<i style="flex:${med[i]};background:${c}">${med[i] / sum > 0.12 ? `${n} ${secs(med[i])}` : ""}</i>` : "").join("")}</div>`;
+  const sub = { asr: (by.asr && by.asr.value) || "", prep: "口令、意图、记忆", llm: ((by.llm && by.llm.value) || "") + (w.tool ? " · 含工具" : ""), tts: (by.tts && by.tts.value) || "" };
+  const cards = STAGE_META.map(([k, n, c, page], i) => `<button class="tm-card ${i === slow ? "slow" : ""}" data-goto="${page}" title="去${n}的设置">
+      <span class="tm-k"><u style="background:${c}"></u>${n}${i === slow ? "<em>最慢</em>" : ""}</span><b>${secs(S[k].median)}</b>
+      <small>${esc(sub[k])}${S[k].p90 != null ? ` · 慢的时候 ${secs(S[k].p90)}` : ""}</small></button>`).join("");
+  const maxT = Math.max(...w.recent.map((r) => (r.asr || 0) + (r.prep || 0) + (r.llm || 0) + (r.tts || 0)), 1);
+  const recent = w.recent.map((r) => {
+    const tot = (r.asr || 0) + (r.prep || 0) + (r.llm || 0) + (r.tts || 0), d = new Date(r.t * 1000);
+    return `<div class="tm-row"><span>${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}${r.llm == null ? " · 口令" : r.tool ? " · 工具" : ""}</span>
+      <div class="tm-mini" style="width:${Math.max(4, (tot / maxT) * 100)}%">${STAGE_META.map(([k, , c]) => r[k] ? `<i style="flex:${r[k]};background:${c}"></i>` : "").join("")}</div><b>${secs(tot)}</b></div>`;
+  }).join("");
+  return `<div class="card u-panel tm"><div class="h">说完到开始回话 <b class="tm-total">${secs(w.total.median)}</b>
+      <span>${timingWin === "day" ? "最近 24 小时" : "最近 7 天"}的中位数 · ${w.n} 次对话${w.local ? `（${w.local} 次是口令，没问大模型）` : ""} · 慢的时候 ${secs(w.total.p90)}</span>${tabs}</div>
+    ${bar}<div class="tm-cards">${cards}</div>
+    <div class="tm-recent"><div class="muted small">最近几次 · 一格一段，颜色同上；只记时间，不记说了什么。设备上判断「说完」的那 0.6 秒和放出来的时间不在里面。</div>${recent}</div></div>`;
+}
 async function renderHow(root) {
   const d = await api("pipeline");
   const f = d.flow, p = d.prompt, m = p.marks;
@@ -1883,7 +1935,7 @@ async function renderHow(root) {
   if (!N.some((x) => x.id === selStage)) selStage = by.llm ? "llm" : N[0].id;
   const nodeHtml = (x, list) => x.dia ? `<button class="sdia ${x.id === selStage ? "sel" : ""}" data-stage="${x.id}" data-node="${x.id}" style="--c:${x.c}"><span>${esc(x.title)}<small>${esc(x.value)}</small></span></button>`
     : `<button class="snode ${x.opt ? "opt" : ""} ${x.ai ? "ai" : ""} ${x.id === selStage ? "sel" : ""}" data-stage="${x.id}" ${list ? "" : `data-node="${x.id}"`} style="--c:${x.c}">
-      <span class="ib">${svgIco(x.icon)}</span><span class="t"><b>${esc(x.title)}</b><span class="v" title="${esc(x.value || "")}">${esc(x.value || "")}</span></span>
+      <span class="ib">${svgIco(x.icon)}</span><span class="t"><b>${esc(x.title)}${stageChip(d.timing, x.id)}</b><span class="v" title="${esc(x.value || "")}">${esc(x.value || "")}</span></span>
       ${list ? `<span class="lt" style="--c:${LANES[x.lane].c}">${esc(LANES[x.lane].name.split(" ")[0])}</span>` : ""}</button>`;
   const cells = [];
   for (let l = 0; l < 3; l++) for (let c = 1; c <= cols; c++) {
@@ -1898,6 +1950,7 @@ async function renderHow(root) {
     ...(toolsOn ? [["llm", "tools", "#8b5cf6", "要用工具时", true]] : []), ["llm", "tts", "#8b5cf6"], ["tts", "play"]].filter((w) => has(w[0]) && has(w[1]));
   root.innerHTML = `
     <div class="page-head"><div><h1>工作原理</h1><p class="sub">说一句话之后会发生什么、可以怎么跟它说话。内容按当前配置生成，修改设置后会跟着变。</p></div></div>
+    ${timingHtml(d.timing, by)}
     <div class="card u-panel" style="margin-top:0!important"><div class="h">一句话怎么走<span>点一步看说明，再点「去设置」</span></div>
       <div class="swim" id="swim" style="--cols:${cols}">
         ${LANES.map((L, i) => `<div class="lane l${i}" style="grid-row:${i + 1}"></div><div class="ln" style="grid-row:${i + 1};color:${L.c}">${svgIco(L.icon)}${esc(L.name)}</div>`).join("")}
@@ -1930,6 +1983,8 @@ async function renderHow(root) {
 
     <p class="how-foot">每一步为什么这样设计、连接和 Claude Code 进程什么时候启动和关闭、哪些记录会保存，见 GitHub 上的
       <a href="${esc(d.design_url)}" target="_blank" rel="noopener">设计细节 ↗</a>。</p>`;
+  root.querySelectorAll("[data-twin]").forEach((b) => b.addEventListener("click", () => { timingWin = b.dataset.twin; renderHow(root); }));
+  root.querySelectorAll(".tm-card[data-goto]").forEach((b) => b.addEventListener("click", () => { location.hash = "#" + b.dataset.goto; }));
   const wires = () => {
     const box = $("swim"), svg = $("wires");
     if (!box || !svg || !box.offsetWidth) return;

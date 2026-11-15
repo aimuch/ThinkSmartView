@@ -73,3 +73,17 @@ def test_late_records_still_reach_disk(monkeypatch):
     time.sleep(0.2)
     d = json.load(open(health._path()))
     assert any("dev-9" in v for v in d["online"].values())
+
+
+def test_stage_timings():
+    """工作原理的耗时条（设计画布第 78 块）：四段的中位数、慢的时候、口令不算大模型那段，只记时间和设备。"""
+    t0 = 1000.0
+    health.stages({"said": t0, "text": t0 + 0.5, "llm": t0 + 0.7, "first": t0 + 2.7, "tool": True}, t0 + 3.3, "aa:bb:cc:dd:ee")
+    health.stages({"said": t0, "text": t0 + 0.4, "llm": t0 + 0.5, "first": t0 + 1.5}, t0 + 2.0, "dev-2")
+    health.stages({"said": t0, "text": t0 + 0.6}, t0 + 1.2, "dev-2")                      # 口令：没问大模型
+    health.stages({"said": t0, "text": t0 + 0.6}, t0 - 5, "dev-2")                        # 时间倒了：不记
+    v = health.stage_view(time.time() - 60)
+    assert v["n"] == 3 and v["local"] == 1 and v["tool"] == 1
+    assert v["stages"]["asr"]["median"] == 500 and v["stages"]["llm"]["median"] == 1500 and v["stages"]["llm"]["p90"] == 2000
+    assert v["recent"][0]["llm"] is None and v["recent"][0]["prep"] == 600 and v["recent"][-1]["device"] == "dd:ee"
+    assert v["total"]["median"] == 2000

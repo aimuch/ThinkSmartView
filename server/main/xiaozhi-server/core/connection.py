@@ -1192,6 +1192,9 @@ class ConnectionHandler:
                 self.system_introduced_speakers.add(cs)
                 speaker_for_system = cs
 
+            marks = getattr(self, "turn_marks", None)    # [xiaozhi-hub] 工作原理的耗时条（设计画布第 78 块）：开始问大模型
+            if marks is not None and "llm" not in marks:
+                marks["llm"] = time.monotonic()
             if self.intent_type == "function_call" and functions is not None:
                 # 使用支持functions的streaming接口
                 llm_responses = self.llm.response_with_functions(
@@ -1258,6 +1261,9 @@ class ConnectionHandler:
                                         # [xiaozhi-hub] 变形的 DSML 标记接口认不出，会留在 response 参数里
                                         new_part = tc.setdefault("_da_filter", ToolMarkupFilter()).feed(new_part)
                                     if new_part:
+                                        marks = getattr(self, "turn_marks", None)
+                                        if marks is not None and "first" not in marks:
+                                            marks["first"] = time.monotonic()
                                         self.tts.tts_text_queue.put(
                                             TTSMessageDTO(
                                                 sentence_id=current_sentence_id,
@@ -1283,6 +1289,10 @@ class ConnectionHandler:
 
                 if content is not None and len(content) > 0:
                     if not tool_call_flag:
+                        marks = getattr(self, "turn_marks", None)   # [xiaozhi-hub] 大模型说出第一句（第 78 块）
+                        if marks is not None and "first" not in marks and content.strip():
+                            marks["first"] = time.monotonic()
+                            marks["tool"] = depth > 0
                         response_message.append(content)
                         self.tts.tts_text_queue.put(
                             TTSMessageDTO(

@@ -39,6 +39,10 @@ async def sendAudioMessage(conn: "ConnectionHandler", sentenceType, audios, text
         if t0 is not None:   # [xiaozhi-hub] 说完到开始回话（设计画布第 68 块）
             conn.reply_t0 = None
             health.latency((time.monotonic() - t0) * 1000, getattr(conn, "device_id", "") or "")
+        marks = getattr(conn, "turn_marks", None)
+        if marks:            # [xiaozhi-hub] 每一段花了多久（设计画布第 78 块）
+            conn.turn_marks = None
+            health.stages(marks, time.monotonic(), getattr(conn, "device_id", "") or "")
 
     if sentenceType == SentenceType.FIRST:
         # 同一句子的后续消息加入流控队列，其他情况立即发送

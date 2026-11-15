@@ -57,6 +57,8 @@ async def startToChat(conn: "ConnectionHandler", text, gen=None):
         return
     # [xiaozhi-hub] 这句要回答了：说完的时刻交给第一段语音（状态页「说完到开始回话」，设计画布第 68 块）
     conn.reply_t0, conn.said_at = getattr(conn, "said_at", None), None
+    # 工作原理的耗时条（设计画布第 78 块）：说完、识别出字；后面的点在 chat() 和第一段语音那里打
+    conn.turn_marks = {"said": conn.reply_t0, "text": time.monotonic()} if conn.reply_t0 is not None else None
     # 检查输入是否是JSON格式（包含说话人信息）
     speaker_name = None
     actual_text = text

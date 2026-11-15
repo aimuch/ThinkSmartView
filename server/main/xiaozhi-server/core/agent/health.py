@@ -17,6 +17,8 @@ FLUSH_EVERY = 30
 KINDS = ("asr", "tts", "ext")
 MAX_EVENTS = 300
 MAX_LAT = 400          # 每小时最多留这么多个耗时
+MAX_TURNS = 2000       # 每段耗时最多留这么多次对话（设计画布第 78 块）
+STAGES = ("asr", "prep", "llm", "tts")
 
 _lock = threading.RLock()
 _d = None
@@ -47,6 +49,7 @@ def _load() -> dict:
         for k in ("hours", "lat", "online", "flags"):
             d.setdefault(k, {})
         d.setdefault("events", [])
+        d.setdefault("turns", [])
         _d = d
     return _d
 
@@ -57,6 +60,7 @@ def _prune(d: dict):
         for h in [h for h in d[k] if int(h) < cut]:
             del d[k][h]
     d["events"] = [e for e in d["events"] if e.get("t", 0) >= time.time() - KEEP][-MAX_EVENTS:]
+    d["turns"] = [x for x in d.get("turns") or [] if x[0] >= time.time() - KEEP][-MAX_TURNS:]
 
 
 def flush(force: bool = False):
@@ -118,6 +122,42 @@ def latency(ms: float, device: str = "", t: float = None):
             _touch()
     except Exception:  # noqa: BLE001
         pass
+
+
+def stages(marks: dict, now: float, device: str = "", t: float = None):
+    """一次对话每段多少毫秒（设计画布第 78 块）。marks：said 说完、text 识别出字、llm 开始问大模型、first 说出第一句
+    （都是 monotonic 秒），now 第一段语音发出去。没问大模型（本地命令）的大模型那段记 None，理解算到合成开始前。
+    只记时间、设备，不记说了什么。"""
+    try:
+        said, text = marks.get("said"), marks.get("text")
+        if said is None or text is None or now < said or now - said > 120:
+            return
+        ms = lambda a, b: max(0, round((b - a) * 1000))
+        llm, first = marks.get("llm"), marks.get("first")
+        if llm is not None and first is not None and text <= llm <= first <= now:
+            row = [ms(said, text), ms(text, llm), ms(llm, first), ms(first, now)]
+        else:
+            row = [ms(said, text), ms(text, now), None, 0]
+        with _lock:
+            _load()["turns"].append([int(time.time() if t is None else t), device[-5:], *row, bool(marks.get("tool"))])
+            _touch()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def stage_view(since: float, recent: int = 8) -> dict:
+    """since 以来每段的中位数、慢的时候（九成以内）、次数；最近几次的明细。"""
+    with _lock:
+        rows = [x for x in _load().get("turns") or [] if x[0] >= since]
+    def pct(xs, q):
+        xs = sorted(x for x in xs if x is not None)
+        return xs[min(len(xs) - 1, int(len(xs) * q))] if xs else None
+    out = {k: {"median": _median([r[2 + i] for r in rows if r[2 + i] is not None]), "p90": pct([r[2 + i] for r in rows], .9)}
+           for i, k in enumerate(STAGES)}
+    totals = [sum(v for v in r[2:6] if v is not None) for r in rows]
+    return {"n": len(rows), "local": sum(1 for r in rows if r[4] is None), "tool": sum(1 for r in rows if r[6]),
+            "stages": out, "total": {"median": _median(totals), "p90": pct(totals, .9)},
+            "recent": [{"t": r[0], "device": r[1], "asr": r[2], "prep": r[3], "llm": r[4], "tts": r[5], "tool": r[6]} for r in rows[-recent:]][::-1]}
 
 
 def online(device: str, t: float = None):

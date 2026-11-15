@@ -3159,8 +3159,13 @@ class AdminHandler:
 
     async def handle_pipeline(self, request: web.Request):
         self._require_login(request)
+        from core.agent import health
+
         merged = await self._blocking(self._merged)
-        return self._json({"ok": True, **await self._blocking(pipeline.describe, merged)})
+        now = time.time()
+        # 每段花了多久（设计画布第 78 块）：最近 24 小时和 7 天
+        timing = {"day": health.stage_view(now - 86400), "week": health.stage_view(now - 7 * 86400)}
+        return self._json({"ok": True, **await self._blocking(pipeline.describe, merged), "timing": timing})
 
     # ---------- 语音识别、语音合成 ----------
 
