@@ -149,7 +149,7 @@ function renderHome() {
   $('hLogin').style.display = showLogin ? '' : 'none';
   $('hRooms').style.display = loggedIn && !onHub ? '' : 'none';
   $('hRefresh').style.display = (loggedIn && !onHub) || onHub ? '' : 'none';
-  $('hSub').textContent = onHub ? (src === 'hub' ? '智能中枢 · 和电脑上的网页一样' : '机柜 · rack-screen 概览') : loggedIn ? `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
+  $('hSub').textContent = onHub ? (src === 'hub' ? '智能中枢 · 和电脑上的网页一样' : '机柜 · 和机柜屏上的一样') : loggedIn ? `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
     : '用米家 App 扫码登录后显示家里的设备';
   // the home: its name with ▾, the others in a menu
   const homes = loggedIn ? v.homes : [];

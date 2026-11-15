@@ -23,7 +23,7 @@ def test_tabs_setting():
     assert appproxy.normalize_tabs({'show': ['rack', 'mi', 'x'], 'first': 'rack'}) == {'show': ['mi', 'rack'], 'first': 'rack'}
     assert appproxy.normalize_tabs({'show': ['hub'], 'first': 'rack'}) == {'show': ['hub'], 'first': ''}   # 先看的那个没显示
     assert appproxy.normalize_tabs({'show': []}) == {'show': ['mi'], 'first': ''}
-    assert appproxy.url('rack') == 'http://127.0.0.1:8091/setup#overview' and appproxy.url('hub').endswith(':8092/#/')
+    assert appproxy.url('rack') == 'http://127.0.0.1:8091/kiosk' and appproxy.url('hub').endswith(':8092/#/')
 
 
 @pytest.mark.asyncio

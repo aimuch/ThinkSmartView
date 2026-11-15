@@ -14,7 +14,7 @@ from aiohttp import ClientSession, ClientTimeout, web
 log = logging.getLogger(__name__)
 
 APPS = {'rack': 8091, 'hub': 8092}
-HOME = {'rack': '/setup#overview', 'hub': '/#/'}     # what each page opens on
+HOME = {'rack': '/kiosk', 'hub': '/#/'}     # what each page opens on: rack-screen's /kiosk is its screen picture drawn for this window
 HOP = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailers', 'transfer-encoding',
        'upgrade', 'host', 'content-length'}
 
