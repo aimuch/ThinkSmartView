@@ -844,7 +844,7 @@ body.screen-dark * { animation-play-state: paused !important; }
 .sheet.work .wk-cols { display: flex; flex-direction: column; position: relative; }
 .sheet.work .wk-page { flex: 1; min-height: 0; }
 .sheet.work .wk-page[hidden] { display: none; }
-.wk-split { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.05fr 1fr; gap: 18px; }
+.wk-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, calc(var(--l, .52) * 100% - 11px)) 22px minmax(0, 1fr); gap: 0; }
 .wk-col { min-height: 0; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 14px; }
 .wk-col::-webkit-scrollbar { display: none; }
 .wk-card { padding: 16px 18px; border-radius: 20px; background: var(--card); border: 1px solid var(--line); }
@@ -876,3 +876,50 @@ body.screen-dark * { animation-play-state: paused !important; }
 body.identify::after { content: ""; position: fixed; inset: 0; z-index: 9999; pointer-events: none; border: 10px solid var(--accent2);
   animation: identify 0.8s ease-in-out infinite; }
 @keyframes identify { 50% { border-color: transparent; } }
+
+/* 工作台（设计画布第 75 块）：中间能拖的竖条、同步任务、智能中枢一页、右上角的设置 */
+.wk-grip { display: flex; align-items: center; justify-content: center; cursor: col-resize; touch-action: none; }
+.wk-grip i { width: 6px; height: 64px; border-radius: 6px; background: var(--line); transition: background .15s, height .15s; }
+.wk-grip:active i, .wk-grip:hover i { background: var(--accent); height: 96px; }
+.tk-list { display: flex; flex-direction: column; }
+.tk { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
+.tk:first-child { border-top: 0; }
+.tk-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tk-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tk-name b { font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-main small { font-size: 14px; color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-pill { flex: none; font-style: normal; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--card2); color: var(--ink2); }
+.tk-pill.run { background: #6c8cff26; color: var(--accent); } .tk-pill.ok { background: #43d39e24; color: var(--ok); } .tk-pill.bad { background: #ff6b8129; color: var(--bad); }
+.tk-bar { height: 6px; border-radius: 6px; background: var(--card2); overflow: hidden; }
+.tk-bar i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .6s; }
+.tk-acts { flex: none; display: flex; align-items: center; gap: 8px; }
+.tk-btn { height: 44px; padding: 0 16px; border-radius: 999px; font-size: 15px; font-weight: 600; background: var(--card2); color: var(--ink); }
+.tk-btn.go { background: var(--accent); color: #fff; }
+.tk-btn.stop { background: #ff6b8129; color: var(--bad); }
+.tk-btn:disabled { opacity: .5; } .tk-btn:active { transform: scale(.95); }
+.switch.sm { transform: scale(.82); transform-origin: right center; }
+.wk-hub .h-tiles { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+#wkCfgBtn.on { background: var(--card2); color: var(--accent2); }
+.wk-cfg { position: absolute; top: 110px; right: 40px; z-index: 5; width: 440px; max-height: calc(100% - 140px); overflow-y: auto; scrollbar-width: none;
+          padding: 18px 20px; border-radius: 24px; background: linear-gradient(160deg, var(--pop, #141c42), var(--sheet2, #0a0f24)); border: 1.5px solid var(--line); box-shadow: 0 20px 60px #0007;
+          display: flex; flex-direction: column; gap: 10px; }
+.wk-cfg[hidden] { display: none; }
+.wc-head { display: flex; align-items: center; justify-content: space-between; } .wc-head b { font-size: 20px; }
+.wc-x { width: 40px; height: 40px; border-radius: 50%; background: var(--card2); color: var(--ink2); }
+.wc-sub { margin-top: 6px; font-size: 14px; color: var(--ink3); }
+.wc-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 2px 0; border-top: 1px solid var(--line); }
+.wc-row b { flex: 1; font-size: 17px; font-weight: 600; } .wc-row div { flex: 1; display: flex; flex-direction: column; } .wc-row small { font-size: 13px; color: var(--ink3); }
+.wc-ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--card2); color: var(--ink2); }
+.wc-mv { width: 38px; height: 38px; border-radius: 10px; background: var(--card2); color: var(--ink2); font-size: 18px; }
+.wc-mv:disabled { opacity: .3; }
+.wc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.wc-chips button { height: 40px; padding: 0 14px; border-radius: 999px; background: var(--card2); color: var(--ink2); font-size: 15px; border: 1.5px solid transparent; }
+.wc-chips button.on { color: var(--ink); border-color: var(--accent); background: #6c8cff24; }
+.wc-btn { height: 40px; padding: 0 14px; border-radius: 999px; background: var(--card2); color: var(--ink2); font-size: 15px; } .wc-btn:disabled { opacity: .4; }
+.wc-note { margin: 0; font-size: 14px; color: var(--ink3); }
+@media (orientation: portrait) {
+  .wk-split { grid-template-columns: minmax(0, 1fr); row-gap: 14px; }
+  .wk-grip { display: none; }
+  .wk-cfg { left: 24px; right: 24px; width: auto; top: 190px; }
+  .tk { flex-wrap: wrap; } .tk-acts { margin-left: auto; }
+}

@@ -496,7 +496,7 @@
     </div>
    </section>
    <section class="set-pane" data-pane="home">
-    <div class="alarms-card" id="htCard">
+    <div class="alarms-card" id="htCard" hidden>
       <div class="bright-head"><b>家居里显示</b><span class="bright-num">点亮的出现在「家居」顶上的分页里</span></div>
       <div class="minutes" id="htShow"><button data-t="mi">米家</button><button data-t="hub">智能中枢</button></div>
       <div class="bright-head"><b class="sub">打开「家居」先看</b></div>
@@ -656,8 +656,6 @@
     <div class="alarms-card" id="svcCard">
       <div class="bright-head"><b>接入的服务</b><span class="bright-num">网关「外部服务 › 家里的系统」，只改这台</span></div>
       <div class="alarm-list" id="svcList"></div>
-      <div class="bright-head" id="wkFirstHead"><b class="sub">打开工作台先看</b></div>
-      <div class="minutes" id="wkFirst"><button data-t="">上次看的</button><button data-t="desk">智能桌面</button><button data-t="rack">机柜</button><button data-t="repo">仓库同步</button></div>
       <p class="opt-note" id="svcNote">关掉后，顶栏的工作台按钮、首页和仪表盘上的那一块、语音命令都一起没有。只影响这台设备；别的插件在网关后台的「设备」页改。</p>
     </div>
     <div class="opt">
@@ -778,6 +776,7 @@
     <div><h2>工作台</h2><p id="wkSub">经小麦网关</p></div>
     <div class="wk-tabs" id="wkTabs" role="tablist"></div>
     <div class="w-btns">
+      <button class="close" id="wkCfgBtn" aria-label="工作台设置"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       <button class="close" id="wkRefresh" aria-label="刷新"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
       <button class="close" id="wkClose" aria-label="关闭"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
@@ -785,10 +784,13 @@
   <!-- 工作台分三页（设计画布第 71 块）：每页占满；机柜那页是 rack-screen 自己的画面（/kiosk） -->
   <div class="wk-cols" id="wkCols">
     <section class="wk-sec wk-page" id="wkDesk"></section>
+    <section class="wk-sec wk-page" id="wkHub"></section>
     <section class="wk-sec wk-page" id="wkRack"></section>
     <section class="wk-sec wk-page" id="wkRepo"></section>
     <div class="wk-screen" id="wkScreen" hidden><p class="wk-screen-msg" id="wkScreenMsg"></p></div>
   </div>
+  <!-- 工作台设置（设计画布第 75 块）：右上角齿轮打开，就地改，存在这台设备上 -->
+  <div class="wk-cfg" id="wkCfg" hidden></div>
 </div>
 <div class="h-detail" id="hDetail">
   <div class="h-detail-card">

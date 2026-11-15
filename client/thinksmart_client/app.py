@@ -337,6 +337,7 @@ class Client:
                 log.warning('invalid %s %r, using the default', key, cfg.get(key))
                 cfg[key] = config.DEFAULTS[key]
         cfg['home_blocks'] = looks.normalize_blocks(cfg.get('home_blocks'))
+        cfg['work'] = appproxy.normalize_work(cfg.get('work'), (cfg.get('home_tabs') or {}).get('work', ''))   # 工作台（第 75 块）
         cfg['home_tabs'] = appproxy.normalize_tabs(cfg.get('home_tabs'))   # 家居的分页（设计画布第 62 块）
         cfg['dash_cards'] = looks.normalize_blocks(cfg.get('dash_cards'), looks.DASH_CARDS)
         try:
@@ -2388,9 +2389,36 @@ class Client:
     def home_tabs_view(self):
         return {**self.cfg['home_tabs'], 'urls': {a: appproxy.url(a) for a in appproxy.APPS}}
 
-    async def set_home_tabs(self, show=None, first=None, work=None):
-        """Settings page: which tabs 家居 shows and which one it opens on ('' = the one looked at last);
-        work: the page 工作台 opens on (设计画布第 71 块)."""
+    def work_view(self):
+        return {**self.cfg['work'], 'urls': {a: appproxy.url(a) for a in appproxy.APPS}}
+
+    async def set_work(self, changes):
+        """工作台右上角的设置（设计画布第 75 块）：order、hidden、first、rack、hub、split（合并）、idle_close。"""
+        cur = dict(self.cfg['work'])
+        for k in ('order', 'hidden', 'first', 'rack', 'hub', 'idle_close'):
+            if k in changes:
+                cur[k] = changes[k]
+        if isinstance(changes.get('split'), dict):
+            cur['split'] = {**cur.get('split', {}), **changes['split']}
+            cur['split'] = {k: v for k, v in cur['split'].items() if v is not None}
+        if changes.get('split') is None and 'split' in changes:
+            cur['split'] = {}
+        self.cfg['work'] = appproxy.normalize_work(cur)
+        config.save(work=self.cfg['work'])
+        view = self.work_view()
+        self.events.publish('work', view)
+        return view
+
+    async def repo_command(self, op, ident, on=None):
+        """工作台「仓库同步」里的同步任务操作（设计画布第 75 块），经网关转给 repo-manager。"""
+        r = await self._hub_http('/kiosk/repo', {'device': self.cfg['device_id'], 'op': op, 'id': ident, 'on': on})
+        if r and r.get('repo_status') is not None and self.integrations:
+            self.integrations['repo_status'] = r['repo_status']
+            self.events.publish('integrations', self.integrations)
+        return r
+
+    async def set_home_tabs(self, show=None, first=None):
+        """Settings page: which tabs 家居 shows and which one it opens on ('' = the one looked at last)."""
         cur = dict(self.cfg['home_tabs'])
         if show is not None:
             if not isinstance(show, list) or not show:
@@ -2398,8 +2426,6 @@ class Client:
             cur['show'] = show
         if first is not None:
             cur['first'] = first
-        if work is not None:
-            cur['work'] = work
         self.cfg['home_tabs'] = appproxy.normalize_tabs(cur)
         config.save(home_tabs=self.cfg['home_tabs'])
         view = self.home_tabs_view()
@@ -2408,7 +2434,7 @@ class Client:
 
     def snapshot(self):
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
-                'hub_node': self.hub_node.view(),
+                'hub_node': self.hub_node.view(), 'work': self.work_view(),
                 'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
                 'broadcast': self.broadcast_view(), 'photo': self.photo_view(), 'slides': self.slides_view(),
                 'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),

@@ -56,6 +56,7 @@ DEFAULTS = {
     'alarm_tone': 'coffee',   # alarms.TONES
     'bluetooth': True,    # the Bluetooth speaker switch (bt.py): off powers the adapter down
     'hub_node': False,    # 当智能中枢的蓝牙节点 (hub_node.py, 设计画布第 73 块)
+    'work': None,         # 工作台的设置 (appproxy.normalize_work, 设计画布第 75 块)
     'rotation_auto': False,   # follow the accelerometer (rotation.py); the rotation itself lives in the kiosk config
     # 外观 (looks.py, 设计画布第 8 块): colour theme, the conversation avatar, what the home page shows
     'theme': 'night',

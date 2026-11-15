@@ -16,6 +16,7 @@ const ICON = {
   light: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
   group: '<path d="M12 3l2.2 5.6L20 9l-4.5 3.8L17 19l-5-3.2L7 19l1.5-6.2L4 9l5.8-.4z"/>',
   psu: '<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
+  hub: '<circle cx="12" cy="12" r="2.5"/><path d="M5 5l4.5 4.5M19 5l-4.5 4.5M5 19l4.5-4.5M19 19l-4.5-4.5"/>',
   ir: '<rect x="7" y="2" width="10" height="20" rx="3"/><path d="M10 7h4M12 11v.01M10 15h.01M14 15h.01M10 18h.01M14 18h.01"/>',
 };
 const svg = (k, s = 24) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k] || ICON.light}</svg>`;
@@ -37,9 +38,16 @@ async function refresh() {
 }
 
 /* ---------------- 工作台 ---------------- */
-// 工作台分三页（设计画布第 71 块）：智能桌面、机柜、仓库同步，每页占满；只显示这台设备接入了的
-const WK = [['desk', '智能桌面', 'desk', 'wkDesk', 'desk_hub'], ['rack', '机柜', 'rack', 'wkRack', 'rack_status'], ['repo', '仓库同步', 'repo', 'wkRepo', 'repo_status']];
-const wkTabs = () => { const on = WK.filter(w => A()[w[4]]); return on.length ? on : WK; };
+// 工作台的页（设计画布第 71、75 块）：智能桌面、智能中枢、机柜、仓库同步，每页占满；只显示这台设备接入了的、
+// 设置里没藏起来的，按设置里的顺序
+const WK = [['desk', '智能桌面', 'desk', 'wkDesk', 'desk_hub'], ['hub', '智能中枢', 'hub', 'wkHub', 'smart_hub'],
+            ['rack', '机柜', 'rack', 'wkRack', 'rack_status'], ['repo', '仓库同步', 'repo', 'wkRepo', 'repo_status']];
+const W = () => ui.work || { order: WK.map(w => w[0]), hidden: [], first: '', rack: 'screen', hub: 'tiles', split: {}, idle_close: true, urls: {} };
+const wkOrdered = () => W().order.map(k => WK.find(w => w[0] === k)).filter(Boolean);
+const wkTabs = () => {
+  const on = wkOrdered().filter(w => A()[w[4]]), shown = on.filter(w => !W().hidden.includes(w[0]));
+  return shown.length ? shown : on.length ? on.slice(0, 1) : WK.filter(w => w[0] !== 'hub');
+};
 function lastTab() { try { return localStorage.getItem('wkTab') || ''; } catch (e) { return ''; } }
 function pickTab(...wants) {
   const keys = wkTabs().map(w => w[0]);
@@ -49,8 +57,8 @@ function openWork(on, want) {   // 也给「打开页面」用（wf.js，设计�
   ig.open = on;
   $('work').classList.toggle('on', on);
   if (!DEMO) postJson('/api/integrations/visible', { visible: on || ig.homeOpen });
-  if (on) { ig.tab = pickTab(want, (ui.home_tabs || {}).work, lastTab()); renderWork(); refresh(); }
-  else renderScreen();
+  if (on) { ig.tab = pickTab(want, W().first, lastTab()); ig.touched = Date.now(); renderWork(); refresh(); }
+  else { renderScreen(); showCfg(false); }
 }
 const secHead = (k, title, small = '') => `<div class="wk-h"><span class="wk-ic">${svg(k, 22)}</span><b>${title}</b>${small ? `<small>${esc(small)}</small>` : ''}</div>`;
 const note = text => `<p class="wk-note">${esc(text)}</p>`;
@@ -91,7 +99,13 @@ function deskHtml() {
         `<button class="wk-check${ig.busy[t.id] ? ' busy' : ''}" data-todo="${esc(t.id)}" ${d.allow_todo ? '' : 'disabled'} aria-label="完成"></button>` +
         `<span>${esc(t.title)}</span>${t.when ? `<em class="k-${esc(t.kind)}">${esc(t.when)}</em>` : ''}</div>`).join('')}</div>` : note('没有未完成的待办'));
   }
-  return head + `<div class="wk-split"><div class="wk-col">${left.join('')}</div><div class="wk-col wk-card">${right.join('')}</div></div>`;
+  return head + split('desk', left.join(''), right.join(''), '');
+}
+// 左右两栏，中间的竖条能拖（设计画布第 75 块）：左栏占多少存在这台设备的工作台设置里
+function split(key, left, right, rightClass = 'wk-card') {
+  const l = (W().split || {})[key] ?? (key === 'repo' ? 0.58 : 0.52);
+  return `<div class="wk-split" data-split="${key}" style="--l:${l}"><div class="wk-col ${key === 'repo' ? 'wk-card' : ''}">${left}</div>` +
+    `<div class="wk-grip" data-grip="${key}" title="拖动调宽，双击恢复"><i></i></div><div class="wk-col ${rightClass || 'wk-card'}">${right}</div></div>`;
 }
 
 function rackHtml() {
@@ -111,6 +125,20 @@ function rackHtml() {
   return parts.join('');
 }
 
+function taskHtml(x) {
+  const busy = ig.busy['task:' + x.id];
+  const pill = x.state === 'running' ? '<em class="tk-pill run">同步中</em>' : x.state === 'paused' ? '<em class="tk-pill">暂停了</em>'
+    : x.last === 'error' || x.failed ? `<em class="tk-pill bad">${x.failed ? `上次 ${x.failed} 个失败` : '上次出错'}</em>`
+    : x.last === 'stopped' ? '<em class="tk-pill">上次停了</em>' : x.last ? '<em class="tk-pill ok">上次成功</em>' : '';
+  const b = (op, text, cls = '') => `<button class="tk-btn ${cls}" data-task="${esc(x.id)}" data-op="${op}"${busy ? ' disabled' : ''}>${text}</button>`;
+  const acts = x.state === 'running' ? b('pause', '暂停') + b('stop', '停止', 'stop')
+    : x.state === 'paused' ? b('resume', '继续', 'go') + b('stop', '停止', 'stop') : b('run', '立即同步', 'go');
+  const pct = x.total ? Math.round(x.done / x.total * 100) : 0;
+  return `<div class="tk"><div class="tk-main"><div class="tk-name"><b>${esc(x.name)}</b>${pill}</div>` +
+    `<small>${esc([x.host, x.schedule, x.total ? `${x.done} / ${x.total}` : ''].filter(Boolean).join(' · '))}</small>` +
+    (x.total ? `<div class="tk-bar"><i style="width:${pct}%"></i></div>` : '') + `</div>` +
+    `<div class="tk-acts">${acts}<button class="switch sm" role="switch" data-task="${esc(x.id)}" data-op="schedule" aria-checked="${x.enabled}" aria-label="定时"${busy ? ' disabled' : ''}><i></i></button></div></div>`;
+}
 function repoHtml() {
   if (!A().repo_status) return secHead('repo', '仓库同步') + note(NOT_YET('仓库同步'));
   const r = ig.data.repo_status || {};
@@ -119,52 +147,73 @@ function repoHtml() {
   const head = secHead('repo', '仓库同步', ev && ev.at ? ev.at.slice(5, 16).replace('T', ' ') : '');
   const nums = `<div class="wk-nums four"><div><b>${r.total}</b><small>仓库</small></div><div class="ok"><b>${r.synced}</b><small>已同步</small></div>` +
     `<div class="${r.failed ? 'bad' : ''}"><b>${r.failed}</b><small>失败</small></div><div class="${r.suspect7 ? 'bad' : ''}"><b>${r.suspect7}</b><small>疑似删库</small></div></div>`;
+  const tasks = r.tasks || [], running = tasks.filter(x => x.state !== 'idle').length;
+  const left = `<div class="wk-row"><b>同步任务</b><small>${tasks.length ? `${tasks.length} 个${running ? ` · ${running} 个在跑` : ''} · 右边开关是定时` : ''}</small></div>` +
+    (r.tasks === null || r.tasks === undefined ? note('读不到同步任务（repo-manager 太旧？）') : tasks.length ? `<div class="tk-list">${tasks.map(taskHtml).join('')}</div>` : note('repo-manager 里还没有同步任务'));
   const att = (r.attention || []).length ? `<div class="wk-row"><b>要处理的</b><small>${r.attention_total || r.attention.length} 个</small></div><div class="wk-att">${r.attention.map(a => `<div><b>${esc(a.name)}</b>` +
       `${a.why ? `<em class="wk-why">${esc(a.why)}</em>` : ''}<small>${esc(a.host || '')}</small></div>`).join('')}` +
     (r.attention_total > r.attention.length ? `<small class="wk-more">还有 ${r.attention_total - r.attention.length} 个，在 repo-manager 网页里看</small>` : '') + '</div>'
     : note('没有要处理的仓库');
-  const w = r.watches || {}, side = [];
-  side.push(`<div class="wk-row"><b>正在同步</b><small>${w.running ? `${w.running} 个` : '没有'}</small></div>`);
-  if (ev && ev.msg) side.push(`<div class="wk-row"><b><span class="ai-ink">最近的事</span></b></div><p class="wk-msg">${esc(ev.msg)}</p>`);
-  return head + nums + `<div class="wk-split"><div class="wk-col wk-card">${att}</div><div class="wk-col wk-card">${side.join('')}</div></div>`;
+  const msg = ev && ev.msg ? `<div class="wk-row"><b><span class="ai-ink">最近的事</span></b></div><p class="wk-msg">${esc(ev.msg)}</p>` : '';
+  return head + nums + split('repo', left, att + msg);
+}
+async function taskDo(id, op, on) {
+  ig.busy['task:' + id] = true; renderWork();
+  const r = await postJson('/api/integrations/repo', { op, id, on });
+  delete ig.busy['task:' + id];
+  if (r.repo_status && ig.data) ig.data.repo_status = r.repo_status;
+  if (!r.ok) toast(r.error || '没做成', 'error');
+  else toast({ run: '开始同步了', pause: '暂停了', resume: '继续同步', stop: '停下了', schedule: on ? '定时开了' : '定时关了' }[op] || '好了');
+  renderWork();
+}
+function hubPageHtml() {
+  if (!A().smart_hub) return secHead('hub', '智能中枢') + note(NOT_YET('智能中枢'));
+  return secHead('hub', '智能中枢', ig.data.smart_hub && !ig.data.smart_hub.error ? hubSummary(hubDevices()) : '') + `<div class="wk-hub">${hubHtml().replace(/<p class="h-sum">.*?<\/p>/, '')}</div>`;
 }
 
 function renderTabs() {
   const tabs = wkTabs(), r = ig.data && ig.data.rack_status, p = ig.data && ig.data.repo_status;
   const badge = { rack: r && !r.error && r.problems.length ? `<em class="w">${r.problems.length}</em>` : '',
-                  repo: p && !p.error && p.failed ? `<em>${p.failed}</em>` : '', desk: '' };
+                  repo: p && !p.error && p.failed ? `<em>${p.failed}</em>` : '', desk: '', hub: '' };
   $('wkTabs').hidden = tabs.length < 2;
   set('wkTabs', tabs.map(([k, name, ic]) => `<button role="tab" data-wtab="${k}" class="${k === ig.tab ? 'on' : ''}" aria-selected="${k === ig.tab}">${svg(ic, 20)}<span>${name}</span>${badge[k]}</button>`).join(''));
 }
-// 机柜那页：网关说能放 rack-screen 的画面（填了登录密码、登得上）就放它的 /kiosk，不然放 Prometheus 摘要
-const rackScreen = () => !!(ig.open && ig.tab === 'rack' && A().rack_status && ig.data.rack_status && ig.data.rack_status.screen && !DEMO
-  && ui.home_tabs && ui.home_tabs.urls && ui.home_tabs.urls.rack);
+// 机柜那页放 rack-screen 的画面（设置里选了、网关说能放：填了登录密码、登得上）；智能中枢那页可以放它自己的网页
+function screenUrl() {
+  if (!ig.open || !ig.data || DEMO) return '';
+  const u = W().urls || (ui.home_tabs || {}).urls || {};
+  if (ig.tab === 'rack' && W().rack === 'screen' && A().rack_status && (ig.data.rack_status || {}).screen) return u.rack || '';
+  if (ig.tab === 'hub' && W().hub === 'web' && A().smart_hub) return u.hub || '';
+  return '';
+}
 function renderScreen() {
-  const box = $('wkScreen'), on = !!(ig.data && rackScreen());
-  box.hidden = !on;
-  const f = box.querySelector('iframe');
-  if (!on) { if (f) { f.src = 'about:blank'; f.remove(); } return; }
-  if (!f) {
-    $('wkScreenMsg').textContent = '正在打开 rack-screen 的画面…';
-    const n = document.createElement('iframe');
-    n.title = '机柜';
-    n.addEventListener('load', () => { $('wkScreenMsg').textContent = ''; });
-    n.src = ui.home_tabs.urls.rack;
-    box.appendChild(n);
-  }
+  const box = $('wkScreen'), url = screenUrl();
+  box.hidden = !url;
+  let f = box.querySelector('iframe');
+  if (f && f.dataset.src !== url) { f.src = 'about:blank'; f.remove(); f = null; }
+  if (!url || f) return;
+  $('wkScreenMsg').textContent = '正在打开…';
+  const n = document.createElement('iframe');
+  n.title = ig.tab === 'hub' ? '智能中枢' : '机柜';
+  n.dataset.src = url;
+  n.addEventListener('load', () => { $('wkScreenMsg').textContent = ''; });
+  n.src = url;
+  box.appendChild(n);
 }
 function renderWork() {
-  if (!ig.open) return;
+  if (!ig.open || ig.dragging) return;
   if (!ig.data) { set('wkDesk', note('正在连小麦网关…')); return; }
   ig.tab = pickTab(ig.tab);
   renderTabs();
-  const screen = rackScreen();
-  for (const [k, , , id] of WK) $(id).hidden = k !== ig.tab || (k === 'rack' && screen);
+  const screen = !!screenUrl();
+  for (const [k, , , id] of WK) $(id).hidden = k !== ig.tab || screen;
   if (ig.tab === 'desk') set('wkDesk', deskHtml());
-  if (ig.tab === 'rack' && !screen) set('wkRack', rackHtml() + (A().rack_status && !(ig.data.rack_status || {}).screen
+  if (ig.tab === 'hub' && !screen) set('wkHub', hubPageHtml());
+  if (ig.tab === 'rack' && !screen) set('wkRack', rackHtml() + (A().rack_status && W().rack === 'screen' && !(ig.data.rack_status || {}).screen
     ? note('在网关后台「外部服务 › 家里的系统 › 机柜 › 设置」里填 rack-screen 的登录密码，这一页就换成和机柜屏一样的画面。') : ''));
   if (ig.tab === 'repo') set('wkRepo', repoHtml());
   renderScreen();
+  if (!$('wkCfg').hidden) renderCfg();
   $('wkSub').textContent = ig.data.at ? `经小麦网关 · ${hm(ig.data.at)} 更新` : '经小麦网关';
 }
 $('wkTabs').addEventListener('click', e => {
@@ -174,19 +223,6 @@ $('wkTabs').addEventListener('click', e => {
   try { localStorage.setItem('wkTab', ig.tab); } catch (err) { /* 只是记一下上次看的 */ }
   renderWork();
 });
-function renderWkFirst() {
-  const w = (ui.home_tabs || {}).work || '';
-  $('wkFirst').querySelectorAll('[data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === w));
-}
-$('wkFirst').addEventListener('click', async e => {
-  const b = e.target.closest('[data-t]');
-  if (!b) return;
-  if (DEMO) { ui.home_tabs = Object.assign({}, ui.home_tabs, { work: b.dataset.t }); return renderWkFirst(); }
-  const r = await postJson('/api/home-tabs', { work: b.dataset.t });
-  if (r && r.ok) handlers.home_tabs(r.home_tabs); else toast((r && r.error) || '没保存上', 'error');
-});
-const prevHomeTabs = handlers.home_tabs;
-handlers.home_tabs = v => { if (prevHomeTabs) prevHomeTabs(v); else ui.home_tabs = v; renderWkFirst(); };
 
 async function deskDo(op, id, label) {
   if (ig.busy[id]) return;
@@ -200,6 +236,24 @@ async function deskDo(op, id, label) {
   if (r.ok) toast(r.text || label); else toast(r.text || r.error || '没做成', 'error');
 }
 $('wkCols').addEventListener('click', e => {
+  const tk = e.target.closest('[data-task]');
+  if (tk && !tk.disabled) {
+    const x = ((ig.data.repo_status || {}).tasks || []).find(v => v.id === tk.dataset.task);
+    if (!x) return;
+    const op = tk.dataset.op;
+    if (op === 'schedule') return taskDo(x.id, op, tk.getAttribute('aria-checked') !== 'true');
+    if (op === 'stop') return window.miApi.askConfirm(`停止「${x.name}」这次同步？已经同步完的仓库不受影响。`, () => taskDo(x.id, op));
+    return taskDo(x.id, op);
+  }
+  if (e.target.closest('.wk-hub')) {
+    if (hubClick(e)) return;
+    const p = e.target.closest('[data-hpower]');
+    const px = p ? findDev(p.dataset.hpower) : null;
+    if (px) return toggle(px);
+    const h = e.target.closest('[data-hub]');
+    if (h) return openLight(h.dataset.hub);
+    return;
+  }
   const s = e.target.closest('[data-src]');
   if (s) {
     const d = ig.data.desk_hub;
@@ -417,6 +471,87 @@ $('ldControls').addEventListener('change', e => {
   if (r && x) hubAct(x.id, r.dataset.lop, Number(r.value));
 });
 
+/* ---------------- 工作台设置（设计画布第 75 块）：右上角齿轮 ---------------- */
+async function sendWork(changes) {
+  if (DEMO) { ui.work = Object.assign({}, W(), changes, changes.split ? { split: Object.assign({}, W().split, changes.split) } : {}); renderWork(); return; }
+  const r = await postJson('/api/work', changes);
+  if (r && r.ok) handlers.work(r.work); else toast((r && r.error) || '没保存上', 'error');
+}
+function showCfg(on) {
+  $('wkCfg').hidden = !on;
+  $('wkCfgBtn').classList.toggle('on', !!on);
+  if (on) renderCfg();
+}
+function renderCfg() {
+  const w = W(), avail = wkOrdered().filter(x => A()[x[4]]);
+  const chip = (key, val, text) => `<button data-wset="${key}" data-v="${val}" class="${w[key] === val ? 'on' : ''}">${text}</button>`;
+  const rows = avail.map(([k, name, ic], i) => `<div class="wc-row"><span class="wc-ic">${svg(ic, 20)}</span><b>${name}</b>` +
+    `<button class="wc-mv" data-move="${k}" data-d="-1"${i === 0 ? ' disabled' : ''} aria-label="往前">↑</button>` +
+    `<button class="wc-mv" data-move="${k}" data-d="1"${i === avail.length - 1 ? ' disabled' : ''} aria-label="往后">↓</button>` +
+    `<button class="switch sm" role="switch" data-show="${k}" aria-checked="${!w.hidden.includes(k)}" aria-label="显示${name}"><i></i></button></div>`).join('');
+  set('wkCfg', `<div class="wc-head"><b>工作台设置</b><button class="wc-x" data-wclose="1" aria-label="关闭">✕</button></div>` +
+    `<div class="wc-sub">显示哪几页、顺序</div>${rows || '<p class="wc-note">这台设备还没接入任何一个</p>'}` +
+    `<div class="wc-sub">打开工作台先看</div><div class="wc-chips">${chip('first', '', '上次看的')}${avail.map(([k, n]) => chip('first', k, n)).join('')}</div>` +
+    (A().rack_status ? `<div class="wc-sub">机柜那页放</div><div class="wc-chips">${chip('rack', 'screen', '机柜屏的画面')}${chip('rack', 'list', '简要列表')}</div>` : '') +
+    (A().smart_hub ? `<div class="wc-sub">智能中枢那页放</div><div class="wc-chips">${chip('hub', 'tiles', '设备块')}${chip('hub', 'web', '它自己的网页')}</div>` : '') +
+    `<div class="wc-row"><b>左右栏宽度</b><button class="wc-btn" data-wreset="1"${Object.keys(w.split || {}).length ? '' : ' disabled'}>恢复默认</button></div>` +
+    `<div class="wc-row"><div><b>没人碰 3 分钟回首页</b><small>关掉就一直开着（叫它时也不收起）</small></div><button class="switch sm" role="switch" data-idle="1" aria-checked="${w.idle_close}"><i></i></button></div>`);
+}
+$('wkCfgBtn').addEventListener('click', () => showCfg($('wkCfg').hidden));
+$('wkCfg').addEventListener('click', e => {
+  const w = W(), t = e.target;
+  if (t.closest('[data-wclose]')) return showCfg(false);
+  const mv = t.closest('[data-move]');
+  if (mv) {
+    const order = w.order.slice(), avail = wkOrdered().filter(x => A()[x[4]]).map(x => x[0]);
+    const i = avail.indexOf(mv.dataset.move), j = i + Number(mv.dataset.d);
+    if (j < 0 || j >= avail.length) return;
+    const a = order.indexOf(avail[i]), b = order.indexOf(avail[j]);
+    [order[a], order[b]] = [order[b], order[a]];
+    return sendWork({ order });
+  }
+  const sh = t.closest('[data-show]');
+  if (sh) {
+    const k = sh.dataset.show, hidden = w.hidden.includes(k) ? w.hidden.filter(x => x !== k) : [...w.hidden, k];
+    if (wkOrdered().filter(x => A()[x[4]] && !hidden.includes(x[0])).length === 0) return toast('至少留一页', 'info');
+    return sendWork({ hidden });
+  }
+  const c = t.closest('[data-wset]');
+  if (c) return sendWork({ [c.dataset.wset]: c.dataset.v });
+  if (t.closest('[data-wreset]')) return sendWork({ split: null });
+  if (t.closest('[data-idle]')) return sendWork({ idle_close: !w.idle_close });
+});
+handlers.work = v => { ui.work = v; renderWork(); if (!$('wkCfg').hidden) renderCfg(); };
+
+// 拖中间的竖条调两栏宽度：拖的时候不重画，松手存
+$('wkCols').addEventListener('pointerdown', e => {
+  const g = e.target.closest('[data-grip]');
+  if (!g) return;
+  const box = g.closest('.wk-split'), key = g.dataset.grip;
+  e.preventDefault();
+  g.setPointerCapture(e.pointerId);
+  ig.dragging = true;
+  let l = Number(getComputedStyle(box).getPropertyValue('--l')) || 0.5;
+  const move = ev => {
+    const r = box.getBoundingClientRect();
+    l = Math.min(0.7, Math.max(0.3, (ev.clientX - r.left) / r.width));
+    box.style.setProperty('--l', l.toFixed(3));
+  };
+  const up = () => {
+    g.removeEventListener('pointermove', move);
+    ig.dragging = false;
+    sendWork({ split: { [key]: Number(l.toFixed(3)) } });
+  };
+  g.addEventListener('pointermove', move);
+  g.addEventListener('pointerup', up, { once: true });
+  g.addEventListener('pointercancel', up, { once: true });
+});
+$('wkCols').addEventListener('dblclick', e => { const g = e.target.closest('[data-grip]'); if (g) sendWork({ split: { [g.dataset.grip]: null } }); });
+
+// 没人碰 3 分钟回首页（设置里能关）
+document.addEventListener('pointerdown', () => { ig.touched = Date.now(); }, true);
+setInterval(() => { if (ig.open && W().idle_close && Date.now() - (ig.touched || 0) > 180000) openWork(false); }, 15000);
+
 /* ---------------- 仪表盘卡片（dash.js 调） ---------------- */
 window.igApi = {
   available: A,
@@ -444,8 +579,6 @@ window.igApi = {
 const SVC = [['desk_hub', '智能桌面（DeskHub）', '连接口令'], ['rack_status', '机柜', ''], ['repo_status', '仓库同步', ''], ['smart_hub', '蓝牙灯（智能中枢）', '访问令牌']];
 function renderSvc() {
   const P = ig.data && ig.data.plugins;
-  renderWkFirst();
-  $('wkFirstHead').hidden = $('wkFirst').hidden = WK.filter(w => A()[w[4]]).length < 2;
   set('svcList', SVC.map(([k, label, need]) => {
     const s = P && P[k], g = s && (s.global ? '开' : '关');
     const sub = !s ? '—'
@@ -516,11 +649,12 @@ handlers.snapshot = s => {
   baseSnapshot(s);
   if (s.integrations) ig.data = s.integrations;
   if (s.hub_node) ui.hub_node = s.hub_node;
+  if (s.work) ui.work = s.work;
   renderAll();
 };
 handlers.integrations = d => { ig.data = d; renderAll(); };
 // 叫醒时工作台和灯的详情也收起（和家居页一样）
 const baseAutoClose = window.miAutoClose;
-window.miAutoClose = () => { if (baseAutoClose) baseAutoClose(); if (ig.open) openWork(false); closeLight(); };
+window.miAutoClose = () => { if (baseAutoClose) baseAutoClose(); if (ig.open && W().idle_close) openWork(false); closeLight(); };
 window.openWork = openWork;
 })();

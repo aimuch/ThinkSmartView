@@ -19,11 +19,19 @@ def free_port():
 
 
 def test_tabs_setting():
-    assert appproxy.normalize_tabs(None) == {'show': ['mi', 'hub'], 'first': '', 'work': ''}
-    assert appproxy.normalize_tabs({'show': ['rack', 'hub', 'mi', 'x'], 'first': 'hub'}) == {'show': ['mi', 'hub'], 'first': 'hub', 'work': ''}
-    assert appproxy.normalize_tabs({'show': ['hub'], 'first': 'mi'}) == {'show': ['hub'], 'first': '', 'work': ''}   # 先看的那个没显示
-    assert appproxy.normalize_tabs({'show': []}) == {'show': ['mi'], 'first': '', 'work': ''}
-    assert appproxy.normalize_tabs({'work': 'rack'})['work'] == 'rack' and appproxy.normalize_tabs({'work': 'x'})['work'] == ''
+    assert appproxy.normalize_tabs(None) == {'show': ['mi'], 'first': ''}
+    assert appproxy.normalize_tabs({'show': ['rack', 'hub', 'mi', 'x'], 'first': 'hub'}) == {'show': ['mi'], 'first': ''}
+
+
+def test_work_setting():
+    """工作台的设置（设计画布第 75 块）：四页都在 order 里；以前存的「先看」带过来；栏宽限在 30%–70%。"""
+    w = appproxy.normalize_work(None, 'rack')
+    assert w == {'order': ['desk', 'hub', 'rack', 'repo'], 'hidden': [], 'first': 'rack', 'rack': 'screen', 'hub': 'tiles',
+                 'split': {}, 'idle_close': True}
+    w = appproxy.normalize_work({'order': ['repo', 'x', 'repo', 'desk'], 'hidden': ['hub', 'y'], 'first': 'nope', 'rack': 'list',
+                                 'hub': 'web', 'split': {'desk': 0.9, 'repo': 0.2, 'z': 0.5}, 'idle_close': False})
+    assert w == {'order': ['repo', 'desk', 'hub', 'rack'], 'hidden': ['hub'], 'first': '', 'rack': 'list', 'hub': 'web',
+                 'split': {'desk': 0.7, 'repo': 0.3}, 'idle_close': False}
     assert appproxy.url('rack') == 'http://127.0.0.1:8091/kiosk' and appproxy.url('hub').endswith(':8092/#/')
 
 

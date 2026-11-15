@@ -107,6 +107,14 @@ def make_app(client: Client):
             return web.json_response({'ok': False, 'error': str(e)}, status=400)
         return web.json_response({'ok': True, 'screen_off': value})
 
+    async def work_settings(request):
+        body = await request.json()
+        return web.json_response({'ok': True, 'work': await client.set_work(body if isinstance(body, dict) else {})})
+
+    async def repo_command(request):
+        body = await request.json()
+        return await _hub_call(client.repo_command, str(body.get('op') or ''), str(body.get('id') or ''), body.get('on'))
+
     async def hub_node_switch(request):
         body = await request.json()
         return web.json_response({'ok': True, 'hub_node': await client.set_hub_node(bool(body.get('on')))})
@@ -121,7 +129,7 @@ def make_app(client: Client):
     async def home_tabs(request):
         body = await request.json()
         try:
-            value = await client.set_home_tabs(body.get('show'), body.get('first'), body.get('work'))
+            value = await client.set_home_tabs(body.get('show'), body.get('first'))
         except ValueError as e:
             return web.json_response({'ok': False, 'error': str(e)}, status=400)
         return web.json_response({'ok': True, 'home_tabs': value})
@@ -442,6 +450,8 @@ def make_app(client: Client):
     app.router.add_post('/api/screen-off', screen_off)
     app.router.add_get('/api/screen-light', screen_light)
     app.router.add_post('/api/hub-node', hub_node_switch)
+    app.router.add_post('/api/work', work_settings)
+    app.router.add_post('/api/integrations/repo', repo_command)
     app.router.add_post('/api/home-tabs', home_tabs)
     app.router.add_post('/api/volume', volume)
     app.router.add_post('/api/alarm-volume', alarm_volume)

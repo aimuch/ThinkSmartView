@@ -324,7 +324,7 @@ FOCUS_TOOLS = [   # 专注计时（focus.py，设计画布第 47 块）
             'required': ['action']},
     },
 ]
-PAGES = ('home', 'work', 'work.rack', 'work.desk', 'work.repo', 'weather', 'focus', 'study', 'smart', 'settings',
+PAGES = ('home', 'work', 'work.rack', 'work.desk', 'work.repo', 'work.hub', 'weather', 'focus', 'study', 'smart', 'settings',
          'settings.screen', 'settings.looks', 'settings.net', 'settings.system', 'settings.alarms', 'settings.family',
          'settings.voice', 'album', 'close')   # 和网关 core/agent/commands.py 的 PAGES 一致
 PAGE_TOOLS = [   # 打开设备上的页面（设计画布第 53 块）

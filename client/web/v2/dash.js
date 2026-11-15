@@ -194,7 +194,7 @@ function home() {
 function smart() {
   const v = mi();
   // 接入了智能中枢：房间栏上面「米家 | 智能中枢」，和家居页同一个选择（设计画布第 45 块）
-  const hubOn = !!(window.hubAvailable && window.hubAvailable() && window.miApi && window.miApi.src);
+  const hubOn = false;   // 智能中枢挪到了工作台（设计画布第 75 块），家居只留米家
   const src = hubOn ? window.miApi.src() : 'mi';
   const sw = hubOn ? `<div class="h-src d-src">${[['mi', '米家'], ['hub', '智能中枢']].map(([k, n]) =>
     `<button data-src="${k}" class="${k === src ? 'on' : ''}">${n}</button>`).join('')}</div>` : '';

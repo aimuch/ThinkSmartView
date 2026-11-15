@@ -19,8 +19,9 @@ HOP = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 
        'upgrade', 'host', 'content-length'}
 
 
-TABS = ('mi', 'hub')             # 家居 的分页：米家（设备自己画的）、智能中枢；机柜挪到了工作台（设计画布第 71 块）
-WORK_TABS = ('desk', 'rack', 'repo')   # 工作台的分页：智能桌面、机柜、仓库同步
+TABS = ('mi',)                   # 家居 的分页：只剩米家；机柜（第 71 块）、智能中枢（第 75 块）挪到了工作台
+WORK_TABS = ('desk', 'hub', 'rack', 'repo')   # 工作台的分页：智能桌面、智能中枢、机柜、仓库同步
+SPLIT_MIN, SPLIT_MAX = 0.3, 0.7  # 工作台两栏的左栏占多少（拖中间的竖条）
 
 
 def url(app):
@@ -34,8 +35,27 @@ def normalize_tabs(value):
     show = value.get('show')
     show = [t for t in TABS if t in show] if isinstance(show, list) else list(TABS)
     first = value.get('first') if value.get('first') in TABS else ''
-    work = value.get('work') if value.get('work') in WORK_TABS else ''
-    return {'show': show or ['mi'], 'first': first if first in (show or ['mi']) else '', 'work': work}
+    return {'show': show or ['mi'], 'first': first if first in (show or ['mi']) else ''}
+
+
+def normalize_work(value, legacy_first=''):
+    """工作台的设置（设计画布第 75 块）：{'order': 四页的顺序, 'hidden': 不显示的页, 'first': 先看哪页（'' = 上次看的）,
+    'rack': 机柜页放 'screen'（机柜屏的画面）或 'list', 'hub': 智能中枢页放 'tiles' 或 'web'（它自己的网页）,
+    'split': {'desk', 'repo'} 左栏占多少, 'idle_close': 没人碰 3 分钟回首页}。legacy_first：以前存在 home_tabs 里的「先看」。"""
+    v = value if isinstance(value, dict) else {}
+    order = [x for x in v.get('order') or [] if x in WORK_TABS]
+    order = list(dict.fromkeys(order)) + [x for x in WORK_TABS if x not in order]
+    hidden = [x for x in v.get('hidden') or [] if x in WORK_TABS]
+    first = v.get('first', legacy_first)
+    split = {}
+    for k in ('desk', 'repo'):
+        s = (v.get('split') or {}).get(k)
+        if isinstance(s, (int, float)) and not isinstance(s, bool):
+            split[k] = round(min(SPLIT_MAX, max(SPLIT_MIN, float(s))), 3)
+    return {'order': order, 'hidden': list(dict.fromkeys(hidden)), 'first': first if first in WORK_TABS else '',
+            'rack': v.get('rack') if v.get('rack') in ('screen', 'list') else 'screen',
+            'hub': v.get('hub') if v.get('hub') in ('tiles', 'web') else 'tiles',
+            'split': split, 'idle_close': v.get('idle_close') is not False}
 
 
 class AppProxy:
