@@ -10,8 +10,8 @@
 <meta name="theme-color" content="#070b18" media="(prefers-color-scheme: dark)">
 <title>小麦 · 清单</title>
 <style>
-  :root { --bg: #f4f6fb; --ink: #141a2e; --ink2: #4b5470; --ink3: #6b7593; --line: #d7dcea; --card: #fff; --card2: #eef1f8; --accent: #4b6bff; --bad: #c93636; --ok: #138a5e; --warn: #a86400; --sheet: #fff; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #070b18; --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #8a94bb; --line: #ffffff26; --card: #ffffff12; --card2: #ffffff1c; --accent: #8fa6ff; --bad: #ff7b8f; --ok: #43d39e; --warn: #ffb547; --sheet: #141a33; } }
+  :root { --bg: #f4f6fb; --ink: #141a2e; --ink2: #4b5470; --ink3: #6b7593; --line: #d7dcea; --card: #fff; --card2: #eef1f8; --accent: #4b6bff; --on-accent: #fff; --bad: #c93636; --ok: #138a5e; --warn: #a86400; --sheet: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #070b18; --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #8a94bb; --line: #ffffff26; --card: #ffffff12; --card2: #ffffff1c; --accent: #8fa6ff; --on-accent: #0b1230; --bad: #ff7b8f; --ok: #43d39e; --warn: #ffb547; --sheet: #141a33; } }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 17px/1.5 -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
     padding: max(16px, env(safe-area-inset-top)) 14px max(24px, env(safe-area-inset-bottom)); }
@@ -23,7 +23,7 @@
   .dot.off { background: var(--warn); }
   .tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
   .tabs button { flex: none; height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--card); color: var(--ink2); font-size: 15px; white-space: nowrap; }
-  .tabs button.on { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; }
+  .tabs button.on { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
   .tabs em { font-style: normal; font-size: 11px; margin-left: 4px; opacity: .85; }
   .scope { font-size: 13px; color: var(--ink3); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .scope b { font-weight: 600; color: var(--ok); } .scope b.own { color: var(--ink2); }
@@ -39,7 +39,7 @@
   .it .meta .due { color: var(--accent); } .it.late .meta .due { color: var(--bad); }
   form.add { display: flex; gap: 8px; }
   form.add input { flex: 1; min-width: 0; height: 48px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); font-size: 17px; }
-  .btn { height: 48px; padding: 0 18px; border-radius: 14px; border: 0; background: var(--accent); color: #fff; font-size: 16px; }
+  .btn { height: 48px; padding: 0 18px; border-radius: 14px; border: 0; background: var(--accent); color: var(--on-accent); font-size: 16px; }
   .btn.ghost { background: var(--card); color: var(--ink2); border: 1px solid var(--line); }
   .btn.bad { background: none; color: var(--bad); border: 1px solid var(--line); }
   .note { font-size: 13px; color: var(--ink3); margin: 0; }
@@ -56,7 +56,7 @@
   .row input, .row select { flex: 1; min-width: 0; height: 42px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 16px; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chips button { height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--card); color: var(--ink2); font-size: 14px; }
-  .chips button.on { background: var(--accent); color: #fff; border-color: transparent; }
+  .chips button.on { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
   .sub { font-size: 13px; color: var(--ink3); margin-top: 2px; }
   .hide { display: none !important; }
 </style>
