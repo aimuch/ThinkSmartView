@@ -923,3 +923,88 @@ body.identify::after { content: ""; position: fixed; inset: 0; z-index: 9999; po
   .wk-cfg { left: 24px; right: 24px; width: auto; top: 190px; }
   .tk { flex-wrap: wrap; } .tk-acts { margin-left: auto; }
 }
+
+/* 智能桌面、仓库同步重新设计（设计画布第 77 块） */
+.dk-hero { display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center; padding: 18px 20px; border-radius: 22px;
+           background: linear-gradient(135deg, #43d39e26, #6c8cff17); border: 1.5px solid #43d39e66; }
+.dk-hero.off { background: var(--card); border-color: var(--line); }
+.dk-mon { width: 84px; height: 56px; border-radius: 9px; border: 3px solid var(--ink2); position: relative; display: grid; place-items: center; color: var(--ink); }
+.dk-mon::after { content: ""; position: absolute; left: 30px; right: 30px; bottom: -13px; height: 9px; border-radius: 0 0 4px 4px; background: var(--ink2); }
+.dk-now { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dk-now small { font-size: 14px; color: var(--ink3); }
+.dk-now b { font-size: 30px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-now span { font-size: 14px; color: var(--ink3); }
+.dk-live { align-self: start; display: flex; align-items: center; gap: 7px; font-style: normal; font-size: 13px; padding: 6px 12px; border-radius: 999px; background: #43d39e1f; color: var(--ok); white-space: nowrap; }
+.dk-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px #43d39e33; }
+.dk-live.off { background: var(--card2); color: var(--ink3); } .dk-live.off i { background: var(--ink3); box-shadow: none; }
+.dk-srcs { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 12px; }
+.dk-src { min-height: 112px; padding: 14px; border-radius: 18px; background: var(--card2); border: 1.5px solid transparent; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left; transition: transform .12s; }
+.dk-src:active { transform: scale(.96); }
+.dk-si { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--card); color: var(--ink2); }
+.dk-src b { font-size: 18px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-src small { margin-top: auto; font-size: 13px; color: var(--ink3); }
+.dk-src.on { border-color: var(--ok); background: #43d39e1f; } .dk-src.on .dk-si { background: var(--ok); color: #04301f; } .dk-src.on small { color: var(--ok); }
+.dk-src.busy { animation: wkpulse 1s ease-in-out infinite; }
+.dk-rings { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.dk-ring { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 14px; }
+.dk-ring > small { font-size: 12px; color: var(--ink3); }
+.dk-ring-c { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--accent2) var(--v), var(--card2) 0); }
+.dk-ring-c.two { background: conic-gradient(var(--accent) var(--v), var(--card2) 0); }
+.dk-ring-c.low { background: conic-gradient(var(--warn) var(--v), var(--card2) 0); }
+.dk-ring-c div { width: 74px; height: 74px; border-radius: 50%; background: var(--pop, #141c42); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.dk-ring-c b { font-size: 21px; } .dk-ring-c small { font-size: 11px; color: var(--ink3); }
+.dk-stats { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 160px; }
+.dk-stats b { display: block; font-size: 26px; font-weight: 600; } .dk-stats small { font-size: 13px; color: var(--ink3); }
+.dk-grp { display: flex; justify-content: space-between; margin: 12px 2px 2px; font-size: 13px; color: var(--ink3); }
+.dk-grp.bad { color: var(--bad); } .dk-grp.warn { color: var(--warn); }
+.wk-todo.bad .wk-check::after { border-color: var(--bad); }
+.dk-undo { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 14px; background: #43d39e1f; font-size: 15px; }
+.dk-undo button { height: 38px; padding: 0 14px; border-radius: 999px; background: var(--card2); color: var(--ink); font-size: 14px; }
+.rp-health { flex: none; display: flex; flex-direction: column; gap: 10px; }
+.rp-total { display: flex; align-items: baseline; gap: 10px; } .rp-total b { font-size: 30px; font-weight: 700; } .rp-total small { color: var(--ink3); font-size: 14px; } .rp-total span { flex: 1; }
+.rp-warn { font-style: normal; font-size: 13px; padding: 4px 12px; border-radius: 999px; background: #ff6b8129; color: var(--bad); align-self: center; }
+.rp-bar { display: flex; gap: 2px; height: 14px; border-radius: 8px; overflow: hidden; }
+.rp-bar i { display: block; height: 100%; min-width: 3px; }
+.rp-leg { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--ink2); }
+.rp-leg span { display: flex; align-items: center; gap: 6px; } .rp-leg u { width: 10px; height: 10px; border-radius: 3px; text-decoration: none; display: inline-block; }
+.rp-run { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 20px; background: linear-gradient(135deg, #6c8cff24, #5ee0ff10); border: 1.5px solid #6c8cff55; }
+.rp-run.paused { background: var(--card); border-color: var(--line); }
+.rp-run-h { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rp-run-h b { flex: none; max-width: 40%; font-size: 19px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-run-h small { flex: 1; min-width: 0; font-size: 13px; color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-acts { flex: none; display: flex; gap: 8px; }
+.rp-acts .tk-btn { height: 40px; padding: 0 14px; font-size: 14px; }
+.rp-run-p { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; color: var(--ink2); }
+.rp-run-p b { font-size: 28px; font-weight: 700; color: var(--ink); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.rp-run-p span { white-space: nowrap; font-variant-numeric: tabular-nums; } .rp-run-p .bad { color: var(--bad); }
+.rp-run-p em { margin-left: auto; font-style: normal; font-size: 13px; color: var(--ink3); white-space: nowrap; }
+.rp-rest { flex: none; }
+.rp-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.rp-row > i { width: 10px; height: 10px; border-radius: 50%; }
+.rp-row b { display: block; font-size: 17px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-row small { display: block; font-size: 13px; color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-why { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 11px 2px; border-top: 1px solid var(--line); font-size: 16px; color: var(--ink); text-align: left; }
+.rp-why em { font-style: normal; font-size: 13px; padding: 2px 10px; border-radius: 999px; background: #ff6b8129; color: var(--bad); }
+.rp-why em.w { background: #ffb54729; color: var(--warn); }
+.rp-why.open { color: var(--accent2); }
+.rp-names { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 10px; }
+.rp-names span { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--card2); color: var(--ink2); }
+.rp-names small { width: 100%; font-size: 12px; color: var(--ink3); }
+.rp-host { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 15px; } .rp-host i { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
+.rp-host i.warn { background: var(--warn); } .rp-host small { margin-left: auto; color: var(--ink3); font-size: 13px; }
+.dk-todos { overflow-y: auto; }
+@media (orientation: portrait) { .sheet.work .wk-split { flex: none; } .dk-todos { overflow: visible; } .dk-now b { font-size: 24px; } .dk-hero { grid-template-columns: auto 1fr; } .dk-live { grid-column: 1 / -1; justify-self: start; } .dk-srcs { grid-template-columns: 1fr 1fr; } }
+/* 同步任务卡片按自己的宽度排（左栏能拖到 30%）：窄了先藏说明文字、按钮变小，不挤出卡片、不压字 */
+.rp-run, .rp-rest { container-type: inline-size; }
+@container (max-width: 460px) {
+  .rp-run-h small { display: none; }
+  .rp-run-h b { flex: 1; max-width: none; min-width: 0; }
+  .rp-acts .tk-btn, .rp-row .tk-btn { height: 36px; padding: 0 11px; font-size: 13px; }
+  .rp-run-p b { font-size: 24px; }
+  .rp-run-p em { margin-left: 0; }
+  .rp-row { gap: 8px; }
+  .rp-row .switch.sm { transform: scale(.7); }
+}
+@container (max-width: 340px) {
+  .rp-run-h .tk-pill { display: none; }
+}

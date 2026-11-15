@@ -4,7 +4,7 @@
 // 在 home.js 之后、dash.js 之前加载；用 app.js 的 $、esc、toast、handlers、ui，home.js 的 window.miApi。
 (() => {
 
-const ig = { data: null, open: false, homeOpen: false, light: null, busy: {}, sig: {} };
+const ig = { data: null, open: false, homeOpen: false, light: null, busy: {}, sig: {}, undo: {} };
 const A = () => (ig.data && ig.data.available) || {};
 const hasWork = () => !!(A().rack_status || A().repo_status || A().desk_hub);
 const set = (id, html) => { const el = $(id); if (el && ig.sig[id] !== html) { ig.sig[id] = html; el.innerHTML = html; } };
@@ -74,38 +74,62 @@ function meter(left) {
 function tokens(n) { return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${(n / 1e4).toFixed(1)} 万` : String(n); }
 function resetIn(s) { return !s ? '' : s < 3600 ? `${Math.max(1, Math.round(s / 60))} 分钟后` : s < 86400 ? `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, '0')} 后` : `${Math.round(s / 86400)} 天后`; }
 
+// 智能桌面（设计画布第 77 块）：最大的一块是「显示器现在接的是…」；输入源带图标；AI 用量两个圆环；待办按过期 / 今天 / 以后 / 没定日子分组
+const SRC_ICON = {
+  mac: '<path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9H4z"/><path d="M2 18h20"/>',
+  kvm: '<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
+  usb: '<path d="M12 3v14M12 3l-2 3h4zM8 9v3l4 2M16 7v4l-4 2"/><circle cx="12" cy="19" r="2"/>',
+  pc: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+};
+function srcKind(s) {
+  const n = `${s.name} ${s.port || ''}`.toLowerCase();
+  return /mac|book|imac/.test(n) ? 'mac' : /kvm|切换/.test(n) ? 'kvm' : /usb|type-?c|雷电|thunder/.test(n) ? 'usb' : 'pc';
+}
+const srcSvg = (k, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${SRC_ICON[k]}</svg>`;
+function ringHtml(left, name, reset, i) {
+  const v = Math.max(0, Math.min(100, left)), low = v <= 25;
+  return `<div class="dk-ring"><div class="dk-ring-c${low ? ' low' : i ? ' two' : ''}" style="--v:${v * 3.6}deg"><div><b>${v}%</b><small>剩下</small></div></div><span>${esc(name)}</span>${reset ? `<small>${esc(reset)}</small>` : ''}</div>`;
+}
+const TODO_GROUPS = [['o', '过期', 'bad'], ['t', '今天', 'warn'], ['later', '以后', ''], ['n', '没定日子', '']];
+function todoGroup(t) { return t.kind === 'o' ? 'o' : t.kind === 't' ? 't' : t.kind === 'n' || !t.when ? 'n' : 'later'; }
 function deskHtml() {
   if (!A().desk_hub) return secHead('desk', '智能桌面') + note(NOT_YET('智能桌面（DeskHub）'));
   const d = ig.data.desk_hub || {};
   if (!d.seen) return secHead('desk', '智能桌面') + note('还没有 Mac 连上来：在 Mac 上的 DeskHub App（0.4.5 起）里打开 设置 › 控制终端，点「添加一个控制终端」，填网关地址和后台里的同一串口令。');
-  const head = secHead('desk', '智能桌面', `${d.name} · ${d.online ? ago(d.seen) : '上次 ' + hm(d.seen)}`);
-  const left = [], right = [];
-  if (!d.online) left.push(note(`Mac 上的 DeskHub 没连网关（上次 ${hm(d.seen)}）。下面是上次的内容，现在点了不会生效。`));
-  const srcs = d.sources || [];
-  left.push(`<div class="wk-sub">显示器输入源</div>`);
-  left.push(srcs.length ? `<div class="wk-srcs">${srcs.map(s => `<button class="wk-src${s.id === d.current ? ' on' : ''}${ig.busy[s.id] ? ' busy' : ''}" data-src="${esc(s.id)}">` +
-      `<b>${esc(s.name)}</b><small>${s.id === d.current ? '当前' : esc(s.port || '')}</small></button>`).join('')}</div>`
+  const srcs = d.sources || [], cur = srcs.find(s => s.id === d.current);
+  const left = [];
+  left.push(`<div class="dk-hero${d.online ? '' : ' off'}"><div class="dk-mon">${cur ? srcSvg(srcKind(cur), 30) : ''}</div>` +
+    `<div class="dk-now"><small>显示器现在接的是</small><b>${esc(cur ? cur.name : '不知道')}</b><span>${esc([cur && cur.port, d.online ? '读回确认 · 点下面换一个' : `DeskHub 没连网关（上次 ${hm(d.seen)}），现在点了不会生效`].filter(Boolean).join(' · '))}</span></div>` +
+    `<em class="dk-live${d.online ? '' : ' off'}"><i></i>${esc(d.name || 'DeskHub')} · ${d.online ? ago(d.seen) : '离线'}</em></div>`);
+  left.push(srcs.length ? `<div class="dk-srcs">${srcs.map(s => `<button class="dk-src${s.id === d.current ? ' on' : ''}${ig.busy[s.id] ? ' busy' : ''}" data-src="${esc(s.id)}">` +
+      `<span class="dk-si">${srcSvg(srcKind(s))}</span><b>${esc(s.name)}</b><small>${s.id === d.current ? '现在' : esc(s.port || '')}</small></button>`).join('')}</div>`
     : note('Mac 上还没有试切过的输入源：在 DeskHub 的菜单里先试切一次。'));
   const u = d.usage;
-  if (u) {
-    left.push(`<div class="wk-row"><b><span class="ai-ink">AI 用量</span>${u.provider ? ' · ' + esc([u.provider, u.plan].filter(Boolean).join(' ')) : ''}</b><small>今天 ${u.calls} 次 · ${tokens(u.tokens)} token</small></div>`);
-    left.push(u.windows.map(w => `<div class="wk-win"><span>${esc(w.name)}</span>${meter(w.left)}<small>剩 ${w.left}%${w.reset_s ? ' · ' + resetIn(w.reset_s) : ''}</small></div>`).join(''));
-  } else if (d.usage_off) left.push(note('Mac 上读不到 Magpie 的用量（Magpie 没开？）'));
-  if (d.todos_off) right.push(note(d.todos_off === 'access' ? 'DeskHub 没有读提醒事项的权限：在 Mac 的 系统设置 › 隐私与安全性 › 提醒事项 里打开。' : 'DeskHub 里关掉了提醒事项。'));
+  if (u) left.push(`<div class="dk-ai wk-card"><div class="wk-row"><b><span class="ai-ink">AI 用量</span>${u.provider ? ' · ' + esc([u.provider, u.plan].filter(Boolean).join(' ')) : ''}</b><small>Magpie 读的</small></div>` +
+      `<div class="dk-rings">${(u.windows || []).slice(0, 2).map((w, i) => ringHtml(w.left, w.name, w.reset_s ? resetIn(w.reset_s) + '重置' : '', i)).join('')}` +
+      `<div class="dk-stats"><div><b>${u.calls}</b><small>今天的请求</small></div><div><b>${tokens(u.tokens)}</b><small>今天的 token</small></div></div></div></div>`);
+  else if (d.usage_off) left.push(note('Mac 上读不到 Magpie 的用量（Magpie 没开？）'));
+  let right;
+  if (d.todos_off) right = note(d.todos_off === 'access' ? 'DeskHub 没有读提醒事项的权限：在 Mac 的 系统设置 › 隐私与安全性 › 提醒事项 里打开。' : 'DeskHub 里关掉了提醒事项。');
   else {
-    const todos = d.todos || [];
-    right.push(`<div class="wk-row"><b>电脑上的待办</b><small>${todos.length < d.todos_total ? `${todos.length} / ${d.todos_total}` : todos.length ? `${todos.length} 条` : ''}</small></div>`);
-    right.push(todos.length ? `<div class="wk-todos">${todos.slice(0, 30).map(t => `<div class="wk-todo">` +
-        `<button class="wk-check${ig.busy[t.id] ? ' busy' : ''}" data-todo="${esc(t.id)}" ${d.allow_todo ? '' : 'disabled'} aria-label="完成"></button>` +
-        `<span>${esc(t.title)}</span>${t.when ? `<em class="k-${esc(t.kind)}">${esc(t.when)}</em>` : ''}</div>`).join('')}</div>` : note('没有未完成的待办'));
+    const todos = (d.todos || []).filter(x => !ig.undo[x.id]), total = d.todos_total || todos.length;
+    const head2 = `<div class="wk-row"><b>电脑上的待办</b><small>${todos.length < total ? `${todos.length} / ${total}` : `${todos.length} 条`}${d.allow_todo ? ' · 点圆圈完成' : ''}</small></div>`;
+    const undo = Object.values(ig.undo).map(x => `<div class="dk-undo"><span>「${esc(x.title)}」做完了</span><button data-undo="${esc(x.id)}">撤销</button></div>`).join('');
+    right = head2 + undo + (todos.length ? TODO_GROUPS.map(([g, name, cls]) => {
+      const list = todos.filter(x => todoGroup(x) === g);
+      return list.length ? `<div class="dk-grp ${cls}"><span>${name}</span><span>${list.length}</span></div>` + list.map(x => `<div class="wk-todo${cls === 'bad' ? ' bad' : ''}">` +
+        `<button class="wk-check${ig.busy[x.id] ? ' busy' : ''}" data-todo="${esc(x.id)}" ${d.allow_todo ? '' : 'disabled'} aria-label="完成"></button>` +
+        `<span>${esc(x.title)}</span>${x.when ? `<em class="k-${esc(x.kind)}">${esc(x.when.replace('（过期）', ''))}</em>` : ''}</div>`).join('') : '';
+    }).join('') : note('没有未完成的待办'));
   }
-  return head + split('desk', left.join(''), right.join(''), '');
+  return split('desk', left.join(''), right, 'wk-card dk-todos');
 }
+
 // 左右两栏，中间的竖条能拖（设计画布第 75 块）：左栏占多少存在这台设备的工作台设置里
 function split(key, left, right, rightClass = 'wk-card') {
   const l = (W().split || {})[key] ?? (key === 'repo' ? 0.58 : 0.52);
-  return `<div class="wk-split" data-split="${key}" style="--l:${l}"><div class="wk-col ${key === 'repo' ? 'wk-card' : ''}">${left}</div>` +
-    `<div class="wk-grip" data-grip="${key}" title="拖动调宽，双击恢复"><i></i></div><div class="wk-col ${rightClass || 'wk-card'}">${right}</div></div>`;
+  return `<div class="wk-split" data-split="${key}" style="--l:${l}"><div class="wk-col">${left}</div>` +
+    `<div class="wk-grip" data-grip="${key}" title="拖动调宽，双击恢复"><i></i></div><div class="wk-col ${rightClass === 'wk-plain' ? '' : rightClass || 'wk-card'}">${right}</div></div>`;
 }
 
 function rackHtml() {
@@ -125,37 +149,55 @@ function rackHtml() {
   return parts.join('');
 }
 
-function taskHtml(x) {
-  const busy = ig.busy['task:' + x.id];
-  const pill = x.state === 'running' ? '<em class="tk-pill run">同步中</em>' : x.state === 'paused' ? '<em class="tk-pill">暂停了</em>'
-    : x.last === 'error' || x.failed ? `<em class="tk-pill bad">${x.failed ? `上次 ${x.failed} 个失败` : '上次出错'}</em>`
-    : x.last === 'stopped' ? '<em class="tk-pill">上次停了</em>' : x.last ? '<em class="tk-pill ok">上次成功</em>' : '';
-  const b = (op, text, cls = '') => `<button class="tk-btn ${cls}" data-task="${esc(x.id)}" data-op="${op}"${busy ? ' disabled' : ''}>${text}</button>`;
-  const acts = x.state === 'running' ? b('pause', '暂停') + b('stop', '停止', 'stop')
-    : x.state === 'paused' ? b('resume', '继续', 'go') + b('stop', '停止', 'stop') : b('run', '立即同步', 'go');
-  const pct = x.total ? Math.round(x.done / x.total * 100) : 0;
-  return `<div class="tk"><div class="tk-main"><div class="tk-name"><b>${esc(x.name)}</b>${pill}</div>` +
-    `<small>${esc([x.host, x.schedule, x.total ? `${x.done} / ${x.total}` : ''].filter(Boolean).join(' · '))}</small>` +
-    (x.total ? `<div class="tk-bar"><i style="width:${pct}%"></i></div>` : '') + `</div>` +
-    `<div class="tk-acts">${acts}<button class="switch sm" role="switch" data-task="${esc(x.id)}" data-op="schedule" aria-checked="${x.enabled}" aria-label="定时"${busy ? ' disabled' : ''}><i></i></button></div></div>`;
+// 仓库同步（设计画布第 77 块）：顶上一根分段条看全部仓库；正在跑的任务单独一张大卡；其他任务一行一个；要处理的按原因
+const VIEW_SEG = [['synced', '已同步', 'var(--ok)'], ['behind', '落后', 'var(--accent2)'], ['dirty', '有本地修改', 'var(--warn)'], ['failed', '失败', 'var(--bad)'],
+                  ['protected', '被拦下', '#c08cff'], ['gone', '上游没了', 'var(--ink3)'], ['skipped', '跳过', 'var(--line)']];
+function dur(s) {
+  if (s == null) return '';
+  return s < 3600 ? `${Math.max(1, Math.round(s / 60))} 分钟` : s < 86400 ? `${Math.floor(s / 3600)} 小时${Math.round(s % 3600 / 60) ? ` ${Math.round(s % 3600 / 60)} 分` : ''}` : `${Math.floor(s / 86400)} 天 ${Math.round(s % 86400 / 3600)} 小时`;
+}
+function taskBtn(x, op, text, cls = '') {
+  return `<button class="tk-btn ${cls}" data-task="${esc(x.id)}" data-op="${op}"${ig.busy['task:' + x.id] ? ' disabled' : ''}>${text}</button>`;
+}
+function runCard(x) {   // 在跑（或暂停）的那次：两行字 + 一根进度条（设计画布第 77 块，紧凑版）
+  const pct = x.total ? Math.round(x.done / x.total * 100) : 0, c = x.counts || {}, paused = x.state === 'paused';
+  const since = x.started ? (Date.now() - Date.parse(x.started)) / 1000 : null;
+  const meta = [x.host, x.trigger === 'manual' ? '手动开始' : x.trigger ? '定时开始' : '', since ? `已跑 ${dur(since)}` : ''].filter(Boolean).join(' · ');
+  const eta = paused ? '' : x.eta_s ? `还要约 ${dur(x.eta_s)}` : '剩余时间算一会儿';
+  return `<div class="rp-run${paused ? ' paused' : ''}">` +
+    `<div class="rp-run-h"><em class="tk-pill ${paused ? '' : 'run'}">${paused ? '暂停了' : '同步中'}</em><b>${esc(x.name)}</b><small>${esc(meta)}</small>` +
+    `<span class="rp-acts">${paused ? taskBtn(x, 'resume', '继续', 'go') : taskBtn(x, 'pause', '暂停')}${taskBtn(x, 'stop', '停止', 'stop')}</span></div>` +
+    `<div class="rp-run-p"><b>${pct}%</b><span>${x.done} / ${x.total}</span><span>新克隆 ${c.cloned || 0}</span><span>更新 ${c.updated || 0}</span>` +
+    `<span class="${c.failed ? 'bad' : ''}">失败 ${c.failed || 0}</span>${eta ? `<em>${eta}</em>` : ''}</div>` +
+    `<div class="tk-bar"><i style="width:${pct}%"></i></div></div>`;
+}
+function taskRow(x) {
+  const dot = x.state !== 'idle' ? 'var(--accent2)' : x.last === 'error' || x.failed ? 'var(--bad)' : x.last === 'stopped' ? 'var(--ink3)' : x.last ? 'var(--ok)' : 'var(--ink3)';
+  const last = x.state === 'running' ? '同步中' : x.state === 'paused' ? '暂停了' : x.last === 'error' ? '上次出错' : x.failed ? `上次 ${x.failed} 个失败` : x.last === 'stopped' ? '上次停了' : x.last ? '上次成功' : '还没跑过';
+  const acts = x.state === 'idle' ? taskBtn(x, 'run', '立即同步', 'go') : '';
+  return `<div class="rp-row"><i style="background:${dot}"></i><div><b>${esc(x.name)}</b><small>${esc([x.host, x.schedule, last].join(' · '))}</small></div>${acts}` +
+    `<button class="switch sm" role="switch" data-task="${esc(x.id)}" data-op="schedule" aria-checked="${x.enabled}" aria-label="定时"${ig.busy['task:' + x.id] ? ' disabled' : ''}><i></i></button></div>`;
 }
 function repoHtml() {
   if (!A().repo_status) return secHead('repo', '仓库同步') + note(NOT_YET('仓库同步'));
   const r = ig.data.repo_status || {};
   if (r.error) return secHead('repo', '仓库同步') + note(`读不到 repo-manager：${r.error}`);
-  const ev = r.last_event;
-  const head = secHead('repo', '仓库同步', ev && ev.at ? ev.at.slice(5, 16).replace('T', ' ') : '');
-  const nums = `<div class="wk-nums four"><div><b>${r.total}</b><small>仓库</small></div><div class="ok"><b>${r.synced}</b><small>已同步</small></div>` +
-    `<div class="${r.failed ? 'bad' : ''}"><b>${r.failed}</b><small>失败</small></div><div class="${r.suspect7 ? 'bad' : ''}"><b>${r.suspect7}</b><small>疑似删库</small></div></div>`;
-  const tasks = r.tasks || [], running = tasks.filter(x => x.state !== 'idle').length;
-  const left = `<div class="wk-row"><b>同步任务</b><small>${tasks.length ? `${tasks.length} 个${running ? ` · ${running} 个在跑` : ''} · 右边开关是定时` : ''}</small></div>` +
-    (r.tasks === null || r.tasks === undefined ? note('读不到同步任务（repo-manager 太旧？）') : tasks.length ? `<div class="tk-list">${tasks.map(taskHtml).join('')}</div>` : note('repo-manager 里还没有同步任务'));
-  const att = (r.attention || []).length ? `<div class="wk-row"><b>要处理的</b><small>${r.attention_total || r.attention.length} 个</small></div><div class="wk-att">${r.attention.map(a => `<div><b>${esc(a.name)}</b>` +
-      `${a.why ? `<em class="wk-why">${esc(a.why)}</em>` : ''}<small>${esc(a.host || '')}</small></div>`).join('')}` +
-    (r.attention_total > r.attention.length ? `<small class="wk-more">还有 ${r.attention_total - r.attention.length} 个，在 repo-manager 网页里看</small>` : '') + '</div>'
-    : note('没有要处理的仓库');
-  const msg = ev && ev.msg ? `<div class="wk-row"><b><span class="ai-ink">最近的事</span></b></div><p class="wk-msg">${esc(ev.msg)}</p>` : '';
-  return head + nums + split('repo', left, att + msg);
+  const v = r.views || { synced: r.synced, failed: r.failed }, sum = VIEW_SEG.reduce((a, [k]) => a + (v[k] || 0), 0) || 1;
+  const health = `<div class="rp-health wk-card"><div class="rp-total"><b>${r.total}</b><small>个仓库</small><span></span>` +
+    (r.suspect7 ? `<em class="rp-warn">⚠ 最近 7 天疑似删库 ${r.suspect7} 次</em>` : '') + `</div>` +
+    `<div class="rp-bar">${VIEW_SEG.filter(([k]) => v[k]).map(([k, , c]) => `<i style="flex:${v[k]};background:${c}"></i>`).join('')}</div>` +
+    `<div class="rp-leg">${VIEW_SEG.filter(([k]) => v[k] && k !== 'skipped').map(([k, n, c]) => `<span><u style="background:${c}"></u>${n} <b>${v[k]}</b></span>`).join('')}</div></div>`;
+  const tasks = r.tasks || [], active = tasks.filter(x => x.state !== 'idle'), rest = tasks.filter(x => x.state === 'idle');
+  const left = (r.tasks == null ? note('读不到同步任务（repo-manager 太旧？）') : '') + active.map(runCard).join('') +
+    (rest.length ? `<div class="wk-card rp-rest"><div class="wk-row"><b>${active.length ? '其他同步任务' : '同步任务'} · ${rest.length}</b><small>开关 = 定时</small></div>${rest.map(taskRow).join('')}</div>` : '');
+  const reasons = r.reasons || [], open = ig.reason;
+  const right = `<div class="wk-card"><div class="wk-row"><b>要处理的 · ${r.attention_total || 0}</b><small>按原因 · 点开看</small></div>` +
+    (reasons.length ? reasons.map(x => `<button class="rp-why${open === x.kind ? ' open' : ''}" data-reason="${esc(x.kind)}"><span>${esc(x.label)}</span><em class="${x.kind === 'local_changes' || x.kind === 'protected' ? 'w' : ''}">${x.count}</em></button>` +
+      (open === x.kind && x.names.length ? `<div class="rp-names">${x.names.map(n => `<span>${esc(n)}</span>`).join('')}${x.count > x.names.length ? `<small>还有 ${x.count - x.names.length} 个，在 repo-manager 网页里看</small>` : ''}</div>` : '')).join('')
+      : note('没有要处理的仓库')) + `</div>` +
+    ((r.host_list || []).length ? `<div class="wk-card"><div class="wk-row"><b>服务器</b><small>${r.hosts && r.hosts.down ? `${r.hosts.down} 台连不上` : '都在线'}</small></div>` +
+      r.host_list.map(h => `<div class="rp-host"><i class="${r.hosts && r.hosts.down ? 'warn' : ''}"></i><span>${esc(h.name)}</span><small>${h.tasks} 个任务</small></div>`).join('') + '</div>' : '');
+  return health + split('repo', left, right, 'wk-plain');
 }
 async function taskDo(id, op, on) {
   ig.busy['task:' + id] = true; renderWork();
@@ -236,6 +278,8 @@ async function deskDo(op, id, label) {
   if (r.ok) toast(r.text || label); else toast(r.text || r.error || '没做成', 'error');
 }
 $('wkCols').addEventListener('click', e => {
+  const rs = e.target.closest('[data-reason]');
+  if (rs) { ig.reason = ig.reason === rs.dataset.reason ? null : rs.dataset.reason; return renderWork(); }
   const tk = e.target.closest('[data-task]');
   if (tk && !tk.disabled) {
     const x = ((ig.data.repo_status || {}).tasks || []).find(v => v.id === tk.dataset.task);
@@ -260,8 +304,15 @@ $('wkCols').addEventListener('click', e => {
     if (s.dataset.src === d.current) return toast('显示器已经在这个输入源了');
     return deskDo('switch', s.dataset.src);
   }
+  const u = e.target.closest('[data-undo]');
+  if (u) { const x = ig.undo[u.dataset.undo]; if (x) { clearTimeout(x.timer); delete ig.undo[x.id]; renderWork(); } return; }
   const t = e.target.closest('[data-todo]');
-  if (t && !t.disabled) return deskDo('todo_done', t.dataset.todo);
+  if (t && !t.disabled) {   // 划掉后 3 秒内能撤销，过了才真去 Mac 上完成
+    const x = ((ig.data.desk_hub || {}).todos || []).find(v => v.id === t.dataset.todo);
+    if (!x) return;
+    ig.undo[x.id] = { id: x.id, title: x.title, timer: setTimeout(() => { delete ig.undo[x.id]; deskDo('todo_done', x.id); }, 3000) };
+    return renderWork();
+  }
 });
 $('btnWork').addEventListener('click', () => openWork(true));
 $('wkClose').addEventListener('click', () => openWork(false));
