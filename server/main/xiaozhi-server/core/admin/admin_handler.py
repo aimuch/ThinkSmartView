@@ -2157,6 +2157,8 @@ class AdminHandler:
         merged = await self._blocking(self._merged)
         sel = merged.get("selected_module") or {}
         return {"ok": True, **(await self._blocking(services.view, merged)),
+                "home": {"plugins": pages.home_plugins(merged), "devices": self._device_plugins(merged),
+                         "intent": pages.describe_intent(merged)["mode"]},
                 "ai": {"llm": llm_router.model_label(sel.get("LLM") or ""), "asr": sel.get("ASR") or "",
                        "tts": sel.get("TTS") or ""}}
 
@@ -2169,6 +2171,18 @@ class AdminHandler:
         from core.agent import services
 
         body = await self._read_json(request)
+        if body.get("op") == "home":                    # 家里的系统的总开关（设计画布第 63 块）：改的是意图识别的插件列表
+            merged = await self._blocking(self._merged)
+            try:
+                changed = await self._blocking(pages.save_home_plugin, str(body.get("name") or ""), bool(body.get("on")),
+                                               merged, self.config_path)
+            except (ValueError, KeyError) as e:
+                return self._error(str(e) or "配置里没有「用插件」", 400)
+            if changed:
+                merged = await self._blocking(self._merged)
+                if (merged.get("selected_module") or {}).get("Intent") == pages.intent_entry_name(merged, "function_call"):
+                    await self._apply("Intent")
+            return self._json(await self._services_view())
         try:
             await self._blocking(services.apply, body)
         except services.ServicesError as e:

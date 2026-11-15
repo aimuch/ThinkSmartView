@@ -98,6 +98,12 @@
   .pill.ai-soft, #cn-models .chip.on { background: var(--ai-soft); color: var(--ai-soft-ink); border-color: var(--ai-soft-line); }
   .btn.primary.ai { background: var(--ai-fill); border-color: transparent; }
   .btn.primary.ai:hover:not(:disabled) { filter: brightness(1.08); }
+  /* AI 彩色补齐二（设计画布第 63 块）：和模型、智能体有关的次要按钮描渐变边、字也用渐变；侧栏的大模型、称呼、智能体图标用渐变 */
+  .ag-add.ai-ring { border-style: solid; }
+  .btn.ai-ring, .ag-add.ai-ring { border-color: transparent; background: linear-gradient(var(--card), var(--card)) padding-box, var(--ai) border-box; }
+  .btn.ai-ring > span, .ag-add.ai-ring > span { background: var(--ai-fill); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 600; }
+  .btn.ai-ring:hover:not(:disabled), .ag-add.ai-ring:hover { filter: brightness(1.08); }
+  #nav button[data-page="llm"] .ico svg, #nav button[data-page="calls"] .ico svg, #nav button[data-page="agents"] .ico svg, #nav button[data-page="grokbot"] .ico svg { stroke: url(#ai-grad); }
   .pill.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
   .pill.err { background: var(--err-soft); color: var(--err); border-color: transparent; }
   .section-title { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .03em; margin: 28px 0 10px;
@@ -916,6 +922,7 @@
   <aside>
     <div class="side-resize" id="side-resize" title="拖动调宽度，双击恢复"></div>
     <div class="brand"><div class="logo" data-logo></div><span data-brand-name>小麦网关</span><button class="side-col" id="side-col" type="button" title="收起侧栏">‹‹</button></div>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="ai-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset=".55" stop-color="#5b6cff"/><stop offset="1" stop-color="#1aa3d9"/></linearGradient></defs></svg>
     <nav class="nav" id="nav">
       <button data-page="status"><span class="ico">◎</span>状态</button>
       <button data-page="devices"><span class="ico">▣</span>设备</button>
@@ -986,6 +993,7 @@ async function api(path, body, quiet) {
 
 // 按钮执行期间显示转圈并禁用，避免重复点击；保存超过半秒（写配置、重建模型要几秒）再提示一句
 async function busy(btn, fn) {
+  if (btn && !btn.matches("button") && btn.closest) btn = btn.closest("button") || btn;   // 点到按钮里的 <span>（AI 渐变字）时
   if (btn.disabled) return;
   btn.disabled = true; btn.classList.add("busy");
   const hint = btn.textContent.includes("保存") ? "正在保存，请稍等…" : "";
@@ -1753,7 +1761,7 @@ async function renderLLM(root) {
         <label class="f">模型${x.models.length ? '<span class="hint">可从列表选，也可以手填</span>' : ""}
           <input class="in mono" id="api-model" value="${esc(x.model)}" list="api-models" placeholder="模型名称">
           <datalist id="api-models">${x.models.map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
-          <button type="button" class="btn sm" id="api-fetch" style="margin-top:6px">读取模型列表</button></label>
+          <button type="button" class="btn sm ai-ring" id="api-fetch" style="margin-top:6px"><span>读取模型列表</span></button></label>
         <div class="full chips" id="api-list" style="margin-top:0"></div>
         <label class="f full">API Key${x.key_optional ? '<span class="hint">本机服务不需要 Key 时可以留空</span>' : ""}
           <input class="in mono" id="api-key" type="password" autocomplete="off"
@@ -1761,7 +1769,7 @@ async function renderLLM(root) {
       </div>
       <p class="muted small" style="margin:8px 0 0">Key 只保存在这台电脑的配置文件里，页面上只显示首尾 4 位。</p>
       <div class="actions"><span class="result" id="api-result"></span>
-        <button class="btn" id="api-test">测试连接</button>
+        <button class="btn ai-ring" id="api-test"><span>测试连接</span></button>
         <button class="btn ${using ? "primary" : ""}" id="api-save">保存</button>
         ${using ? "" : '<button class="btn primary ai" id="api-use">保存并设为默认</button>'}</div>`;
     const values = () => ({ base_url: $("api-url").value.trim(), model: $("api-model").value.trim(), api_key: $("api-key").value.trim() });
@@ -1834,9 +1842,9 @@ async function renderVision(box) {
       ${p.local ? '<div class="chips" id="vision-list"></div>' : ""}
       <p class="muted small" style="margin:8px 0 14px">${p.key_url ? `<a href="${esc(p.key_url)}" target="_blank" rel="noopener">去这里创建 API Key</a>。` : ""}Key 只保存在这台电脑的配置文件里。「试一下」用已保存的设置发一张测试图。</p>
       <div class="actions"><span class="result muted" id="vision-result"></span>
-        ${p.local ? '<button class="btn" id="vision-fetch">读取模型列表</button>' : ""}
-        <button class="btn" id="vision-test">试一下</button>
-        <button class="btn primary" id="vision-save">${p.id === d.selected ? "保存" : "保存并使用"}</button></div>
+        ${p.local ? '<button class="btn ai-ring" id="vision-fetch"><span>读取模型列表</span></button>' : ""}
+        <button class="btn ai-ring" id="vision-test"><span>试一下</span></button>
+        <button class="btn primary ai" id="vision-save">${p.id === d.selected ? "保存" : "保存并使用"}</button></div>
     </div>`;
   void customModel;
   box.querySelectorAll("[data-vision]").forEach((b) => (b.onclick = () => { visionPick = b.dataset.vision; renderVision(box); }));
@@ -2520,6 +2528,7 @@ async function renderIntent(root) {
         ${d.always_on.map((p) => `<div class="plugin fixed"><input type="checkbox" checked disabled>
           <div><b>${esc(p.label)}</b> <span class="pill">始终开启</span><small>${esc(p.desc)}</small></div></div>`).join("")}
       </div>
+      ${(d.home || []).length ? `<p class="muted small" style="margin:12px 0 0">${esc(d.home.join("、"))}在<a href="#services">「外部服务 → 家里的系统」</a>里设置和开关 ›</p>` : ""}
       ${d.extra.length ? `<p class="muted small" style="margin:12px 0 0">另外保留了配置文件里手动添加的：${esc(d.extra.join("、"))}</p>` : ""}
     </div>
     <div class="card panel hidden" id="plugin-settings" style="margin-top:12px"></div>
@@ -2748,6 +2757,18 @@ async function renderServices(root) {
         <span class="sv-name"><b>${esc(r.name)}</b>${tag(r.custom)}<small class="mono">${esc(r.url)}</small></span>${st(r.status, r.on)}
         <span class="sv-acts"><button class="btn sm" data-test="radio" data-id="${esc(r.id)}">测试</button>${r.custom ? `<button class="btn sm danger" data-del="radio" data-id="${esc(r.id)}">删除</button>` : ""}${sw("radio", r.id, r.on)}</span></div>`).join("");
   }
+  // 家里的系统（设计画布第 63 块）：智能中枢、机柜、仓库同步、智能桌面。还是大模型能调的插件，总开关改的是意图识别的插件列表
+  function homeHtml() {
+    const H = d.home;
+    if (!H || !H.plugins.length) return "";
+    return `<div class="card panel sv-sec" style="margin-top:16px" id="sv-home"><div class="sv-head"><b>家里的系统</b><span class="muted small">大模型能直接用（开灯、查机柜、看仓库同步），设备屏幕上的工作台和蓝牙灯也用${H.intent === "function_call" ? "" : "；<b>意图识别现在是「不用插件」，选了「用插件」才生效</b>"}</span></div>
+      ${H.plugins.map((p) => `<div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">
+        <span class="sv-dot ${p.needs_config ? "none" : p.enabled ? "ok" : ""}"></span>
+        <span class="sv-name"><b>${esc(p.label)}</b>${p.needs_config ? ' <span class="pill warn">还没填</span>' : ""}<small>${esc(p.desc)}</small>
+          ${H.devices.length > 1 ? `<div class="pd-chips" data-pd="${esc(p.name)}"></div>` : ""}</span>
+        <span class="sv-acts"><button class="btn sm" data-plugin="${esc(p.settings)}" data-label="${esc(p.label)}">设置</button>
+          <label class="switch" style="margin:0" title="${p.enabled ? "关掉（所有设备）" : "打开（所有设备）"}"><input type="checkbox" data-home="${esc(p.name)}" ${p.enabled ? "checked" : ""}></label></span></div>`).join("")}</div>`;
+  }
   function draw() {
     const c = counts();
     root.innerHTML = `
@@ -2772,6 +2793,7 @@ async function renderServices(root) {
           <span class="sv-name"><b>${esc(d.geoip.name)}</b><small>设备没设住宅地址时，查天气用它猜在哪个城市；设了就用不到</small>${st(d.geoip.status, d.geoip.on)}</span>
           <span class="sv-acts"><button class="btn sm" data-test="geoip" data-id="geoip">测试</button>${sw("geoip", "geoip", d.geoip.on)}</span></div></div>
     </div>
+    ${homeHtml()}
     ${d.media ? `<div class="card panel sv-sec" style="margin-top:16px"><div class="sv-head"><b>媒体</b><span class="muted small">放歌、儿歌、英语、动画、菜谱视频用的家里 NAS，在「媒体」页填和分区</span>
         <span class="sv-acts"><a class="btn sm" href="#media" style="text-decoration:none">去「媒体」页</a></span></div>
       ${d.media.map((m) => `<div class="sv-row" style="grid-template-columns:12px minmax(0,1fr) auto">${m.configured ? dot(m.status, m.on) : '<span class="sv-dot none"></span>'}
@@ -2796,7 +2818,13 @@ async function renderServices(root) {
       [ids[i], ids[j]] = [ids[j], ids[i]];
       op({ op: "order", ids });
     }));
-    root.querySelectorAll("[data-plugin]").forEach((b) => (b.onclick = () => openPluginSettings(b.dataset.plugin, b.dataset.label, async () => { d = await api("services"); })));
+    root.querySelectorAll("[data-plugin]").forEach((b) => (b.onclick = () => openPluginSettings(b.dataset.plugin, b.dataset.label, async () => { d = await api("services"); })
+      .then(() => $("plugin-settings").scrollIntoView({ behavior: "smooth", block: "nearest" })).catch((err) => toast(err.message, true))));
+    if (d.home) root.querySelectorAll("#sv-home [data-pd]").forEach((box) => renderDeviceChips(box, d.home));
+    root.querySelectorAll("[data-home]").forEach((i) => (i.onchange = () => {
+      const p = d.home.plugins.find((x) => x.name === i.dataset.home);
+      op({ op: "home", name: i.dataset.home, on: i.checked }, i.checked ? (p && p.needs_config ? `${p.label}打开了，还要点「设置」填好才用得了` : `${p ? p.label : ""}打开了`) : "关掉了");
+    }));
     root.querySelectorAll("[data-line]").forEach((b) => (b.onclick = () => {
       if (b.dataset.line === "auto") { lineEdit = false; if (d.line.manual) op({ op: "line", ip: "" }, "线路改回自动"); else draw(); }
       else { lineEdit = true; draw(); $("sv-line-ip").focus(); }
@@ -3061,7 +3089,7 @@ async function renderKids(root) {
       ${d.devices.map((x) => `<div class="kd-dev"><b>${esc(x.name)}</b><span class="muted small">${x.enabled ? `${x.age} 岁 · 今天聊了 ${x.today} 分` : "没开"}</span>
         ${x.enabled ? `<input class="in kd-devage" type="number" min="1" max="14" value="${x.age}" data-devage="${esc(x.id)}" title="几岁">` : ""}
         <label class="switch" style="margin:0 0 0 auto"><input type="checkbox" data-dev="${esc(x.id)}" ${x.enabled ? "checked" : ""}></label></div>`).join("") || '<p class="muted small">还没有设备连过网关。</p>'}</div>
-    <div class="card panel sv-sec" style="margin:0"><div class="sv-head"><b>学一学的内容</b><span class="muted small">设备点「学一学」时用；网关连不上时用设备自带的</span></div>
+    <div class="card panel sv-sec" style="margin:0"><div class="sv-head"><b>学一学的内容</b><span class="pill ai-soft">AI 出题</span><span class="muted small">设备点「学一学」时用；网关连不上时用设备自带的</span></div>
       <label class="kd-lab">认字卡（按顺序出，现在出到第 ${(L.char_pos || 0) + 1} 个）<textarea class="in kd-ta" id="kd-chars" rows="3">${esc(L.chars)}</textarea></label>
       <label class="kd-lab">古诗（一行一首，一轮里不重复）<textarea class="in kd-ta" id="kd-poems" rows="3">${esc(L.poems.join("\n"))}</textarea></label>
       <label class="kd-lab">口算<select class="in" id="kd-math">${Object.entries(d.math).map(([k, n]) => `<option value="${k}" ${L.math === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
@@ -3360,7 +3388,7 @@ async function renderAgents(root) {
         <div><b>${esc(a.name)}${isDefault(a.entry)}</b><small>${esc(k ? k.label : a.kind)} · ${esc(aliases(a.aliases))}</small></div>${pill(a.ready ? "ready" : "setup")}</div>
         <div class="ag-tags">${a.kind === "dify" ? `<span class="b">${a.mode === "workflows/run" ? "流水线（工作流）" : "Dify 应用"}</span>` : a.kind === "coze" ? '<span class="b">Coze</span>' : `<span class="b">${a.background ? "慢了转后台" : "一直等着"}</span>`}
           ${a.base_url ? `<span class="mono">${esc(a.base_url.replace(/^https?:\/\//, "").slice(0, 28))}</span>` : ""}</div></button>`; }).join("")}
-      <button class="ag-add" data-agent-edit="new">＋ 加一个智能体</button>
+      <button class="ag-add ai-ring" data-agent-edit="new"><span>＋ 加一个智能体</span></button>
     </div>
     <div class="card panel ag-form ${agentEdit ? "" : "hidden"}" id="ag-form"></div>
     <div class="section-title">智能体和流水线</div>
@@ -3400,8 +3428,8 @@ function renderAgentForm(box, d, root) {
       <div class="small muted" style="margin-top:6px">工作流的输入变量要叫 query，输出变量要叫 answer。</div></div></div>` : ""}
     ${a.kind === "openai" ? `<div class="cli-row" style="margin-top:8px"><div class="cli-k">慢了怎么办</div><div>${seg([{ value: "bg", label: "转后台，做完汇报" }, { value: "wait", label: "一直等着" }], a.background ? "bg" : "wait", "bg")}</div></div>` : ""}
     <div class="actions"><span class="result muted" id="ag-result">${a.kind === "openai" ? "智能体自己有工具和记忆；小麦只把这台设备的对话发过去，念它的回答。" : ""}</span>
-      ${isNew ? "" : '<button class="btn danger" id="ag-del">删除</button><button class="btn" id="ag-test">测试</button>'}
-      <button class="btn" id="ag-cancel">取消</button><button class="btn primary" id="ag-save">保存</button></div>`;
+      ${isNew ? "" : '<button class="btn danger" id="ag-del">删除</button><button class="btn ai-ring" id="ag-test"><span>测试</span></button>'}
+      <button class="btn" id="ag-cancel">取消</button><button class="btn primary ai" id="ag-save">保存</button></div>`;
   const segVal = (attr) => (box.querySelector(`[data-${attr}].on`) || {}).dataset?.[attr];
   box.querySelectorAll(".seg button").forEach((b) => (b.onclick = () => {
     if (b.dataset.kind) { agentEdit = "new:" + b.dataset.kind; return renderAgentForm(box, d, root); }
@@ -3757,7 +3785,7 @@ async function renderCostPrices(root) {
       <div id="sync-pending"></div><p class="muted small" style="margin:4px 0 0">每百万 token 的价格。模型名可以写多个（逗号分隔），支持 * 通配。时段：星期写 workday（工作日，按下面的节假日和调休）、weekend、all 或 1-5；时间写 09:00-12:00,14:00-18:00，可以跨午夜。
       命中第一个时段就用它的价格，都不命中用这一行的价格。</p>
       <div id="cost-prices"></div>
-      <div class="actions"><button class="btn" id="cost-add">＋ 加一个模型</button><button class="btn primary" id="cost-save-prices">保存单价</button></div></div>
+      <div class="actions"><button class="btn ai-ring" id="cost-add"><span>＋ 加一个模型</span></button><button class="btn primary" id="cost-save-prices">保存单价</button></div></div>
 
     <div class="card panel"><b>日历</b><p class="muted small" style="margin:4px 0 10px">「工作日」时段按这里算：法定节假日当天算休息日（DeepSeek 等按空闲价），调休上班的周末算工作日。每行一个日期，格式 2026-10-01。</p>
       <div class="price-row" style="grid-template-columns: 1fr 1fr 1fr">
@@ -3863,7 +3891,7 @@ async function renderCallNames(root) {
     </div>
     <div id="cn-models"></div>
     <div class="card panel" id="cn-add-box" style="margin-top:16px"></div>
-    <div class="actions"><span class="result muted">保存后马上生效，不用重启服务。</span><button class="btn primary" id="cn-save">保存</button></div>`;
+    <div class="actions"><span class="result muted">保存后马上生效，不用重启服务。</span><button class="btn primary ai" id="cn-save">保存</button></div>`;
 
   const allAliases = () => models.flatMap((m) => m.aliases);
   // 没装的本机 CLI：称呼可以挪给默认模型（默认模型配好了才行）

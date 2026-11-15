@@ -1163,7 +1163,8 @@ def describe_intent(merged: dict) -> dict:
         "locked": llm_kind(merged) == "cli",
         "plugins": [{**p, "enabled": p["name"] in functions,
                      "needs_config": bool(p.get("config")) and not plugin_configured(merged, p)}
-                    for p in catalog.PLUGINS],
+                    for p in catalog.PLUGINS if not p.get("home")],
+        "home": [p["label"] for p in catalog.PLUGINS if p.get("home")],
         "always_on": catalog.ALWAYS_ON_PLUGINS,
         "extra": [f for f in functions if f not in catalog.PLUGIN_NAMES],
     }
@@ -1180,8 +1181,8 @@ def intent_entry_name(merged: dict, mode: str) -> str:
     raise KeyError(mode)
 
 
-def save_intent_plugins(functions: list, merged: dict, path: Path = None) -> list:
-    """保存 function_call 的插件列表。后台不认识的插件（用户手动加的）原样保留。"""
+def save_intent_plugins(functions: list, merged: dict, path: Path = None, home: dict = None) -> list:
+    """保存 function_call 的插件列表。后台不认识的插件（用户手动加的）原样保留；家里的系统只按 home 改。"""
     if not isinstance(functions, list):
         raise ValueError("插件列表格式不对")
     unknown = [f for f in functions if f not in catalog.PLUGIN_NAMES]
@@ -1189,7 +1190,10 @@ def save_intent_plugins(functions: list, merged: dict, path: Path = None) -> lis
         raise ValueError(f"不认识的插件：{', '.join(map(str, unknown))}")
     name = intent_entry_name(merged, "function_call")
     current = [str(f) for f in _entry(merged, "Intent", name).get("functions") or []]
-    wanted = [p["name"] for p in catalog.PLUGINS if p["name"] in functions]
+    # 家里的系统（外部服务页开关）不在意图识别页的列表里：保存意图识别时照原样留着
+    home = home or {}
+    wanted = [p["name"] for p in catalog.PLUGINS
+              if (home.get(p["name"], p["name"] in current) if p.get("home") else p["name"] in functions)]
     wanted += [f for f in current if f not in catalog.PLUGIN_NAMES]
     if wanted == current:
         return []
@@ -1197,6 +1201,23 @@ def save_intent_plugins(functions: list, merged: dict, path: Path = None) -> lis
         target = data.setdefault("Intent", CommentedMap()).setdefault(name, CommentedMap())
         target["functions"] = CommentedSeq(wanted)
     return ["functions"]
+
+
+def home_plugins(merged: dict) -> list:
+    """外部服务页「家里的系统」（设计画布第 63 块）：智能中枢、机柜、仓库同步、智能桌面，和全局开没开、填没填。"""
+    functions = [str(f) for f in _entry(merged, "Intent", "function_call").get("functions") or []]
+    return [{**p, "enabled": p["name"] in functions, "needs_config": not plugin_configured(merged, p)}
+            for p in catalog.PLUGINS if p.get("home")]
+
+
+def save_home_plugin(name: str, on: bool, merged: dict, path: Path = None) -> list:
+    """打开、关掉一个家里的系统（全局）：只动这一个，意图识别页的其他插件不变。"""
+    if name not in {p["name"] for p in catalog.PLUGINS if p.get("home")}:
+        raise ValueError("没有这个接入")
+    current = [str(f) for f in _entry(merged, "Intent", "function_call").get("functions") or []]
+    keep = [f for f in current if f != name]
+    return save_intent_plugins([f for f in keep if f in catalog.PLUGIN_NAMES] + ([name] if on else []), merged, path,
+                               home={name: bool(on)})
 
 
 def remember_api_intent(mode: str, path: Path = None) -> None:

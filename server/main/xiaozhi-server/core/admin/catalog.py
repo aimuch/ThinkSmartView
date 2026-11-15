@@ -269,15 +269,16 @@ PLUGINS = [
      "config": "home_assistant"},
     {"name": "search_from_ragflow", "label": "查知识库", "desc": "需要在配置文件的 plugins.search_from_ragflow 里填写 RAGFlow 地址和 Key",
      "config": "search_from_ragflow"},
-    # [xiaozhi-hub] 接入家里别的服务（core/integrations，设计画布第 38、39 块）。设备屏幕上的工作台和蓝牙灯也按这里的开关
+    # [xiaozhi-hub] 接入家里别的系统（core/integrations，设计画布第 38、39 块）。设备屏幕上的工作台和蓝牙灯也按这里的开关。
+    # "home"：在「外部服务 → 家里的系统」里设置和开关（设计画布第 63 块），意图识别页的插件列表里不列
     {"name": "smart_hub", "label": "智能中枢（蓝牙灯）", "desc": "开关、调亮度和色温，查蓝牙设备的状态；点「设置」填智能中枢的访问令牌",
-     "config": "smart_hub", "settings": "smart_hub"},
-    {"name": "rack_status", "label": "机柜状态", "desc": "主机在不在线、CPU、温度、Ping 检测（Prometheus，选填 rack-screen 令牌）",
-     "config": "rack_status", "settings": "rack_status"},
+     "config": "smart_hub", "settings": "smart_hub", "home": True},
+    {"name": "rack_status", "label": "机柜", "desc": "主机在不在线、CPU、温度、Ping 检测（Prometheus，选填 rack-screen 令牌）",
+     "config": "rack_status", "settings": "rack_status", "home": True},
     {"name": "repo_status", "label": "仓库同步", "desc": "repo-manager 的同步结果和需要处理的仓库",
-     "config": "repo_status", "settings": "repo_status"},
-    {"name": "desk_hub", "label": "桌面（DeskHub）", "desc": "切显示器输入源、AI 用量、电脑上的提醒事项；Mac 上的 DeskHub App 连网关",
-     "config": "desk_hub", "settings": "desk_hub"},
+     "config": "repo_status", "settings": "repo_status", "home": True},
+    {"name": "desk_hub", "label": "智能桌面（DeskHub）", "desc": "切显示器输入源、AI 用量、电脑上的提醒事项；Mac 上的 DeskHub App 连网关",
+     "config": "desk_hub", "settings": "desk_hub", "home": True},
 ]
 PLUGIN_NAMES = {p["name"] for p in PLUGINS}
 
