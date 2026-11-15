@@ -1664,30 +1664,47 @@ class AdminHandler:
     def _lists_url(self, secret: str) -> str:
         return self._photo_url("x").rsplit("/photo/", 1)[0] + f"/lists/{secret}"
 
+    async def _lists_extra(self, device: str, secret: str) -> dict:
+        """清单之外设备和手机页要的：在家用的链接、出门用的（经 Tailscale，没装就没有）、能选在哪台响的设备。"""
+        from core.agent import intercom
+
+        names = await self._blocking(self._device_names)
+        ts = await intercom.tailnet_url()
+        return {"url": self._lists_url(secret), "url_out": ts.rsplit("/call", 1)[0] + f"/lists/{secret}" if ts else None,
+                "devices": [{"id": d, "name": n or d} for d, n in names.items()], "here": device, "here_name": names.get(device, "")}
+
+    LIST_FIELDS = ("text", "due", "time", "repeat", "remind")
+
+    def _list_change_args(self, b: dict, by: str) -> dict:
+        return {"items": b.get("items") or [], "done": b.get("done"), "by": by, "scope": b.get("scope"), "new_name": b.get("new_name"),
+                **{k: b[k] for k in self.LIST_FIELDS if k in b}}
+
     async def handle_kiosk_lists(self, request: web.Request):
         if not self._from_this_machine(request):
             return self._error("仅限本机", 403)
         from core.utils import device_lists
 
+        device = request.query.get("device") or ""
         try:
-            v = await self._blocking(device_lists.view, request.query.get("device") or "")
+            v = await self._blocking(device_lists.view, device)
         except ValueError as e:
             return self._error(str(e), 400)
-        return self._json({"ok": True, **v, "url": self._lists_url(v["secret"])})
+        return self._json({"ok": True, **v, **await self._lists_extra(device, v["secret"])})
 
     async def handle_kiosk_lists_change(self, request: web.Request):
-        """{"device", "op": add|remove|check|clear_done|delete_list, "name", "items", "done"}"""
+        """{"device", "op", "name", "items", "done", "scope", "new_name", "text", "due", "time", "repeat", "remind"}（设计画布第 76 块）"""
         if not self._from_this_machine(request):
             return self._error("仅限本机", 403)
         from core.utils import device_lists
 
         b = await self._read_json(request)
+        device = str(b.get("device") or "")
+        by = (await self._blocking(self._device_names)).get(device, "") or "设备"
         try:
-            v = await self._blocking(device_lists.change, str(b.get("device") or ""), str(b.get("op") or ""),
-                                     b.get("name"), b.get("items") or [], b.get("done"))
+            v = await self._blocking(lambda: device_lists.change(device, str(b.get("op") or ""), b.get("name"), **self._list_change_args(b, by)))
         except ValueError as e:
             return self._json({"ok": False, "error": str(e)})
-        return self._json({"ok": True, **v, "url": self._lists_url(v["secret"])})
+        return self._json({"ok": True, **v, **await self._lists_extra(device, v["secret"])})
 
     async def handle_lists_page(self, request: web.Request):
         html = (STATIC_DIR / "lists.html").read_text(encoding="utf-8")
@@ -1701,24 +1718,29 @@ class AdminHandler:
         if not device:
             return self._json({"ok": False, "error": "这个链接无效，在小麦的设置页重新扫码"})
         v = await self._blocking(device_lists.view, device)
-        return self._json({"ok": True, "version": v["version"], "lists": v["lists"]})
+        extra = await self._lists_extra(device, v["secret"])
+        return self._json({"ok": True, "version": v["version"], "lists": v["lists"], "scopes": v["scopes"],
+                           "devices": extra["devices"], "here": device, "here_name": extra["here_name"]})
+
+    PHONE_LIST_OPS = ("add", "remove", "check", "clear_done", "edit", "create_list", "rename_list", "set_scope", "delete_list")
 
     async def handle_lists_data_change(self, request: web.Request):
+        from core.agent import intercom
         from core.utils import device_lists
 
         device = await self._blocking(device_lists.by_secret, request.match_info["secret"])
         if not device:
             return self._json({"ok": False, "error": "这个链接无效，在小麦的设置页重新扫码"})
         b = await self._read_json(request)
-        if b.get("op") not in ("add", "remove", "check", "clear_done"):
+        if b.get("op") not in self.PHONE_LIST_OPS:
             return self._json({"ok": False, "error": "不支持的操作"})
+        who, _login = intercom.caller_of(request.headers)     # 经 Tailscale 打开的带着登录身份
+        by = f"{who}的手机" if who else "手机"
         try:
-            v = await self._blocking(device_lists.change, device, b["op"], b.get("name"), b.get("items") or [], b.get("done"))
+            v = await self._blocking(lambda: device_lists.change(device, b["op"], b.get("name"), **self._list_change_args(b, by)))
         except ValueError as e:
             return self._json({"ok": False, "error": str(e)})
-        return self._json({"ok": True, "version": v["version"], "lists": v["lists"]})
-
-    # ---------- 家人声音（core/utils/local_voiceprint.py） ----------
+        return self._json({"ok": True, "version": v["version"], "lists": v["lists"], "scopes": v["scopes"]})
 
     async def handle_kiosk_voiceprint(self, request: web.Request):
         if not self._from_this_machine(request):

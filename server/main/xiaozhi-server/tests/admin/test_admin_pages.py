@@ -1262,22 +1262,64 @@ async def test_memory_history(client):
 
 
 async def test_lists_device_and_phone(kiosk, tmp_path, monkeypatch):
+    """清单（设计画布第 11、76 块）：购物清单全家共用，待办只在这台；手机扫哪台的码看到全家的 + 那台的。"""
+    from core.agent import intercom
     from core.utils import device_lists
 
     monkeypatch.setattr(device_lists, "_path", lambda: str(tmp_path / "device_lists.json"))
+
+    async def ts():
+        return "https://dev.example.ts.net/call"
+    monkeypatch.setattr(intercom, "tailnet_url", ts)
     v = await (await kiosk.get("/kiosk/lists?device=dev-1")).json()
-    assert v["ok"] and set(v["lists"]) == {"购物清单", "待办"} and v["url"].endswith("/lists/" + v["secret"])
+    assert v["ok"] and v["scopes"] == {"购物清单": "family", "待办": "device"} and v["url"].endswith("/lists/" + v["secret"])
+    assert v["url_out"] == "https://dev.example.ts.net/lists/" + v["secret"]
     v = await (await kiosk.post("/kiosk/lists", json={"device": "dev-1", "op": "add", "name": "购物清单", "items": ["酱油", "鸡蛋", "酱油"]})).json()
     assert [x["text"] for x in v["lists"]["购物清单"]] == ["酱油", "鸡蛋"]
+    await kiosk.post("/kiosk/lists", json={"device": "dev-1", "op": "add", "name": "待办", "items": ["周五交报告"]})
+    # 另一台设备：看得到全家的购物清单，看不到 dev-1 的待办
+    v2 = await (await kiosk.get("/kiosk/lists?device=dev-2")).json()
+    assert [x["text"] for x in v2["lists"]["购物清单"]] == ["酱油", "鸡蛋"] and v2["lists"]["待办"] == []
     secret = v["secret"]
     page = await kiosk.get(f"/lists/{secret}")
     assert page.status == 200 and "清单" in await page.text()
-    r = await (await kiosk.post(f"/lists/{secret}/data", json={"op": "check", "name": "购物清单", "items": ["鸡蛋"], "done": True})).json()
+    egg = v["lists"]["购物清单"][1]["id"]
+    r = await (await kiosk.post(f"/lists/{secret}/data", json={"op": "check", "name": "购物清单", "items": [egg], "done": True})).json()
     assert r["ok"] and r["lists"]["购物清单"][1]["done"] is True
     assert (await (await kiosk.post(f"/lists/{secret}/data", json={"op": "delete_list", "name": "待办"})).json())["ok"] is False
     assert (await (await kiosk.get("/lists/wrong/data")).json())["ok"] is False
-    v = await (await kiosk.get("/kiosk/lists?device=dev-1")).json()
-    assert v["version"] == 2 and v["lists"]["购物清单"][1]["done"]
+    # 手机上设定时和重复：每月 15 号 9 点、提前 1 天响
+    r = await (await kiosk.post(f"/lists/{secret}/data", json={"op": "add", "name": "待办", "items": ["交物业费"], "time": "09:00",
+                                                                 "repeat": {"freq": "monthly", "monthday": 15}, "remind": {"mode": "ring", "before": [0, 1440]}},
+                                headers={"Tailscale-User-Login": "mom@example.com", "Tailscale-User-Name": "妈妈"})).json()
+    fee = r["lists"]["待办"][-1]
+    assert fee["by"] == "妈妈的手机" and fee["repeat_text"] == "每月 15 号" and fee["remind"]["before"] == [0, 1440] and fee["due"].endswith("-15")
+    first = fee["due"]
+    r = await (await kiosk.post(f"/lists/{secret}/data", json={"op": "check", "name": "待办", "items": [fee["id"]], "done": True})).json()
+    fee2 = r["lists"]["待办"][-1]
+    assert fee2["done"] is False and fee2["due"] > first and fee2["times"] == 1     # 重复的：排到下个月，不划掉
+    data = await (await kiosk.get(f"/lists/{secret}/data")).json()
+    assert data["here"] == "dev-1" and data["scopes"]["待办"] == "device"
+    v = await (await kiosk.post("/kiosk/lists", json={"device": "dev-1", "op": "create_list", "name": "药店", "scope": "family"})).json()
+    assert v["scopes"]["药店"] == "family"
+    assert (await (await kiosk.post("/kiosk/lists", json={"device": "dev-1", "op": "create_list", "name": "药店"})).json())["ok"] is False
+
+
+def test_lists_migrate_old_format(tmp_path, monkeypatch):
+    """以前每台一份：两台的购物清单合成全家一份（同名留一条，没划掉的优先），待办留在原来那台，先备份。"""
+    import json
+    from core.utils import device_lists
+
+    path = tmp_path / "device_lists.json"
+    monkeypatch.setattr(device_lists, "_path", lambda: str(path))
+    path.write_text(json.dumps({"a": {"secret": "s1", "version": 3, "lists": {"购物清单": [{"text": "酱油", "done": True}], "待办": [{"text": "报告", "done": False}]}},
+                                "b": {"secret": "s2", "version": 1, "lists": {"购物清单": [{"text": "酱油", "done": False}, {"text": "牛奶", "done": False}], "待办": []}}}), encoding="utf-8")
+    va = device_lists.view("a")
+    assert [(x["text"], x["done"]) for x in va["lists"]["购物清单"]] == [("酱油", True)]   # b 还没合进来
+    vb = device_lists.view("b")
+    assert sorted((x["text"], x["done"]) for x in vb["lists"]["购物清单"]) == [("牛奶", False), ("酱油", False)]
+    assert [x["text"] for x in device_lists.view("a")["lists"]["待办"]] == ["报告"] and vb["lists"]["待办"] == []
+    assert (tmp_path / "device_lists.json.bak-76").exists() and device_lists.by_secret("s1") == "a"
 
 
 async def test_kiosk_prefs_translate(kiosk, tmp_path, monkeypatch):

@@ -3,68 +3,298 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="清单">
+<meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#070b18" media="(prefers-color-scheme: dark)">
 <title>小麦 · 清单</title>
 <style>
-  :root { --bg: #f4f6fb; --ink: #141a2e; --ink2: #5b6480; --ink3: #7c86a3; --line: #d7dcea; --card: #fff; --accent: #5b7cff; --bad: #d64545; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #070b18; --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #7883ab; --line: #ffffff26; --card: #ffffff12; --accent: #8fa6ff; --bad: #ff6b81; } }
+  :root { --bg: #f4f6fb; --ink: #141a2e; --ink2: #4b5470; --ink3: #6b7593; --line: #d7dcea; --card: #fff; --card2: #eef1f8; --accent: #4b6bff; --bad: #c93636; --ok: #138a5e; --warn: #a86400; --sheet: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #070b18; --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #8a94bb; --line: #ffffff26; --card: #ffffff12; --card2: #ffffff1c; --accent: #8fa6ff; --bad: #ff7b8f; --ok: #43d39e; --warn: #ffb547; --sheet: #141a33; } }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 17px/1.5 -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
-    padding: max(18px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
-  main { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-  .tabs { display: flex; gap: 8px; overflow-x: auto; }
-  .tabs button { flex: none; height: 40px; padding: 0 16px; border-radius: 20px; border: 1px solid var(--line); background: var(--card); color: var(--ink2); font-size: 15px; }
+    padding: max(16px, env(safe-area-inset-top)) 14px max(24px, env(safe-area-inset-bottom)); }
+  main { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  header { display: flex; flex-direction: column; gap: 2px; }
+  header h1 { margin: 0; font-size: 24px; }
+  .conn { font-size: 13px; color: var(--ink3); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  .dot.off { background: var(--warn); }
+  .tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+  .tabs button { flex: none; height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--card); color: var(--ink2); font-size: 15px; white-space: nowrap; }
   .tabs button.on { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; }
-  .it { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
-  .it input { width: 24px; height: 24px; accent-color: var(--accent); }
-  .it span { flex: 1; font-size: 19px; }
-  .it.done span { color: var(--ink3); text-decoration: line-through; }
-  .it button { border: 0; background: none; color: var(--ink3); font-size: 18px; }
-  form { display: flex; gap: 8px; }
-  form input { flex: 1; height: 48px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); font-size: 17px; }
-  form button, .clear { height: 48px; padding: 0 18px; border-radius: 14px; border: 0; background: var(--accent); color: #fff; font-size: 16px; }
-  .clear { background: var(--card); color: var(--ink2); border: 1px solid var(--line); }
+  .tabs em { font-style: normal; font-size: 11px; margin-left: 4px; opacity: .85; }
+  .scope { font-size: 13px; color: var(--ink3); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .scope b { font-weight: 600; color: var(--ok); } .scope b.own { color: var(--ink2); }
+  .link { border: 0; background: none; color: var(--accent); font-size: 14px; padding: 4px 0; }
+  .it { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); margin-bottom: 8px; }
+  .it .ck { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--ink3); background: none; }
+  .it.done .ck { background: var(--ok); border-color: var(--ok); }
+  .it.late .ck { border-color: var(--bad); }
+  .it .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: 0; }
+  .it .tx { font-size: 18px; overflow-wrap: anywhere; }
+  .it.done .tx { color: var(--ink3); text-decoration: line-through; }
+  .it .meta { font-size: 12.5px; color: var(--ink3); display: flex; flex-wrap: wrap; gap: 2px 8px; }
+  .it .meta .due { color: var(--accent); } .it.late .meta .due { color: var(--bad); }
+  form.add { display: flex; gap: 8px; }
+  form.add input { flex: 1; min-width: 0; height: 48px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); font-size: 17px; }
+  .btn { height: 48px; padding: 0 18px; border-radius: 14px; border: 0; background: var(--accent); color: #fff; font-size: 16px; }
+  .btn.ghost { background: var(--card); color: var(--ink2); border: 1px solid var(--line); }
+  .btn.bad { background: none; color: var(--bad); border: 1px solid var(--line); }
   .note { font-size: 13px; color: var(--ink3); margin: 0; }
   .err { color: var(--bad); }
-  .empty { color: var(--ink3); text-align: center; padding: 20px 0; }
+  .empty { color: var(--ink3); text-align: center; padding: 22px 0; }
+  .grp { font-size: 12.5px; color: var(--ink3); margin: 6px 2px; }
+  dialog { border: 0; padding: 0; width: min(520px, 100vw); max-width: 100vw; margin: auto auto 0; border-radius: 22px 22px 0 0; background: var(--sheet); color: var(--ink);
+    max-height: 92vh; }
+  dialog::backdrop { background: #0008; }
+  .sh { padding: 18px 16px max(18px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
+  .sh h2 { margin: 0; font-size: 18px; display: flex; justify-content: space-between; align-items: center; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .row label { width: 72px; flex: none; font-size: 14px; color: var(--ink3); }
+  .row input, .row select { flex: 1; min-width: 0; height: 42px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 16px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--card); color: var(--ink2); font-size: 14px; }
+  .chips button.on { background: var(--accent); color: #fff; border-color: transparent; }
+  .sub { font-size: 13px; color: var(--ink3); margin-top: 2px; }
+  .hide { display: none !important; }
 </style>
 </head>
 <body>
 <main>
+  <header><h1 id="title">清单</h1><div class="conn" id="conn"></div></header>
   <div class="tabs" id="tabs"></div>
+  <div class="scope" id="scope"></div>
   <div id="items"></div>
-  <form id="add"><input id="text" placeholder="加一项，比如：酱油" maxlength="60" autocomplete="off"><button>加</button></form>
-  <button class="clear" id="clear">清掉已划掉的</button>
-  <p class="note" id="note">在小麦上说「把酱油加到购物清单」也行。这个页面只在家里的 Wi‑Fi 下能打开。</p>
+  <form class="add" id="add"><input id="text" placeholder="加一项，比如：酱油" maxlength="60" autocomplete="off"><button class="btn">加</button></form>
+  <button class="btn ghost" id="clear">清掉已划掉的</button>
+  <p class="note" id="note">在小麦上说「把酱油加到购物清单」「每月 15 号提醒我交物业费」也行。点一项能设日期、重复和提醒。</p>
 </main>
+
+<dialog id="edit"><form method="dialog" class="sh" id="ef">
+  <h2><span>这一项</span><button class="link" value="cancel">关闭</button></h2>
+  <div class="row"><label>内容</label><input id="eText" maxlength="60"></div>
+  <div class="row"><label>日期</label><input id="eDue" type="date"></div>
+  <div class="row"><label>时间</label><input id="eTime" type="time"></div>
+  <div><div class="sub">重复</div><div class="chips" id="eFreq"></div></div>
+  <div id="eRule" class="sh" style="padding:0;gap:8px"></div>
+  <div><div class="sub">提醒</div><div class="chips" id="eMode"></div></div>
+  <div id="eRemind" style="display:flex;flex-direction:column;gap:8px">
+    <div><div class="sub">什么时候</div><div class="chips" id="eBefore"></div></div>
+    <div><div class="sub">在哪台响（不选就是看得到这项的都响）</div><div class="chips" id="eWhere"></div></div>
+  </div>
+  <div class="row" style="gap:8px"><button class="btn" id="eSave" value="save" style="flex:1">存</button><button class="btn bad" id="eDel" value="delete">删掉</button></div>
+</form></dialog>
+
+<dialog id="lst"><form method="dialog" class="sh">
+  <h2><span id="lTitle">新清单</span><button class="link" value="cancel">关闭</button></h2>
+  <div class="row"><label>名字</label><input id="lName" maxlength="20" placeholder="比如：药店"></div>
+  <div><div class="sub">谁能看到</div><div class="chips" id="lScope"><button type="button" data-s="family">全家（各台设备和家人的手机）</button><button type="button" data-s="device">只在这台</button></div></div>
+  <div class="row" style="gap:8px"><button class="btn" id="lSave" value="save" style="flex:1">存</button><button class="btn bad" id="lDel" value="delete">删掉这个清单</button></div>
+</form></dialog>
+
 <script>
 const secret = location.pathname.split('/').filter(Boolean).pop();
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-let data = null, current = localStorage.getItem('xm-list') || '购物清单';
+const WEEK = '一二三四五六日';
+const FREQS = [['', '不重复'], ['daily', '每天'], ['workdays', '工作日'], ['weekly', '每周'], ['monthly', '每月'], ['yearly', '每年'], ['lunar', '农历每年']];
+const BEFORE = [[0, '准时'], [10, '提前 10 分钟'], [60, '提前 1 小时'], [1440, '提前 1 天'], [4320, '提前 3 天']];
+const MODES = [['none', '不提醒'], ['show', '只在首页显示'], ['ring', '响铃']];
+const remote = /\.ts\.net$/.test(location.hostname);
+let data = null, current = '', ed = null, lstEdit = null, queue = [];
+try { current = localStorage.getItem('xm-list') || ''; queue = JSON.parse(localStorage.getItem('xm-queue') || '[]'); } catch (_) {}
+
+function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function dueText(x) {
+  if (!x.due) return '';
+  const t = today(), d = new Date(x.due + 'T00:00'), n = Math.round((d - new Date(t + 'T00:00')) / 864e5);
+  const day = n === 0 ? '今天' : n === 1 ? '明天' : n === -1 ? '昨天' : n < 0 ? `过期 ${-n} 天` : n < 7 ? `周${WEEK[(d.getDay() + 6) % 7]}` : `${d.getMonth() + 1}月${d.getDate()}日`;
+  return day + (x.time ? ' ' + x.time : '');
+}
+function sorted(items) {
+  const k = x => x.done ? '9' : x.due ? '0' + x.due + (x.time || '') : '5';
+  return items.slice().sort((a, b) => k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
+}
 function render() {
   if (!data) return;
   const names = Object.keys(data.lists);
   if (!names.includes(current)) current = names[0];
+  const scope = data.scopes[current];
+  $('title').textContent = current;
   document.title = '小麦 · ' + current;
-  $('tabs').innerHTML = names.map(n => `<button class="${n === current ? 'on' : ''}" data-n="${esc(n)}">${esc(n)} ${data.lists[n].filter(x => !x.done).length || ''}</button>`).join('');
-  const items = data.lists[current] || [];
-  $('items').innerHTML = items.length ? items.map(x => `<label class="it ${x.done ? 'done' : ''}"><input type="checkbox" ${x.done ? 'checked' : ''} data-t="${esc(x.text)}">` +
-    `<span>${esc(x.text)}</span><button type="button" data-del="${esc(x.text)}" aria-label="删除">✕</button></label>`).join('') : '<div class="empty">清单是空的</div>';
+  $('conn').innerHTML = `<span class="dot${queue.length ? ' off' : ''}"></span>${remote ? '出门也能用 · 经 Tailscale' : '家里的 Wi‑Fi'}` +
+    (queue.length ? ` · <span class="err">没连上，${queue.length} 项改动先记在手机上，有网就同步</span>` : ' · 刚刚同步') + (data.here_name ? ` · ${esc(data.here_name)}的码` : '');
+  $('tabs').innerHTML = names.map(n => `<button class="${n === current ? 'on' : ''}" data-n="${esc(n)}">${esc(n)}<em>${data.scopes[n] === 'family' ? '全家' : '这台'}</em> ${data.lists[n].filter(x => !x.done).length || ''}</button>`).join('') +
+    '<button data-new="1">＋</button>';
+  $('scope').innerHTML = (scope === 'family' ? '<span><b>全家共用</b> · 各台设备和家人的手机都能看、能改</span>' : `<span><b class="own">只在${esc(data.here_name || '这台')}</b> · 别的设备、别人扫别的码看不到</span>`) +
+    '<button class="link" data-listcfg="1">清单设置</button>';
+  const items = sorted(data.lists[current] || []), t = today();
+  $('items').innerHTML = items.length ? items.map(x => {
+    const late = !x.done && x.due && x.due < t;
+    const meta = [x.due ? `<span class="due">${esc(dueText(x))}</span>` : '', x.repeat_text ? `<span>${esc(x.repeat_text)}</span>` : '',
+      x.remind ? `<span>${x.remind.mode === 'ring' ? '🔔' : '👁'}</span>` : '', x.by ? `<span>${esc(x.by)}</span>` : ''].filter(Boolean).join('');
+    return `<div class="it${x.done ? ' done' : ''}${late ? ' late' : ''}"><button class="ck" data-ck="${esc(x.id)}" aria-label="${x.done ? '没做完' : '做完了'}"></button>` +
+      `<button class="body" data-ed="${esc(x.id)}"><span class="tx">${esc(x.text)}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</button></div>`;
+  }).join('') : '<div class="empty">清单是空的</div>';
 }
-async function call(method, body) {
+function save() { try { localStorage.setItem('xm-queue', JSON.stringify(queue)); } catch (_) {} }
+async function send(body) {
+  const r = await fetch(`/lists/${secret}/data`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return r.json();
+}
+async function call(body) {
+  if (!body) {
+    try { const r = await (await fetch(`/lists/${secret}/data`)).json(); if (r.ok) { data = r; render(); } else showErr(r.error); } catch (e) { render(); }
+    return;
+  }
+  if (queue.length) { queue.push(body); save(); render(); return flush(); }
   try {
-    const r = await (await fetch(`/lists/${secret}/data`, method === 'GET' ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
-    if (!r.ok) { $('note').className = 'note err'; $('note').textContent = r.error; return; }
-    data = r; render();
-  } catch (e) { $('note').className = 'note err'; $('note').textContent = '连不上小麦网关：手机要连家里的 Wi‑Fi'; }
+    const r = await send(body);
+    if (!r.ok) return showErr(r.error);
+    data = Object.assign(data || {}, r); render();
+  } catch (e) { queue.push(body); save(); render(); }   // 超市里信号不好：先记在手机上
 }
-$('tabs').onclick = e => { const b = e.target.closest('[data-n]'); if (b) { current = b.dataset.n; try { localStorage.setItem('xm-list', current); } catch (_) {} render(); } };
-$('items').onchange = e => { const c = e.target.closest('[data-t]'); if (c) call('POST', { op: 'check', name: current, items: [c.dataset.t], done: c.checked }); };
-$('items').onclick = e => { const b = e.target.closest('[data-del]'); if (b) { e.preventDefault(); call('POST', { op: 'remove', name: current, items: [b.dataset.del] }); } };
-$('add').onsubmit = e => { e.preventDefault(); const t = $('text').value.trim(); if (t) { $('text').value = ''; call('POST', { op: 'add', name: current, items: [t] }); } };
-$('clear').onclick = () => call('POST', { op: 'clear_done', name: current });
-call('GET');
-setInterval(() => document.visibilityState === 'visible' && call('GET'), 10000);
+async function flush() {
+  while (queue.length) {
+    try {
+      const r = await send(queue[0]);
+      queue.shift(); save();
+      if (r.ok) data = Object.assign(data || {}, r);
+    } catch (e) { render(); return; }
+  }
+  render();
+}
+function showErr(msg) { $('note').className = 'note err'; $('note').textContent = msg; }
+function find(id) { return (data.lists[current] || []).find(x => x.id === id); }
+
+/* ---- 一项：日期、重复、提醒 ---- */
+function chips(box, opts, on, key) { box.innerHTML = opts.map(([v, t]) => `<button type="button" data-${key}="${v}" class="${on(v) ? 'on' : ''}">${esc(t)}</button>`).join(''); }
+function ruleBox() {
+  const r = ed.repeat || {}, f = r.freq || '', box = $('eRule');
+  if (!f) { box.innerHTML = ''; return; }
+  const num = (id, v, lo, hi, w = 72) => `<input id="${id}" type="number" min="${lo}" max="${hi}" value="${v ?? ''}" style="width:${w}px;flex:none">`;
+  let html = '';
+  if (['daily', 'weekly', 'monthly', 'yearly'].includes(f)) html += `<div class="row"><label>每隔</label>${num('rInt', r.interval || 1, 1, 99)}<span class="sub">${{ daily: '天', weekly: '周', monthly: '个月', yearly: '年' }[f]}</span></div>`;
+  if (f === 'weekly') html += `<div class="chips" id="rDays">${[1, 2, 3, 4, 5, 6, 7].map(d => `<button type="button" data-day="${d}" class="${(r.days || []).includes(d) ? 'on' : ''}">周${WEEK[d - 1]}</button>`).join('')}</div>`;
+  if (f === 'monthly') {
+    const kind = r.nth ? 'nth' : r.monthday === -1 ? 'last' : 'day';
+    html += `<div class="chips" id="rMk"><button type="button" data-mk="day" class="${kind === 'day' ? 'on' : ''}">几号</button><button type="button" data-mk="last" class="${kind === 'last' ? 'on' : ''}">最后一天</button><button type="button" data-mk="nth" class="${kind === 'nth' ? 'on' : ''}">第几个周几</button></div>`;
+    if (kind === 'day') html += `<div class="row"><label>几号</label>${num('rMd', r.monthday > 0 ? r.monthday : '', 1, 31)}</div>`;
+    if (kind === 'nth') html += `<div class="row"><label>第几个</label><select id="rN">${[[1, '第一个'], [2, '第二个'], [3, '第三个'], [4, '第四个'], [-1, '最后一个']].map(([v, t]) => `<option value="${v}"${(r.nth || [])[0] === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` +
+      `<select id="rW">${[1, 2, 3, 4, 5, 6, 7].map(d => `<option value="${d}"${(r.nth || [])[1] === d ? ' selected' : ''}>周${WEEK[d - 1]}</option>`).join('')}</select></div>`;
+  }
+  if (f === 'yearly' || f === 'lunar') html += `<div class="row"><label>${f === 'lunar' ? '农历' : '日期'}</label>${num('rM', r.month, 1, 12, 64)}<span class="sub">月</span>${num('rD', r.day, 1, f === 'lunar' ? 30 : 31, 64)}<span class="sub">日</span></div>`;
+  const end = r.until ? 'until' : r.count ? 'count' : 'never';
+  html += `<div class="chips" id="rEnd"><button type="button" data-end="never" class="${end === 'never' ? 'on' : ''}">一直重复</button><button type="button" data-end="until" class="${end === 'until' ? 'on' : ''}">到哪天</button><button type="button" data-end="count" class="${end === 'count' ? 'on' : ''}">共几次</button></div>`;
+  if (end === 'until') html += `<div class="row"><label>到</label><input id="rUntil" type="date" value="${r.until || ''}"></div>`;
+  if (end === 'count') html += `<div class="row"><label>次数</label>${num('rCount', r.count || '', 1, 999)}</div>`;
+  box.innerHTML = html;
+}
+function readRule() {
+  const r = Object.assign({}, ed.repeat || {}), v = id => $(id) && $(id).value;
+  if (!r.freq) return null;
+  if (v('rInt')) r.interval = Number(v('rInt'));
+  if (r.freq === 'monthly') {
+    if ($('rN')) { r.nth = [Number(v('rN')), Number(v('rW'))]; delete r.monthday; }
+    else if ($('rMd')) { r.monthday = Number(v('rMd')); delete r.nth; }
+  }
+  if (r.freq === 'yearly' || r.freq === 'lunar') { r.month = Number(v('rM')); r.day = Number(v('rD')); }
+  if ($('rUntil')) { r.until = v('rUntil'); delete r.count; } else if ($('rCount')) { r.count = Number(v('rCount')); delete r.until; } else { delete r.until; delete r.count; }
+  return r;
+}
+function renderEdit() {
+  chips($('eFreq'), FREQS, v => (ed.repeat ? ed.repeat.freq : '') === v, 'freq');
+  ruleBox();
+  const m = ed.remind ? ed.remind.mode : 'none';
+  chips($('eMode'), MODES, v => v === m, 'mode');
+  $('eRemind').classList.toggle('hide', m === 'none');
+  chips($('eBefore'), BEFORE, v => ((ed.remind || {}).before || [0]).includes(Number(v)), 'before');
+  chips($('eWhere'), (data.devices || []).map(d => [d.id, d.name]), v => ((ed.remind || {}).where || []).includes(v), 'where');
+}
+function openEdit(x) {
+  ed = JSON.parse(JSON.stringify(x));
+  $('eText').value = x.text; $('eDue').value = x.due || ''; $('eTime').value = x.time || '';
+  renderEdit();
+  $('edit').showModal();
+}
+$('ef').addEventListener('click', e => {
+  const b = e.target.closest('button[type=button]');
+  if (!b) return;
+  if (b.dataset.freq !== undefined) {
+    const f = b.dataset.freq, d = $('eDue').value ? new Date($('eDue').value + 'T00:00') : new Date();
+    ed.repeat = !f ? null : f === 'weekly' ? { freq: f, days: [(d.getDay() + 6) % 7 + 1] } : f === 'monthly' ? { freq: f, monthday: d.getDate() }
+      : f === 'yearly' || f === 'lunar' ? { freq: f, month: d.getMonth() + 1, day: d.getDate() } : { freq: f };
+  } else if (b.dataset.day) {
+    ed.repeat = readRule(); const d = Number(b.dataset.day), s = new Set(ed.repeat.days || []);
+    s.has(d) ? s.delete(d) : s.add(d); ed.repeat.days = [...s].sort();
+  } else if (b.dataset.mk) {
+    ed.repeat = readRule();
+    if (b.dataset.mk === 'last') { ed.repeat.monthday = -1; delete ed.repeat.nth; }
+    else if (b.dataset.mk === 'nth') ed.repeat.nth = ed.repeat.nth || [1, 1];
+    else { ed.repeat.monthday = ed.repeat.monthday > 0 ? ed.repeat.monthday : 1; delete ed.repeat.nth; }
+  } else if (b.dataset.end) {
+    ed.repeat = readRule(); delete ed.repeat.until; delete ed.repeat.count;
+    if (b.dataset.end === 'until') ed.repeat.until = today(); if (b.dataset.end === 'count') ed.repeat.count = 10;
+  } else if (b.dataset.mode) {
+    ed.remind = b.dataset.mode === 'none' ? null : Object.assign({ before: [0], where: [] }, ed.remind || {}, { mode: b.dataset.mode });
+  } else if (b.dataset.before !== undefined) {
+    const v = Number(b.dataset.before), s = new Set(ed.remind.before || [0]); s.has(v) ? s.delete(v) : s.add(v);
+    ed.remind.before = [...s].sort((a, c) => a - c);
+  } else if (b.dataset.where) {
+    const s = new Set(ed.remind.where || []); s.has(b.dataset.where) ? s.delete(b.dataset.where) : s.add(b.dataset.where);
+    ed.remind.where = [...s];
+  }
+  renderEdit();
+});
+$('edit').addEventListener('close', () => {
+  const v = $('edit').returnValue;
+  if (v === 'delete') call({ op: 'remove', name: current, items: [ed.id] });
+  else if (v === 'save') {
+    const repeat = readRule();
+    call({ op: 'edit', name: current, items: [ed.id], text: $('eText').value.trim(), due: $('eDue').value || null, time: $('eTime').value || null,
+           repeat, remind: ed.remind && ed.remind.mode !== 'none' ? ed.remind : null });
+  }
+});
+
+/* ---- 清单：新建、改名、改范围、删 ---- */
+function openList(isNew) {
+  lstEdit = { isNew, scope: isNew ? 'family' : data.scopes[current] };
+  $('lTitle').textContent = isNew ? '新清单' : '清单设置';
+  $('lName').value = isNew ? '' : current;
+  $('lDel').classList.toggle('hide', isNew);
+  [...$('lScope').children].forEach(b => b.classList.toggle('on', b.dataset.s === lstEdit.scope));
+  $('lst').showModal();
+}
+$('lScope').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (b) { lstEdit.scope = b.dataset.s; [...$('lScope').children].forEach(x => x.classList.toggle('on', x === b)); } });
+$('lst').addEventListener('close', async () => {
+  const v = $('lst').returnValue, name = $('lName').value.trim();
+  if (v === 'delete') { if (confirm(`删掉「${current}」和里面的 ${data.lists[current].length} 项？`)) await call({ op: 'delete_list', name: current }); return; }
+  if (v !== 'save' || !name) return;
+  if (lstEdit.isNew) { current = name; await call({ op: 'create_list', name, scope: lstEdit.scope }); return; }
+  if (name !== current) { await call({ op: 'rename_list', name: current, new_name: name }); current = name; }
+  if (lstEdit.scope !== data.scopes[current]) await call({ op: 'set_scope', name: current, scope: lstEdit.scope });
+});
+
+$('tabs').onclick = e => {
+  if (e.target.closest('[data-new]')) return openList(true);
+  const b = e.target.closest('[data-n]');
+  if (b) { current = b.dataset.n; try { localStorage.setItem('xm-list', current); } catch (_) {} render(); }
+};
+$('scope').onclick = e => { if (e.target.closest('[data-listcfg]')) openList(false); };
+$('items').onclick = e => {
+  const c = e.target.closest('[data-ck]');
+  if (c) { const x = find(c.dataset.ck); return x && call({ op: 'check', name: current, items: [x.id], done: !x.done }); }
+  const b = e.target.closest('[data-ed]');
+  if (b) { const x = find(b.dataset.ed); if (x) openEdit(x); }
+};
+$('add').onsubmit = e => { e.preventDefault(); const t = $('text').value.trim(); if (t) { $('text').value = ''; call({ op: 'add', name: current, items: [t] }); } };
+$('clear').onclick = () => call({ op: 'clear_done', name: current });
+window.addEventListener('online', flush);
+call();
+if (queue.length) flush();
+setInterval(() => { if (document.visibilityState !== 'visible') return; queue.length ? flush() : call(); }, 10000);
 </script>
 </body>
 </html>
