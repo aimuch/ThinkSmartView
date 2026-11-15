@@ -242,3 +242,18 @@ async def test_hub_error_is_shown(tmp_path, monkeypatch, hub):
     await c._study_tick(c.study.next_at)
     await c.study_task
     assert c.study.view(0)['error'] == '连不上小麦网关' and c.said == []
+
+
+def test_on_survives_a_restart():
+    """开着学习陪伴时客户端重启（升级、音频看门狗）：起来以后接着开；到了自动关的时间、跟着专注开的不接。"""
+    from thinksmart_client import study
+    s = study.Study({'auto_off': 2})
+    assert s.saved() is None
+    s.start(1000.0)
+    on = s.saved()
+    assert on == {'at': 1000.0, 'source': None}
+    t = study.Study({'auto_off': 2})
+    assert t.restore(on, 1000.0 + 3600) and t.enabled and t.next_at == 1000.0 + 3605
+    assert not study.Study({'auto_off': 2}).restore(on, 1000.0 + 3 * 3600)        # 已经过了自动关
+    assert not study.Study({'auto_off': 2}).restore({'at': 1000.0, 'source': 'focus'}, 1100.0)
+    assert not study.Study().restore(None, 1.0) and not study.Study().restore({'at': 'x'}, 1.0)

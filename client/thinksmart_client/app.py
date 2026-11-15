@@ -403,6 +403,7 @@ class Client:
         self.dark = False       # 息屏了：页面停装饰动画（_dark_loop）
         self.focus = focus.Focus(cfg.get('focus'))                           # 专注计时（设计画布第 47 块）
         self.study = study.Study(cfg.get('study'), STUDY_LOG)                # 学习陪伴（设计画布第 48 块）
+        self.study.restore(cfg.get('study_on'), time.time())   # 开着时重启（升级、音频看门狗）照样开着
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
         self.airplay = airplay.AirPlay(self.audio.airplay, self.events.publish, cfg.get('airplay'))   # 设计画布第 49 块
         # 机柜和智能中枢自己的网页放在「家居」里：设备本机的小代理（appproxy.py，设计画布第 62 块）
@@ -3709,6 +3710,13 @@ class Client:
         return {**self.study.view(time.time()), 'camera': camera.available()}
 
     def _study_publish(self, said=None):
+        on = self.study.saved()
+        if on != self.cfg.get('study_on'):     # 开着、关了都记下：客户端重启后照旧（以前只在内存里，一重启就关了）
+            self.cfg['study_on'] = on
+            if on:
+                config.save(study_on=on)
+            else:
+                config.unset('study_on')
         view = self.study_view()
         self.events.publish('study', {**view, 'said': said})
         return view

@@ -115,6 +115,20 @@ class Study:
         self.streak, self.error = {}, None
         return True
 
+    def saved(self):
+        """开着时存进配置的那一份（客户端重启后接着开）；关着是 None。"""
+        return {'at': self.enabled_at, 'source': self.source} if self.enabled else None
+
+    def restore(self, on, now):
+        """客户端刚起来：上次开着、还没到自动关的时间就接着开（跟着专注开的不接：专注没了）。"""
+        if not isinstance(on, dict) or on.get('source') or not isinstance(on.get('at'), (int, float)):
+            return False
+        hours = self.settings['auto_off']
+        if hours > 0 and now - on['at'] >= hours * 3600:
+            return False
+        self.enabled_at, self.source, self.next_at = float(on['at']), None, now + 5
+        return True
+
     def stop(self):
         if not self.enabled:
             return False

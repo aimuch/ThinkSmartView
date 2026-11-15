@@ -36,6 +36,7 @@ from gi.repository import Gdk, GLib, Gtk, WebKit2  # noqa: E402
 CONF = '/etc/thinksmart-kiosk.conf'
 SHARE = '/usr/local/share/thinksmart-kiosk'
 WELCOME = SHARE + '/welcome.html'
+CLIENT_DIR = '/opt/thinksmart/client/current'   # 小麦语音助手（thinksmart-client）装在这里
 KEYBOARD = SHARE + '/keyboard.js'
 RETRY_SECONDS = 5
 
@@ -456,6 +457,10 @@ def main():
     def page_status():
         st = device_status()
         st.update(target=url, tries=state['tries'], help=conf.get('HELP_URL', ''))
+        # 小麦客户端装着、展示的就是它：开机、客户端重启时它要十几秒才起来，欢迎页先显示「小麦正在启动」，
+        # 不显示给新设备看的安装引导（设计画布第 70 块）
+        if url.startswith('http://127.0.0.1:8090') and os.path.isdir(CLIENT_DIR):
+            st['client'] = '1'
         return st
 
     def show_welcome():
