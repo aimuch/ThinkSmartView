@@ -485,3 +485,6 @@ def _health_in_tmp(tmp_path, monkeypatch):
 
     monkeypatch.setattr(health, "_path", lambda: str(tmp_path / "health.json"))
     monkeypatch.setattr(health, "_d", None)
+    monkeypatch.setattr(health, "_timer", None)
+    monkeypatch.setattr(health, "_dirty", 0.0)
+    monkeypatch.setattr(health, "_flushed", 0.0)

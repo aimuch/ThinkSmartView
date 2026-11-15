@@ -22,6 +22,7 @@ _lock = threading.RLock()
 _d = None
 _dirty = 0.0
 _flushed = 0.0
+_timer = None
 
 
 def _path() -> str:
@@ -77,9 +78,18 @@ def flush(force: bool = False):
 
 
 def _touch():
-    global _dirty
+    """记了新东西：离上次写盘满 30 秒就写；不满的话 30 秒后补写一次（之后没有新记录也不会丢在内存里）。"""
+    global _dirty, _timer
     _dirty = _dirty or time.time()
     flush()
+    if _dirty and _timer is None:
+        def later():
+            global _timer
+            _timer = None
+            flush(force=True)
+        _timer = threading.Timer(FLUSH_EVERY, later)
+        _timer.daemon = True
+        _timer.start()
 
 
 def record(kind: str, ok: bool, t: float = None):

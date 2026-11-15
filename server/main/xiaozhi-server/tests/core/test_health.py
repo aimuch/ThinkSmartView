@@ -62,3 +62,14 @@ def test_device_update_offline_and_back(monkeypatch):
     kinds = [(e["kind"], e["device"]) for e in sorted(health._load()["events"], key=lambda e: e["t"])]
     assert ("update", "dev-1") in kinds and kinds.count(("offline", "dev-1")) == 1 and kinds[-1] == ("online", "dev-1")
     presence.reset()
+
+
+def test_late_records_still_reach_disk(monkeypatch):
+    """刚写过盘时再记一条：不等下一条记录，过一会儿自己补写。"""
+    monkeypatch.setattr(health, "FLUSH_EVERY", 0.05)
+    health.record("asr", True)
+    health.flush(force=True)
+    health.online("dev-9")
+    time.sleep(0.2)
+    d = json.load(open(health._path()))
+    assert any("dev-9" in v for v in d["online"].values())
