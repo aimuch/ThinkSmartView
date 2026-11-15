@@ -24,6 +24,7 @@ def blanker(tmp_path, monkeypatch):
     backlight.write_text('4095\n')
     touch_r, touch_w = os.pipe()
     ib.BACKLIGHT_PATH, ib.HINT_PATH, ib.ALS_PATH = str(backlight), hint, str(tmp_path / 'als')
+    ib.STATE_PATH = tmp_path / 'state.json'
     ib.open_input_devices = lambda: [touch_r]
     ib.FREEZE_DELAY = float(os.environ.get('TEST_FREEZE_DELAY', '0.1'))
     ib.FREEZE_WEB = os.environ.get('TEST_FREEZE_WEB', '1') == '1'     # the stop/continue tests turn it on
@@ -48,6 +49,18 @@ def blanker(tmp_path, monkeypatch):
             time.sleep(0.4)
 
         DIM = ib.DIM_BRIGHTNESS
+        BLANK = ib.BLANK_BRIGHTNESS
+
+        def state(self):
+            return json.loads((tmp_path / 'state.json').read_text())
+
+        def blanked_at(self, level, seconds):
+            end = time.monotonic() + seconds
+            while time.monotonic() < end:
+                if self.level() == level:
+                    return True
+                time.sleep(0.1)
+            return False
 
         def level(self):
             # a plain file stands in for sysfs: the blanker's write_text truncates before it writes,
@@ -181,3 +194,34 @@ def test_page_keeps_running_while_dark_by_default(monkeypatch, request):
     assert b.blanked_within(2)
     time.sleep(0.4)
     assert (4242, b.STOP) not in b.signals
+
+
+def test_the_users_screen_off_level(blanker, tmp_path):
+    """熄屏后的亮度（设计画布第 69 块）：照 hint 的 blank；状态文件告诉别的程序屏幕是不是熄着。"""
+    blanker.hint(hold=False, idle=1, after=1, blank=400)
+    assert blanker.state()["blanked"] is False
+    assert blanker.blanked_at(400, 2)
+    time.sleep(0.3)
+    assert blanker.state() == {"blanked": True, "blank": 400, "at": blanker.state()["at"]}
+    blanker.hint(activity=False, hold=False, idle=1, after=1, blank=150)   # 熄着时改了：马上换
+    assert blanker.level() == 150
+    (tmp_path / 'backlight').write_text('3000\n')                        # 走近亮屏点亮了它
+    time.sleep(0.5)
+    assert blanker.state()["blanked"] is False
+
+
+def test_out_of_range_levels_are_clamped(blanker):
+    blanker.hint(hold=False, idle=1, after=1, blank=99999)
+    assert blanker.blanked_at(1300, 2)
+    blanker.touch()
+    blanker.hint(hold=False, idle=1, after=1, blank="x")
+    assert blanker.blanked_at(blanker.BLANK, 2)
+
+
+def test_preview_shows_the_level_then_the_normal_one(blanker):
+    blanker.hint(hold=False, idle=60, brightness=50)
+    normal = blanker.level()
+    blanker.hint(activity=False, hold=False, idle=60, brightness=50, blank=400, preview={"level": 400, "until": time.time() + 0.8})
+    assert blanker.level() == 400 and blanker.state()["blanked"] is False
+    time.sleep(1.0)
+    assert blanker.level() == normal

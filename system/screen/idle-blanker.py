@@ -17,6 +17,12 @@ Input-idle screen blanker + ALS auto-brightness for CD-18781Y.
   "idle": seconds (optional) is the user's auto screen-off, used instead of IDLE_TIMEOUT for
   touch and conversations alike (the client sends the same value in "after"); 0 = never blank.
   Without it (older clients) IDLE_TIMEOUT and "after" work as before.
+- "blank": the backlight level while the screen is off (system 0.2.17, 设计画布第 69 块), BLANK_MIN to
+  BLANK_MAX; without it BLANK_BRIGHTNESS. These panels still show the page at the darkest level, so the
+  user picks how much. "preview": {"level", "until"} shows a level for a moment while the screen is on
+  (the settings page's 「看一下」); afterwards the normal level comes back. Whether the screen is off and at
+  which level goes to STATE_PATH, so the proximity and touch/motion wake daemons and the client don't
+  have to guess it from the backlight (a brighter screen-off level would look "on" to them).
 - THINKSMART_FREEZE_WEB=1 only (off by default since system 0.2.16): the backlight's darkest level still
   shows the page on these panels, and a stopped page left a clock that never moved, so the page keeps
   running and pauses its own animations while dark (thinksmart-client watches the backlight). When on:
@@ -54,6 +60,9 @@ MIN_BRIGHTNESS  = 3800     # never go below ~93% in auto mode (WLED minimum ~120
 # the compositor. WLED hardware shuts off below ~1200, so 10 is physically dark but
 # KWin never sees 0 and leaves the DRM connector alive.
 BLANK_BRIGHTNESS = 10
+BLANK_MIN      = 10       # the darkest screen-off level (the old fixed one)
+BLANK_MAX      = 1300     # the brightest one: still below MANUAL_MIN, the user's 0%
+STATE_PATH     = HINT_PATH.with_name("thinksmart-screen-state.json")   # {"blanked", "blank", "at"}
 DIM_BRIGHTNESS = 1600      # sleep hours (WLED goes dark below ~1200)
 MANUAL_MIN     = 1400      # the user's 0% (hint "brightness"); thinksmart-client mirrors it
 ALS_PATH       = "/tmp/als_lux"
@@ -119,6 +128,23 @@ def set_brightness(val):
     except Exception as e:
         logger.warning(f"set_brightness({val}) failed: {e}")
         return False
+
+
+def blank_level(value):
+    """The hint's "blank" as a backlight level; anything else is the old fixed BLANK_BRIGHTNESS."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return BLANK_BRIGHTNESS
+    return max(BLANK_MIN, min(BLANK_MAX, value))
+
+
+def write_state(blanked, level):
+    """Tell the wake daemons and the client whether the screen is off (and at which level)."""
+    try:
+        tmp = STATE_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"blanked": bool(blanked), "blank": level, "at": int(time.time())}))
+        tmp.replace(STATE_PATH)
+    except OSError as e:
+        logger.warning(f"screen state not written: {e}")
 
 
 def read_hint(last_mtime):
@@ -195,12 +221,16 @@ def run():
     fds = open_input_devices()
     logger.info(f"Watching {len(fds)} input device(s)")
     freeze_web(False)     # a blanker that died while the screen was dark left the page stopped
+    write_state(False, BLANK_BRIGHTNESS)
 
     last_input    = time.monotonic()
     last_als      = 0.0
     last_wake     = 0.0
     blanked       = False
     blanked_at    = 0.0
+    blank         = BLANK_BRIGHTNESS   # the user's screen-off level (hint "blank")
+    preview       = None           # (level, until): the settings page shows a level for a moment
+    previewing    = None           # the level shown now
     frozen        = False          # the page renderer is stopped
     target_brightness = MAX_BRIGHTNESS
     hint_mtime    = None
@@ -229,6 +259,7 @@ def run():
         frozen = False
         set_brightness(awake_brightness())
         blanked = False
+        write_state(False, blank)
 
     def awake_brightness():
         if manual is not None:
@@ -253,6 +284,17 @@ def run():
                     last_als = 0.0     # back to auto: follow the light sensor right away
                 if not blanked:
                     set_brightness(awake_brightness())
+            new_blank = blank_level(hint.get("blank"))
+            if new_blank != blank:
+                blank = new_blank
+                logger.info(f"Voice client: screen-off level {blank}")
+                if blanked:
+                    set_brightness(blank)
+                write_state(blanked, blank)
+            p = hint.get("preview")
+            preview = None
+            if isinstance(p, dict) and isinstance(p.get("until"), (int, float)) and p["until"] > time.time():
+                preview = (blank_level(p.get("level")), float(p["until"]))
             new_idle = hint.get("idle", IDLE_TIMEOUT)
             if isinstance(new_idle, bool) or not isinstance(new_idle, int) or new_idle < 0:
                 new_idle = IDLE_TIMEOUT
@@ -278,7 +320,7 @@ def run():
         brightness = get_brightness()
 
         # External restore (e.g. proximity daemon)
-        if blanked and brightness is not None and brightness > BLANK_BRIGHTNESS:
+        if blanked and brightness is not None and brightness > blank:
             logger.info("Screen restored externally — resetting idle timer")
             freeze_web(False)
             frozen = False
@@ -294,8 +336,18 @@ def run():
                     pass
             idle_secs = 0
             blanked   = False
+            write_state(False, blank)
 
+        # the settings page's preview: that level for a moment, then the normal one again
         if not blanked:
+            want = preview[0] if preview and time.time() < preview[1] else None
+            if want != previewing:
+                set_brightness(want if want is not None else awake_brightness())
+                logger.info(f"Preview of the screen-off level {want}" if want is not None else "Preview over")
+                previewing = want
+                last_wake = time.monotonic()   # the light sensor waits a little after a preview too
+
+        if not blanked and previewing is None:
             # ALS auto-brightness while screen is on (not in the sleep hours or at the user's level)
             now = time.monotonic()
             if not dim and manual is None and now - last_als >= ALS_INTERVAL and now - last_wake >= ALS_WAKE_COOL:
@@ -316,10 +368,11 @@ def run():
             # Blank on idle (never during a voice conversation, nor with the user's screen-off off)
             if not hold and idle_timeout and idle_secs >= timeout:
                 logger.info(f"Idle for {idle_secs:.1f}s — blanking screen")
-                if set_brightness(BLANK_BRIGHTNESS):
-                    logger.info("Screen blanked")
+                if set_brightness(blank):
+                    logger.info(f"Screen blanked (level {blank})")
                     blanked = True
                     blanked_at = time.monotonic()
+                    write_state(True, blank)
 
         # THINKSMART_FREEZE_WEB=1: stop the page a little after blanking
         if blanked and not frozen and time.monotonic() - blanked_at >= FREEZE_DELAY:

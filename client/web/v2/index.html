@@ -268,6 +268,12 @@
       <button data-m="1">1 分钟</button><button data-m="3">3 分钟</button><button data-m="5">5 分钟</button><button data-m="10">10 分钟</button><button data-m="30">30 分钟</button>
     </div>
     <p class="opt-note" id="offNote"></p>
+    <!-- 熄屏后的亮度（设计画布第 69 块）：五档，点一档屏幕降到那个亮度几秒给你看 -->
+    <div class="blank-card" id="blankCard">
+      <div class="bright-head"><b>熄屏后的亮度</b><span class="bright-num" id="blankNow"></span><button class="upd-btn" id="blankTry">看一下</button></div>
+      <div class="minutes" id="blankLevels"></div>
+      <p class="opt-note" id="blankNote">点一档，屏幕马上降到那个亮度 3 秒给你看，然后亮回来。熄屏时时间和内容照常更新。</p>
+    </div>
     <div class="opt" id="proxRow">
       <div class="opt-text">
         <b>走近亮屏</b>

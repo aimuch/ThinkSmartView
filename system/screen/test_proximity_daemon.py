@@ -58,3 +58,14 @@ def test_switch_from_the_client(tmp_path):
     out = tmp_path / 'status.json'
     m.write_status({'baseline': 182, 'threshold': 252}, str(out))
     assert json.loads(out.read_text())['threshold'] == 252
+
+
+def test_screen_off_comes_from_the_blankers_state(tmp_path):
+    """熄屏后的亮度能调了（设计画布第 69 块）：屏幕是不是熄着听 idle-blanker 的状态文件；没有这个文件（旧的）才看背光。"""
+    m = load()
+    state = tmp_path / 'state.json'
+    assert m.screen_blanked(10, str(state)) and not m.screen_blanked(400, str(state))
+    state.write_text(json.dumps({"blanked": True, "blank": 400}))
+    assert m.screen_blanked(400, str(state))
+    state.write_text(json.dumps({"blanked": False, "blank": 400}))
+    assert not m.screen_blanked(10, str(state))

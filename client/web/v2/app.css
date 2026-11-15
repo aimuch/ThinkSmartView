@@ -800,3 +800,10 @@ body[data-theme="dawn"] .svc-warn, body[data-theme="candy"] .svc-warn, body[data
 
 /* 息屏时（背光最低，还看得见）：内容照常更新，只停装饰动画省电 */
 body.screen-dark * { animation-play-state: paused !important; }
+
+/* 熄屏后的亮度（设计画布第 69 块） */
+.blank-card { display: flex; flex-direction: column; gap: 14px; padding: 4px 0 6px; }
+.blank-card[hidden] { display: none; }
+.blank-card .bright-head { display: flex; align-items: center; gap: 14px; }
+.blank-card .bright-head .upd-btn { margin-left: auto; }
+#blankLevels { grid-template-columns: repeat(5, 1fr); }

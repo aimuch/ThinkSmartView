@@ -57,7 +57,7 @@ from . import airplay, alarms, appproxy, intercom, broadcast, bt, camera, config
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
-from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off, proximity_status
+from .device import BLANK_LEVELS, DIM_LEVEL, STATE_PATH, Keys, Screen, normalize_screen_off, proximity_status
 from .hub import Hub
 from .kws import Kws
 from .opus import Decoder, Encoder
@@ -378,6 +378,7 @@ class Client:
             self.screen_off = normalize_screen_off(None)
         self.screen.idle = self._screen_off_seconds()   # written by start()'s release()
         self.screen.proximity = self.screen_off['proximity']
+        self.screen.blank = BLANK_LEVELS[self.screen_off['blank']]
         self.reports = 0              # pending on the hub
         self.hub_seen = 0.0           # monotonic: last answer from the hub's HTTP side (health check)
         self.keys = Keys(on_step=self.volume_step, on_mic=self._on_mic)
@@ -1709,10 +1710,13 @@ class Client:
         if not BACKLIGHT.exists():
             return
         while True:
-            try:
-                dark = int(BACKLIGHT.read_text().strip() or 0) <= DARK_LEVEL
-            except (OSError, ValueError):
-                dark = self.dark
+            try:   # idle-blanker 0.2.17 起写状态文件（熄屏后的亮度能调了，不能再看背光是不是 10）
+                dark = bool(json.loads(STATE_PATH.read_text())['blanked'])
+            except (OSError, ValueError, KeyError, TypeError):
+                try:
+                    dark = int(BACKLIGHT.read_text().strip() or 0) <= DARK_LEVEL
+                except (OSError, ValueError):
+                    dark = self.dark
             if dark != self.dark:
                 self.dark = dark
                 self.events.publish('dark', {'dark': dark})
@@ -3230,9 +3234,13 @@ class Client:
     def _screen_off_seconds(self):
         return self.screen_off['minutes'] * 60 if self.screen_off['enabled'] else 0
 
-    async def set_screen_off(self, **changes):
-        """Page: enabled and/or minutes (one of device.SCREEN_OFF_MINUTES); raises ValueError."""
+    async def set_screen_off(self, preview=False, **changes):
+        """Page: enabled and/or minutes (one of device.SCREEN_OFF_MINUTES), proximity, blank (0-4: 熄屏后的亮度);
+        preview: show the screen-off level for a few seconds now (设计画布第 69 块). Raises ValueError."""
         self.screen_off = normalize_screen_off(self.screen_off, changes)
+        self.screen.blank_level(BLANK_LEVELS[self.screen_off['blank']])
+        if preview:
+            self.screen.preview(BLANK_LEVELS[self.screen_off['blank']])
         config.save(screen_off=self.screen_off)
         self.screen.blank_after(self._screen_off_seconds())
         self.screen.proximity_wake(self.screen_off['proximity'])

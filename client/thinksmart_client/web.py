@@ -100,7 +100,8 @@ def make_app(client: Client):
     async def screen_off(request):
         body = await request.json()
         try:
-            value = await client.set_screen_off(**{k: body.get(k) for k in ('enabled', 'minutes', 'proximity')})
+            value = await client.set_screen_off(preview=bool(body.get('preview')),
+                                                **{k: body.get(k) for k in ('enabled', 'minutes', 'proximity', 'blank')})
         except ValueError as e:
             return web.json_response({'ok': False, 'error': str(e)}, status=400)
         return web.json_response({'ok': True, 'screen_off': value})

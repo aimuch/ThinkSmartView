@@ -10,8 +10,10 @@ TOUCH_EVENT = '/dev/input/event1'
 ACCEL_DELTA_THRESHOLD = 40
 POLL_SECONDS = 0.2
 WAKE_COOLDOWN_SECONDS = 2.0
-# idle-blanker blanks to 10; anything at or below this counts as a blanked screen
+# idle-blanker blanks to 10; anything at or below this counts as a blanked screen (an older blanker; a newer
+# one says whether the screen is off in STATE_PATH, its screen-off level being the user's choice)
 BLANKED_BRIGHTNESS_MAX = 10
+STATE_PATH = Path(os.environ.get('THINKSMART_SCREEN_STATE', '/run/user/1000/thinksmart-screen-state.json'))
 
 last_wake = 0.0
 last_accel = None
@@ -53,8 +55,14 @@ def read_brightness():
 
 
 def screen_is_off() -> bool:
-    brightness = read_brightness()
-    return drm_state() == 'Off' or (brightness is not None and brightness <= BLANKED_BRIGHTNESS_MAX)
+    if drm_state() == 'Off':
+        return True
+    try:
+        import json
+        return bool(json.loads(STATE_PATH.read_text())['blanked'])
+    except Exception:
+        brightness = read_brightness()
+        return brightness is not None and brightness <= BLANKED_BRIGHTNESS_MAX
 
 
 def wake_display(reason: str) -> None:

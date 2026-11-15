@@ -60,6 +60,17 @@ BLANK_BRIGHTNESS = 10
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 HINT_PATH = os.path.join(RUNTIME_DIR, "thinksmart-screen.json")       # written by thinksmart-client
 STATUS_PATH = os.path.join(RUNTIME_DIR, "thinksmart-proximity.json")  # read by thinksmart-client
+STATE_PATH = os.path.join(RUNTIME_DIR, "thinksmart-screen-state.json") # written by idle-blanker (0.2.17)
+
+
+def screen_blanked(brightness, path=STATE_PATH):
+    """Is the screen off? idle-blanker says so in STATE_PATH (its screen-off level is the user's choice now,
+    设计画布第 69 块); an older blanker didn't write it: then at or below BLANK_BRIGHTNESS."""
+    try:
+        with open(path) as f:
+            return bool(json.load(f)["blanked"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return brightness is not None and brightness <= BLANK_BRIGHTNESS
 
 
 class Gate:
@@ -311,7 +322,7 @@ class ProximitySensor:
                         write_status(self.status)
 
                     # Screen is blanked (brightness at or below BLANK_BRIGHTNESS=10)
-                    if brightness <= BLANK_BRIGHTNESS and wanted:
+                    if screen_blanked(brightness) and wanted:
                         if not self.sensor_enabled:
                             self.enable_sensor()
                             self.calibrate()

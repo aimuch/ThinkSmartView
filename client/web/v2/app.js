@@ -406,8 +406,10 @@ $('brightRange').addEventListener('pointercancel', dropBright);
 
 /* ---- settings: auto screen-off (the client hints the system's screen blanker) ---- */
 const offEdit = {};   // a change on its way
+const BLANK_NAMES = ['最暗', '很暗', '暗', '稍暗', '看得清'];   // 熄屏后的亮度（device.BLANK_NAMES）
 function offSetting() {
-  return Object.assign({ enabled: true, minutes: 5, proximity: true }, ui.status.screen_off || {}, offEdit);
+  const e = Object.assign({}, offEdit); delete e.preview;
+  return Object.assign({ enabled: true, minutes: 5, proximity: true, blank: 0 }, ui.status.screen_off || {}, e);
 }
 // 走近亮屏（设计画布第 59 块）：接近传感器上次熄屏时量的「没人时的读数」和门槛
 function proxNote(on) {
@@ -426,7 +428,10 @@ function renderScreenOff() {
   $('offMinutes').classList.toggle('off', !s.enabled);
   for (const b of $('offMinutes').children) b.classList.toggle('on', Number(b.dataset.m) === s.minutes);
   $('offNote').textContent = s.enabled ? `${s.minutes} 分钟没碰屏幕、也没在对话，就熄屏` : '屏幕一直亮着，不会自动熄屏';
-  $('proxRow').hidden = $('proxNote').hidden = !s.enabled;
+  $('proxRow').hidden = $('proxNote').hidden = $('blankCard').hidden = !s.enabled;
+  const bl = s.blank || 0;
+  $('blankLevels').innerHTML = BLANK_NAMES.map((n, i) => `<button data-blank="${i}" class="${i === bl ? 'on' : ''}">${n}</button>`).join('');
+  $('blankNow').textContent = BLANK_NAMES[bl];
   $('proxSwitch').setAttribute('aria-checked', String(s.proximity !== false));
   $('proxNote').textContent = proxNote(s.proximity !== false);
 }
@@ -444,6 +449,9 @@ async function sendScreenOff(changes) {
   for (const k in changes) if (offEdit[k] === changes[k]) delete offEdit[k];
   renderScreenOff();
 }
+// 熄屏后的亮度（设计画布第 69 块）：点一档就存，屏幕降到那个亮度 3 秒给你看
+$('blankLevels').addEventListener('click', e => { const b = e.target.closest('[data-blank]'); if (b) sendScreenOff({ blank: Number(b.dataset.blank), preview: true }); });
+$('blankTry').addEventListener('click', () => sendScreenOff({ preview: true }));
 $('offSwitch').addEventListener('click', () => sendScreenOff({ enabled: !offSetting().enabled }));
 $('proxSwitch').addEventListener('click', () => sendScreenOff({ proximity: offSetting().proximity === false }));
 for (const b of $('offMinutes').children) b.addEventListener('click', () => sendScreenOff({ minutes: Number(b.dataset.m) }));

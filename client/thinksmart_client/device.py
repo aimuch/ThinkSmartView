@@ -23,6 +23,11 @@ HINT_PATH = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/1000')) / 'thinksm
 # what the proximity daemon measured at the last blank (system/screen/vcnl4200-proximity-daemon.py, 设计画布第 59 块)
 PROXIMITY_STATUS = HINT_PATH.with_name('thinksmart-proximity.json')
 SCREEN_OFF_MINUTES = (1, 3, 5, 10, 30)   # the settings page's choices; 5 by default (config.py)
+# 熄屏后的亮度（设计画布第 69 块）：五档背光，最暗那档是原来写死的 10；最亮那档仍比「亮度 0%」（1400）暗
+BLANK_LEVELS = (10, 150, 400, 750, 1200)
+BLANK_NAMES = ('最暗', '很暗', '暗', '稍暗', '看得清')
+PREVIEW_SECONDS = 3
+STATE_PATH = HINT_PATH.with_name('thinksmart-screen-state.json')   # idle-blanker 写：屏幕是不是熄着
 # the blanker's MANUAL_MIN (0%), MAX_BRIGHTNESS (100%) and DIM_BRIGHTNESS (sleep hours) on the 0-100 scale
 DIM_LEVEL = round((1600 - 1400) * 100 / (4095 - 1400))
 
@@ -36,9 +41,9 @@ EVIOCGSW = (2 << 30) | (8 << 16) | (ord('E') << 8) | 0x1b
 
 def normalize_screen_off(setting, changes=None):
     """A complete, valid screen-off setting: {'enabled': bool, 'minutes': one of SCREEN_OFF_MINUTES,
-    'proximity': bool (走近亮屏: the proximity sensor wakes the dark screen)}.
-    Raises ValueError for other minutes."""
-    s = {'enabled': True, 'minutes': 5, 'proximity': True}
+    'proximity': bool (走近亮屏: the proximity sensor wakes the dark screen), 'blank': 0-4 (熄屏后的亮度,
+    an index into BLANK_LEVELS)}. Raises ValueError for other minutes or levels."""
+    s = {'enabled': True, 'minutes': 5, 'proximity': True, 'blank': 0}
     s.update({k: v for k, v in (setting or {}).items() if k in s})
     s.update({k: v for k, v in (changes or {}).items() if k in s and v is not None})
     s['enabled'] = bool(s['enabled'])
@@ -46,6 +51,9 @@ def normalize_screen_off(setting, changes=None):
     if isinstance(s['minutes'], bool) or s['minutes'] not in SCREEN_OFF_MINUTES:
         raise ValueError(f'minutes must be one of {SCREEN_OFF_MINUTES}, got {s["minutes"]!r}')
     s['minutes'] = int(s['minutes'])
+    if isinstance(s['blank'], bool) or s['blank'] not in range(len(BLANK_LEVELS)):
+        raise ValueError(f'blank must be 0-{len(BLANK_LEVELS) - 1}, got {s["blank"]!r}')
+    s['blank'] = int(s['blank'])
     return s
 
 
@@ -66,6 +74,8 @@ class Screen:
         self.idle = 300              # the user's screen-off in seconds, 0: never
         self.proximity = True        # 走近亮屏: the proximity daemon may wake the dark screen
         self.dawn = None             # 温柔叫醒 (设计画布第 46 块): 0-100 while it brightens before an alarm, else None
+        self.blank = BLANK_LEVELS[0] # 熄屏后的背光（设计画布第 69 块）
+        self._preview = None         # (level, until): the settings page shows a screen-off level for a moment
         self._seq = time.time_ns()   # unique across client restarts
 
     def hold(self):
@@ -124,6 +134,16 @@ class Screen:
             self.proximity = bool(on)
             self._write(activity=False)
 
+    def blank_level(self, level):
+        if self.blank != level:
+            self.blank = level
+            self._write(activity=False)
+
+    def preview(self, level, seconds=PREVIEW_SECONDS):
+        """Show this screen-off level now for a few seconds (the screen stays on), then the normal level."""
+        self._preview = (level, time.time() + seconds)
+        self._write(activity=False)
+
     def blank_after(self, seconds):
         if self.idle != seconds:
             self.idle = seconds
@@ -133,7 +153,9 @@ class Screen:
         if activity:
             self._seq += 1
         hint = {'hold': bool(self.held or self.ringing or self.showing or self.watching), 'dim': self.dimmed, 'seq': self._seq,
-                'brightness': self.level, 'idle': self.idle, 'proximity': self.proximity}
+                'brightness': self.level, 'idle': self.idle, 'proximity': self.proximity, 'blank': self.blank}
+        if self._preview and self._preview[1] > time.time():
+            hint['preview'] = {'level': self._preview[0], 'until': round(self._preview[1], 2)}
         if self.dimmed and self.sleep_level is not None:
             # the user's sleep brightness instead of the blanker's fixed dim level (设计画布第 29 块)
             hint['dim'], hint['brightness'] = False, self.sleep_level
