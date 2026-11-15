@@ -49,7 +49,7 @@ def denied(app: str, method: str, path: str) -> bool:
 
 def auth_headers(app: str, s: dict) -> dict:
     token = s.get("token") or ""
-    if not token:
+    if not token or (app == "rack" and s.get("password")):   # 机柜填了登录密码就用密码，旧的令牌不管
         return {}
     return {"X-Token": token} if app == "rack" else {"Authorization": f"Bearer {token}"}
 
@@ -105,7 +105,7 @@ async def handle(request: web.Request):
     s, why = _settings(app, request.headers.get("X-Device-Id", ""))
     if s is None:
         return _fail(request, 404, why + "。在网关后台「外部服务 → 家里的系统」里打开。")
-    use_password = app == "rack" and not s.get("token") and bool(s.get("password"))
+    use_password = app == "rack" and bool(s.get("password"))
     if not s.get("token") and not use_password and request.method == "GET" and "text/html" in request.headers.get("Accept", ""):
         # 没令牌就只能到它的登录页，而经设备登录不了（登录挡掉了、cookie 也不转）：直接说要填什么
         return _fail(request, 409, APPS[app]["no_token"])
@@ -126,10 +126,20 @@ async def handle(request: web.Request):
         upstream = await _client().request(request.method, url, headers=headers, data=body, allow_redirects=False)
     except Exception as e:  # noqa: BLE001
         return _fail(request, 502, f"连不上{APPS[app]['label']}（{s['url']}）：{type(e).__name__}")
-    if use_password and upstream.status == 401:   # cookie 过期了：下次重新登录
-        from core.integrations import rack
+    if use_password and (upstream.status == 401 or (upstream.status in (302, 303) and
+                                                   upstream.headers.get("Location", "").startswith("/login"))):
+        # cookie 过期了（服务重启、过了 30 天）：重新登录一次再要，不让设备上的页面跳到登录框
+        from core.integrations import common, rack
 
         rack.forget_session(s["url"], s["password"])
+        upstream.release()
+        try:
+            headers["Cookie"] = "rs_session=" + await rack.session(s["url"], s["password"])
+            upstream = await _client().request(request.method, url, headers=headers, data=body, allow_redirects=False)
+        except common.IntegrationError as e:
+            return _fail(request, 502, str(e))
+        except Exception as e:  # noqa: BLE001
+            return _fail(request, 502, f"连不上{APPS[app]['label']}（{s['url']}）：{type(e).__name__}")
     out = web.StreamResponse(status=upstream.status, reason=upstream.reason)
     for k, v in upstream.headers.items():
         if k.lower() not in DROP_RESP:

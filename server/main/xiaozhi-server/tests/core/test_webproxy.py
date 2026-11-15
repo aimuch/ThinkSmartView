@@ -36,12 +36,19 @@ async def upstream():
     async def login(request):
         return web.HTTPFound("/setup")
 
+    async def kiosk(request):   # 像 rack-screen：cookie 不对就转去登录页
+        seen.append(dict(request.headers))
+        if request.headers.get("Cookie") != "rs_session=sid-new":
+            raise web.HTTPFound("/login?next=%2Fkiosk")
+        return web.Response(text="<html>kiosk</html>", content_type="text/html")
+
     app = web.Application()
     app.router.add_get("/setup", page)
     app.router.add_get("/static/app.js", js)
     app.router.add_get("/api/stream", stream)
     app.router.add_route("*", "/api/{x:.*}", echo)
     app.router.add_get("/login", login)
+    app.router.add_get("/kiosk", kiosk)
     async with TestClient(TestServer(app)) as c:
         c.seen = seen
         yield c
@@ -137,3 +144,35 @@ async def test_no_token_says_what_to_fill_in(gateway, monkeypatch, upstream):
     assert r.status == 409 and "登录密码" in await r.text()
     r = await gateway.get("/kiosk/proxy/rack/api/whatever")          # 接口请求照旧转过去（没令牌时它自己回 401）
     assert r.status == 200
+
+
+async def test_rack_password_wins_over_an_old_token(gateway, upstream, monkeypatch):
+    """机柜两个都填了：用登录密码换的 cookie，不发令牌（令牌填错时设备上只看到登录页）。"""
+    from core.integrations import rack
+
+    monkeypatch.setattr(webproxy, "_settings", lambda app, device: ({"url": str(upstream.make_url("")).rstrip("/"), "token": "wrong", "password": "pw"}, None))
+
+    async def session(url, password):
+        return "sid-ok"
+    monkeypatch.setattr(rack, "session", session)
+    r = await gateway.get("/kiosk/proxy/rack/setup")
+    assert r.status == 200
+    sent = upstream.seen[-1]
+    assert sent["Cookie"] == "rs_session=sid-ok" and "X-Token" not in sent
+
+
+async def test_rack_expired_cookie_logs_in_again(gateway, upstream, monkeypatch):
+    """cookie 过期（对方转去登录页）：网关重新登录一次再要，设备上的页面不跳登录框。"""
+    from core.integrations import rack
+
+    monkeypatch.setattr(webproxy, "_settings", lambda app, device: ({"url": str(upstream.make_url("")).rstrip("/"), "password": "pw"}, None))
+    sids = iter(["sid-old", "sid-new"])
+    forgot = []
+
+    async def session(url, password):
+        return next(sids)
+    monkeypatch.setattr(rack, "session", session)
+    monkeypatch.setattr(rack, "forget_session", lambda url, password: forgot.append(url))
+    r = await gateway.get("/kiosk/proxy/rack/kiosk", allow_redirects=False)
+    assert r.status == 200 and await r.text() == "<html>kiosk</html>" and len(forgot) == 1
+    assert [h.get("Cookie") for h in upstream.seen[-2:]] == ["rs_session=sid-old", "rs_session=sid-new"]

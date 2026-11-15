@@ -1,5 +1,5 @@
-"""机柜：主机和 Ping 检测从 Prometheus 读（不用令牌）；填了 rack-screen 的登录密码（或者它配置文件里的
-preview.token），再读它自己的检测项。
+"""机柜：主机和 Ping 检测从 Prometheus 读（不用令牌）；填了 rack-screen 的登录密码，再读它自己的检测项
+（以前填的 preview.token 也还能用，但两个都填了用密码）。
 
 rack-screen 的网页只有一个登录密码、没有用户名：POST /api/login {"password"} 换一个 rs_session 的 cookie，
 之后带着它读 /api/monitors；cookie 过期（401）就重新登录一次。密码只在网关的配置里，cookie 只在内存里。
@@ -108,10 +108,10 @@ async def _get_with_password(url: str, password: str, path: str):
 
 async def _monitors(s: dict) -> list:
     """rack-screen 自己的检测项（要登录密码或令牌）。"""
-    if s.get("token"):
-        data = await request("GET", f"{s['url']}/api/monitors", headers={"X-Token": s["token"]}, timeout=6)
-    else:
+    if s.get("password"):   # 登录密码优先；令牌只给以前只填了令牌的配置用
         data = await _get_with_password(s["url"], s["password"], "/api/monitors")
+    else:
+        data = await request("GET", f"{s['url']}/api/monitors", headers={"X-Token": s["token"]}, timeout=6)
     out = []
     for m in (data or {}).get("monitors") or []:
         if not isinstance(m, dict) or m.get("state") == "paused":

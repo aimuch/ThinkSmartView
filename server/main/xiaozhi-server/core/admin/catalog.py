@@ -273,7 +273,7 @@ PLUGINS = [
     # "home"：在「外部服务 → 家里的系统」里设置和开关（设计画布第 63 块），意图识别页的插件列表里不列
     {"name": "smart_hub", "label": "智能中枢（蓝牙灯）", "desc": "开关、调亮度和色温，查蓝牙设备的状态；点「设置」填智能中枢的访问令牌",
      "config": "smart_hub", "settings": "smart_hub", "home": True},
-    {"name": "rack_status", "label": "机柜", "desc": "主机在不在线、CPU、温度、Ping 检测（Prometheus，选填 rack-screen 令牌）",
+    {"name": "rack_status", "label": "机柜", "desc": "主机在不在线、CPU、温度、Ping 检测（Prometheus，选填 rack-screen 登录密码）",
      "config": "rack_status", "settings": "rack_status", "home": True},
     {"name": "repo_status", "label": "仓库同步", "desc": "repo-manager 的同步结果和需要处理的仓库",
      "config": "repo_status", "settings": "repo_status", "home": True},
@@ -364,8 +364,6 @@ PLUGIN_SETTINGS.update({
             {"key": "url", "label": "rack-screen 地址（选填）", "type": "text", "default": "http://127.0.0.1:8088"},
             {"key": "password", "label": "rack-screen 登录密码（选填）", "type": "secret",
              "hint": "就是打开机柜网页时输的密码，没有用户名"},
-            {"key": "token", "label": "或者 API 令牌（选填）", "type": "secret",
-             "hint": "rack-screen 配置文件里的 preview.token；填了它就不用登录密码"},
         ],
     },
     "repo_status": {

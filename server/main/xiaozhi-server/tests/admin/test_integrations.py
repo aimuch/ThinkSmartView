@@ -266,7 +266,8 @@ async def test_plugin_settings_tests(upstream):
     assert r["message"] == "连上了：4 个设备（2 盏灯、1 台电源）"
     with pytest.raises(ValueError, match="401"):
         await plugin_settings.run_test("smart_hub", {"url": base, "token": "bad-token"}, merged)
-    r = await plugin_settings.run_test("rack_status", {"prometheus": base, "url": base, "token": "rack-tok"}, merged)
+    rack._sessions.clear()
+    r = await plugin_settings.run_test("rack_status", {"prometheus": base, "url": base, "password": "rack-pass"}, merged)
     assert "2 台主机（1 台在线）" in r["message"] and "rack-screen 2 个检测项" in r["message"]
     r = await plugin_settings.run_test("repo_status", {"url": base}, merged)
     assert r["message"] == "连上了：10 个仓库，失败 2 个"
@@ -290,3 +291,7 @@ async def test_rack_logs_in_with_the_password(upstream):
     rack._sessions.clear()
     d = await rack.summary({**s, "password": "wrong"}, fresh=True)
     assert "登录密码不对" in d["monitor_error"]
+    rack._sessions.clear()
+    d = await rack.summary({**s, "token": "rack-pass"}, fresh=True)   # 两个都填了（令牌填错）：用密码
+    assert d["monitor_error"] is None and len(d["monitors"]) == 2
+    rack._sessions.clear()

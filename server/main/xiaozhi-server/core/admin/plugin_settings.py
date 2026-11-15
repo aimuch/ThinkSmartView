@@ -196,7 +196,7 @@ async def _test_integration(name: str, values: dict) -> dict:
         if name == "rack_status":
             d = await rack.summary(s, fresh=True)
             text = f"连上了：{d['total']} 台主机（{d['up']} 台在线），{len(d['probes'])} 个 Ping 检测"
-            if s["token"] or s.get("password"):
+            if s.get("token") or s.get("password"):
                 text += f"，rack-screen {len(d['monitors'])} 个检测项" if not d["monitor_error"] else f"；{d['monitor_error']}"
             return {"message": text}
         if name == "repo_status":
