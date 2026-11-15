@@ -326,7 +326,7 @@ FOCUS_TOOLS = [   # 专注计时（focus.py，设计画布第 47 块）
 ]
 PAGES = ('home', 'work', 'work.rack', 'work.desk', 'work.repo', 'weather', 'focus', 'study', 'smart', 'settings',
          'settings.screen', 'settings.looks', 'settings.net', 'settings.system', 'settings.alarms', 'settings.family',
-         'settings.voice', 'close')   # 和网关 core/agent/commands.py 的 PAGES 一致
+         'settings.voice', 'album', 'close')   # 和网关 core/agent/commands.py 的 PAGES 一致
 PAGE_TOOLS = [   # 打开设备上的页面（设计画布第 53 块）
     {
         'name': 'self.screen.open_page',
@@ -334,8 +334,22 @@ PAGE_TOOLS = [   # 打开设备上的页面（设计画布第 53 块）
                        '「DeskHub」「桌面」「智能桌面」work.desk；「打开天气」weather；「专注」focus；「学习记录」study；「家居」「米家」smart；'
                        '「打开设置」settings，设置里的分类 settings.screen（屏幕和声音）/ settings.looks（外观）/ settings.net（网络）/ '
                        'settings.system（系统）/ settings.alarms（闹钟和作息）/ settings.family（家人）/ settings.voice（语音）；'
+                       '「放相册」「看相册」「放家庭相册」「看看照片」album（说完进待机页轮播家庭相册）；'
                        '「回首页」home；「关掉」「退出这个页面」close。打开后只说一句「好的」。',
         'inputSchema': {'type': 'object', 'properties': {'page': {'type': 'string', 'enum': list(PAGES)}}, 'required': ['page']},
+    },
+]
+ALBUM_TOOLS = [   # 待机页上的家庭相册（设计画布第 66 块）
+    {
+        'name': 'self.album.current',
+        'description': '待机页正在放的那张照片：「这张是哪年的」「这是什么时候拍的」「这张在哪个相册」。返回拍摄日期（taken）、几年前（years_ago）、相册名；'
+                       '照着说，比如「这是 2023 年 11 月 15 日拍的，三年前的今天」。',
+        'inputSchema': {'type': 'object', 'properties': {}},
+    },
+    {
+        'name': 'self.album.hide',
+        'description': '「别放这张了」「这张不要了」「不要放这张」：这台设备以后跳过待机页正在放的这张，马上换下一张（照片还在相册里，后台能恢复）。',
+        'inputSchema': {'type': 'object', 'properties': {}},
     },
 ]
 LISTEN_TOOLS = [   # 说完以后怎么听（设计画布第 52 块）
@@ -382,7 +396,7 @@ PROACTIVE_TOOLS = [
                         'required': ['enabled']},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + LISTEN_TOOLS + PAGE_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
+TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + LISTEN_TOOLS + PAGE_TOOLS + ALBUM_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -636,6 +650,10 @@ async def handle(payload, client=None):
                 text = _dumps({'success': True, 'phase': view['phase'], 'minutes_left': view['left'] and round(view['left'] / 60),
                                'today_minutes': view['today']['minutes'], 'today_rounds': view['today']['rounds'],
                                'sounds': view['sounds']})
+            elif name == 'self.album.current' and client:
+                text = _dumps(client.album_info())
+            elif name == 'self.album.hide' and client:
+                text = _dumps(await client.album_hide_now())
             elif name == 'self.screen.open_page' and client:
                 page = args.get('page')
                 if page in PAGES:

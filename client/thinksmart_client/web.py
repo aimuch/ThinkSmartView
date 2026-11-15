@@ -785,12 +785,25 @@ def make_app(client: Client):
         async def change():
             if body.get('delete'):
                 return {'standby': await client.album_delete(str(body['delete']))}
-            keys = ('enabled', 'minutes', 'album')
+            keys = ('enabled', 'minutes', 'album', 'source', 'albums', 'style', 'interval', 'order', 'night')
             return {'standby': await client.set_standby(**{k: body[k] for k in keys if k in body})}
         return await wake_call(change)
 
     async def album_start(_request):
         return await wake_call(client.album_start)
+
+    async def album_hub_file(request):
+        """网关家庭相册缓存在设备上的照片（设计画布第 66 块）。"""
+        path = client.hub_album.path(request.match_info['name'])
+        if not path:
+            raise web.HTTPNotFound()
+        return web.FileResponse(path, headers={'Cache-Control': 'max-age=31536000'})
+
+    async def album_now(request):
+        """{"id"}：待机页正在放哪张（「这张是哪年的」「别放这张了」用）；不是网关相册的给 null。"""
+        body = await request.json()
+        client.album_now_set(body.get('id'))
+        return web.json_response({'ok': True})
 
     async def album_file(request):
         name = request.match_info['name']
@@ -903,6 +916,8 @@ def make_app(client: Client):
     app.router.add_post('/api/weather/cities', weather_cities)
     app.router.add_post('/api/usb', usb_set)
     app.router.add_post('/api/album/start', album_start)
+    app.router.add_get('/api/album/hub/{name}', album_hub_file)
+    app.router.add_post('/api/album/now', album_now)
     app.router.add_get('/api/album/{name}', album_file)
     app.router.add_post('/api/kids', kids_set)
     app.router.add_post('/api/looks', looks_set)

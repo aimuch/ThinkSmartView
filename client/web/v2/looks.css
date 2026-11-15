@@ -135,7 +135,21 @@ body.net-off .welcome { top: 92px; justify-content: flex-start; padding-top: 12p
 /* 待机页 */
 .standby { position: fixed; inset: 0; z-index: 55; background: var(--bg0); color: #f2f5ff; overflow: hidden; animation: photo-in .4s ease-out; }
 .standby[hidden] { display: none; }
-.sb-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 1.6s ease; }
+.sb-photo { position: absolute; inset: 0; display: flex; gap: 6px; background: #000; opacity: 0; transition: opacity 1.6s ease; }
+.sb-photo img { flex: 1 1 0; min-width: 0; height: 100%; object-fit: cover; }
+.sb-cap { position: absolute; right: 56px; bottom: 54px; max-width: 46%; text-align: right; font-size: 24px; line-height: 1.5; opacity: .88; text-shadow: 0 1px 6px #000a; }
+.sb-cap:empty, .standby.plain .sb-cap { display: none; }
+.standby.photo-only .sb-time, .standby.photo-only .sb-date, .standby.photo-only .sb-wx { display: none; }
+.standby.photo-only .sb-shade { background: linear-gradient(180deg, transparent 70%, #0008); }
+/* 待机页设置（设计画布第 66 块） */
+.sb-row { display: flex; align-items: center; gap: 18px; }
+.sb-row[hidden] { display: none; }
+.sb-k { flex: none; width: 92px; font-size: 20px; color: var(--ink2); }
+.sb-seg { display: flex; flex-wrap: wrap; gap: 10px; }
+.sb-seg button { height: 56px; padding: 0 22px; border-radius: 999px; font-size: 20px; color: var(--ink2); background: var(--card2); border: 1px solid var(--line); }
+.sb-seg button.on { color: #081024; font-weight: 700; border: 0; background: linear-gradient(135deg, #8ff0ff, #8fa6ff); }
+.sb-seg button:active { transform: scale(.96); }
+.sb-sub { font-size: 18px; color: var(--ink2); }
 .sb-photo.on { opacity: 1; }
 .sb-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 35%, #000c); }
 .standby.plain .sb-shade { background: radial-gradient(760px 560px at 20% 46%, var(--glow1, #18245a) 0%, transparent 70%), linear-gradient(160deg, var(--bg1), var(--bg0) 70%); }

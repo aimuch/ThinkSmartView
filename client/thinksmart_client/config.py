@@ -67,7 +67,9 @@ DEFAULTS = {
     'kids': {'enabled': False, 'age': 3, 'daily_minutes': 30, 'bedtime': '20:30', 'voice': 'child'},   # kids.py
     'kids_synced': 0,   # 网关「孩子和学习」那份儿童模式的 updated，用过的最新那次（设计画布第 61 块）
     # 待机页 (设计画布第 10 块): after this long idle, a big clock, the weather and the family album
-    'standby': {'enabled': True, 'minutes': 2, 'album': True},
+    # 家庭相册在网关上（设计画布第 66 块）：source hub|local|none、放哪些相册、样式、多久换一张、顺序、睡眠时段放不放；updated 是本机改的时间
+    'standby': {'enabled': True, 'minutes': 2, 'album': True, 'source': 'hub', 'albums': None, 'style': 'corner',
+                'interval': 15, 'order': 'shuffle', 'night': 'clock', 'updated': 0},
     'gentle_wake': {'enabled': False, 'minutes': 10, 'birds': True},   # 温柔叫醒 (gentle.py)
     'scenes': [],         # 场景口令 (daily.py): [{'name': '我出门了', 'steps': '…'}]
     'tasks': [],          # 定时任务: [{'id', 'time': 'HH:MM', 'days': 'daily'|'workdays'|'weekend'|'once', 'prompt'}]

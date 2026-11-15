@@ -40,6 +40,7 @@ import io
 import json
 import logging
 import os
+import random
 import re
 import shutil
 import socket
@@ -52,7 +53,7 @@ import aiohttp
 import numpy as np
 
 from . import bg
-from . import airplay, alarms, appproxy, intercom, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import airplay, alarms, appproxy, intercom, broadcast, bt, camera, config, cook, perf, daily, focus, gentle, hub_album, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -78,6 +79,7 @@ PHOTOS = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'photos'   # �
 PHOTO_POLL = 1.5
 ALBUM = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'album'   # 待机页的家庭相册
 ALBUM_MAX = 60
+HUB_ALBUM = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'album-hub'   # 网关家庭相册的缓存（设计画布第 66 块）
 STUDY_LOG = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'study'   # 学习陪伴：每天的文字记录
 STANDBY_MINUTES = (1, 2, 5, 10)
 HALT_AFTER = 3           # seconds to read "正在关机 … 等 10 秒再拔" before the screen goes dark
@@ -392,6 +394,9 @@ class Client:
         self.alarm_tone = cfg.get('alarm_tone') if cfg.get('alarm_tone') in alarms.TONES else alarms.DEFAULT_TONE
         self.gentle = gentle.Gentle(cfg.get('gentle_wake'))   # 温柔叫醒（设计画布第 46 块）
         self.usb = usb.Usb(ALBUM, ALBUM_MAX, on_change=self._usb_changed)   # USB 接口（设计画布第 46 块）
+        self.hub_album = hub_album.HubAlbum(HUB_ALBUM, lambda: self.cfg['hub_http'], cfg['device_id'], ALBUM, on_change=self.publish_standby)
+        self.album_now = None   # 待机页正在放的那张（网关相册的 id），「这张是哪年的」「别放这张了」用
+        self.album_want = 0     # 说了「放相册」：对话结束后进待机页
         self.focus = focus.Focus(cfg.get('focus'))                           # 专注计时（设计画布第 47 块）
         self.study = study.Study(cfg.get('study'), STUDY_LOG)                # 学习陪伴（设计画布第 48 块）
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
@@ -1088,6 +1093,9 @@ class Client:
 
     def open_page(self, page):
         """让页面打开某一页（语音、口令都用；页面上 wf.js 的 handlers.open_page）。"""
+        if page == 'album':     # 「放相册」：对话结束后进待机页（设计画布第 66 块）
+            self.album_show()
+            return
         self.screen.poke()
         self.events.publish('open_page', {'page': page})
 
@@ -1625,31 +1633,109 @@ class Client:
 
     # ---- 待机页 and the family album ----
 
+    def standby_settings(self):
+        return {**config.DEFAULTS['standby'], **self.cfg['standby']}
+
     def standby_view(self):
-        s = self.cfg['standby']
+        s = self.standby_settings()
         photos = sorted(ALBUM.glob('*.jpg'), key=lambda p: p.stat().st_mtime, reverse=True) if ALBUM.is_dir() else []
-        return {**s, 'choices': STANDBY_MINUTES, 'photos': [f'/api/album/{p.name}' for p in photos], 'max': ALBUM_MAX}
+        local = [{'u': f'/api/album/{p.name}', 'p': None} for p in photos]
+        ha = getattr(self, 'hub_album', None)
+        hub = ha.show() if ha and s['source'] == 'hub' else []
+        if s['source'] == 'hub' and s['order'] == 'shuffle':
+            first = [x for x in hub if x['otd']]
+            rest = [x for x in hub if not x['otd']]
+            random.Random(datetime.date.today().isoformat()).shuffle(rest)
+            hub = first + rest
+        show = [] if s['source'] == 'none' else hub or local   # 网关的还没取到时先放本机的
+        return {**s, 'album': s['source'] != 'none', 'choices': STANDBY_MINUTES, 'photos': [x['u'] for x in local], 'max': ALBUM_MAX,
+                'show': show, 'hub': {'albums': ha.albums, 'count': len(ha.cached()), 'total': ha.total, 'synced': int(ha.synced)} if ha else None,
+                'want': getattr(self, 'album_want', 0)}
 
     def publish_standby(self):
         self.events.publish('standby', self.standby_view())
 
-    async def set_standby(self, enabled=None, minutes=None, album=None):
-        s = dict(self.cfg['standby'])
+    async def set_standby(self, enabled=None, minutes=None, album=None, **more):
+        s = self.standby_settings()
         if enabled is not None:
             s['enabled'] = bool(enabled)
-        if album is not None:
-            s['album'] = bool(album)
+        if album is not None:     # 老的开关：关了就是不放照片
+            more.setdefault('source', 'hub' if album else 'none')
+        changed = hub_album.clean(more)
+        if changed:
+            s.update(changed)
+            s['album'] = s['source'] != 'none'
+            s['updated'] = int(time.time())
         if minutes is not None:
             if int(minutes) not in STANDBY_MINUTES:
                 raise ValueError(f"只能是 {'、'.join(map(str, STANDBY_MINUTES))} 分钟")
             s['minutes'] = int(minutes)
         self.cfg['standby'] = s
-        if s == config.DEFAULTS['standby']:
+        if {k: v for k, v in s.items() if k != 'updated'} == {k: v for k, v in config.DEFAULTS['standby'].items() if k != 'updated'}:
             config.unset('standby')
         else:
             config.save(standby=s)
         self.publish_standby()
+        if changed and getattr(self, 'hub_album', None):
+            bg.spawn(self.hub_album.push(s))
         return self.standby_view()
+
+    async def _album_loop(self):
+        """网关的家庭相册：10 分钟同步一次；改了设置、后台点了「收进相册」时提前。"""
+        await asyncio.sleep(20)
+        while True:
+            try:
+                newer = await self.hub_album.sync(self.standby_settings())
+                if newer:
+                    s = {**self.standby_settings(), **newer}
+                    s['album'] = s['source'] != 'none'
+                    self.cfg['standby'] = s
+                    config.save(standby=s)
+                    log.info('standby settings from the hub: %s', newer)
+                self.publish_standby()
+            except Exception as e:
+                log.info('album sync: %s', e)
+            self.hub_album.kick.clear()
+            try:
+                await asyncio.wait_for(self.hub_album.kick.wait(), hub_album.SYNC_EVERY)
+            except asyncio.TimeoutError:
+                pass
+
+    def album_now_set(self, pid):
+        self.album_now = pid if isinstance(pid, str) and hub_album.ID.fullmatch(pid) else None
+
+    def album_info(self):
+        """「这张是哪年的」：待机页正在放的那张。"""
+        p = self.hub_album.info(self.album_now) if self.album_now else None
+        if not p:
+            return {'success': False, 'reason': '现在没在放网关相册里的照片'}
+        out = {'success': True, 'albums': p.get('albums') or []}
+        if p.get('taken'):
+            t = datetime.datetime.fromtimestamp(p['taken'])
+            out['taken'] = f'{t.year} 年 {t.month} 月 {t.day} 日'
+            out['years_ago'] = datetime.date.today().year - t.year
+        else:
+            out['taken'] = '照片里没记拍摄时间'
+        return out
+
+    async def album_hide_now(self):
+        """「别放这张了」：这台设备以后跳过它，马上换下一张。"""
+        pid = self.album_now
+        if not pid:
+            return {'success': False, 'reason': '现在没在放网关相册里的照片'}
+        try:
+            await self.hub_album.hide(pid)
+        except Exception as e:
+            log.info('album hide: %s', e)
+        self.album_now = None
+        self.publish_standby()
+        self.events.publish('album_next', {})
+        return {'success': True}
+
+    def album_show(self):
+        """「放相册」：对话一结束就进待机页（open_page 'album'）。"""
+        self.album_want = int(time.time() * 1000)
+        self.publish_standby()
 
     async def album_start(self):
         r = await self.photo_start('家庭相册', purpose='album')
@@ -2157,6 +2243,7 @@ class Client:
         bg.spawn(self._lists_loop())
         bg.spawn(self._alert_loop())
         bg.spawn(self._integrations_loop())
+        bg.spawn(self._album_loop())
         bg.spawn(self._offline_clips_loop())
         await self.bt.start()
         bg.spawn(self._bluetooth_loop())

@@ -57,6 +57,7 @@ def make_client(tmp_path, monkeypatch):
     monkeypatch.setattr(kids, 'USAGE', tmp_path / 'kids.json')
     monkeypatch.setattr(app, 'Kws', FakeKws)
     monkeypatch.setattr(app, 'ALBUM', tmp_path / 'album')
+    monkeypatch.setattr(app, 'HUB_ALBUM', tmp_path / 'album-hub')
     c = app.Client.__new__(app.Client)
     c.events = app.Events()
     c.cfg = {**config.DEFAULTS, 'device_id': 'dev1', 'wake_words': list(config.DEFAULTS['wake_words'])}
@@ -82,6 +83,9 @@ def make_client(tmp_path, monkeypatch):
         return {'ok': True}
     c._hub_http = hub_http
     c.hub = types.SimpleNamespace(connected=False)
+    from thinksmart_client import hub_album
+    c.hub_album = hub_album.HubAlbum(tmp_path / 'album-hub', lambda: 'http://hub', 'dev1', tmp_path / 'album')
+    c.album_now, c.album_want = None, 0
     c.in_turn = lambda: False
     c.kids = kids.normalize(None)
     c.kids_seconds = 0.0
@@ -257,3 +261,63 @@ def test_family_kids_sync_learn_and_reports(tmp_path, monkeypatch):
         assert any(p == '/kiosk/kids/report' and b['kind'] == 'learn' and b['learn'] == 'chars' for p, b in c.hub_calls)
     asyncio.run(run())
     assert json.loads(config.PATH.read_text())['kids_synced'] == 300.0
+
+
+def test_standby_uses_the_hub_album(tmp_path, monkeypatch):
+    """家庭相册在网关上（设计画布第 66 块）：同步下来的照片先放，那年今日排前面；设置谁新听谁的；「别放这张了」。"""
+    from thinksmart_client import hub_album
+    c = make_client(tmp_path, monkeypatch)
+    hub = {'settings': {'source': 'hub', 'albums': None, 'style': 'photo', 'interval': 30, 'order': 'shuffle', 'night': 'clock', 'updated': 0},
+           'photos': [{'id': 'a' * 12, 'taken': 1, 'w': 1280, 'h': 960, 'otd': False, 'albums': ['旅行']},
+                      {'id': 'b' * 12, 'taken': 2, 'w': 960, 'h': 1280, 'otd': True, 'albums': ['孩子']}],
+           'albums': [{'id': 'a1', 'name': '孩子'}], 'collect': False, 'total': 2, 'ok': True}
+    posted = []
+
+    async def fake_get(self, s, path):
+        if path.startswith('/kiosk/album?'):
+            return json.dumps(hub).encode()
+        return b'\xff\xd8jpeg'
+
+    class FakeResp:
+        status = 200
+        async def read(self): return b'{}'
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+
+    class FakeSession:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        def post(self, url, json=None, data=None):
+            posted.append((url, json))
+            return FakeResp()
+
+    monkeypatch.setattr(hub_album.HubAlbum, '_get', fake_get)
+    monkeypatch.setattr(hub_album.aiohttp, 'ClientSession', FakeSession)
+
+    async def run():
+        assert c.standby_view()['show'] == []
+        newer = await c.hub_album.sync(c.standby_settings())
+        assert newer is None                          # 网关的没本机新
+        v = c.standby_view()
+        assert [x['id'] for x in v['show']] == ['b' * 12, 'a' * 12]    # 那年今日排前面
+        assert v['show'][0]['p'] is True and v['show'][0]['u'] == f"/api/album/hub/{'b' * 12}.jpg"
+        assert v['hub']['albums'] == [{'id': 'a1', 'name': '孩子'}] and v['hub']['count'] == 2
+        # 本机改了：推给网关；网关后来又改了：下次同步取回来
+        await c.set_standby(style='corner', interval=10)
+        await asyncio.sleep(0)
+        assert c.standby_settings()['updated'] > 0
+        hub['settings'] = {**hub['settings'], 'style': 'clock', 'updated': c.standby_settings()['updated'] + 5}
+        newer = await c.hub_album.sync(c.standby_settings())
+        assert newer['style'] == 'clock'
+        # 「这张是哪年的」「别放这张了」
+        c.album_now_set('b' * 12)
+        assert c.album_info()['success'] is True
+        r = await c.album_hide_now()
+        assert r['success'] and any(u.endswith('/kiosk/album/hide') for u, _ in posted)
+        assert [x['id'] for x in c.standby_view()['show']] == ['a' * 12]
+        c.album_now_set('../x')
+        assert c.album_info()['success'] is False
+        await c.set_standby(source='none')
+        assert c.standby_view()['show'] == [] and c.standby_view()['album'] is False
+    asyncio.run(run())

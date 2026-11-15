@@ -996,18 +996,32 @@ $('cookTimer').addEventListener('click', () => cookPost('/api/cook/timer'));
 $('cookVideo').addEventListener('click', () => musicPost({ action: 'cook_video' }));
 
 /* ---- 待机页 and the family album ---- */
-const sb = { last: Date.now(), shown: false, idx: 0, layer: 0, armed: null, timer: null };
+// 家庭相册在网关上（设计画布第 66 块）：show 是要轮播的 [{u, id, otd, taken, p（竖照）, a（相册名）}]；
+// 样式 corner 照片 + 角落时钟、photo 只放照片、clock 时钟和天气；横屏遇到竖照两张并排；interval 秒换一张
+const sb = { last: Date.now(), shown: false, idx: -1, layer: 0, armed: null, timer: null, clock: null, want: 0 };
+const SB_SOURCE = [['hub', '家庭相册（网关）'], ['local', '只放这台的照片'], ['none', '不放照片']];
+const SB_STYLE = [['corner', '照片 + 角落时钟'], ['photo', '只放照片'], ['clock', '时钟和天气']];
 function renderStandbyCard() {
   const st = ui.standby;
   if (!st) return;
+  const src = st.source || (st.album ? 'hub' : 'none'), hub = st.hub || { albums: [] };
   $('sbCard').classList.toggle('off', !st.enabled);
   $('sbSwitch').setAttribute('aria-checked', String(!!st.enabled));
-  $('sbAlbum').setAttribute('aria-checked', String(!!st.album));
   $('sbNow').textContent = st.enabled ? `没人说话 ${st.minutes} 分钟后` : '';
   $('sbMinutes').innerHTML = st.choices.map(m => `<button data-m="${m}" class="${m === st.minutes ? 'on' : ''}">${m} 分钟</button>`).join('');
-  $('sbAlbumSub').textContent = st.photos.length ? `${st.photos.length} 张照片，每 15 秒换一张` : '还没有照片，用手机传几张';
+  $('sbSource').innerHTML = SB_SOURCE.map(([k, n]) => `<button data-src="${k}" class="${src === k ? 'on' : ''}">${n}</button>`).join('');
+  $('sbAlbRow').hidden = src !== 'hub' || !hub.albums.length;
+  $('sbAlbums').innerHTML = [['', '全部'], ...hub.albums.map(a => [a.id, a.name])].map(([id, n]) =>
+    `<button data-alb="${esc(id)}" class="${(id ? (st.albums || []).includes(id) : !st.albums) ? 'on' : ''}">${esc(n)}</button>`).join('');
+  $('sbStyleRow').hidden = $('sbIntRow').hidden = src === 'none';
+  $('sbStyle').innerHTML = SB_STYLE.map(([k, n]) => `<button data-sty="${k}" class="${(st.style || 'corner') === k ? 'on' : ''}">${n}</button>`).join('');
+  $('sbInterval').innerHTML = [10, 15, 30, 60].map(v => `<button data-int="${v}" class="${(st.interval || 15) === v ? 'on' : ''}">${v < 60 ? v + ' 秒' : '1 分钟'}</button>`).join('');
+  $('sbAlbumSub').textContent = src === 'hub' ? (hub.total ? `网关相册：这台存了 ${hub.count} 张（共 ${hub.total} 张）${st.photos.length ? `；下面是这台自己的 ${st.photos.length} 张，网关后台能收进全家的相册` : ''}`
+      : '网关相册还没有照片：在网关后台「家庭相册」里加，或者用下面的按钮先传到这台')
+    : src === 'local' ? (st.photos.length ? `这台自己的 ${st.photos.length} 张照片` : '还没有照片，用手机传几张') : '';
   $('sbThumbs').innerHTML = st.photos.map(u => `<button data-del="${esc(u.split('/').pop())}" class="${sb.armed === u.split('/').pop() ? 'armed' : ''}"><img src="${esc(u)}" alt="" loading="lazy"></button>`).join('');
   $('sbAdd').hidden = st.photos.length >= st.max;
+  if (st.want && st.want !== sb.want) { sb.want = st.want; if (Date.now() - st.want < 120000) sb.pending = Date.now(); }   // 说了「放相册」
 }
 async function setStandby(body) {
   if (DEMO !== null) return;
@@ -1015,7 +1029,16 @@ async function setStandby(body) {
   if (r.ok) { ui.standby = r.standby; renderStandbyCard(); } else if (r.error) toast(r.error, 'error');
 }
 $('sbSwitch').addEventListener('click', () => setStandby({ enabled: !(ui.standby && ui.standby.enabled) }));
-$('sbAlbum').addEventListener('click', () => setStandby({ album: !(ui.standby && ui.standby.album) }));
+$('sbSource').addEventListener('click', e => { const b = e.target.closest('[data-src]'); if (b) setStandby({ source: b.dataset.src }); });
+$('sbStyle').addEventListener('click', e => { const b = e.target.closest('[data-sty]'); if (b) setStandby({ style: b.dataset.sty }); });
+$('sbInterval').addEventListener('click', e => { const b = e.target.closest('[data-int]'); if (b) setStandby({ interval: Number(b.dataset.int) }); });
+$('sbAlbums').addEventListener('click', e => {
+  const b = e.target.closest('[data-alb]');
+  if (!b) return;
+  const id = b.dataset.alb, cur = (ui.standby.albums || []).slice();
+  const next = !id ? null : cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
+  setStandby({ albums: next && next.length ? next : null });
+});
 $('sbMinutes').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) setStandby({ minutes: Number(b.dataset.m) }); });
 $('sbThumbs').addEventListener('click', e => {
   const b = e.target.closest('[data-del]');
@@ -1034,11 +1057,19 @@ function showStandby(on) {
   if (on === sb.shown) return;
   sb.shown = on;
   $('standby').hidden = !on;
-  clearInterval(sb.timer);
-  if (on) { renderStandby(); sb.timer = setInterval(renderStandby, 15000); }
+  clearInterval(sb.timer); clearInterval(sb.clock);
+  if (on) {
+    renderClock(); nextPhoto();
+    sb.clock = setInterval(renderClock, 15000);
+    sb.timer = setInterval(nextPhoto, Math.max(10, (ui.standby && ui.standby.interval) || 15) * 1000);
+  } else { sb.forced = false; if (DEMO === null) postJson('/api/album/now', { id: null }).catch(() => {}); }
 }
-function renderStandby() {
-  const now = new Date(), st = ui.standby || {}, photos = (st.album && !(ui.status.sleep || {}).active) ? st.photos || [] : [];
+function standbyPhotos() {
+  const st = ui.standby || {}, night = (ui.status.sleep || {}).active && st.night !== 'play';
+  return st.album !== false && st.style !== 'clock' && !night ? st.show || (st.photos || []).map(u => ({ u })) : [];
+}
+function renderClock() {
+  const now = new Date();
   $('sbTime').textContent = pad(now.getHours()) + ':' + pad(now.getMinutes());
   $('sbDate').textContent = $('bigDate').textContent;
   const w = ui.today && ui.today.weather, n = v => (v === null || v === undefined ? '?' : Math.round(v));
@@ -1046,18 +1077,39 @@ function renderStandby() {
   const next = ui.alarms && ui.alarms.items.find(v => v.kind !== 'timer');
   $('sbAlarm').hidden = !next;
   if (next) $('sbAlarm').textContent = `⏰ ${dayText(next.at)} ${hhmm(next.at)} ${next.label || ''}`;
-  $('standby').classList.toggle('plain', !photos.length);
-  const imgs = [$('sbPhotoA'), $('sbPhotoB')];
-  if (photos.length) {
-    sb.idx = (sb.idx + 1) % photos.length;
-    const nextImg = imgs[sb.layer ^ 1];
-    nextImg.onload = () => { nextImg.classList.add('on'); imgs[sb.layer].classList.remove('on'); sb.layer ^= 1; };
-    nextImg.src = photos[sb.idx];
-  } else imgs.forEach(i => i.classList.remove('on'));
 }
+function photoCaption(x) {
+  if (!x || !x.taken) return x && x.a ? esc(x.a) : '';
+  const t = new Date(x.taken * 1000), d = `${t.getFullYear()} 年 ${t.getMonth() + 1} 月 ${t.getDate()} 日`;
+  return x.otd ? `那年今日 · ${d}${x.a ? '<br>' + esc(x.a) : ''}` : `${x.a ? esc(x.a) + ' · ' : ''}${t.getFullYear()} 年 ${t.getMonth() + 1} 月`;
+}
+function nextPhoto() {
+  const st = ui.standby || {}, photos = standbyPhotos();
+  $('standby').classList.toggle('plain', !photos.length);
+  $('standby').classList.toggle('photo-only', !!photos.length && st.style === 'photo');
+  const layers = [$('sbPhotoA'), $('sbPhotoB')];
+  if (!photos.length) { layers.forEach(l => l.classList.remove('on')); $('sbCap').innerHTML = ''; return; }
+  sb.idx = (sb.idx + 1) % photos.length;
+  const pick = [photos[sb.idx]];
+  // 横屏遇到竖照：下一张也是竖照就两张并排
+  if (innerWidth > innerHeight && pick[0].p && photos.length > 2 && photos[(sb.idx + 1) % photos.length].p) { sb.idx = (sb.idx + 1) % photos.length; pick.push(photos[sb.idx]); }
+  const layer = layers[sb.layer ^ 1];
+  let left = pick.length;
+  layer.innerHTML = '';
+  pick.forEach(x => {
+    const img = new Image();
+    img.alt = '';
+    img.onload = img.onerror = () => { if (--left) return; layer.classList.add('on'); layers[sb.layer].classList.remove('on'); sb.layer ^= 1; };
+    img.src = x.u;
+    layer.appendChild(img);
+  });
+  $('sbCap').innerHTML = photoCaption(pick[0]);
+  if (DEMO === null) postJson('/api/album/now', { id: pick[0].id || null }).catch(() => {});
+}
+function albumNext() { if (sb.shown) { nextPhoto(); clearInterval(sb.timer); sb.timer = setInterval(nextPhoto, Math.max(10, (ui.standby && ui.standby.interval) || 15) * 1000); } };
 // any touch: back to the home page (the touch that ends the standby page does nothing else)
 document.addEventListener('pointerdown', e => {
-  sb.last = Date.now();
+  sb.last = Date.now(); sb.pending = 0;
   if (sb.shown) { e.preventDefault(); e.stopPropagation(); showStandby(false); sb.eatClick = Date.now(); }
 }, true);
 document.addEventListener('click', e => {
@@ -1065,9 +1117,12 @@ document.addEventListener('click', e => {
 }, true);
 setInterval(() => {
   const st = ui.standby;
-  if (!st || !st.enabled || standbyBusy()) { sb.last = Math.max(sb.last, standbyBusy() ? Date.now() : 0); if (sb.shown) showStandby(false); return; }
+  // 说了「放相册」：对话结束、页面空下来就进（等不过 2 分钟）
+  if (sb.pending && Date.now() - sb.pending > 120000) sb.pending = 0;
+  if (sb.pending && st && !standbyBusy()) { sb.pending = 0; sb.last = 0; if (!sb.shown) { showStandby(true); sb.forced = true; } return; }
+  if (!st || (!st.enabled && !sb.forced) || standbyBusy()) { sb.last = Math.max(sb.last, standbyBusy() ? Date.now() : 0); if (sb.shown) showStandby(false); return; }
   if (!sb.shown && Date.now() - sb.last > st.minutes * 60000) showStandby(true);
-}, 5000);
+}, 1000);
 
 /* ---- 温柔叫醒（gentle.py，设计画布第 46 块）：设置卡片、叫醒中的那一条；叫醒中碰屏幕就停 ---- */
 let gentleTimer = null;
@@ -2717,6 +2772,7 @@ const handlers = {
   standby(st) {
     ui.standby = st; renderStandbyCard();
   },
+  album_next() { albumNext(); },   // 「别放这张了」：马上换下一张
   gentle(g) {
     ui.gentle = g; renderGentle();
   },

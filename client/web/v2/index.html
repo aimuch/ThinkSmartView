@@ -310,12 +310,15 @@
         <button class="switch" id="sbSwitch" role="switch" aria-checked="true" aria-label="待机页"><i></i></button></div>
       <div class="sb-on">
         <div class="minutes" id="sbMinutes" style="grid-template-columns:repeat(4,1fr)"></div>
-        <div class="opt rot-auto"><div class="opt-text"><b>家庭相册</b><span id="sbAlbumSub"></span></div>
-          <button class="switch" id="sbAlbum" role="switch" aria-checked="true" aria-label="家庭相册轮播"><i></i></button></div>
+        <div class="sb-row"><span class="sb-k">背景放</span><div class="sb-seg" id="sbSource"></div></div>
+        <div class="sb-row" id="sbAlbRow"><span class="sb-k">相册</span><div class="sb-seg" id="sbAlbums"></div></div>
+        <div class="sb-row" id="sbStyleRow"><span class="sb-k">样式</span><div class="sb-seg" id="sbStyle"></div></div>
+        <div class="sb-row" id="sbIntRow"><span class="sb-k">换一张</span><div class="sb-seg" id="sbInterval"></div></div>
+        <div class="sb-sub" id="sbAlbumSub"></div>
         <div class="sb-thumbs" id="sbThumbs"></div>
         <button class="bt-add" id="sbAdd">＋ 加照片（机身摄像头或手机）</button>
       </div>
-      <p class="opt-note">待机页显示大时钟、日期、天气和下一个闹钟，背景轮播家庭相册（没有照片时用主题的背景）。点一下屏幕或叫它就回到首页；到自动熄屏时间照常熄屏，睡眠时段里不轮播。点两下缩略图删除。</p>
+      <p class="opt-note">待机页显示大时钟、日期、天气和下一个闹钟，背景轮播家庭相册：全家一份放在网关上，在网关后台「家庭相册」里加照片、分相册（设计画布第 66 块）。点一下屏幕或叫它就回到首页；到自动熄屏时间照常熄屏，睡眠时段里默认不放照片。说「放相册」马上进待机页，「这张是哪年的」「别放这张了」也行。这台自己的照片点两下删除。</p>
     </div>
    </section>
    <section class="set-pane" data-pane="net">
@@ -922,11 +925,12 @@
   <button class="upd-btn" id="gentleStop">停下</button>
 </div>
 <div class="standby" id="standby" hidden>
-  <img class="sb-photo" id="sbPhotoA" alt=""><img class="sb-photo" id="sbPhotoB" alt="">
+  <div class="sb-photo" id="sbPhotoA"></div><div class="sb-photo" id="sbPhotoB"></div>
   <div class="sb-shade"></div>
   <div class="sb-alarm" id="sbAlarm" hidden></div>
   <div class="sb-time" id="sbTime"></div><div class="sb-date" id="sbDate"></div>
   <div class="sb-wx" id="sbWx"></div>
+  <div class="sb-cap" id="sbCap"></div>
 </div>
 <!-- 做菜模式: one step per screen -->
 <div class="cook-ov" id="cookOv" hidden>
