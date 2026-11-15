@@ -20,7 +20,7 @@ APPS = {
              "no_token": "网关后台「意图识别 → 插件」的「机柜状态」里还没填 rack-screen 令牌（rack-screen 配置文件里的 preview.token）。"
                          "填好后点右上角的刷新。"},
     "hub": {"plugin": "smart_hub", "label": "智能中枢",
-            "no_token": "网关后台「意图识别 → 插件」的「智能中枢」里还没填访问令牌（智能中枢 .env 里的 BTROUTER_API_TOKEN）。"
+            "no_token": "网关后台「意图识别 → 插件」的「智能中枢」里还没填访问令牌（网关那台机器上 ~/bluetooth-router/.env 里的 BTROUTER_API_TOKEN）。"
                         "填好后点右上角的刷新。"},
 }
 DENY = {

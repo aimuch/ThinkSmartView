@@ -589,7 +589,7 @@ async def test_emby_uses_the_same_code(tmp_path, jf, client):
     v = await (await client.get("/admin/api/media")).json()
     assert v["emby"]["has_password"] and v["jellyfin"]["has_password"]
     sd = await (await client.get("/admin/api/services")).json()
-    assert [m["id"] for m in sd["media"]] == ["music", "jellyfin", "emby"] and sd["media"][2]["configured"]
+    assert [m["id"] for m in sd["media"]] == ["music", "jellyfin", "emby", "fnvideos"] and sd["media"][2]["configured"]
 
 
 def test_jellyfin_headers_work_for_fnvideos():
@@ -597,3 +597,18 @@ def test_jellyfin_headers_work_for_fnvideos():
     h = music.Jellyfin._auth_headers("dev-1", "tok")
     assert h["Authorization"] == h["X-Emby-Authorization"] and 'Token="tok"' in h["Authorization"] and h["X-Emby-Token"] == "tok"
     assert "Token" not in music.Jellyfin._auth_headers("dev-1")["X-Emby-Authorization"]
+
+
+async def test_fnvideos_has_its_own_card(tmp_path, jf, client):
+    """飞牛影视（fnOS 自带，8005）：单独一张卡片，id 前缀 f.，和 Jellyfin 同一套接口。"""
+    await music.apply_async({"op": "fnvideos", "url": jf.base, "user": "andy", "password": JF_PW})
+    d = json.loads((tmp_path / "media.json").read_text(encoding="utf-8"))
+    assert d["fnvideos"]["token"] == JF_TOKEN and JF_PW not in json.dumps(d) and not d["jellyfin"]["url"]
+    assert [s.key for s in music.sources()] == ["f"] and music.get("f").name == "飞牛影视"
+    r = await music.find("红烧肉", video=True)
+    assert r["tracks"] and {t["id"][0] for t in r["tracks"]} == {"f"}
+    assert (await client.get("/kiosk/media/stream/f.e1")).status == 200
+    v = await (await client.get("/admin/api/media")).json()
+    assert v["fnvideos"]["has_password"] and "host" in v["local"]
+    await music.apply_async({"op": "fnvideos", "url": ""})
+    assert not music.load()["fnvideos"]["token"]

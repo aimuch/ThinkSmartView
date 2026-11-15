@@ -375,7 +375,7 @@ async def run_test(group: str, sid: str, merged: dict):
         await _test_news(sid, merged)
     elif group == "geoip":
         await _test_geo()
-    elif group in ("music", "jellyfin", "emby"):
+    elif group in ("music", "jellyfin", "emby", "fnvideos"):
         await _test_music(group)
     else:
         raise ServicesError("没有这一类")
@@ -396,7 +396,7 @@ async def run_all(merged: dict, group: str = None):
         jobs += [_test_news("newsnow", merged), _test_news("chinanews", merged)]
         if geoip_on():
             jobs.append(_test_geo())
-        jobs += [_test_music("music"), _test_music("jellyfin"), _test_music("emby")]
+        jobs += [_test_music("music"), _test_music("jellyfin"), _test_music("emby"), _test_music("fnvideos")]
     await asyncio.gather(*jobs, return_exceptions=True)
     if group is None:
         LAST_ALL["at"] = int(time.time())

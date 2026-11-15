@@ -6,6 +6,7 @@
   或者直接填 API Key。设备上放视频：H.264/MP4 且不高于 720p 直接发；别的让 Jellyfin 转成 720p H.264 的分片 MP4。
   （设备的 WebKit 实测：720p H.264 30 帧不掉帧，1080p 约 26 帧，VP8 只有 7 帧，见设计画布第 60 块。）
 - Emby（e.）：和 Jellyfin 同一套接口（Emby 是 Jellyfin 的前身），认证头不同，其余一样（Jellyfin 的类直接用）。
+- 飞牛影视（f.）：飞牛 fnOS 自带的影视，Jellyfin 10.10 改的，接口一样（单独一张卡片，和家里另装的 Jellyfin 可以同时用）。
 - 网关本机 music/ 文件夹（l.）：没有 NAS 的人用，音频、视频都行，后台能上传。
 
 分区（sections）按用途，不按来源：儿童区（kid=True）「儿歌」「睡前故事」「英语启蒙」「动画」，大人区「音乐」「英语学习」「菜谱」，
@@ -88,10 +89,20 @@ def local_root() -> Path:
     return Path(get_project_dir()) / "music"
 
 
+def _host_ip() -> str:
+    """网关这台机器的局域网地址：本机文件夹是在它上面，不是在开发用的电脑上。"""
+    try:
+        from core.utils.util import get_local_ip
+        return get_local_ip() or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _empty() -> dict:
     return {"navidrome": {"url": "", "user": "", "salt": "", "token": "", "on": True},
             "jellyfin": {"url": "", "user": "", "user_id": "", "token": "", "device": "", "key": False, "on": True},
             "emby": {"url": "", "user": "", "user_id": "", "token": "", "device": "", "key": False, "on": True},
+            "fnvideos": {"url": "", "user": "", "user_id": "", "token": "", "device": "", "key": False, "on": True},
             "local": {"on": True},
             "sections": [dict({k: v for k, v in p.items() if k != "words"}, refs=[]) for p in PRESETS]}
 
@@ -121,7 +132,8 @@ def load() -> dict:
     if not isinstance(raw, dict):
         return d
     for src, keys in (("navidrome", ("url", "user", "salt", "token")), ("jellyfin", ("url", "user", "user_id", "token", "device")),
-                      ("emby", ("url", "user", "user_id", "token", "device"))):
+                      ("emby", ("url", "user", "user_id", "token", "device")),
+                      ("fnvideos", ("url", "user", "user_id", "token", "device"))):
         got = raw.get(src) if isinstance(raw.get(src), dict) else {}
         for k in keys:
             if isinstance(got.get(k), str):
@@ -159,7 +171,7 @@ def _ref(x):
     if not isinstance(x, dict) or x.get("type") not in REF_TYPES:
         return None
     rid = str(x.get("id") or "")
-    if not re.fullmatch(r"[njel]\.[\w\-=./]{0,400}", rid):
+    if not re.fullmatch(r"[njefl]\.[\w\-=./]{0,400}", rid):
         return None
     out = {"type": x["type"], "id": rid, "name": str(x.get("name") or "")[:60]}
     if x.get("media") in ("audio", "video"):
@@ -209,17 +221,17 @@ def apply(op: dict) -> dict:
                     raise MediaError("填上密码（改了用户名也要重新填）")
                 nv["url"], nv["user"] = url, user
             _index.pop("n", None)
-        elif kind in ("jellyfin_saved", "emby_saved"):       # apply_async 换好 token 以后
+        elif kind in tuple(f"{w}_saved" for w in SERVERS):       # apply_async 换好 token 以后
             which = kind.split("_")[0]
             d[which] = {**d[which], **{k: op[k] for k in ("url", "user", "user_id", "token", "device", "key") if k in op}}
             _index.pop(SERVERS[which].key, None)
-        elif kind in ("jellyfin_clear", "emby_clear"):
+        elif kind in tuple(f"{w}_clear" for w in SERVERS):
             which = kind.split("_")[0]
             d[which] = {**_empty()[which], "on": d[which]["on"]}
             _index.pop(SERVERS[which].key, None)
         elif kind == "toggle":
             which = op.get("source")
-            if which not in ("navidrome", "jellyfin", "emby", "local"):
+            if which not in ("navidrome", "local", *SERVERS):
                 raise MediaError("没有这个来源")
             d[which]["on"] = bool(op.get("on"))
         elif kind in ("tag", "ref"):                         # 把一项加进 / 移出分区（tag 是 58 块的说法）
@@ -279,7 +291,7 @@ def apply(op: dict) -> dict:
 
 
 async def apply_async(op: dict) -> dict:
-    """{"op": "jellyfin"|"emby", "url", "user", "password" | "api_key"}：先在服务器上换 token（密码不存），再存。"""
+    """{"op": "jellyfin"|"emby"|"fnvideos", "url", "user", "password" | "api_key"}：先在服务器上换 token（密码不存），再存。"""
     which = op.get("op")
     if which not in SERVERS:
         return await asyncio.to_thread(apply, op)
@@ -806,7 +818,12 @@ class Emby(Jellyfin):
         return h
 
 
-SERVERS = {"jellyfin": Jellyfin, "emby": Emby}
+class FnVideos(Jellyfin):
+    """飞牛影视（fnOS 自带，http://NAS:8005）：Jellyfin 10.10 改的，用 fnOS 的账号登录；认证头 Jellyfin 那两种都带了。"""
+    key, name, sid = "f", "飞牛影视", "fnvideos"
+
+
+SERVERS = {"jellyfin": Jellyfin, "emby": Emby, "fnvideos": FnVideos}
 
 
 def _enc(rel: str) -> str:
@@ -1027,7 +1044,7 @@ def get(key: str, d: dict = None) -> Source:
 
 
 def split_id(sid: str) -> tuple:
-    m = re.fullmatch(r"([njel])\.([\w\-=./]{0,400})", str(sid or ""))
+    m = re.fullmatch(r"([njefl])\.([\w\-=./]{0,400})", str(sid or ""))
     if not m:
         raise MediaError("没有这一项")
     return m.group(1), m.group(2)
@@ -1308,7 +1325,7 @@ def view() -> dict:
                       "status": services.status("music")},
         **{w: {"url": d[w]["url"], "user": d[w]["user"], "has_password": bool(d[w]["token"]), "key": d[w]["key"], "on": d[w]["on"],
                "status": services.status(w)} for w in SERVERS},
-        "local": {"on": d["local"]["on"], "count": _local_count(), "dir": str(Local().root)},
+        "local": {"on": d["local"]["on"], "count": _local_count(), "dir": str(Local().root), "host": _host_ip()},
         "sections": [dict(s, words=words_of(s)[1:], progress=[p for p in prog if p["section"] == s["id"]][:6]) for s in d["sections"]],
         "plays": PLAYS,
         "ready": bool(sources(d)),
@@ -1335,13 +1352,14 @@ def device_view(who: str = "", kids: bool = False, allowed: list = None) -> dict
 
 
 def brief() -> list:
-    """外部服务页的两行：Navidrome、Jellyfin。"""
+    """外部服务页的几行：Navidrome、Jellyfin、Emby、飞牛影视。"""
     d = load()
-    nv, jf, em = d["navidrome"], d["jellyfin"], d["emby"]
+    nv = d["navidrome"]
     n = _local_count() if d["local"]["on"] else 0
-    return [{"id": "music", "name": "Navidrome（家里 NAS 上的音乐）", "url": nv["url"], "configured": bool(nv["url"] and nv["token"]),
-             "on": nv["on"], "local": n, "status": services.status("music")},
-            {"id": "jellyfin", "name": "Jellyfin（家里 NAS 上的视频）", "url": jf["url"], "configured": bool(jf["url"] and jf["token"]),
-             "on": jf["on"], "local": 0, "status": services.status("jellyfin")},
-            {"id": "emby", "name": "Emby（家里 NAS 上的视频）", "url": em["url"], "configured": bool(em["url"] and em["token"]),
-             "on": em["on"], "local": 0, "status": services.status("emby")}]
+    rows = [{"id": "music", "name": "Navidrome（家里 NAS 上的音乐）", "url": nv["url"], "configured": bool(nv["url"] and nv["token"]),
+             "on": nv["on"], "local": n, "status": services.status("music")}]
+    for which, cls in SERVERS.items():
+        x = d[which]
+        rows.append({"id": which, "name": f"{cls.name}（家里 NAS 上的视频）", "url": x["url"], "configured": bool(x["url"] and x["token"]),
+                     "on": x["on"], "local": 0, "status": services.status(which)})
+    return rows

@@ -2243,7 +2243,7 @@ class AdminHandler:
             await media.apply_async(body)
         except media.MediaError as e:
             return self._error(str(e), 400)
-        if body.get("op") in ("navidrome", "jellyfin", "emby") and str(body.get("url") or "").strip():
+        if body.get("op") in ("navidrome", *media.SERVERS) and str(body.get("url") or "").strip():
             src = media.navidrome() if body["op"] == "navidrome" else media.jellyfin(which=body["op"])
             if src:
                 try:
@@ -2253,7 +2253,7 @@ class AdminHandler:
         return await self.handle_media(request)
 
     async def handle_media_test(self, request: web.Request):
-        """{"source": "navidrome"|"jellyfin"|"emby"|"local", "url", "user", "password", "api_key"}：没保存的也能测（空的用存下的）。"""
+        """{"source": "navidrome"|"jellyfin"|"emby"|"fnvideos"|"local", "url", "user", "password", "api_key"}：没保存的也能测（空的用存下的）。"""
         self._require_login(request)
         body = await self._read_json(request)
         which = body.get("source") or "navidrome"

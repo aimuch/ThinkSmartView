@@ -346,7 +346,8 @@ PLUGIN_SETTINGS.update({
 # [xiaozhi-hub] 四个接入的设置（字段和 core/integrations/common.DEFAULTS 一致）
 PLUGIN_SETTINGS.update({
     "smart_hub": {
-        "note": "智能中枢（btrouter）的访问令牌在它的 .env 里（BTROUTER_API_TOKEN），或配置文件的 api.token。"
+        "note": "访问令牌是正在跑的那份智能中枢（btrouter）的 .env 里 BTROUTER_API_TOKEN 这一行，或它配置文件的 api.token；"
+                "和网关在同一台机器上时就是网关那台的 ~/bluetooth-router/.env（不是开发用电脑上的源码仓库）。"
                 "网关只用它读设备、发开关和调光，不改智能中枢的设置。",
         "fields": [
             {"key": "url", "label": "地址", "type": "text", "default": "http://127.0.0.1:8780",
