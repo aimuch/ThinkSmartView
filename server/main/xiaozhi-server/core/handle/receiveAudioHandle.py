@@ -55,6 +55,8 @@ async def startToChat(conn: "ConnectionHandler", text, gen=None):
     if gen is not None and turn_gen.stale(conn, gen):
         conn.logger.bind(tag=TAG).info(f"这句话说完后被打断过，不再回答: {text}")
         return
+    # [xiaozhi-hub] 这句要回答了：说完的时刻交给第一段语音（状态页「说完到开始回话」，设计画布第 68 块）
+    conn.reply_t0, conn.said_at = getattr(conn, "said_at", None), None
     # 检查输入是否是JSON格式（包含说话人信息）
     speaker_name = None
     actual_text = text

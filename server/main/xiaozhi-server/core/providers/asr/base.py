@@ -13,6 +13,7 @@ import threading
 
 from abc import ABC, abstractmethod
 from config.logger import setup_logging
+from core.agent import health
 from core.providers.asr.dto.dto import InterfaceType
 from core.handle.receiveAudioHandle import startToChat
 from core.handle.reportHandle import enqueue_asr_report
@@ -183,6 +184,7 @@ class ASRProviderBase(ABC):
         reject_reason = None      # [xiaozhi-hub] turn_filter 拦下这句的原因
         try:
             total_start_time = time.monotonic()
+            conn.said_at = total_start_time   # [xiaozhi-hub] 说完的时刻：状态页「说完到开始回话」从这里算
             # [xiaozhi-hub] 识别要 1～2 秒，期间设备可能打断了这一句（唤醒词、按钮）：识别完代次变了就丢掉
             gen = turn_gen.current(conn)
 
@@ -447,12 +449,15 @@ class ASRProviderBase(ABC):
             text, _ = await self.speech_to_text(
                 pcm_data, session_id, artifacts
             )
+            if text:
+                health.record("asr", True)   # [xiaozhi-hub] 状态页「最近 24 小时」（设计画布第 68 块）
             return text, file_path
         except OSError as e:
             logger.bind(tag=TAG).error(f"文件操作错误: {e}")
             return None, None
         except Exception as e:
             logger.bind(tag=TAG).error(f"语音识别失败: {e}")
+            health.record("asr", False)
             return None, None
         finally:
             try:

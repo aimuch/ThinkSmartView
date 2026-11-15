@@ -19,6 +19,7 @@ import threading
 import time
 
 from config.config_loader import get_project_dir
+from core.agent import health
 
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 WEATHER_PRESETS = [
@@ -213,7 +214,33 @@ def apply(op: dict) -> dict:
 
 # ---------- 状态
 
+_MEDIA_NAMES = {"music": "Navidrome", "navidrome": "Navidrome", "jellyfin": "Jellyfin", "emby": "Emby", "fnvideos": "飞牛影视"}
+
+
+def _name(sid: str) -> str:
+    """状态页「最近发生的」里写的名字。"""
+    for x in (*WEATHER_PRESETS, *RADIO_PRESETS, *NEWS, GEO):
+        if x["id"] == sid:
+            return x["name"]
+    if sid in _MEDIA_NAMES:
+        return _MEDIA_NAMES[sid]
+    try:
+        d = load()
+        for x in (*(d.get("weather") or []), *(d.get("radio") or [])):
+            if isinstance(x, dict) and x.get("id") == sid:
+                return str(x.get("name") or sid)
+    except Exception:  # noqa: BLE001
+        pass
+    return sid
+
+
 def record(sid: str, ok: bool, ms: float = None, err: str = "", via: str = ""):
+    # [xiaozhi-hub] 状态页（设计画布第 68 块）：每小时成败；连不上记一条，恢复了再记一条
+    health.record("ext", ok)
+    if not ok:
+        health.event("error", f"{_name(sid)}连不上：{str(err or '')[:60]}", key=f"svc:{sid}")
+    elif health.clear_flag(f"svc:{sid}"):
+        health.event("ok", f"{_name(sid)}恢复了")
     s = STATUS.setdefault(sid, {})
     s.update({"ok": bool(ok), "ms": None if ms is None else int(ms), "at": int(time.time()), "err": str(err or "")[:120],
               "via": via})

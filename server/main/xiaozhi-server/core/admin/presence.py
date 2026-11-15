@@ -8,8 +8,11 @@ ONLINE_SECONDS 内有心跳算在线（待机），WebSocket 连着算对话中�
 import threading
 import time
 
+from core.agent import health
+
 ONLINE_SECONDS = 35      # 心跳 10 秒一次，漏两次还算在线
 FORGET_SECONDS = 7 * 86400
+OFFLINE_NOTE_SECONDS = 300   # 断了 5 分钟以上才记「离线了」（重启、换网络这种一下就回来的不记）
 
 _lock = threading.Lock()
 _seen = {}   # device_id -> {"last": 时间戳, "version": 客户端版本}
@@ -22,7 +25,21 @@ def beat(device_id: str, version: str = "") -> None:
         item = _seen.setdefault(device_id, {})
         item["last"] = time.time()
         if version:
+            old = item.get("version")
             item["version"] = str(version)[:20]
+    # [xiaozhi-hub] 状态页（设计画布第 68 块）：这小时在线过；换了版本、离线后回来记一条
+    health.online(device_id)
+    if version and old and old != item["version"]:
+        health.event("update", f"更新到 {item['version']}", device_id)
+    if health.clear_flag(f"offline:{device_id}"):
+        health.event("online", "上线了", device_id)
+
+
+def note_offline(items: list):
+    """状态页查设备时：离线的设备记一条「离线」（同一次离线只记一次，回来时 beat 清掉）。"""
+    for d in items:
+        if d["state"] == "offline" and d.get("last_seen") and time.time() - d["last_seen"] > OFFLINE_NOTE_SECONDS:
+            health.event("offline", "离线了", d["device_id"], t=d["last_seen"] + ONLINE_SECONDS, key=f"offline:{d['device_id']}")
 
 
 def snapshot(connected_ids=()) -> list:

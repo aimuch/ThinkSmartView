@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.connection import ConnectionHandler
+from core.agent import health
 from core.utils import reply_echo, reply_progress, textUtils
 from core.utils.util import audio_to_data
 from core.providers.tts.dto.dto import SentenceType
@@ -34,6 +35,10 @@ async def sendAudioMessage(conn: "ConnectionHandler", sentenceType, audios, text
     if conn.tts.tts_audio_first_sentence:
         conn.logger.bind(tag=TAG).info(f"发送第一段语音: {text}")
         conn.tts.tts_audio_first_sentence = False
+        t0 = getattr(conn, "reply_t0", None)
+        if t0 is not None:   # [xiaozhi-hub] 说完到开始回话（设计画布第 68 块）
+            conn.reply_t0 = None
+            health.latency((time.monotonic() - t0) * 1000, getattr(conn, "device_id", "") or "")
 
     if sentenceType == SentenceType.FIRST:
         # 同一句子的后续消息加入流控队列，其他情况立即发送

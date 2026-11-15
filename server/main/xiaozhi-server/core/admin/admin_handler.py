@@ -32,7 +32,7 @@ from core.admin import auth, brand, catalog, config_store, connections, pages, p
 from core.admin.grokbot import GrokBotAdmin
 from core.admin.status import _claude_version, collect_status
 from core import billing
-from core.agent import album, chat_history, family, llm_router, media, photo_ask, reports
+from core.agent import album, chat_history, family, health, llm_router, media, photo_ask, reports
 from core.utils import local_voiceprint  # noqa: F401  导入时会初始化日志（asyncio.run），不能放到请求里再导入
 from core.agent.agent_session import ErrorKind
 from core.agent.grokbot_client import GrokBotError
@@ -692,8 +692,71 @@ class AdminHandler:
             plugins = {"mode": intent["mode"], "count": len(on), "names": on[:4]}
         except Exception:  # noqa: BLE001
             plugins = None
+        # [xiaozhi-hub] 设计画布第 68 块：最近 24 小时各服务成败、回话耗时、在线台数、最近发生的、每台今天几句、每小时花的钱
+        try:
+            llm_rows = billing.db().rows(since, now + 1)
+        except Exception:  # noqa: BLE001
+            llm_rows = []
+        seen = presence.snapshot(self._connected_ids())
+        presence.note_offline(seen)
+        h = health.view(since, 24, llm_rows)
+        spend = [0.0] * 24
+        for r in llm_rows:
+            i = int((r["ts"] - since) // 3600)
+            if 0 <= i < 24 and r.get("cost"):
+                spend[i] += float(r["cost"])
+        try:
+            per_device = chat_history.db().device_turns(midnight)
+        except Exception:  # noqa: BLE001
+            per_device = {}
         return {"stages": stages, "plugins": plugins, "uptime": int(now - self.started_at), "hours": hours, "hours_since": since,
-                "turns_today": sum(today), "cost": {k: cost.get(k) for k in ("today", "month", "currencies")}}
+                "turns_today": sum(today), "cost": {k: cost.get(k) for k in ("today", "month", "currencies")},
+                "health": h, "spend_hours": [round(x, 4) for x in spend], "device_turns": per_device,
+                "latest_client": self._latest_client(), "attention": self._attention(merged, seen)}
+
+    @staticmethod
+    def _latest_client() -> str:
+        """网关这台上发布过的最新客户端版本（scripts/publish-release.sh 放的），没有就空。"""
+        try:
+            with open(os.path.expanduser("~/thinksmart-releases/latest/download/latest.json"), encoding="utf-8") as f:
+                return str(json.load(f).get("version") or "")
+        except (OSError, ValueError, AttributeError):
+            return ""
+
+    def _attention(self, merged: dict, seen: list) -> list:
+        """「要处理」（设计画布第 68 块）：离线的设备、连不上的外部服务、开了没填的家里的系统、没过的环境自检。
+        每条 {level: bad|warn, text, sub, page, action}。"""
+        out = []
+        try:
+            from core.utils import device_settings
+
+            names = {k: v.get("name", "") for k, v in device_settings.all_devices().items()}
+        except Exception:  # noqa: BLE001
+            names = {}
+        now = time.time()
+        for d in seen:
+            if d["state"] == "offline" and 600 < now - d["last_seen"] < 3 * 86400:   # 断了 10 分钟以上、3 天以内
+                gone = now - d["last_seen"]
+                ago = f"{int(gone // 3600)} 小时" if gone >= 3600 else f"{max(1, int(gone // 60))} 分钟"
+                out.append({"level": "warn", "text": f"{names.get(d['device_id']) or d['device_id']}离线 {ago}",
+                            "sub": "可能断电、网络断了，或者客户端没在跑", "page": "devices", "action": "看设备"})
+        try:
+            from core.agent import services
+
+            for sid, st in list(services.STATUS.items()):
+                if st.get("at") and not st.get("ok") and now - st["at"] < 86400:
+                    out.append({"level": "bad", "text": f"{services._name(sid)}连不上", "sub": str(st.get("err") or "")[:80],
+                                "page": "services", "action": "去看看"})
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            for p in pages.home_plugins(merged):
+                if p["enabled"] and p["needs_config"]:
+                    out.append({"level": "warn", "text": f"{p['label']}开着但还没填", "sub": "外部服务 › 家里的系统",
+                                "page": "services/home", "action": "去填"})
+        except Exception:  # noqa: BLE001
+            pass
+        return out
 
     # ---------- 更新网关 ----------
 

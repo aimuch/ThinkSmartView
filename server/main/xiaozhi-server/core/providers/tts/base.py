@@ -13,6 +13,7 @@ from core.utils import textUtils
 from typing import Callable, Any, Optional
 from abc import ABC, abstractmethod
 from config.logger import setup_logging
+from core.agent import health
 from core.utils import opus_encoder_utils, pcm_gain, tts_phrase_cache
 from core.utils.tts import MarkdownCleaner, convert_percentage_to_range
 from core.utils.output_counter import add_device_output
@@ -158,6 +159,7 @@ class TTSProviderBase(ABC):
                         f"语音生成失败{5 - max_repeat_time + 1}次: {original_text}，错误: {e}"
                     )
                     max_repeat_time -= 1
+            health.record("tts", max_repeat_time > 0)   # [xiaozhi-hub] 状态页（设计画布第 68 块）
             if max_repeat_time > 0:
                 logger.bind(tag=TAG).info(
                     f"语音生成成功: {original_text}，重试{5 - max_repeat_time}次"
@@ -191,6 +193,7 @@ class TTSProviderBase(ABC):
                         f"语音生成失败{5 - max_repeat_time + 1}次: {original_text}，错误: {e}"
                     )
                     max_repeat_time -= 1
+            health.record("tts", max_repeat_time > 0)   # [xiaozhi-hub] 状态页（设计画布第 68 块）
             if max_repeat_time > 0:
                 logger.bind(tag=TAG).info(
                     f"语音生成成功: {original_text}，重试{5 - max_repeat_time}次"
@@ -214,6 +217,8 @@ class TTSProviderBase(ABC):
                         if os.path.exists(tmp_file):
                             os.remove(tmp_file)
                         max_repeat_time -= 1
+
+                health.record("tts", max_repeat_time > 0)   # [xiaozhi-hub] 状态页（设计画布第 68 块）
 
                 if max_repeat_time > 0:
                     logger.bind(tag=TAG).info(

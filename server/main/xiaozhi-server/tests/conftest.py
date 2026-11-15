@@ -476,3 +476,12 @@ def _hub_chat_db(tmp_path):
         time.sleep(0.01)
     chat_history.set_db(None)
     store.close()
+
+
+@pytest.fixture(autouse=True)
+def _health_in_tmp(tmp_path, monkeypatch):
+    """[xiaozhi-hub] 状态页的记录（core/agent/health.py）写到临时目录，不碰 data/。"""
+    from core.agent import health
+
+    monkeypatch.setattr(health, "_path", lambda: str(tmp_path / "health.json"))
+    monkeypatch.setattr(health, "_d", None)

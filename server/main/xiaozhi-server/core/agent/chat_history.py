@@ -217,6 +217,11 @@ class ChatDB:
                 out[i] += 1
         return out
 
+    def device_turns(self, since: float) -> Dict[str, int]:
+        """[xiaozhi-hub] 状态页的设备列表：since 起每台设备用户说了几句。"""
+        return {str(d or ""): n for d, n in self._exec(
+            "SELECT device, COUNT(*) FROM messages WHERE role='user' AND created>=? GROUP BY device", (since,)).fetchall()}
+
     def models(self, device) -> List[str]:
         return [r[0] for r in self._exec("SELECT DISTINCT model FROM messages WHERE device=?", (device,)).fetchall()]
 

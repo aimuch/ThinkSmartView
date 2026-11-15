@@ -822,6 +822,57 @@
   .u-head { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
   .u-head h1 { margin: 0; } .u-head .sub { margin-top: 2px; }
   .u-head .r { margin-left: auto; display: flex; gap: 8px; }
+  /* 状态页（设计画布第 68 块） */
+  .st-banner { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin: 0 0 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+  .st-banner.ok { border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); background: linear-gradient(90deg, color-mix(in srgb, var(--ok) 9%, var(--card)), var(--card) 60%); }
+  .st-banner.ok .sec-ib { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+  .st-banner.warn { border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); background: linear-gradient(90deg, color-mix(in srgb, var(--warn) 10%, var(--card)), var(--card) 60%); }
+  .st-banner.warn .sec-ib, .st-warn-ib { color: var(--warn) !important; background: color-mix(in srgb, var(--warn) 14%, transparent) !important; }
+  .st-banner.bad { border-color: color-mix(in srgb, var(--err) 40%, var(--line)); background: linear-gradient(90deg, color-mix(in srgb, var(--err) 9%, var(--card)), var(--card) 60%); }
+  .st-banner.bad .sec-ib { color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
+  .st-banner-t { flex: 1; min-width: 0; display: flex; flex-direction: column; } .st-banner-t b { font-size: 15px; } .st-banner-t small { color: var(--muted); font-size: 12.5px; }
+  .st-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .st-chip { border: 1px solid var(--line); background: none; color: var(--text); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  .st-chip.bad { border-color: color-mix(in srgb, var(--err) 45%, transparent); color: var(--err); }
+  .st-chip.warn { border-color: color-mix(in srgb, var(--warn) 50%, transparent); color: var(--warn); }
+  .st-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .st-kpi { margin: 0 !important; padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 2px; animation: u-rise var(--d-slow) var(--ease-enter) both; }
+  .st-kpi small { color: var(--muted); font-size: 12px; } .st-kpi em { font-style: normal; font-size: 12px; color: var(--muted); min-height: 18px; }
+  .st-kpi b { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.25; } .st-kpi b i { font-style: normal; font-size: 16px; color: var(--muted); font-weight: 500; }
+  .spark { display: block; width: 100%; height: 34px; margin-top: 6px; overflow: visible; }
+  .st-two { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 12px; align-items: start; margin-bottom: 14px; }
+  .st-two > .card, .st-card { margin: 0 0 14px !important; padding: 14px 16px; } .st-two > .card { margin: 0 !important; }
+  .st-two.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .st-addr { grid-template-columns: auto minmax(0, 1fr) auto !important; } .st-addr code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .st-h { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; } .st-h .sec-ib { margin: 0; } .st-h b { font-size: 14px; }
+  .st-more { margin-left: auto; font-size: 12.5px; color: var(--accent); text-decoration: none; }
+  .st-dev { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto 70px auto; gap: 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+  .st-dev:first-child { border-top: 0; }
+  .st-dev-n { min-width: 0; display: flex; flex-direction: column; } .st-dev-n small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st-ver { font-size: 12px; white-space: nowrap; } .st-upd { font-family: inherit; font-size: 11px; padding: 0 7px; } .st-n { text-align: right; white-space: nowrap; }
+  .row-ib.ai svg { stroke: url(#ai-grad); } .row-ib.sm { width: 24px; height: 24px; border-radius: 7px; } .row-ib.sm svg { width: 13px; height: 13px; }
+  .st-att { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+  .st-att:first-of-type { border-top: 0; } .st-att .sv-dot { position: static; margin: 0; flex: none; }
+  .st-att-t { flex: 1; min-width: 0; display: flex; flex-direction: column; } .st-att-t small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .sv-dot.warn { background: var(--warn); }
+  .st-checks { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 13px; }
+  .st-checks summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  .st-checks > div { display: flex; gap: 8px; align-items: center; padding: 5px 0; } .st-checks .d { margin-left: auto; color: var(--muted); font-size: 12px; text-align: right; overflow-wrap: anywhere; }
+  .st-up { display: grid; grid-template-columns: 28px 170px minmax(0, 1fr) 56px; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+  .st-up:nth-child(2) { border-top: 0; }
+  .st-up-n { display: flex; flex-direction: column; min-width: 0; } .st-up-n small { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st-bars { display: flex; gap: 3px; height: 22px; } .st-bars i { flex: 1; border-radius: 2px; background: var(--line); }
+  .st-bars i.ok { background: var(--ok); opacity: .8; } .st-bars i.half { background: var(--warn); } .st-bars i.bad { background: var(--err); }
+  .st-pct { text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; } .st-pct.bad { color: var(--err); }
+  .st-axis { display: flex; justify-content: space-between; margin: 4px 68px 0 222px; font-size: 11px; color: var(--muted); }
+  .st-ev { display: flex; gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .st-ev:first-of-type { border-top: 0; } .st-ev .t { width: 74px; flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  @media (max-width: 900px) {
+    .st-kpis { grid-template-columns: 1fr 1fr; } .st-two { grid-template-columns: 1fr; }
+    .st-banner { flex-wrap: wrap; } .st-chips { justify-content: flex-start; }
+    .st-dev { grid-template-columns: 28px minmax(0, 1fr) auto; } .st-dev .st-ver, .st-dev .st-n { display: none; }
+    .st-up { grid-template-columns: 28px 92px minmax(0, 1fr); } .st-up .st-pct, .st-up-n small { display: none; } .st-axis { margin: 4px 0 0 132px; }
+  }
   .u-act { display: flex; align-items: flex-end; gap: 3px; height: 34px; margin-bottom: 4px; }
   .u-act i { flex: 1; border-radius: 2px; background: var(--accent); opacity: .75; min-height: 3px; transform-origin: bottom;
              animation: u-grow var(--d-slow) var(--ease-enter) both; }
@@ -1373,6 +1424,8 @@ const SUB_ICONS = {
   who: '<circle cx="9" cy="8" r="4"/><path d="M2 21c.7-3.8 3.4-6 7-6s6.3 2.2 7 6"/><path d="M18 8a3 3 0 0 1 0 6M20.5 5.5a6.5 6.5 0 0 1 0 11"/>',
   text: '<path d="M4 6h16M4 12h11M4 18h7"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+  lan: '<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-4h12v4"/>',
+  update: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
   tool: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
   mem: '<path d="M4 19V6a2 2 0 0 1 2-2h12v15H6a2 2 0 0 0-2 2z"/><path d="M8 8h6"/>',
   calls: '<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>',
@@ -1607,57 +1660,88 @@ function ago(now, ts) {
   return s < 60 ? `${s} 秒前` : s < 3600 ? `${Math.floor(s / 60)} 分钟前` : s < 86400 ? `${Math.floor(s / 3600)} 小时前` : `${Math.floor(s / 86400)} 天前`;
 }
 
-// 设计画布第 14 块 C：活动条、四个数字、拓扑、设备表、自检、连接地址
+// 状态页（设计画布第 68 块）：先回答「有没有事要我管」（横幅、要处理），再看四个数字和小折线、设备、最近 24 小时、最近发生的
+let statusExtra = { latest: "", turns: {}, names: {} };
+function sparkSvg(vals, color) {
+  const xs = vals.map((v) => (v == null ? null : +v)), nums = xs.filter((v) => v != null);
+  if (nums.length < 2) return '<svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>';
+  const mx = Math.max(...nums) || 1, mn = Math.min(0, ...nums), n = xs.length - 1;
+  const y = (v) => (28 - ((v - mn) / (mx - mn || 1)) * 24).toFixed(1);
+  let d = "", area = "", pen = false, first = null, last = null;
+  xs.forEach((v, i) => {
+    const x = ((i / n) * 100).toFixed(1);
+    if (v == null) { pen = false; return; }
+    d += `${pen ? "L" : "M"}${x} ${y(v)} `; pen = true;
+    if (first == null) first = x; last = x;
+  });
+  area = `${d.replace(/M/g, "L").replace(/^L/, "M")}L${last} 30 L${first} 30 Z`;
+  return `<svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"><path d="${area}" fill="${color}" opacity=".14"/><path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+const verLess = (a, b) => { const p = (v) => String(v || "").split(".").map((x) => parseInt(x, 10) || 0); const x = p(a), y = p(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); } return false; };
 async function renderStatus(root) {
   const [s, dev] = await Promise.all([api("status"), api("devices")]);
   setOnline(dev);
-  const stage = Object.fromEntries((s.stages || []).map((x) => [x.id, x]));
-  const bad = s.checks.filter((c) => c.level !== "ok");
+  const H = s.health || { rows: {}, latency: { hours: [] }, online: [], events: [] };
   const cost = s.cost || {}, cur = Object.keys(cost.today || {})[0] || "CNY", sym = (cost.currencies || {})[cur] || "¥";
   const today = (cost.today || {})[cur] || 0, month = (cost.month || {})[cur] || 0;
   const seen = dev.seen || [], live = seen.filter((d) => d.state !== "offline");
-  const max = Math.max(1, ...(s.hours || []));
-  const hourLabel = (i) => new Date(((s.hours_since || 0) + i * 3600) * 1000).getHours() + " 时";
-  const mod = (id, icon, label, warn, ai) => { const x = stage[id] || {}; return `<button class="tmod" data-go="${esc(x.page || id)}">
-      <span class="ic ${ai ? "ai" : ""}">${icon}<span class="s ${warn ? "warn" : ""}"></span></span><span><b>${esc(label)}</b><small>${esc(x.value || "")}</small></span></button>`; };
-  const modWarn = (k) => { const m = s.modules[k]; return m && m.running && m.running !== m.selected; };
-  const first = live[0] || seen[0];
-  const devState = first ? first.state : "offline";
-  const addr = [["本机 IP", s.addresses.ip], ["OTA 地址", s.addresses.ota], ["管理后台", s.addresses.admin]];
+  const names = Object.fromEntries(seen.map((d) => [d.device_id, d.name || d.device_id]));
+  statusExtra = { latest: s.latest_client || "", turns: s.device_turns || {}, names };
+  const stage = Object.fromEntries((s.stages || []).map((x) => [x.id, x]));
+  // 要处理：网关给的（离线设备、连不上的服务、开着没填的）+ 没过的环境自检
+  const att = [...(s.attention || []), ...s.checks.filter((c) => c.level !== "ok").map((c) => ({ level: c.level === "error" ? "bad" : "warn", text: c.name, sub: c.detail, page: "", action: "" }))];
+  const okChecks = s.checks.filter((c) => c.level === "ok").length;
+  const sec = (v) => (v == null ? "—" : `${(v / 1000).toFixed(1)} 秒`);
+  const lat = H.latency || {};
+  const hourText = (i) => new Date(((H.since || s.hours_since || 0) + i * 3600) * 1000).getHours() + " 时";
+  const rowLabel = { asr: ["语音识别", "mic", stage.asr], llm: ["大模型", "spark", stage.llm], tts: ["语音合成", "vol", stage.tts], ext: ["外部服务", "grid", { value: "天气 · 电台 · 新闻 · 家里的系统 · 媒体" }] };
+  const upRow = (k) => {
+    const cells = (H.rows || {})[k] || [], [label, icon, st] = rowLabel[k];
+    const ok = cells.reduce((a, c) => a + c[0], 0), bad = cells.reduce((a, c) => a + c[1], 0);
+    return `<div class="st-up"><span class="row-ib ${k === "llm" ? "ai" : ""}">${svgIco(icon)}</span><span class="st-up-n"><b>${label}</b><small>${esc((st || {}).value || "")}</small></span>
+      <span class="st-bars">${cells.map((c, i) => `<i class="${c[1] ? (c[1] > c[0] ? "bad" : "half") : c[0] ? "ok" : ""}" title="${hourText(i)}：${c[0] + c[1] ? `成功 ${c[0]} 次${c[1] ? `、失败 ${c[1]} 次` : ""}` : "没用到"}"></i>`).join("")}</span>
+      <span class="st-pct ${bad ? "bad" : ""}">${ok + bad ? `${Math.floor((ok / (ok + bad)) * 1000) / 10}%` : "—"}</span></div>`;
+  };
+  const evIcon = { start: "update", online: "dev", offline: "dev", update: "update", error: "bolt", ok: "shield", album: "image" };
+  const when = (t) => { const d = new Date(t * 1000), n = new Date(); const hm = d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+    return d.toDateString() === n.toDateString() ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`; };
+  const addr = [["OTA", s.addresses.ota], ["后台", s.addresses.admin]];
   root.innerHTML = `
-    <div class="u-head"><div><h1>状态</h1><p class="sub">已运行 ${uptimeText(s.uptime || 0)} · ${bad.length ? `${bad.length} 项需要注意` : "全部正常"}</p></div>
-      <div class="r"><button class="btn" id="copy-ota">复制 OTA 地址</button><button class="btn" id="refresh">刷新</button></div></div>
-    <div class="u-act" title="最近 24 小时每小时说了几句">${(s.hours || []).map((n, i) => `<i class="${n ? "" : "z"}" style="height:${n ? Math.max(12, n / max * 100) : 10}%;animation-delay:${i * 12}ms" title="${hourLabel(i)}：${n} 句"></i>`).join("")}</div>
-    <div class="u-act-axis"><span>24 小时前</span><span>最近 24 小时，每格一小时的对话量</span><span>现在</span></div>
-    <div class="u-stats">
-      <div class="card u-stat"><small>在线设备</small><b data-count="${live.length}"></b><em class="${live.length ? "ok" : ""}">${live.some((d) => d.state === "talking") ? "● 有设备在对话" : live.length ? "● 待机中" : "设备待机时也会显示"}</em></div>
-      <div class="card u-stat" style="animation-delay:40ms"><small>今天说了</small><b data-count="${s.turns_today || 0}" data-unit=" 句"></b><em>所有设备、所有模型</em></div>
-      <div class="card u-stat" style="animation-delay:80ms"><small>今天的费用</small><b data-count="${today}" data-pre="${esc(sym)}" data-dec="2"></b><em>本月 ${esc(sym)}${month.toFixed(2)}</em></div>
-      <div class="card u-stat" style="animation-delay:120ms"><small>环境自检</small><b>${s.checks.length - bad.length} / ${s.checks.length}</b><em class="${bad.length ? "warn" : "ok"}">${bad.length ? `${bad.length} 项需要注意` : "● 全部正常"}</em></div>
+    <div class="page-head"><div><h1>状态</h1><p class="sub"><span data-brand-name>小麦网关</span> · ${esc(s.addresses.ip)} · 已运行 ${uptimeText(s.uptime || 0)}</p></div>
+      <div class="r" style="display:flex;gap:8px"><button class="btn" id="copy-ota">复制 OTA 地址</button><button class="btn" id="refresh">刷新</button></div></div>
+    <div class="st-banner ${att.some((a) => a.level === "bad") ? "bad" : att.length ? "warn" : "ok"}">
+      <span class="sec-ib">${svgIco(att.length ? "bolt" : "shield")}</span>
+      <div class="st-banner-t"><b>${att.length ? `${att.length} 件事要处理` : "一切正常"}</b>
+        <small>${live.length} / ${seen.length || 0} 台设备在线 · 环境自检 ${okChecks}/${s.checks.length} 项正常${s.turns_today ? ` · 今天说了 ${s.turns_today} 句` : ""}</small></div>
+      <span class="st-chips">${att.slice(0, 4).map((a, i) => `<button class="st-chip ${a.level}" data-att="${i}">${esc(a.text.length > 14 ? a.text.slice(0, 13) + "…" : a.text)}</button>`).join("")}</span></div>
+    <div class="st-kpis">
+      <div class="card st-kpi"><small>在线设备</small><b>${live.length}<i> / ${seen.length}</i></b><em>${live.some((d) => d.state === "talking") ? "有设备在对话" : live.length ? "待机中" : seen.length ? "都不在线" : "设备开机后 10 秒内出现"}</em>${sparkSvg(H.online || [], "var(--ok)")}</div>
+      <div class="card st-kpi"><small>今天说了</small><b data-count="${s.turns_today || 0}" data-unit=" 句"></b><em>所有设备、所有模型</em>${sparkSvg(s.hours || [], "var(--accent)")}</div>
+      <div class="card st-kpi"><small>说完到开始回话</small><b>${sec(lat.today)}</b><em>${lat.n ? `今天 ${lat.n} 句的中位数${lat.yesterday ? ` · 昨天 ${sec(lat.yesterday)}` : ""}` : "今天还没有记录"}</em>${sparkSvg(lat.hours || [], "#8b5cf6")}</div>
+      <div class="card st-kpi"><small>今天的费用</small><b data-count="${today}" data-pre="${esc(sym)}" data-dec="2"></b><em>本月 ${esc(sym)}${month.toFixed(2)}</em>${sparkSvg(s.spend_hours || [], "var(--warn)")}</div>
     </div>
-    <div class="card u-panel"><div class="h">拓扑<span>点一个节点去改它</span></div>
-      <div class="topo">
-        <div class="tnode"><span class="ic"><svg class="dev-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="12.5" rx="2.5"/><path d="M8.5 20.5h7M12 16v4.5"/></svg><span class="s ${devState === "talking" ? "ok" : devState === "idle" ? "idle" : ""}"></span></span>
-          <b>${first ? "小麦" + (live.length > 1 ? ` 等 ${live.length} 台` : "") : "还没有设备"}</b>
-          <small>${first ? `${first.version ? first.version + " · " : ""}${devState === "talking" ? "对话中" : devState === "idle" ? "待机 · " + ago(dev.now, first.last_seen) + "心跳" : "离线 · " + ago(dev.now, first.last_seen)}` : "配网时填下面的 OTA 地址"}</small></div>
-        <div class="tlink ${live.length ? "" : "off"}"><b>${devState === "talking" ? "WebSocket" : "心跳"}</b><span class="p"></span></div>
-        <div class="tnode hub"><span class="ic"><span class="logo" data-logo></span><span class="s ${bad.some((c) => c.level === "error") ? "err" : bad.length ? "idle" : "ok"}"></span></span>
-          <b data-brand-name>小麦网关</b><small>${esc(s.addresses.ip)}</small></div>
-        <div class="tlink"><span class="p" style="animation-delay:1.2s"></span></div>
-        <div class="tmods">${mod("asr", svgIco("mic"), "语音识别", modWarn("ASR"))}${mod("llm", svgIco("spark"), "大模型", modWarn("LLM"), true)}${mod("tts", svgIco("vol"), "语音合成", modWarn("TTS"))}
-          ${s.plugins ? `<button class="tmod" data-go="intent"><span class="ic">${svgIco("puzzle")}<span class="s ${s.plugins.mode === "function_call" ? "" : "warn"}"></span></span>
-            <span><b>插件</b><small>${s.plugins.mode === "function_call" ? `${s.plugins.count} 个开着 · ${esc(s.plugins.names.join("、"))}` : "当前模型不用插件"}</small></span></button>` : ""}</div>
-      </div></div>
-    <div class="u-two">
-      <div class="card u-panel"><div class="h">设备<span>待机时每 10 秒一次心跳</span></div><div id="devices"></div></div>
-      <div class="card u-panel"><div class="h">环境自检<span class="r" style="color:var(${bad.length ? "--warn" : "--ok"})">${bad.length ? `${bad.length} 项需要注意` : "● 全部正常"}</span></div>
-        <div class="u-checks">${s.checks.map((c) => `<div title="${esc(c.detail)}"><span class="dot ${esc(c.level)}"></span>${esc(c.name)}<span class="d">${esc(c.detail)}</span></div>`).join("")}</div></div>
+    <div class="st-two">
+      <div class="card st-card"><div class="st-h"><span class="sec-ib">${svgIco("dev")}</span><b>设备</b><span class="muted small">待机时每 10 秒一次心跳</span><a class="st-more" href="#devices">设备设置 ›</a></div><div id="devices"></div></div>
+      <div class="card st-card"><div class="st-h"><span class="sec-ib st-warn-ib">${svgIco("fix")}</span><b>要处理</b><span class="muted small">处理完就不在这里了</span></div>
+        ${att.length ? att.map((a, i) => `<div class="st-att"><span class="sv-dot ${a.level === "bad" ? "bad" : "warn"}"></span><span class="st-att-t"><b>${esc(a.text)}</b>${a.sub ? `<small>${esc(a.sub)}</small>` : ""}</span>
+          ${a.page ? `<button class="btn sm" data-att="${i}">${esc(a.action || "去看看")} ›</button>` : ""}</div>`).join("") : '<p class="muted small" style="margin:8px 0 0">没有要处理的事。</p>'}
+        <details class="st-checks"><summary>环境自检 ${okChecks}/${s.checks.length} 项正常</summary>
+          ${s.checks.map((c) => `<div title="${esc(c.detail)}"><span class="dot ${esc(c.level)}"></span>${esc(c.name)}<span class="d">${esc(c.detail)}</span></div>`).join("")}</details></div>
     </div>
-    <div class="card u-panel"><div class="h">连接地址<span>设备配网时填 OTA 地址；在路由器里给这台电脑固定 IP</span></div>
-      <div class="u-addr">${addr.map(([k, v]) => `<span class="k">${k}</span><code>${esc(v)}</code><button class="btn sm copy" data-copy="${esc(v)}">复制</button>`).join("")}</div></div>`;
+    <div class="card st-card"><div class="st-h"><span class="sec-ib">${svgIco("bars")}</span><b>最近 24 小时</b><span class="muted small">每小时一根：绿的都成功，红的那一小时失败多，黄的有失败；灰的没用到</span></div>
+      ${["asr", "llm", "tts", "ext"].map(upRow).join("")}
+      <div class="st-axis"><span>24 小时前</span><span>现在</span></div></div>
+    <div class="st-two even">
+      <div class="card st-card"><div class="st-h"><span class="sec-ib">${svgIco("history")}</span><b>最近发生的</b><span class="muted small">留 7 天</span></div>
+        ${(H.events || []).length ? H.events.slice(0, 12).map((e) => `<div class="st-ev"><span class="t">${when(e.t)}</span><span class="row-ib sm">${svgIco(evIcon[e.kind] || "history")}</span>
+          <span>${e.device ? `<b>${esc(names[e.device] || e.device)}</b> ` : ""}${esc(e.text)}</span></div>`).join("") : '<p class="muted small" style="margin:8px 0 0">还没有记录。设备上线下线、更新、服务连不上和恢复都会记在这里。</p>'}</div>
+      <div class="card st-card"><div class="st-h"><span class="sec-ib">${svgIco("lan")}</span><b>连接地址</b><span class="muted small">设备配网时填 OTA 地址</span></div>
+        <div class="u-addr st-addr">${addr.map(([k, v]) => `<span class="k">${k}</span><code>${esc(v)}</code><button class="btn sm copy" data-copy="${esc(v)}">复制</button>`).join("")}</div></div>
+    </div>`;
   applyBrand();
   root.querySelectorAll("[data-count]").forEach(countUp);
-  root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => openPage(b.dataset.go)));
+  root.querySelectorAll("[data-att]").forEach((b) => (b.onclick = () => { const a = att[+b.dataset.att]; if (a && a.page) location.hash = "#" + a.page; }));
   root.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
   $("copy-ota").onclick = () => copyText(s.addresses.ota);
   $("refresh").onclick = (e) => busy(e.target, () => openPage("status", true));
@@ -1701,12 +1785,13 @@ function renderDevices(dev) {
     return;
   }
   box.dataset.key = key;
-  box.innerHTML = `<table class="u-table"><tr><th>设备</th><th>状态</th><th>当前模型</th><th>版本</th><th>最近</th><th></th></tr>
-    ${rows.map((r) => { const c = conn[r.device_id]; return `<tr>
-      <td title="${esc(r.device_id)}">${r.name ? `<b style="font-weight:600">${esc(r.name)}</b><div class="mono muted" style="font-size:11px">${esc(r.device_id)}</div>` : `<span class="mono">${esc(r.device_id || "未知设备")}</span>`}${c && c.home ? `<div class="muted small">${esc(c.home)}</div>` : ""}</td>
-      <td>${STATE_PILL[r.state] || ""}</td><td>${esc(c ? c.model_label || "默认" : "—")}</td><td class="mono">${esc(r.version || "—")}</td>
-      <td>${c ? `<span data-since="${c.connected_at}">${duration(dev.now - c.connected_at)}</span>` : `<span data-ago="${r.last_seen}">${ago(dev.now, r.last_seen)}</span>`}</td>
-      <td>${c ? `<button class="btn sm" data-sid="${esc(c.session_id)}">详情 ›</button>` : ""}</td></tr>`; }).join("")}</table>`;
+  const X = statusExtra;
+  box.innerHTML = rows.map((r) => { const c = conn[r.device_id], old = X.latest && r.version && verLess(r.version, X.latest), n = X.turns[r.device_id] || 0;
+    return `<div class="st-dev"><span class="row-ib">${svgIco("dev")}<span class="sv-dot ${r.state === "offline" ? "" : "ok"}"></span></span>
+      <span class="st-dev-n" title="${esc(r.device_id)}"><b>${esc(r.name || r.device_id || "未知设备")}</b><small>${c && c.home ? esc(c.home) + " · " : ""}${c ? `连着 <span data-since="${c.connected_at}">${duration(dev.now - c.connected_at)}</span>${c.model_label ? " · " + esc(c.model_label) : ""}` : `<span data-ago="${r.last_seen}">${ago(dev.now, r.last_seen)}</span>`}</small></span>
+      ${STATE_PILL[r.state] || ""}<span class="mono st-ver">${esc(r.version || "—")}${old ? ' <span class="pill st-upd" title="网关上发布了 ' + esc(X.latest) + '">能更新</span>' : ""}</span>
+      <span class="muted small st-n">${n ? `今天 ${n} 句` : ""}</span>
+      <span>${c ? `<button class="btn sm" data-sid="${esc(c.session_id)}">详情 ›</button>` : ""}</span></div>`; }).join("");
   box.querySelectorAll("[data-sid]").forEach((b) => (b.onclick = () => {
     deviceDrawer = b.dataset.sid;
     openDrawer("", "");

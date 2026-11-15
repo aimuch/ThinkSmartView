@@ -60,6 +60,8 @@ async def main():
             auth_key = str(uuid.uuid4().hex)
     
     config["server"]["auth_key"] = auth_key
+    from core.agent import health   # [xiaozhi-hub] 状态页「最近发生的」（设计画布第 68 块）
+    health.event("start", "网关启动")
 
     # 添加 stdin 监控任务
     stdin_task = asyncio.create_task(monitor_stdin())
