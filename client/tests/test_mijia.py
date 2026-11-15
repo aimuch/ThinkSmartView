@@ -405,3 +405,22 @@ def test_home_screen_polls_only_favorites(tmp_path):
     finally:
         svc_mod.POLL_HOME, svc_mod.POLL_VISIBLE = 30, 6
     assert polled[0] == [ids[1]] and 'all' in polled
+
+
+def test_empty_home_reply_means_the_login_is_gone():
+    """失效的登录小米回 code 0、没有 result：不能当成「已登录、0 个设备」，要当过期让屏幕提示重新扫码。"""
+    import asyncio
+
+    from thinksmart_client.mijia import cloud
+
+    c = cloud.MiCloud.__new__(cloud.MiCloud)
+
+    async def request(path, data):
+        return None
+    c.request = request
+    try:
+        asyncio.run(c.homes())
+    except cloud.MiCloudError as e:
+        assert e.kind == 'expired' and '重新扫码' in str(e)
+    else:
+        raise AssertionError('should have raised')

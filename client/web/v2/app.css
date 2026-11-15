@@ -1008,3 +1008,11 @@ body.identify::after { content: ""; position: fixed; inset: 0; z-index: 9999; po
 @container (max-width: 340px) {
   .rp-run-h .tk-pill { display: none; }
 }
+/* 清单（设计画布第 76 块）：全家 / 这台、日期和重复 */
+.li-scope { font-style: normal; font-size: 12px; font-weight: 500; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--card2); color: var(--ink3); vertical-align: middle; }
+.li-scope.fam { background: #43d39e24; color: var(--ok); }
+.li-due { font-style: normal; font-size: 0.82em; margin-left: 6px; color: var(--accent); white-space: nowrap; }
+.li-due.late { color: var(--bad); }
+.qr-opts { display: flex; gap: 8px; margin: 4px 0 10px; }
+.qr-opts button { height: 44px; padding: 0 16px; border-radius: 999px; background: var(--card2); color: var(--ink2); font-size: 16px; border: 1.5px solid transparent; }
+.qr-opts button.on { border-color: var(--accent); color: var(--ink); background: #6c8cff24; }

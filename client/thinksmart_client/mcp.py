@@ -275,12 +275,28 @@ DAILY_TOOLS = [
     },
     {
         'name': 'self.list.update',
-        'description': '购物清单、待办等清单：「把酱油和鸡蛋加到购物清单」op="add", name="购物清单", items=["酱油","鸡蛋"]；'
-                       '「酱油买了」op="check"；「把鸡蛋删了」op="remove"；「购物清单里有什么」op="show"（念出没划掉的）；'
-                       '「清掉买过的」op="clear_done"。待办用 name="待办"。也能在手机上看（设置页「清单 → 手机看」）。',
-        'inputSchema': {'type': 'object', 'properties': {'op': {'type': 'string', 'enum': ['add', 'remove', 'check', 'show', 'clear_done']},
-                                                        'name': {'type': 'string'},
-                                                        'items': {'type': 'array', 'items': {'type': 'string'}}},
+        'description': '购物清单、待办等清单（设计画布第 76 块）。「把酱油和鸡蛋加到购物清单」op="add", name="购物清单", items=["酱油","鸡蛋"]；'
+                       '「酱油买了」「物业费交了」op="check"；「把鸡蛋删了」op="remove"；「购物清单里有什么」「我有什么待办」op="show"；'
+                       '「清掉买过的」op="clear_done"；新建清单 op="create_list"（scope="family" 全家都看得到，"device" 只在这台，默认只在这台）。'
+                       '购物清单是全家共用的；待办、工作上的事是这台自己的（name="待办"）。'
+                       '带时间、重复、提醒的：「每月 15 号上午九点提醒我交物业费」op="add", name="待办", items=["交物业费"], time="09:00", '
+                       'repeat={freq:"monthly", monthday:15}, remind="ring"；「周五前交报告」due="YYYY-MM-DD"；「提前一天提醒」before=[1440]（分钟，可多个，0=准时）。'
+                       '给已有的一项加时间：op="schedule"，字段同上。repeat：freq=daily|workdays|weekly|monthly|yearly|lunar，interval=每几（每两周=2），'
+                       'weekly 用 days=[1-7]（1=周一），monthly 用 monthday（-1=最后一天）或 nth=[第几个(-1=最后一个), 周几]，yearly/lunar 用 month、day'
+                       '（生日、节日按农历用 lunar），结束 until="YYYY-MM-DD" 或 count=次数。remind：ring 到点在设备上响铃，show 只在首页显示。'
+                       '日期一律换算成 YYYY-MM-DD 再传；说之前先确认一遍你理解的时间和重复。',
+        'inputSchema': {'type': 'object', 'properties': {
+            'op': {'type': 'string', 'enum': ['add', 'remove', 'check', 'show', 'clear_done', 'schedule', 'create_list']},
+            'name': {'type': 'string'}, 'items': {'type': 'array', 'items': {'type': 'string'}},
+            'scope': {'type': 'string', 'enum': ['family', 'device']},
+            'due': {'type': 'string', 'description': 'YYYY-MM-DD'}, 'time': {'type': 'string', 'description': 'HH:MM'},
+            'repeat': {'type': 'object', 'properties': {
+                'freq': {'type': 'string', 'enum': ['daily', 'workdays', 'weekly', 'monthly', 'yearly', 'lunar']},
+                'interval': {'type': 'integer'}, 'days': {'type': 'array', 'items': {'type': 'integer'}}, 'monthday': {'type': 'integer'},
+                'nth': {'type': 'array', 'items': {'type': 'integer'}}, 'month': {'type': 'integer'}, 'day': {'type': 'integer'},
+                'until': {'type': 'string'}, 'count': {'type': 'integer'}}},
+            'remind': {'type': 'string', 'enum': ['none', 'show', 'ring']},
+            'before': {'type': 'array', 'items': {'type': 'integer'}}},
                         'required': ['op']},
     },
     {
@@ -444,12 +460,27 @@ async def _daily(client, name, args):
             data = await client.refresh_lists()
             items = ((data or {}).get('lists') or {}).get(list_name)
             if items is None:
-                return {'success': False, 'reason': f'没有「{list_name}」这个清单'}
-            return {'name': list_name, 'todo': [x['text'] for x in items if not x['done']],
+                return {'success': False, 'reason': f'没有「{list_name}」这个清单', 'lists': list(((data or {}).get('lists') or {}))}
+            return {'name': list_name, 'scope': '全家' if (data.get('scopes') or {}).get(list_name) == 'family' else '只在这台',
+                    'todo': [x['text'] + (f"（{x['due']}{' ' + x['time'] if x.get('time') else ''}{'，' + x['repeat_text'] if x.get('repeat_text') else ''}）"
+                                          if x.get('due') else '') for x in items if not x['done']],
                     'done': [x['text'] for x in items if x['done']]}
-        data = await client.list_change(op, list_name, args.get('items') or [])
+        extra = {k: args[k] for k in ('due', 'time', 'repeat') if args.get(k) not in (None, '', {})}
+        if args.get('remind') or args.get('before'):
+            extra['remind'] = None if args.get('remind') == 'none' else {
+                'mode': args.get('remind') or 'ring', 'before': args.get('before') or [0], 'where': [client.cfg['device_id']]}
+        try:
+            if op == 'create_list':
+                data = await client.list_change('create_list', list_name, [], scope=args.get('scope') or 'device')
+            else:
+                data = await client.list_change('edit' if op == 'schedule' else op, list_name, args.get('items') or [], **extra)
+        except ValueError as e:
+            return {'success': False, 'reason': str(e)}
         items = data['lists'].get(list_name) or []
-        return {'success': True, 'name': list_name, 'todo': [x['text'] for x in items if not x['done']]}
+        hit = [x for x in items if x['text'] in (args.get('items') or [])]
+        return {'success': True, 'name': list_name, 'todo': [x['text'] for x in items if not x['done']],
+                'scheduled': [{'text': x['text'], 'due': x.get('due'), 'time': x.get('time'), 'repeat': x.get('repeat_text'),
+                               'remind': (x.get('remind') or {}).get('mode')} for x in hit if x.get('due')]}
     # self.media.play
     if (args.get('action') or 'play') == 'stop':
         await client.media_stop()

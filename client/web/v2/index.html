@@ -530,7 +530,7 @@
     <div class="alarms-card" id="listsCard">
       <div class="bright-head"><b>清单</b><span class="bright-num" id="listsCount"></span><button class="upd-btn" id="listsPhone" style="margin-left:auto">手机看</button></div>
       <div class="alarm-list" id="listsList"></div>
-      <p class="opt-note">直接说「把酱油加到购物清单」「购物清单里有什么」「酱油买了」。点「手机看」用手机扫码，在超市边买边划掉。</p>
+      <p class="opt-note">购物清单全家共用（客厅、书房、家人的手机看到的是同一份）；待办只在这台。直接说「把酱油加到购物清单」「每月 15 号上午九点提醒我交物业费」「购物清单里有什么」。点「手机看」用手机扫码：手机装了 Tailscale 出门也能打开，在手机上还能设日期、重复和提醒。</p>
     </div>
     <div class="alarms-card" id="mediaCard">
       <div class="bright-head"><b>媒体、电台和助眠声</b><span class="bright-num" id="mediaNow"></span></div>
@@ -1004,7 +1004,8 @@
 <div class="photo-ov" id="qrOv" hidden><div class="photo-sheet">
   <div class="photo-left"><canvas id="qrCanvas" width="340" height="340"></canvas></div>
   <div class="photo-txt"><small id="qrKicker"></small><h2 id="qrTitle"></h2><p id="qrNote"></p>
-    <div class="photo-btns"><button class="upd-btn" id="qrClose">关闭</button></div></div></div></div>
+    <div class="qr-opts" id="qrOpts" hidden></div>
+    <div class="photo-btns"><button class="upd-btn" id="qrReset" hidden>换一个链接</button><button class="upd-btn" id="qrClose">关闭</button></div></div></div></div>
 <script src="/static/v2/vendor/qrcode.js"></script>
 <script src="/static/v2/app.js"></script>
 <script src="/static/v2/home.js"></script>

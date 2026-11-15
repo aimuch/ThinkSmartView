@@ -314,8 +314,8 @@ function plan() {
   const all = l ? Object.values(l).flat() : [], done = all.filter(x => x.done).length;
   set('dPlanLists', head('✓', '清单', all.length ? `办完 ${done} / ${all.length}` : '') +
     (all.length ? `<div class="d-bar"><i style="transform:scaleX(${done / all.length})"></i></div>` : '') +
-    (l ? Object.keys(l).map(name => `<div class="dp-list"><b>${esc(name)}</b>` +
-      (l[name].length ? l[name].slice(0, 6).map(x => `<button class="d-todo${x.done ? ' done' : ''}" data-check="${esc(name)}" data-text="${esc(x.text)}" data-done="${x.done ? 1 : 0}"><i></i>${esc(x.text)}</button>`).join('') : '<div class="dm">空的</div>') + '</div>').join('')
+    (l ? Object.keys(l).map(name => `<div class="dp-list"><b>${esc(name)}<em class="li-scope${(ui.lists.scopes || {})[name] === 'family' ? ' fam' : ''}">${(ui.lists.scopes || {})[name] === 'family' ? '全家' : '这台'}</em></b>` +
+      (l[name].length ? l[name].slice(0, 6).map(x => `<button class="d-todo${x.done ? ' done' : ''}" data-check="${esc(name)}" data-text="${esc(x.text)}" data-done="${x.done ? 1 : 0}"><i></i>${window.listItemText ? window.listItemText(x) : esc(x.text)}</button>`).join('') : '<div class="dm">空的</div>') + '</div>').join('')
       : '<div class="dm">清单还没取到</div>') + '<div class="d-chips"><button data-phone="1">手机看</button><button data-ask="购物清单里有什么">念一遍</button></div>');
   const notes = (ui.notes && ui.notes.notes) || [];
   set('dPlanNotes', head('✉', '留言', notes.length ? `${notes.length} 条` : '') +

@@ -851,7 +851,8 @@ def make_app(client: Client):
             if kind == 'lists':
                 if body.get('op') == 'refresh':
                     return {'lists': await client.refresh_lists()}
-                return {'lists': await client.list_change(body.get('op'), body.get('name'), body.get('items') or [], body.get('done'))}
+                extra = {k: body[k] for k in ('scope', 'new_name', 'text', 'due', 'time', 'repeat', 'remind') if k in body}
+                return {'lists': await client.list_change(body.get('op'), body.get('name'), body.get('items') or [], body.get('done'), **extra)}
             if kind == 'music':           # 屏幕上的音乐按钮（设计画布第 58 块）
                 minutes = body.get('minutes')
                 if body.get('action') == 'video':     # 网页里的 <video> 报放到哪、放完了（设计画布第 60 块）

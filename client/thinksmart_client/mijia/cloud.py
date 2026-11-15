@@ -283,11 +283,16 @@ class MiCloud:
     async def homes(self) -> list:
         data = {'fg': True, 'fetch_share': True, 'fetch_share_dev': True, 'limit': 300, 'app_ver': 7}
         try:
-            return parse_homes(await self.request('v2/homeroom/gethome_merged', {**data, 'plat_form': 0}))
+            raw = await self.request('v2/homeroom/gethome_merged', {**data, 'plat_form': 0})
         except MiCloudError as e:
             if e.kind == 'expired':
                 raise
-            return parse_homes(await self.request('v2/homeroom/gethome', data))
+            raw = await self.request('v2/homeroom/gethome', data)
+        if raw is None:
+            # 失效的登录（同一个账号在别的设备上又扫码了，或者到期了）：小米不报错，回 code 0、没有 result。
+            # 当成正常就成了「已登录、一个设备都没有」，所以当作过期，让屏幕提示重新扫码
+            raise MiCloudError('expired', '米家登录已失效（可能在别的设备上又登录了这个账号），请重新扫码')
+        return parse_homes(raw)
 
     async def devices(self, dids=None) -> list:
         try:

@@ -972,27 +972,71 @@ $('homeNotes').addEventListener('click', e => {
   const r = e.target.closest('[data-read]');
   if (r) dailyPost('notes', { read: r.dataset.read });
 });
+// 清单（设计画布第 76 块）：全家的（购物清单）和这台的（待办）；有日期的带上日期、重复、🔔
+const LWEEK = '一二三四五六日';
+function listDue(x) {
+  if (!x.due) return '';
+  const d = new Date(x.due + 'T00:00'), t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const n = Math.round((d - t0) / 864e5);
+  return (n === 0 ? '今天' : n === 1 ? '明天' : n < 0 ? `过期 ${-n} 天` : n < 7 ? `周${LWEEK[(d.getDay() + 6) % 7]}` : `${d.getMonth() + 1}月${d.getDate()}日`) + (x.time ? ' ' + x.time : '');
+}
+window.listDue = listDue;
+function listItemText(x) {
+  const bits = [listDue(x), x.repeat_text].filter(Boolean).join(' · ');
+  return esc(x.text) + (bits ? `<em class="li-due${x.due && listDue(x).startsWith('过期') ? ' late' : ''}">${esc(bits)}${x.remind && x.remind.mode === 'ring' ? ' 🔔' : ''}</em>` : '');
+}
+window.listItemText = listItemText;
 function renderLists() {
   const l = ui.lists;
   if (!l) { $('homeList').hidden = true; return; }
-  const names = Object.keys(l.lists);
+  const names = Object.keys(l.lists), scopes = l.scopes || {};
   const todo = n => l.lists[n].filter(x => !x.done);
   const shop = names.find(n => n === '购物清单') || names[0];
   const items = shop ? todo(shop) : [];
   $('homeList').hidden = !items.length;
   if (items.length) $('homeList').innerHTML = `🛒 ${esc(shop)} <span>${esc(items.slice(0, 4).map(x => x.text).join('、'))}${items.length > 4 ? '…' : ''} · ${items.length} 项</span>`;
   $('listsCount').textContent = `${names.length} 个清单`;
-  $('listsList').innerHTML = names.map(n => `<div class="al"><div class="al-text"><b>${n === '购物清单' ? '🛒' : '✅'} ${esc(n)}</b>` +
-    `<span>${esc(todo(n).map(x => x.text).join('、') || '空的')}</span></div></div>`).join('');
+  $('listsList').innerHTML = names.map(n => `<div class="al"><div class="al-text"><b>${n === '购物清单' ? '🛒' : '✅'} ${esc(n)}` +
+    `<em class="li-scope${scopes[n] === 'family' ? ' fam' : ''}">${scopes[n] === 'family' ? '全家' : '只在这台'}</em></b>` +
+    `<span>${todo(n).length ? todo(n).slice(0, 6).map(listItemText).join('、') : '空的'}</span></div></div>`).join('');
 }
 function showQr(kicker, title, note, url) {
   $('qrKicker').textContent = kicker; $('qrTitle').innerHTML = title; $('qrNote').textContent = note;
   if (window.drawQr) window.drawQr($('qrCanvas'), url);
+  $('qrOpts').hidden = $('qrReset').hidden = true;
   $('qrOv').hidden = false;
 }
+// 清单的二维码：手机装了 Tailscale 出门也能开（经网关的 https 地址），没装就只在家里的 Wi‑Fi 下能开
+let qrOut = true, qrResetArmed = null;
+function showListsQr() {
+  const l = ui.lists;
+  if (!l || !l.url) return;
+  const out = qrOut && l.url_out;
+  showQr('清单', out ? '用手机扫码<br>出门也能看' : '用手机扫码<br>看清单',
+    out ? '手机要装 Tailscale、登进你的 tailnet；在超市里边买边划掉，这边马上同步。看到的是全家的清单和这台自己的。'
+        : '手机连着家里的 Wi‑Fi 就能打开；在超市里要用「出门也能用」那个码。看到的是全家的清单和这台自己的。', out ? l.url_out : l.url);
+  if (l.url_out) {
+    $('qrOpts').innerHTML = `<button data-qo="1" class="${out ? 'on' : ''}">出门也能用</button><button data-qo="0" class="${out ? '' : 'on'}">只在家里</button>`;
+    $('qrOpts').hidden = false;
+  }
+  $('qrReset').hidden = false;
+  $('qrReset').textContent = '换一个链接';
+}
+$('qrOpts').addEventListener('click', e => { const b = e.target.closest('[data-qo]'); if (b) { qrOut = b.dataset.qo === '1'; showListsQr(); } });
+$('qrReset').addEventListener('click', async () => {
+  if (!qrResetArmed) {
+    $('qrReset').textContent = '旧的码马上失效，确定？';
+    qrResetArmed = setTimeout(() => { qrResetArmed = null; $('qrReset').textContent = '换一个链接'; }, 4000);
+    return;
+  }
+  clearTimeout(qrResetArmed); qrResetArmed = null;
+  await dailyPost('lists', { op: 'reset_secret', name: '购物清单' });
+  showListsQr();
+  toast('换好了：以前扫过的码都打不开了');
+});
 $('qrClose').addEventListener('click', () => { $('qrOv').hidden = true; });
-$('listsPhone').addEventListener('click', () => { if (ui.lists && ui.lists.url) showQr('清单', '用手机扫码<br>看清单', '在超市边买边划掉，小麦这边也会同步。手机要连家里的 Wi‑Fi。', ui.lists.url); });
-$('homeList').addEventListener('click', () => { if (ui.lists && ui.lists.url) showQr('清单', '用手机扫码<br>看清单', '在超市边买边划掉，小麦这边也会同步。手机要连家里的 Wi‑Fi。', ui.lists.url); });
+$('listsPhone').addEventListener('click', showListsQr);
+$('homeList').addEventListener('click', showListsQr);
 
 /* ---- 做菜模式 (cook.py) ---- */
 $('messages').addEventListener('click', e => {

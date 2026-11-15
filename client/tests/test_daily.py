@@ -141,7 +141,7 @@ def test_voice_tools(tmp_path, monkeypatch):
     r = call(c, 'self.list.update', op='add', name='购物清单', items=['酱油', '鸡蛋'])
     assert r['todo'] == ['酱油', '鸡蛋']
     call(c, 'self.list.update', op='check', name='购物清单', items=['鸡蛋'])
-    assert call(c, 'self.list.update', op='show', name='购物清单') == {'name': '购物清单', 'todo': ['酱油'], 'done': ['鸡蛋']}
+    assert call(c, 'self.list.update', op='show', name='购物清单') == {'name': '购物清单', 'scope': '只在这台', 'todo': ['酱油'], 'done': ['鸡蛋']}
     r = call(c, 'self.media.play', kind='radio', name='东方广播')
     assert r['action'] == 'RESPONSE' and '东方广播' in r['response']
     assert '30 分钟后停' in call(c, 'self.media.play', kind='sound', name='雨声')['response']

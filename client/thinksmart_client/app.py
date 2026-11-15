@@ -1511,19 +1511,80 @@ class Client:
             log.info('no lists from the hub: %s', e)
             return self.lists
         if data and data.get('ok'):
-            if not self.lists or data['version'] != self.lists.get('version'):
-                self.lists = {k: data[k] for k in ('version', 'lists', 'url')}
-                self.events.publish('lists', self.lists)
+            if not self.lists or data['version'] != self.lists.get('version') or data.get('url_out') != self.lists.get('url_out'):
+                self._set_lists(data)
         return self.lists
 
-    async def list_change(self, op, name, items=(), done=None):
+    LIST_KEYS = ('version', 'lists', 'scopes', 'url', 'url_out', 'devices', 'here_name')
+
+    def _set_lists(self, data):
+        self.lists = {k: data.get(k) for k in self.LIST_KEYS}
+        self.events.publish('lists', self.lists)
+        try:
+            self._sync_list_alarms()
+        except Exception:
+            log.exception('list reminders')
+
+    async def list_change(self, op, name, items=(), done=None, **extra):
+        """清单的改动（设计画布第 76 块）。extra：scope、new_name、text、due、time、repeat、remind。"""
         data = await self._hub_http('/kiosk/lists', {'device': self.cfg['device_id'], 'op': op, 'name': name,
-                                                     'items': list(items or []), 'done': done})
+                                                     'items': list(items or []), 'done': done, **extra})
         if not data.get('ok'):
             raise ValueError(data.get('error') or '没改成')
-        self.lists = {k: data[k] for k in ('version', 'lists', 'url')}
-        self.events.publish('lists', self.lists)
+        self._set_lists(data)
         return self.lists
+
+    def _list_reminders(self, now=None):
+        """清单里要在这台响铃的提醒 -> {key: (到点的时间, 念的话, 显示的字)}。key 记着是哪一项、哪一次、提前多少。"""
+        now = now or time.time()
+        me, out = self.cfg['device_id'], {}
+        for name, items in ((self.lists or {}).get('lists') or {}).items():
+            for x in items or []:
+                r = x.get('remind') or {}
+                if x.get('done') or not x.get('due') or r.get('mode') != 'ring':
+                    continue
+                where = r.get('where') or []
+                if where and 'all' not in where and me not in where:
+                    continue
+                try:
+                    at = datetime.datetime.fromisoformat(f"{x['due']}T{x.get('time') or '09:00'}")
+                except ValueError:
+                    continue
+                for b in r.get('before') or [0]:
+                    fire = at - datetime.timedelta(minutes=int(b))
+                    if fire.timestamp() <= now:
+                        continue
+                    lead = '' if not b else f"（{'明天' if b == 1440 else f'{b // 1440} 天后' if b % 1440 == 0 else f'{b // 60} 小时后' if b % 60 == 0 else f'{b} 分钟后'}）"
+                    out[f"list:{x['id']}:{fire.isoformat(timespec='minutes')}"] = (fire, f"提醒{lead}：{x['text']}", x['text'] + lead)
+        return out
+
+    def _sync_list_alarms(self):
+        """把清单里要响铃的提醒排成这台的提醒（alarms.py）：响铃、再睡、断电后补响都和闹钟一样；划掉、改了的自动撤掉。"""
+        if not alarms.clock_synced():
+            return
+        want = self._list_reminders()
+        have = {i.get('src'): i for i in self.alarms.items if str(i.get('src') or '').startswith('list:')}
+        changed = False
+        now = time.time()
+        for src, item in have.items():
+            # 还没到点的才撤（划掉了、改了时间）；响过的留给闹钟自己收拾，「再睡 10 分钟」还找得到它
+            if src not in want and (item.get('at') or 0) > now and not (self.ring and any(i['id'] == item['id'] for i in self.ring['items'])):
+                self.alarms.remove(item['id'])
+                changed = True
+        for src, (fire, say, label) in want.items():
+            if src in have:
+                continue
+            try:
+                item = self.alarms.create('reminder', label, say, None, date=fire.date().isoformat(), time=fire.strftime('%H:%M'))
+            except ValueError as e:
+                log.info('list reminder %s not set: %s', src, e)
+                continue
+            item['src'] = src
+            self.alarms.save()
+            bg.spawn(self._make_clip(item))
+            changed = True
+        if changed:
+            self.publish_alarms()
 
     async def _lists_loop(self):
         while True:
