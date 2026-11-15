@@ -18,6 +18,7 @@ import io
 import json
 import os
 import re
+import secrets
 import time
 import wave
 from concurrent.futures import ThreadPoolExecutor
@@ -25,12 +26,13 @@ from pathlib import Path
 
 from aiohttp import web
 
+from config.config_loader import get_project_dir
 from config.logger import setup_logging
 from core.admin import auth, brand, catalog, config_store, connections, pages, pipeline, plugin_settings, presence, updater
 from core.admin.grokbot import GrokBotAdmin
 from core.admin.status import _claude_version, collect_status
 from core import billing
-from core.agent import chat_history, family, llm_router, media, photo_ask, reports
+from core.agent import album, chat_history, family, llm_router, media, photo_ask, reports
 from core.utils import local_voiceprint  # noqa: F401  导入时会初始化日志（asyncio.run），不能放到请求里再导入
 from core.agent.agent_session import ErrorKind
 from core.agent.grokbot_client import GrokBotError
@@ -248,6 +250,17 @@ class AdminHandler:
                 # 孩子和学习（core/agent/family.py，设计画布第 61 块）
                 web.get("/admin/api/kids", self.handle_kids),
                 web.post("/admin/api/kids", self.handle_kids_save),
+                # 家庭相册（core/agent/album.py，设计画布第 66 块）
+                web.get("/admin/api/album", self.handle_album),
+                web.post("/admin/api/album", self.handle_album_save),
+                web.post("/admin/api/album/upload", self.handle_album_upload),
+                web.get("/admin/api/album/photo/{id}", self.handle_album_photo),
+                web.get("/kiosk/album", self.handle_kiosk_album),
+                web.post("/kiosk/album/settings", self.handle_kiosk_album_settings),
+                web.post("/kiosk/album/upload", self.handle_kiosk_album_upload),
+                web.post("/kiosk/album/hide", self.handle_kiosk_album_hide),
+                web.post("/kiosk/album/collected", self.handle_kiosk_album_collected),
+                web.get("/kiosk/album/photo/{id}", self.handle_kiosk_album_photo),
                 web.get("/kiosk/kids", self.handle_kiosk_kids),
                 web.get("/kiosk/kids/learn", self.handle_kiosk_kids_learn),
                 web.post("/kiosk/kids/report", self.handle_kiosk_kids_report),
@@ -2525,6 +2538,109 @@ class AdminHandler:
         except (ValueError, TypeError) as e:
             return self._error(str(e) or "参数不对", 400)
         return self._json(await self._kids_view())
+
+    # ---------- 家庭相册（core/agent/album.py，设计画布第 66 块） ----------
+
+    async def handle_album(self, request: web.Request):
+        self._require_login(request)
+        names = await self._blocking(self._device_names)
+        return self._json({"ok": True, **await self._blocking(album.view, names)})
+
+    async def handle_album_save(self, request: web.Request):
+        self._require_login(request)
+        body = await self._read_json(request)
+        try:
+            await self._blocking(album.apply, body)
+        except album.AlbumError as e:
+            return self._error(str(e), 400)
+        names = await self._blocking(self._device_names)
+        return self._json({"ok": True, **await self._blocking(album.view, names)})
+
+    async def _receive_photo(self, request: web.Request, source: str, device: str = ""):
+        """请求体就是照片（不走 multipart），收到临时文件再交给 album.upload。"""
+        os.makedirs(os.path.join(get_project_dir(), "data", "album"), exist_ok=True)
+        tmp = os.path.join(get_project_dir(), "data", "album", f".up-{secrets.token_hex(6)}")
+        size = 0
+        try:
+            with open(tmp, "wb") as f:
+                async for chunk in request.content.iter_chunked(256 * 1024):
+                    size += len(chunk)
+                    if size > album.MAX_UPLOAD:
+                        raise album.AlbumError("照片太大（最多 40 MB）")
+                    await self._blocking(f.write, chunk)
+            if not size:
+                raise album.AlbumError("文件是空的")
+            rec = await self._blocking(album.upload, tmp, str(request.query.get("name") or "")[:80], source, device)
+        except album.AlbumError as e:
+            return self._error(str(e), 400)
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        return self._json({"ok": True, "photo": rec})
+
+    async def handle_album_upload(self, request: web.Request):
+        """?name=<文件名>，请求体是照片。"""
+        self._require_login(request)
+        return await self._receive_photo(request, "upload")
+
+    async def handle_album_photo(self, request: web.Request):
+        """?size=t|d|p：缩略图、给设备的、存的那张。"""
+        self._require_login(request)
+        path = await self._blocking(album.image, request.match_info["id"], str(request.query.get("size") or "t"))
+        if not path:
+            return self._error("没有这张", 404)
+        return web.FileResponse(path, headers={"Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400"})
+
+    async def handle_kiosk_album(self, request: web.Request):
+        """?device=&local=<本机照片张数>：这台设备的待机页设置和该放的照片。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        try:
+            local = int(request.query["local"]) if "local" in request.query else None
+        except ValueError:
+            local = None
+        return self._json({"ok": True, **await self._blocking(album.for_device, str(request.query.get("device") or ""), local)})
+
+    async def handle_kiosk_album_settings(self, request: web.Request):
+        """{"device", "source", "albums", "style", "interval", "order", "night", "updated"}：设备上改的待机页设置。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        body = await self._read_json(request)
+        dev = str(body.get("device") or "")
+        if not dev:
+            return self._error("哪台设备？", 400)
+        return self._json({"ok": True, "settings": await self._blocking(album.device_set, dev, body)})
+
+    async def handle_kiosk_album_upload(self, request: web.Request):
+        """?device=&name=：设备把本机原来的照片传上来（后台点了「收进相册」以后）。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        names = await self._blocking(self._device_names)
+        dev = str(request.query.get("device") or "")
+        return await self._receive_photo(request, "device", names.get(dev) or dev or "设备")
+
+    async def handle_kiosk_album_hide(self, request: web.Request):
+        """{"device", "id"}：「别放这张了」。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        body = await self._read_json(request)
+        await self._blocking(album.hide, str(body.get("device") or ""), str(body.get("id") or ""))
+        return self._json({"ok": True})
+
+    async def handle_kiosk_album_collected(self, request: web.Request):
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        body = await self._read_json(request)
+        await self._blocking(album.collected, str(body.get("device") or ""))
+        return self._json({"ok": True})
+
+    async def handle_kiosk_album_photo(self, request: web.Request):
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        path = await self._blocking(album.image, request.match_info["id"], "d")
+        if not path:
+            return self._error("没有这张", 404)
+        return web.FileResponse(path, headers={"Content-Type": "image/jpeg", "Cache-Control": "max-age=31536000"})
 
     async def handle_kiosk_kids(self, request: web.Request):
         """?device=：这台设备该用的儿童模式（每台的开关和几岁 + 全家一份的限时、睡觉时间、声音，带 updated）。"""

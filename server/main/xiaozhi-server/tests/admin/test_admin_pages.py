@@ -1406,5 +1406,7 @@ def test_subtab_attribute_is_reserved_for_tabify():
     import re
     from pathlib import Path
     html = (Path(__file__).resolve().parents[2] / "core/admin/static/index.html").read_text(encoding="utf-8")
-    assert html.count('querySelectorAll("[data-tab]")') == 1
+    start = html.index("function tabify(")
+    body = html[start:html.index("\n}\n", start)]
+    assert html.count('querySelectorAll("[data-tab]")') == body.count('querySelectorAll("[data-tab]")') >= 1   # 只有 tabify 里用
     assert not re.search(r'<button[^>]*\sdata-tab=', html)

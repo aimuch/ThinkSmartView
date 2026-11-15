@@ -218,7 +218,8 @@ PAGES = [  # 设备「打开页面」能去的地方（和客户端 PAGES 一致
     ("work.repo", "工作台 · 仓库同步"), ("weather", "天气"), ("focus", "专注"), ("study", "学习记录"),
     ("smart", "家居"), ("settings", "设置"), ("settings.screen", "设置 · 屏幕和声音"), ("settings.looks", "设置 · 外观"),
     ("settings.net", "设置 · 网络"), ("settings.system", "设置 · 系统"), ("settings.alarms", "设置 · 闹钟和作息"),
-    ("settings.family", "设置 · 家人"), ("settings.voice", "设置 · 语音"), ("close", "关掉当前页面"),
+    ("settings.family", "设置 · 家人"), ("settings.voice", "设置 · 语音"), ("album", "待机页 · 家庭相册"),
+    ("close", "关掉当前页面"),
 ]
 PAGE_IDS = [p[0] for p in PAGES]
 

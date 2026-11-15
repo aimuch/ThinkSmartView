@@ -237,8 +237,31 @@ def describe_branches(merged: dict) -> list:
     return out
 
 
+def describe_route(merged: dict) -> dict:
+    """[xiaozhi-hub] 泳道图（设计画布第 67 块）里的两条岔路：口令（不经过大模型）、大模型调的工具（插件）。"""
+    out = {"commands": None, "tools": None}
+    try:
+        from core.agent import commands
+
+        c = commands.load()
+        out["commands"] = {"enabled": bool(c.get("enabled")),
+                           "builtin": sum(1 for v in (c.get("builtin") or {}).values() if v.get("enabled")),
+                           "custom": len(c.get("custom") or [])}
+    except Exception:  # noqa: BLE001 —— 口令模块出问题不影响这一页
+        pass
+    try:
+        intent = pages.describe_intent(merged)
+        on = [p["label"] for p in intent["plugins"] if p["enabled"]]
+        home = [p["label"] for p in pages.home_plugins(merged) if p.get("enabled")]
+        out["tools"] = {"mode": intent["mode"], "plugins": on + home, "locked": intent["locked"]}
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
 def describe_flow(merged: dict) -> dict:
-    return {"stages": describe_stages(merged), "tips": describe_tips(merged), "branches": describe_branches(merged)}
+    return {"stages": describe_stages(merged), "tips": describe_tips(merged), "branches": describe_branches(merged),
+            "route": describe_route(merged)}
 
 
 # ---------- 提示词拆解 ----------
