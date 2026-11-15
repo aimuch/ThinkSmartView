@@ -25,6 +25,7 @@ def blanker(tmp_path, monkeypatch):
     touch_r, touch_w = os.pipe()
     ib.BACKLIGHT_PATH, ib.HINT_PATH, ib.ALS_PATH = str(backlight), hint, str(tmp_path / 'als')
     ib.open_input_devices = lambda: [touch_r]
+    ib.FREEZE_DELAY = float(os.environ.get('TEST_FREEZE_DELAY', '0.1'))
     ib.signal.signal = lambda *a: None
     sent = []                                       # (pid, signal) to the page renderers
     ib.web_pids = lambda: [4242]
@@ -158,3 +159,14 @@ def test_a_voice_wake_continues_the_page(blanker):
     time.sleep(0.3)
     blanker.hint(hold=True)                                      # wake word: new seq
     assert blanker.signals[-1] == (4242, blanker.CONT)
+
+
+def test_page_stopped_only_after_it_painted_itself_black(tmp_path, monkeypatch, request):
+    """BLANK_BRIGHTNESS still shows a faint picture on some panels: the page gets FREEZE_DELAY seconds to go black."""
+    monkeypatch.setenv('TEST_FREEZE_DELAY', '1.0')
+    b = request.getfixturevalue('blanker')
+    b.hint(hold=False, idle=1, after=1)
+    assert b.blanked_within(2)
+    assert (4242, b.STOP) not in b.signals
+    time.sleep(1.2)
+    assert b.signals[-1] == (4242, b.STOP)

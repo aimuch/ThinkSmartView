@@ -2681,6 +2681,7 @@ const handlers = {
     if ('slides' in s) renderSlides(s.slides);   // the demo's snapshots have none
     if (s.kids) { ui.kids = s.kids; renderKids(); }
     if (s.standby) { ui.standby = s.standby; renderStandbyCard(); }
+    if ('dark' in s) setDark(s.dark);
     if (s.gentle) { ui.gentle = s.gentle; renderGentle(); }
     if (s.focus) { ui.focus = s.focus; if (handlers.focus) handlers.focus(s.focus); }
     if (s.study && handlers.study) handlers.study(s.study);
@@ -2773,6 +2774,7 @@ const handlers = {
     ui.standby = st; renderStandbyCard();
   },
   album_next() { albumNext(); },   // 「别放这张了」：马上换下一张
+  dark(d) { setDark(d.dark); },     // 息屏了：涂黑（不留一张不走的钟在玻璃上）
   gentle(g) {
     ui.gentle = g; renderGentle();
   },
@@ -2839,12 +2841,27 @@ function connectEvents() {
 }
 // 息屏时网页进程被暂停（idle-blanker 的 SIGSTOP）：醒来后这个计时器一下子跳过了很久，期间被丢掉的推送补不回来，
 // 重新连一次拿完整的快照
-let eventsTick = Date.now();
+// 息屏时整页涂黑（客户端看背光，idle-blanker 3 秒后才暂停网页）；醒来时计时器一下子跳过很久：马上去掉黑幕、重连拿快照
+function setDark(on) {
+  document.body.classList.toggle('blackout', !!on);
+  if (!on && document.body.classList.contains('was-dark')) { tick(); if (sb.shown) renderClock(); }
+  document.body.classList.toggle('was-dark', !!on);
+}
+let eventsTick = Date.now(), wakeTick = Date.now();
+setInterval(() => {
+  const now = Date.now(), gap = now - wakeTick;
+  wakeTick = now;
+  if (gap > 2500) {
+    setDark(false);
+    if (!DEMO && events && gap > 20000) { eventsTick = now; connectEvents(); }
+  }
+}, 500);
 setInterval(() => {
   const now = Date.now(), resumed = now - eventsTick > 30000;
   eventsTick = now;
   if (!DEMO && events && (resumed || now - eventsSeen > 40000)) connectEvents();
 }, 10000);
+document.addEventListener('pointerdown', () => setDark(false), true);
 
 /* ---- buttons ---- */
 function post(path, body) {

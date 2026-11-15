@@ -797,3 +797,7 @@ body[data-theme="dawn"] .svc-warn, body[data-theme="candy"] .svc-warn, body[data
   .wk-sec { flex: none; overflow: visible; }
   .wk-nums { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* 息屏时整页涂黑（有的屏背光 10 还隐约看得见；网页 3 秒后被暂停，不留一张不走的钟） */
+body.blackout::after { content: ""; position: fixed; inset: 0; background: #000; z-index: 2147483647; pointer-events: none; }
+body.blackout * { animation-play-state: paused !important; }

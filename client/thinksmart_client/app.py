@@ -79,6 +79,8 @@ PHOTOS = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'photos'   # �
 PHOTO_POLL = 1.5
 ALBUM = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'album'   # 待机页的家庭相册
 ALBUM_MAX = 60
+BACKLIGHT = Path('/sys/class/backlight/backlight/brightness')   # 息屏时 idle-blanker 写 10（BLANK_BRIGHTNESS）
+DARK_LEVEL = 10
 HUB_ALBUM = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'album-hub'   # 网关家庭相册的缓存（设计画布第 66 块）
 STUDY_LOG = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'study'   # 学习陪伴：每天的文字记录
 STANDBY_MINUTES = (1, 2, 5, 10)
@@ -397,6 +399,7 @@ class Client:
         self.hub_album = hub_album.HubAlbum(HUB_ALBUM, lambda: self.cfg['hub_http'], cfg['device_id'], ALBUM, on_change=self.publish_standby)
         self.album_now = None   # 待机页正在放的那张（网关相册的 id），「这张是哪年的」「别放这张了」用
         self.album_want = 0     # 说了「放相册」：对话结束后进待机页
+        self.dark = False       # 息屏了：页面涂黑（_dark_loop）
         self.focus = focus.Focus(cfg.get('focus'))                           # 专注计时（设计画布第 47 块）
         self.study = study.Study(cfg.get('study'), STUDY_LOG)                # 学习陪伴（设计画布第 48 块）
         self.bt = bt.Bluetooth(self.audio.background, self.events.publish, cfg.get('bluetooth') is not False)
@@ -1701,6 +1704,21 @@ class Client:
             except asyncio.TimeoutError:
                 pass
 
+    async def _dark_loop(self):
+        """息屏了（背光降到 10）就告诉页面：涂成全黑。有的屏 10 还能隐约看见，idle-blanker 3 秒后才暂停网页，
+        不涂黑的话玻璃上留着一张不走的钟和天气。亮回来时也说一声（页面醒来自己也会发现）。"""
+        if not BACKLIGHT.exists():
+            return
+        while True:
+            try:
+                dark = int(BACKLIGHT.read_text().strip() or 0) <= DARK_LEVEL
+            except (OSError, ValueError):
+                dark = self.dark
+            if dark != self.dark:
+                self.dark = dark
+                self.events.publish('dark', {'dark': dark})
+            await asyncio.sleep(0.25)
+
     def album_now_set(self, pid):
         self.album_now = pid if isinstance(pid, str) and hub_album.ID.fullmatch(pid) else None
 
@@ -2244,6 +2262,7 @@ class Client:
         bg.spawn(self._alert_loop())
         bg.spawn(self._integrations_loop())
         bg.spawn(self._album_loop())
+        bg.spawn(self._dark_loop())
         bg.spawn(self._offline_clips_loop())
         await self.bt.start()
         bg.spawn(self._bluetooth_loop())
@@ -2371,7 +2390,7 @@ class Client:
                 'mijia': self.mijia.view(), 'rotation': self.rotation.view(), 'wake_words': self.wake_view(),
                 'broadcast': self.broadcast_view(), 'photo': self.photo_view(), 'slides': self.slides_view(),
                 'looks': self.looks_view(), 'today': self.today, 'kids': self.kids_view(),
-                'standby': self.standby_view(), 'cook': self.cook_view(), 'media': self.media_view(),
+                'standby': self.standby_view(), 'dark': getattr(self, 'dark', False), 'cook': self.cook_view(), 'media': self.media_view(),
                 'gentle': self.gentle.view(time.time()), 'focus': self.focus.view(), 'study': self.study_view(),
                 'airplay': self.airplay and self.airplay.view(),
                 'intercom': self.intercom and self.intercom.view(),

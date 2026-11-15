@@ -21,7 +21,9 @@ Input-idle screen blanker + ALS auto-brightness for CD-18781Y.
   animating at ~30% CPU behind a dark panel. Every way back (touch, voice, proximity, motion, anyone
   else lighting the panel) continues it first (SIGCONT); so do startup (a blanker that died while it
   was stopped) and exit. The page notices the gap and reloads its state. THINKSMART_FREEZE_WEB=0 turns
-  this off. (Idea from fubin0478/thinksmart-view, MIT.)
+  this off. (Idea from fubin0478/thinksmart-view, MIT.) It is stopped FREEZE_DELAY seconds after the
+  backlight goes down, not at once: BLANK_BRIGHTNESS still shows a faint picture on some panels, and the
+  voice client tells the page in that time to paint itself black, so no frozen clock is left on the glass.
 
 Deploy to /usr/local/bin/idle-blanker.py
 Service: ~/.config/systemd/user/idle-blanker.service
@@ -58,6 +60,7 @@ ALS_WAKE_COOL  = 30.0      # seconds after wake before ALS kicks in
 ALS_DEADBAND   = 150       # only adjust if target differs by this much
 FREEZE_WEB     = os.environ.get("THINKSMART_FREEZE_WEB", "1") != "0"
 WEB_COMM       = "WebKitWebProces"   # /proc/<pid>/comm keeps 15 characters
+FREEZE_DELAY   = 3.0      # seconds between blanking and stopping the page (it paints itself black first)
 kill           = os.kill             # tests replace it
 
 
@@ -195,6 +198,8 @@ def run():
     last_als      = 0.0
     last_wake     = 0.0
     blanked       = False
+    blanked_at    = 0.0
+    frozen        = False          # the page renderer is stopped
     target_brightness = MAX_BRIGHTNESS
     hint_mtime    = None
     hint_seq      = None
@@ -215,10 +220,11 @@ def run():
     signal.signal(signal.SIGINT, handle_signal)
 
     def wake(why):
-        nonlocal blanked, last_wake
+        nonlocal blanked, last_wake, frozen
         logger.info(f"{why} — restoring brightness")
         last_wake = time.monotonic()
         freeze_web(False)      # first: the page draws while the backlight comes up
+        frozen = False
         set_brightness(awake_brightness())
         blanked = False
 
@@ -273,6 +279,7 @@ def run():
         if blanked and brightness is not None and brightness > BLANK_BRIGHTNESS:
             logger.info("Screen restored externally — resetting idle timer")
             freeze_web(False)
+            frozen = False
             last_input = time.monotonic()
             last_wake  = time.monotonic()
             if dim or manual is not None:
@@ -310,7 +317,12 @@ def run():
                 if set_brightness(BLANK_BRIGHTNESS):
                     logger.info("Screen blanked")
                     blanked = True
-                    freeze_web(True)
+                    blanked_at = time.monotonic()
+
+        # stop the page a little after blanking: it has painted itself black by then
+        if blanked and not frozen and time.monotonic() - blanked_at >= FREEZE_DELAY:
+            freeze_web(True)
+            frozen = True
 
 
 if __name__ == "__main__":
