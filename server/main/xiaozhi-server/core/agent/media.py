@@ -596,7 +596,12 @@ class Jellyfin(Source):
 
     @classmethod
     def _auth_headers(cls, device, token=""):
-        return {"Authorization": cls._auth(device, token)}
+        # 飞牛影视（fnOS 自带，Jellyfin 10.10 改的）只认老写法 X-Emby-Authorization：两种都带上，真 Jellyfin 两种都认
+        a = cls._auth(device, token)
+        h = {"Authorization": a, "X-Emby-Authorization": a}
+        if token:
+            h["X-Emby-Token"] = token
+        return h
 
     def _headers(self):
         return self._auth_headers(self.device, self.token)

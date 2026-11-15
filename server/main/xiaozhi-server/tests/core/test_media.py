@@ -590,3 +590,10 @@ async def test_emby_uses_the_same_code(tmp_path, jf, client):
     assert v["emby"]["has_password"] and v["jellyfin"]["has_password"]
     sd = await (await client.get("/admin/api/services")).json()
     assert [m["id"] for m in sd["media"]] == ["music", "jellyfin", "emby"] and sd["media"][2]["configured"]
+
+
+def test_jellyfin_headers_work_for_fnvideos():
+    """飞牛影视只认 X-Emby-Authorization；Jellyfin 两种都认：都带上，令牌只在头里。"""
+    h = music.Jellyfin._auth_headers("dev-1", "tok")
+    assert h["Authorization"] == h["X-Emby-Authorization"] and 'Token="tok"' in h["Authorization"] and h["X-Emby-Token"] == "tok"
+    assert "Token" not in music.Jellyfin._auth_headers("dev-1")["X-Emby-Authorization"]
