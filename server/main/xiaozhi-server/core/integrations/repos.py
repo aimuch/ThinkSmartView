@@ -32,9 +32,14 @@ async def summary(s: dict, fresh: bool = False) -> dict:
         events = [e for e in data.get("events") or [] if isinstance(e, dict)]
         try:
             state = await request("GET", f"{s['url']}/api/state", auth=auth, timeout=10)
-            tasks = _tasks(state)
+            tasks, host_names = _tasks(state), [str(h.get("name") or "") for h in state.get("hosts") or [] if isinstance(h, dict)]
         except IntegrationError:
-            tasks = None
+            tasks, host_names = None, []
+        try:   # 失败的仓库按原因数一数（设计画布第 77 块）
+            failed = await request("GET", f"{s['url']}/api/repos?view=failed&limit=2000", auth=auth, timeout=10)
+            reasons = _reasons((failed or {}).get("repos") or [], views)
+        except IntegrationError:
+            reasons = None
         return {"total": repos.get("total") or 0, "synced": views.get("synced") or 0, "behind": views.get("behind") or 0,
                 "dirty": views.get("dirty") or 0, "failed": views.get("failed") or 0, "protected": views.get("protected") or 0,
                 "gone": views.get("gone") or 0, "suspect7": int(guard.get("before") or 0) + int(guard.get("skip") or 0),
@@ -42,13 +47,45 @@ async def summary(s: dict, fresh: bool = False) -> dict:
                 "hosts": {k: hosts.get(k) or 0 for k in ("total", "online", "down")},
                 "attention": attention, "attention_total": data.get("attention_total") or len(attention),
                 "last_event": ({"at": events[0].get("at"), "msg": str(events[0].get("msg") or "")[:120]} if events else None),
-                "tasks": tasks}
+                "tasks": tasks, "reasons": reasons,
+                "views": {k: int(views.get(k) or 0) for k in ("synced", "behind", "dirty", "failed", "protected", "gone", "skipped")},
+                "host_list": [{"name": n, "tasks": sum(1 for x in tasks or [] if x["host"] == n)} for n in host_names if n]}
     if fresh:
         _cache.drop(s["url"])
     return await _cache.get(s["url"], fetch)
 
 
 ACTIVE = {"running", "queued", "starting", "paused"}
+_samples = {}   # 在跑的那次 -> [(时间, 完成数)]：按最近 10 分钟的速度估剩余时间
+
+
+def _reasons(rows: list, views: dict) -> list:
+    """「要处理的」按原因：失败的按 kind 分，再加被拦下（疑似删库）、上游没了；每类带几个仓库名（点开看）。"""
+    groups = {}
+    for r in rows:
+        if isinstance(r, dict):
+            g = groups.setdefault(r.get("kind") or "other", [])
+            g.append(str(r.get("name") or r.get("path") or ""))
+    out = [{"kind": k, "label": KIND.get(k, {"other": "其他错误", "host": "服务器连不上"}.get(k, k)), "count": len(v), "names": v[:8]}
+           for k, v in sorted(groups.items(), key=lambda kv: -len(kv[1]))]
+    for k, label in (("protected", "被拦下（疑似删库）"), ("gone", "上游没了")):
+        if views.get(k):
+            out.append({"kind": k, "label": label, "count": int(views[k]), "names": []})
+    return out
+
+
+def _eta(job_id: str, done: int, total: int):
+    import time
+
+    now = time.time()
+    seq = [x for x in _samples.get(job_id, []) if now - x[0] <= 900] + [(now, done)]
+    _samples[job_id] = seq
+    for k in [k for k in _samples if k != job_id and now - _samples[k][-1][0] > 3600]:
+        _samples.pop(k, None)
+    t0, d0 = seq[0]
+    if now - t0 < 120 or done <= d0 or not total:
+        return None
+    return int((total - done) / ((done - d0) / (now - t0)))
 
 
 def _schedule(w: dict) -> str:
@@ -88,6 +125,11 @@ def _tasks(state) -> list:
              "done": int((job or {}).get("done") or 0) if active else None, "total": int((job or {}).get("total") or 0) if active else None,
              "last": None if active else (last.get("status") or None), "failed": int(counts.get("failed") or 0) if not active else 0,
              "ended": None if active else (last.get("ended") or None)}
+        if active:
+            jc = job.get("counts") or {}
+            x.update(started=job.get("started"), trigger=job.get("trigger"),
+                     counts={k: int(jc.get(k) or 0) for k in ("cloned", "updated", "failed")},
+                     eta_s=_eta(job["id"], x["done"], x["total"]))
         out.append(x)
     out.sort(key=lambda x: (x["state"] == "idle", not x["enabled"], x["name"]))
     return out

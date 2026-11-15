@@ -115,6 +115,10 @@ def fake_upstreams():
     async def state(request):
         return web.json_response(repo_state)
 
+    async def repo_list(request):
+        assert request.query.get("view") == "failed"
+        return web.json_response({"repos": [{"name": "a", "kind": "network"}, {"name": "b", "kind": "network"}, {"name": "c", "kind": "auth"}]})
+
     async def repo_post(request):
         if request.headers.get("X-Repo-Manager") != "1":
             return web.json_response({"error": "需要请求头"}, status=403)
@@ -130,6 +134,7 @@ def fake_upstreams():
 
     app = web.Application()
     app.router.add_get("/api/state", state)
+    app.router.add_get("/api/repos", repo_list)
     app.router.add_post("/api/{op:(job|watch)/[a-z]+}", repo_post)
     app.router.add_get("/api/devices", devices)
     app.router.add_post("/api/devices/{id}/{action}", action)
@@ -342,9 +347,12 @@ async def test_repo_tasks_and_actions(client, upstream):
     _, calls = upstream
     d = (await (await client.get("/kiosk/integrations?device=study")).json())["repo_status"]
     t1, t2 = d["tasks"]
-    assert t1 == {"id": "w1", "name": "OpenSource", "host": "飞牛", "schedule": "每天 03:00", "enabled": True, "state": "running",
-                  "job": "j1", "done": 30, "total": 120, "last": None, "failed": 0, "ended": None}
+    assert {k: t1[k] for k in ("id", "name", "host", "schedule", "state", "job", "done", "total")} == {
+        "id": "w1", "name": "OpenSource", "host": "飞牛", "schedule": "每天 03:00", "state": "running", "job": "j1", "done": 30, "total": 120}
+    assert t1["counts"] == {"cloned": 0, "updated": 0, "failed": 0} and t1["eta_s"] is None
     assert t2["state"] == "idle" and t2["schedule"] == "定时关" and t2["failed"] == 87 and t2["job"] is None
+    assert d["reasons"][0] == {"kind": "network", "label": "网络错误", "count": 2, "names": ["a", "b"]} and d["reasons"][1]["label"] == "认证失败"
+    assert d["views"]["synced"] == 7 and d["views"]["failed"] == 2
     r = await (await client.post("/kiosk/repo", json={"device": "study", "op": "pause", "id": "w1"})).json()
     assert r["ok"] and calls[-1] == ("repo", "job/pause", {"id": "j1"}) and r["repo_status"]["tasks"][0]["state"] == "paused"
     r = await client.post("/kiosk/repo", json={"device": "study", "op": "run", "id": "w1"})
