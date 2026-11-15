@@ -82,8 +82,19 @@ def fake_upstreams():
             return vec([({"instance": "1.1.1.1"}, 9.2)])
         return vec([])
 
+    logins = []
+
+    async def login(request):
+        body = await request.json()
+        logins.append(body.get("password"))
+        if body.get("password") != "rack-pass":
+            return web.json_response({"error": "wrong password"}, status=401)
+        r = web.json_response({"ok": True})
+        r.set_cookie("rs_session", f"sid{len(logins)}", httponly=True)
+        return r
+
     async def monitors(request):
-        if request.headers.get("X-Token") != "rack-tok":
+        if request.headers.get("X-Token") != "rack-tok" and request.cookies.get("rs_session") != f"sid{len(logins)}":
             return web.json_response({"error": "log in"}, status=401)
         return web.json_response({"monitors": [{"name": "家庭影院", "state": "down", "latency_ms": None, "msg": "timeout"},
                                                {"name": "博客", "state": "up", "latency_ms": 80}]})
@@ -100,6 +111,7 @@ def fake_upstreams():
     app.router.add_post("/api/devices/{id}/{action}", action)
     app.router.add_get("/api/v1/query", prom)
     app.router.add_get("/api/monitors", monitors)
+    app.router.add_post("/api/login", login)
     app.router.add_get("/api/overview", overview)
     return app, calls
 
@@ -262,3 +274,19 @@ async def test_plugin_settings_tests(upstream):
         plugin_settings.test_values("desk_hub", {"token": "short"}, merged)
     with pytest.raises(ValueError, match="http"):
         plugin_settings.test_values("rack_status", {"prometheus": "localhost:9090"}, merged)
+
+
+async def test_rack_logs_in_with_the_password(upstream):
+    """机柜只有登录密码（没有用户名）：网关登录换 cookie 读检测项，cookie 过期就再登录一次（设计画布第 70 块）。"""
+    base, _ = upstream
+    rack._sessions.clear()
+    s = {"prometheus": base, "url": base, "token": "", "password": "rack-pass"}
+    d = await rack.summary(s, fresh=True)
+    assert [m["name"] for m in d["monitors"]] == ["家庭影院", "博客"] and d["monitor_error"] is None
+    key = (base, hash("rack-pass"))
+    rack._sessions[key] = "stale"                      # 过期的 cookie：401 后重新登录
+    d = await rack.summary(s, fresh=True)
+    assert d["monitor_error"] is None and rack._sessions[key].startswith("sid")
+    rack._sessions.clear()
+    d = await rack.summary({**s, "password": "wrong"}, fresh=True)
+    assert "登录密码不对" in d["monitor_error"]

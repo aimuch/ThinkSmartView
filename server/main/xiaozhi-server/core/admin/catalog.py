@@ -357,12 +357,15 @@ PLUGIN_SETTINGS.update({
         ],
     },
     "rack_status": {
-        "note": "主机和 Ping 检测从 Prometheus 读，不用令牌。填了 rack-screen 的令牌（它配置文件里的 preview.token），"
-                "还能读到它自己的检测项（HTTP、端口、证书等）。",
+        "note": "主机和 Ping 检测从 Prometheus 读，不用密码。填了 rack-screen 的登录密码（打开它的网页时要输的那个，"
+                "没有用户名），还能读到它自己的检测项（HTTP、端口、证书等）。",
         "fields": [
             {"key": "prometheus", "label": "Prometheus 地址", "type": "text", "default": "http://127.0.0.1:9090"},
             {"key": "url", "label": "rack-screen 地址（选填）", "type": "text", "default": "http://127.0.0.1:8088"},
-            {"key": "token", "label": "rack-screen 令牌（选填）", "type": "secret"},
+            {"key": "password", "label": "rack-screen 登录密码（选填）", "type": "secret",
+             "hint": "就是打开机柜网页时输的密码，没有用户名"},
+            {"key": "token", "label": "或者 API 令牌（选填）", "type": "secret",
+             "hint": "rack-screen 配置文件里的 preview.token；填了它就不用登录密码"},
         ],
     },
     "repo_status": {

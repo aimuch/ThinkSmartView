@@ -134,6 +134,6 @@ async def test_no_token_says_what_to_fill_in(gateway, monkeypatch, upstream):
     r = await gateway.get("/kiosk/proxy/hub/", headers={"Accept": "text/html"})
     assert r.status == 409 and "BTROUTER_API_TOKEN" in await r.text()
     r = await gateway.get("/kiosk/proxy/rack/setup", headers={"Accept": "text/html"})
-    assert r.status == 409 and "preview.token" in await r.text()
+    assert r.status == 409 and "登录密码" in await r.text()
     r = await gateway.get("/kiosk/proxy/rack/api/whatever")          # 接口请求照旧转过去（没令牌时它自己回 401）
     assert r.status == 200

@@ -1,11 +1,18 @@
-"""机柜：主机和 Ping 检测从 Prometheus 读（不用令牌）；填了 rack-screen 的令牌，再读它自己的检测项。
+"""机柜：主机和 Ping 检测从 Prometheus 读（不用令牌）；填了 rack-screen 的登录密码（或者它配置文件里的
+preview.token），再读它自己的检测项。
+
+rack-screen 的网页只有一个登录密码、没有用户名：POST /api/login {"password"} 换一个 rs_session 的 cookie，
+之后带着它读 /api/monitors；cookie 过期（401）就重新登录一次。密码只在网关的配置里，cookie 只在内存里。
 
 Prometheus 的查询照 rack-screen（smart-screen 仓库）的写法：node_exporter 的 up、CPU、内存、温度，
 blackbox 的 probe_success。macOS 上的 node_exporter 没有 MemAvailable，用 free + inactive 算。
 """
 
+import asyncio
 import time
 import urllib.parse
+
+import aiohttp
 
 from core.integrations.common import Cache, IntegrationError, request
 
@@ -45,9 +52,66 @@ def _by_instance(rows: list) -> dict:
     return out
 
 
+_sessions = {}   # (地址, 密码的指纹) -> rs_session cookie
+
+
+async def _login(url: str, password: str) -> str:
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8, connect=4)) as http:
+            async with http.post(f"{url}/api/login", json={"password": password, "remember": True},
+                                 headers={"Origin": url}) as r:
+                data = await r.json(content_type=None) if r.content_type == "application/json" else None
+                if r.status == 401:
+                    raise IntegrationError("rack-screen 的登录密码不对")
+                if r.status == 429:
+                    raise IntegrationError("rack-screen：密码错太多次，过一会儿再试")
+                if r.status >= 400:
+                    raise IntegrationError(f"rack-screen 登录失败（{r.status}" + (f"：{data.get('error')}" if isinstance(data, dict) and data.get("error") else "") + "）")
+                cookie = r.cookies.get("rs_session")
+                if not cookie or not cookie.value:
+                    raise IntegrationError("rack-screen 没给登录 cookie")
+                return cookie.value
+    except IntegrationError:
+        raise
+    except asyncio.TimeoutError:
+        raise IntegrationError("rack-screen 8 秒没有回应")
+    except aiohttp.ClientError:
+        raise IntegrationError("连不上 rack-screen")
+
+
+async def session(url: str, password: str) -> str:
+    """登录 cookie（有就用缓存的）：设备上「家居 › 机柜」那一页经网关代理打开时用。"""
+    key = (url, hash(password))
+    if not _sessions.get(key):
+        _sessions[key] = await _login(url, password)
+    return _sessions[key]
+
+
+def forget_session(url: str, password: str):
+    _sessions.pop((url, hash(password)), None)
+
+
+async def _get_with_password(url: str, password: str, path: str):
+    key = (url, hash(password))
+    for attempt in (0, 1):
+        sid = _sessions.get(key)
+        if not sid:
+            sid = _sessions[key] = await _login(url, password)
+        try:
+            return await request("GET", f"{url}{path}", headers={"Cookie": f"rs_session={sid}"}, timeout=6)
+        except IntegrationError as e:
+            if "401" in str(e) and attempt == 0:   # 过期了：重新登录一次
+                _sessions.pop(key, None)
+                continue
+            raise
+
+
 async def _monitors(s: dict) -> list:
-    """rack-screen 自己的检测项（要令牌）。"""
-    data = await request("GET", f"{s['url']}/api/monitors", headers={"X-Token": s["token"]}, timeout=6)
+    """rack-screen 自己的检测项（要登录密码或令牌）。"""
+    if s.get("token"):
+        data = await request("GET", f"{s['url']}/api/monitors", headers={"X-Token": s["token"]}, timeout=6)
+    else:
+        data = await _get_with_password(s["url"], s["password"], "/api/monitors")
     out = []
     for m in (data or {}).get("monitors") or []:
         if not isinstance(m, dict) or m.get("state") == "paused":
@@ -86,7 +150,7 @@ async def summary(s: dict, fresh: bool = False) -> dict:
         probes = [{"name": inst, "up": v >= 1, "ms": None if inst not in ms else round(ms[inst])}
                   for inst, v in sorted(_by_instance(res["probe"]).items())]
         out = {"hosts": hosts, "probes": probes, "monitors": [], "monitor_error": None}
-        if s.get("token"):
+        if s.get("token") or s.get("password"):
             try:
                 out["monitors"] = await _monitors(s)
             except IntegrationError as e:

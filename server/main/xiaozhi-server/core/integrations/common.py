@@ -11,7 +11,7 @@ import aiohttp
 # 插件名 -> (设置存在 plugins 下的键, 默认值)。字段和后台表单一致（core/admin/catalog.PLUGIN_SETTINGS）
 DEFAULTS = {
     "smart_hub": {"url": "http://127.0.0.1:8780", "token": ""},
-    "rack_status": {"prometheus": "http://127.0.0.1:9090", "url": "http://127.0.0.1:8088", "token": ""},
+    "rack_status": {"prometheus": "http://127.0.0.1:9090", "url": "http://127.0.0.1:8088", "token": "", "password": ""},
     "repo_status": {"url": "http://127.0.0.1:8765", "password": ""},
     "desk_hub": {"token": ""},
 }
