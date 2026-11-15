@@ -215,7 +215,7 @@ CATEGORY_IDS = [c[0] for c in CATEGORIES]
 
 PAGES = [  # 设备「打开页面」能去的地方（和客户端 PAGES 一致）
     ("home", "首页"), ("work", "工作台"), ("work.rack", "工作台 · 机柜"), ("work.desk", "工作台 · 桌面"),
-    ("work.repo", "工作台 · 仓库同步"), ("weather", "天气"), ("focus", "专注"), ("study", "学习记录"),
+    ("work.repo", "工作台 · 仓库同步"), ("work.hub", "工作台 · 智能中枢"), ("weather", "天气"), ("focus", "专注"), ("study", "学习记录"),
     ("smart", "家居"), ("settings", "设置"), ("settings.screen", "设置 · 屏幕和声音"), ("settings.looks", "设置 · 外观"),
     ("settings.net", "设置 · 网络"), ("settings.system", "设置 · 系统"), ("settings.alarms", "设置 · 闹钟和作息"),
     ("settings.family", "设置 · 家人"), ("settings.voice", "设置 · 语音"), ("album", "待机页 · 家庭相册"),

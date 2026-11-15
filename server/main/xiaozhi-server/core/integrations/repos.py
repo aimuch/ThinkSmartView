@@ -1,4 +1,5 @@
-"""仓库同步：读 repo-manager 的概览（GET /api/overview）。
+"""仓库同步：读 repo-manager 的概览（GET /api/overview）和同步任务（GET /api/state 的 watches、jobs），
+在设备上开始、暂停、继续、停止同步任务，开关定时（设计画布第 75 块）。
 
 repo-manager 对本机（127.0.0.1）来的请求不要密码；网关不在同一台机器上时填它的局域网密码（HTTP Basic）。
 """
@@ -29,16 +30,92 @@ async def summary(s: dict, fresh: bool = False) -> dict:
             attention.append({"name": str(a.get("name") or a.get("path") or ""), "why": why or str(a.get("state") or ""),
                               "host": str(a.get("host_name") or ""), "fails": a.get("fails")})
         events = [e for e in data.get("events") or [] if isinstance(e, dict)]
+        try:
+            state = await request("GET", f"{s['url']}/api/state", auth=auth, timeout=10)
+            tasks = _tasks(state)
+        except IntegrationError:
+            tasks = None
         return {"total": repos.get("total") or 0, "synced": views.get("synced") or 0, "behind": views.get("behind") or 0,
                 "dirty": views.get("dirty") or 0, "failed": views.get("failed") or 0, "protected": views.get("protected") or 0,
                 "gone": views.get("gone") or 0, "suspect7": int(guard.get("before") or 0) + int(guard.get("skip") or 0),
                 "watches": {k: watches.get(k) or 0 for k in ("total", "running", "ok", "failed", "error")},
                 "hosts": {k: hosts.get(k) or 0 for k in ("total", "online", "down")},
                 "attention": attention, "attention_total": data.get("attention_total") or len(attention),
-                "last_event": ({"at": events[0].get("at"), "msg": str(events[0].get("msg") or "")[:120]} if events else None)}
+                "last_event": ({"at": events[0].get("at"), "msg": str(events[0].get("msg") or "")[:120]} if events else None),
+                "tasks": tasks}
     if fresh:
         _cache.drop(s["url"])
     return await _cache.get(s["url"], fetch)
+
+
+ACTIVE = {"running", "queued", "starting", "paused"}
+
+
+def _schedule(w: dict) -> str:
+    if not w.get("enabled"):
+        return "定时关"
+    sc = w.get("schedule") or {}
+    if sc.get("mode") == "daily":
+        return f"每天 {sc.get('at') or ''}".strip()
+    if sc.get("mode") == "weekly":
+        return f"每周 {sc.get('at') or ''}".strip()
+    if sc.get("every"):
+        return f"每 {sc['every']} 分钟"
+    return "定时开"
+
+
+def _tasks(state) -> list:
+    """repo-manager 的同步任务 -> 屏幕上一行一个：名字、在哪台机器、定时、在跑的进度、上次怎么样。"""
+    if not isinstance(state, dict):
+        return []
+    jobs = {j.get("id"): j for j in state.get("jobs") or [] if isinstance(j, dict)}
+    out = []
+    for w in state.get("watches") or []:
+        if not isinstance(w, dict) or not w.get("id"):
+            continue
+        last = w.get("last") or {}
+        job = jobs.get(w.get("job_id")) if w.get("job_id") in jobs else None
+        if job is None:
+            job = next((j for j in jobs.values() if j.get("watch_id") == w["id"] and j.get("status") in ACTIVE), None)
+        active = bool(job and job.get("status") in ACTIVE)
+        path = str(w.get("path") or last.get("root") or "")
+        name = path.rstrip("/").rsplit("/", 1)[-1] or str((job or last).get("title") or w["id"])
+        counts = last.get("counts") or {}
+        x = {"id": w["id"], "name": name, "host": str(w.get("host_name") or last.get("host_name") or ""),
+             "schedule": _schedule(w), "enabled": bool(w.get("enabled")),
+             "state": ("paused" if job.get("paused") or job.get("status") == "paused" else "running") if active else "idle",
+             "job": job.get("id") if active else None,
+             "done": int((job or {}).get("done") or 0) if active else None, "total": int((job or {}).get("total") or 0) if active else None,
+             "last": None if active else (last.get("status") or None), "failed": int(counts.get("failed") or 0) if not active else 0,
+             "ended": None if active else (last.get("ended") or None)}
+        out.append(x)
+    out.sort(key=lambda x: (x["state"] == "idle", not x["enabled"], x["name"]))
+    return out
+
+
+async def act(s: dict, op: str, task_id: str, on=None) -> None:
+    """op：run（立即同步）、pause、resume、stop（对在跑的那次）、schedule（定时开关，on）。"""
+    auth = aiohttp.BasicAuth("repo-manager", s["password"]) if s.get("password") else None
+    state = await request("GET", f"{s['url']}/api/state", auth=auth, timeout=10)
+    task = next((x for x in _tasks(state) if x["id"] == task_id), None)
+    if task is None:
+        raise IntegrationError("repo-manager 里没有这个同步任务")
+    if op == "run":
+        if task["state"] != "idle":
+            raise IntegrationError("这个同步任务正在跑")
+        path, body = "/api/watch/run", {"id": task_id}
+    elif op in ("pause", "resume", "stop"):
+        if not task["job"]:
+            raise IntegrationError("这个同步任务现在没在跑")
+        path, body = f"/api/job/{op}", {"id": task["job"]}
+    elif op == "schedule":
+        path, body = "/api/watch/enable", {"id": task_id, "enabled": bool(on)}
+    else:
+        raise IntegrationError(f"不支持的操作：{op}")
+    data = await request("POST", f"{s['url']}{path}", auth=auth, json=body, headers={"X-Repo-Manager": "1"}, timeout=15)
+    if isinstance(data, dict) and data.get("error"):
+        raise IntegrationError(str(data["error"]))
+    _cache.drop(s["url"])
 
 
 def spoken(d: dict) -> str:

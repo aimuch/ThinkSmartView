@@ -215,6 +215,7 @@ class AdminHandler:
                 web.get("/kiosk/hubnode", self.handle_kiosk_hubnode),
                 web.post("/kiosk/smarthub", self.handle_kiosk_smarthub),
                 web.post("/kiosk/deskhub", self.handle_kiosk_deskhub),
+                web.post("/kiosk/repo", self.handle_kiosk_repo),
                 web.post("/kiosk/plugin", self.handle_kiosk_plugin),
                 # Mac 上的 DeskHub App 连进来：局域网能到，连接口令就是凭证（core/integrations/deskhub.py）
                 web.post("/deskhub/push", self.handle_deskhub_push),
@@ -1963,6 +1964,25 @@ class AdminHandler:
             return self._error(str(e), 400)
         self.logger.bind(tag=TAG).info(f"设备 {device} 在屏上把 {name} {'打开' if on else '关掉'}了")
         return self._json({"ok": True, "plugins": common.plugin_states(merged, device)})
+
+    async def handle_kiosk_repo(self, request: web.Request):
+        """{"device", "op", "id", "on"}：工作台「仓库同步」里点的同步任务操作（设计画布第 75 块）：
+        run 立即同步、pause / resume / stop 在跑的那次、schedule 定时开关。回操作后的仓库同步概览。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.integrations import common, repos
+
+        body = await self._read_json(request)
+        merged = await self._blocking(self._merged)
+        if not (common.ready(merged, "repo_status") and common.enabled_for(merged, str(body.get("device") or ""), "repo_status")):
+            return self._error("仓库同步没接入", 400)
+        s = common.settings(merged, "repo_status")
+        try:
+            await repos.act(s, str(body.get("op") or ""), str(body.get("id") or ""), body.get("on"))
+            data = await repos.summary(s, fresh=True)
+        except common.IntegrationError as e:
+            return self._error(str(e), 502)
+        return self._json({"ok": True, "repo_status": data})
 
     async def handle_kiosk_smarthub(self, request: web.Request):
         """{"device", "id", "action", "value"}：设备屏幕上点的灯 -> 动作后的这个设备。"""

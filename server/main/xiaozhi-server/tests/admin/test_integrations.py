@@ -106,7 +106,31 @@ def fake_upstreams():
                                   "attention": [{"name": "AI/autogen", "kind": "local_changes", "state": "failed", "host_name": "飞牛"}],
                                   "events": [{"at": "2026-11-12T04:00:00", "msg": "同步完成"}]})
 
+    repo_state = {"watches": [{"id": "w1", "path": "/vol4/Data/OpenSource", "host_name": "飞牛", "enabled": True,
+                               "schedule": {"mode": "daily", "at": "03:00"}, "job_id": "j1", "last": {"status": "done", "counts": {"failed": 0}}},
+                              {"id": "w2", "path": "/volume1/DevSpace", "host_name": "群晖", "enabled": False,
+                               "last": {"status": "done", "counts": {"failed": 87}, "ended": "2026-10-16T16:33:29"}}],
+                  "jobs": [{"id": "j1", "watch_id": "w1", "status": "running", "done": 30, "total": 120, "paused": False}]}
+
+    async def state(request):
+        return web.json_response(repo_state)
+
+    async def repo_post(request):
+        if request.headers.get("X-Repo-Manager") != "1":
+            return web.json_response({"error": "需要请求头"}, status=403)
+        body, op = await request.json(), request.match_info["op"]
+        calls.append(("repo", op, body))
+        if op == "job/pause":
+            repo_state["jobs"][0]["paused"] = True
+        elif op == "job/stop":
+            repo_state["jobs"][0]["status"] = "stopped"
+        elif op == "watch/enable":
+            next(w for w in repo_state["watches"] if w["id"] == body["id"])["enabled"] = body["enabled"]
+        return web.json_response({"ok": True})
+
     app = web.Application()
+    app.router.add_get("/api/state", state)
+    app.router.add_post("/api/{op:(job|watch)/[a-z]+}", repo_post)
     app.router.add_get("/api/devices", devices)
     app.router.add_post("/api/devices/{id}/{action}", action)
     app.router.add_get("/api/v1/query", prom)
@@ -310,3 +334,24 @@ async def test_hubnode_settings_for_the_device(client):
     ds.put("living", {"plugins": ["get_weather"]}, config_store.load_merged(custom_path=client.cfg_path))
     d = await (await client.get("/kiosk/hubnode?device=living")).json()
     assert d["ok"] is False and "没给这台设备接入" in d["error"]
+
+
+
+async def test_repo_tasks_and_actions(client, upstream):
+    """仓库同步的同步任务（设计画布第 75 块）：在跑的带进度，能暂停、停止；没跑的能立即同步；定时开关。"""
+    _, calls = upstream
+    d = (await (await client.get("/kiosk/integrations?device=study")).json())["repo_status"]
+    t1, t2 = d["tasks"]
+    assert t1 == {"id": "w1", "name": "OpenSource", "host": "飞牛", "schedule": "每天 03:00", "enabled": True, "state": "running",
+                  "job": "j1", "done": 30, "total": 120, "last": None, "failed": 0, "ended": None}
+    assert t2["state"] == "idle" and t2["schedule"] == "定时关" and t2["failed"] == 87 and t2["job"] is None
+    r = await (await client.post("/kiosk/repo", json={"device": "study", "op": "pause", "id": "w1"})).json()
+    assert r["ok"] and calls[-1] == ("repo", "job/pause", {"id": "j1"}) and r["repo_status"]["tasks"][0]["state"] == "paused"
+    r = await client.post("/kiosk/repo", json={"device": "study", "op": "run", "id": "w1"})
+    assert r.status == 502 and "正在跑" in (await r.json())["error"]
+    await client.post("/kiosk/repo", json={"device": "study", "op": "stop", "id": "w1"})
+    assert calls[-1] == ("repo", "job/stop", {"id": "j1"})
+    await client.post("/kiosk/repo", json={"device": "study", "op": "run", "id": "w2"})
+    assert calls[-1] == ("repo", "watch/run", {"id": "w2"})
+    r = await (await client.post("/kiosk/repo", json={"device": "study", "op": "schedule", "id": "w2", "on": True})).json()
+    assert calls[-1] == ("repo", "watch/enable", {"id": "w2", "enabled": True}) and any(x["id"] == "w2" and x["enabled"] for x in r["repo_status"]["tasks"])
