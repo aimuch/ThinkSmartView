@@ -97,6 +97,8 @@ function openHome(on) {
   if (!DEMO) {
     miFetch('/api/mijia/visible', { visible: on });
     if (on && mi.view && mi.view.account && mi.view.state !== 'loading') miFetch('/api/mijia/refresh');
+    // 二维码还在等人扫就关了「家居」：后台别再长轮询小米（以前要等二维码过期，最多 5 分钟）
+    if (!on && mi.view && (mi.view.login || {}).state === 'waiting') miFetch('/api/mijia/login/cancel');
   }
   renderHome();
 }
