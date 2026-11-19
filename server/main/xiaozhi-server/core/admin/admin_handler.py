@@ -38,6 +38,7 @@ from core.agent.agent_session import ErrorKind
 from core.agent.grokbot_client import GrokBotError
 from core.utils.modules_initialize import initialize_modules
 from core.utils.textUtils import EMOJI_MAP
+from core.utils.atomic_file import write_json
 
 TAG = __name__
 
@@ -1858,9 +1859,8 @@ class AdminHandler:
     def _save_today_weather(self):
         path = self.data_dir / ".today-weather.json"
         try:
-            tmp = path.with_suffix(".tmp")
-            tmp.write_text(json.dumps({k: list(v) for k, v in self._today_cache.items()}, ensure_ascii=False), encoding="utf-8")
-            os.replace(tmp, path)
+            # 两台设备同时取首页天气时会同时存：临时文件名每次不同（以前固定的 .tmp 会撞）
+            write_json(path, {k: list(v) for k, v in self._today_cache.items()}, ensure_ascii=False)
         except OSError as e:
             self.logger.bind(tag=TAG).warning(f"首页天气存不下来：{e}")
 

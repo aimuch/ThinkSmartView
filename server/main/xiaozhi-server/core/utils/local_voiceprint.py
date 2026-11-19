@@ -23,6 +23,7 @@ import numpy as np
 
 from config.config_loader import get_project_dir
 from config.logger import setup_logging
+from core.utils.atomic_file import write_json
 
 TAG = __name__
 logger = setup_logging()
@@ -59,11 +60,7 @@ def _load():
 
 def _save(data):
     path = _path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f)
-    os.replace(tmp, path)
+    write_json(path, data)
 
 
 def _get_extractor():

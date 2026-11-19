@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from config.config_loader import get_project_dir
+from core.utils.atomic_file import write_bytes
 
 _TASKS = set()   # [xiaozhi-hub] 后台任务的引用
 
@@ -191,11 +192,8 @@ def _load_cached(key):
 
 
 def _save_cached(key, packets) -> None:
-    _cache_dir.mkdir(parents=True, exist_ok=True)
-    path = _cache_file(key)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_bytes(b"".join(struct.pack(">I", len(p)) + bytes(p) for p in packets))
-    tmp.replace(path)
+    # 同一句话的两次对话可能同时填缓存：临时文件名每次不同
+    write_bytes(_cache_file(key), b"".join(struct.pack(">I", len(p)) + bytes(p) for p in packets))
 
 
 async def _fill_cache(conn: "ConnectionHandler", text: str) -> None:

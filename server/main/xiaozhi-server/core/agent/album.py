@@ -23,6 +23,7 @@ from datetime import date, datetime
 
 from config.config_loader import get_project_dir
 from config.logger import setup_logging
+from core.utils.atomic_file import write_json
 
 TAG = __name__
 logger = setup_logging()
@@ -73,11 +74,7 @@ def load() -> dict:
 
 def save(d: dict):
     with _lock:
-        os.makedirs(os.path.dirname(_path()), exist_ok=True)
-        tmp = _path() + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(d, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, _path())
+        write_json(_path(), d, ensure_ascii=False, indent=1)
 
 
 class AlbumError(Exception):

@@ -19,6 +19,7 @@ import time
 
 from config.config_loader import get_project_dir
 from core.utils import recur
+from core.utils.atomic_file import write_json
 
 FAMILY = "__family__"
 FAMILY_LISTS = ("购物清单",)
@@ -44,11 +45,7 @@ def _load():
 
 def _save(data):
     path = _path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
+    write_json(path, data, ensure_ascii=False, indent=2)
 
 
 def _norm(t):

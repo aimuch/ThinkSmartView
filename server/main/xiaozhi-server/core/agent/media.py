@@ -34,6 +34,7 @@ from aiohttp import web
 
 from config.config_loader import get_project_dir
 from core.agent import services
+from core.utils.atomic_file import write_json
 
 AUDIO_EXT = {".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wav", ".wma", ".ape"}
 VIDEO_EXT = {".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi"}
@@ -158,12 +159,7 @@ def load() -> dict:
 
 
 def save(d: dict):
-    os.makedirs(os.path.dirname(_path()), exist_ok=True)
-    tmp = _path() + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, _path())
+    write_json(_path(), d, mode=0o600, ensure_ascii=False, indent=1)
 
 
 def _ref(x):
@@ -1298,11 +1294,7 @@ def save_progress(section: str, who: str, item_id: str, index: int, at: float, d
     with _plock:
         d = _load_progress()
         d[f"{section}|{who}"] = rec
-        os.makedirs(os.path.dirname(_progress_path()), exist_ok=True)
-        tmp = _progress_path() + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(d, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, _progress_path())
+        write_json(_progress_path(), d, ensure_ascii=False, indent=1)
     return rec
 
 

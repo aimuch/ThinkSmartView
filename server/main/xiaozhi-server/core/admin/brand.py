@@ -9,11 +9,11 @@
 
 import base64
 import json
-import os
 import re
 import threading
 from pathlib import Path
 from urllib.parse import urlparse
+from core.utils.atomic_file import write_json
 
 DEFAULT_NAME = "小麦网关"
 NAME_MAX = 20
@@ -90,11 +90,7 @@ def save(data_dir: Path, payload: dict) -> dict:
     data = {"name": name, "icon": {"kind": kind, "value": value}, "repo_url": repo_url, "repo_label": repo_label}
     path = _path(data_dir)
     with _lock:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".part")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, path)
+        write_json(path, data, ensure_ascii=False)
     return load(data_dir)
 
 

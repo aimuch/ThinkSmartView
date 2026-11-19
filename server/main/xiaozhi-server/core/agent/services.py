@@ -20,6 +20,7 @@ import time
 
 from config.config_loader import get_project_dir
 from core.agent import health
+from core.utils.atomic_file import write_json
 
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 WEATHER_PRESETS = [
@@ -83,11 +84,7 @@ def load() -> dict:
 
 
 def save(d: dict):
-    os.makedirs(os.path.dirname(_path()), exist_ok=True)
-    tmp = _path() + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, _path())
+    write_json(_path(), d, ensure_ascii=False, indent=1)
 
 
 def _is_ip(s) -> bool:

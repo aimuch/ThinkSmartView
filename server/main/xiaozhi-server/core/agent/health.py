@@ -11,6 +11,7 @@ import threading
 import time
 
 from config.config_loader import get_project_dir
+from core.utils.atomic_file import write_json
 
 KEEP = 7 * 86400
 FLUSH_EVERY = 30
@@ -70,12 +71,8 @@ def flush(force: bool = False):
             return
         d = _load()
         _prune(d)
-        os.makedirs(os.path.dirname(_path()), exist_ok=True)
-        tmp = _path() + ".tmp"
         try:
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(d, f, ensure_ascii=False)
-            os.replace(tmp, _path())
+            write_json(_path(), d, ensure_ascii=False)
         except OSError:
             return
         _dirty, _flushed = 0.0, time.time()

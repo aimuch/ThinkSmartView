@@ -17,6 +17,7 @@ import time
 from collections import deque
 
 from config.config_loader import get_project_dir
+from core.utils.atomic_file import write_json
 
 # 严格程度：最像的那个人要多像才叫名字。用合成的几种声音试过（唤醒词 1 秒左右）：录过的人 0.75～0.85，
 # 没录过的大人 0.35～0.50，没录过的别的孩子可能到 0.63～0.70（孩子的声音彼此像）。家里常有别的孩子来就用「严格」。
@@ -92,11 +93,7 @@ def save(body: dict) -> dict:
                 if isinstance(p, dict):
                     d["people"][str(name)[:12]] = {"call": str(p.get("call") or "").strip()[:12],
                                                   "lines": _lines(p.get("lines")), "off": bool(p.get("off"))}
-        os.makedirs(os.path.dirname(_path()), exist_ok=True)
-        tmp = _path() + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(d, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, _path())
+        write_json(_path(), d, ensure_ascii=False, indent=1)
         return d
 
 

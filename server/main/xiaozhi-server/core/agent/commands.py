@@ -20,6 +20,7 @@ import time
 from collections import deque
 
 from config.config_loader import get_project_dir
+from core.utils.atomic_file import write_json
 
 # ---------------------------------------------------------------- 文字整理
 
@@ -584,10 +585,7 @@ def save(d: dict) -> dict:
     path = _path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with _lock:
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(clean_d, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, path)
+        write_json(path, clean_d, ensure_ascii=False, indent=1)
     return clean_d
 
 

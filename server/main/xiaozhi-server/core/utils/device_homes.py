@@ -10,6 +10,7 @@ import threading
 import time
 
 from config.config_loader import get_project_dir
+from core.utils.atomic_file import write_json
 
 _lock = threading.Lock()
 _cache = {"mtime": None, "data": {}}
@@ -58,9 +59,5 @@ def put(device: str, place: dict = None):
         else:
             data.pop(device, None)
         path = _path()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
+        write_json(path, data, ensure_ascii=False, indent=2)
         _cache["mtime"] = None

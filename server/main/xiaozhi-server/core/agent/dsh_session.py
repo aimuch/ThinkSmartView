@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from core.agent.agent_session import Activity, AgentEvent, AgentSession, AgentSessionError, Done, Error, ErrorKind, TextDelta
+from core.utils.atomic_file import write_text
 
 # DSH 的三档权限预设（dsh --permission-mode 认的名字）
 PERMISSION_PRESETS = ("read-only", "workspace-write", "danger-full-access")
@@ -78,10 +79,7 @@ def write_patch(path: Path, model: str, effort: str, persona: str) -> None:
     if effort:
         rows.append(f"    reasoningEffort: {_yaml_str(effort)}")
     rows += ["- id: system-prompt", "  config:", f"    personaPrefix: {_yaml_str(persona)}"]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".part")
-    tmp.write_text("\n".join(rows) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    write_text(path, "\n".join(rows) + "\n")
 
 
 @dataclass

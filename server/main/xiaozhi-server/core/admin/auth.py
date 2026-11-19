@@ -4,10 +4,10 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import secrets
 import time
 from pathlib import Path
+from core.utils.atomic_file import write_json
 
 _SCRYPT = {"n": 2**14, "r": 8, "p": 1}
 MIN_PASSWORD_LENGTH = 6
@@ -110,12 +110,7 @@ class SessionStore:
         kept = {k: self._sessions[k] for k in self._kept if self._sessions.get(k, 0) > now}
         self._kept = set(kept)
         try:
-            self.kept_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.kept_path.with_suffix(".part")
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump({"sessions": kept}, f)
-            os.replace(tmp, self.kept_path)
+            write_json(self.kept_path, {"sessions": kept}, mode=0o600)
         except OSError:
             pass
 
@@ -127,13 +122,7 @@ class SessionStore:
     def save(self, path: Path) -> None:
         """后台更新网关前调用：把登录会话交给重启后的新进程，更新完页面不用重新登录。"""
         self._purge()
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".part")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump({"saved": time.time(), "sessions": self._sessions}, f)
-        os.replace(tmp, path)
+        write_json(Path(path), {"saved": time.time(), "sessions": self._sessions}, mode=0o600)
 
     def restore(self, path: Path, max_age: int = 1800) -> int:
         """启动时调用：读入 max_age 秒内交接过来的会话，读完就删掉文件。返回读入了几个。"""

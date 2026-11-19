@@ -20,6 +20,7 @@ import threading
 import time
 
 from config.config_loader import get_project_dir
+from core.utils.atomic_file import write_json
 
 DEFAULT_RULES = {"daily_minutes": 30, "bedtime": "20:30", "voice": "child", "updated": 0}
 DEFAULT_CHARS = ("人口手日月水火山石田土木禾竹米上下大小中天地左右多少来去出入"
@@ -52,11 +53,7 @@ def _read(path):
 
 
 def _write(path, d):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, path)
+    write_json(path, d, ensure_ascii=False, indent=1)
 
 
 def load() -> dict:

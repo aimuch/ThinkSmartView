@@ -11,6 +11,7 @@ import time
 from collections import deque
 
 from config.config_loader import get_project_dir
+from core.utils.atomic_file import write_json
 
 WINDOWS = (0.2, 0.3, 0.5)
 LATE = 1.5
@@ -41,11 +42,7 @@ def save(enabled=None, window=None) -> dict:
         d["enabled"] = enabled
     if window in WINDOWS:
         d["window"] = window
-    os.makedirs(os.path.dirname(_path()), exist_ok=True)
-    tmp = _path() + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(d, f)
-    os.replace(tmp, _path())
+    write_json(_path(), d)
     return d
 
 

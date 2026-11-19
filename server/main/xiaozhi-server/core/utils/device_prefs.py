@@ -10,6 +10,7 @@ import threading
 import time
 
 from config.config_loader import get_project_dir
+from core.utils.atomic_file import write_json
 
 KIDS_VOICE_EDGE = "zh-CN-YunxiaNeural"   # Edge TTS 的童声
 _lock = threading.Lock()
@@ -60,11 +61,7 @@ def put_kids(device: str, value: dict):
         data.setdefault(device, {})["kids"] = {"enabled": bool(v.get("enabled")), "age": age, "voice": voice,
                                               "updated": time.time()}
         path = _path()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
+        write_json(path, data, ensure_ascii=False, indent=2)
 
 
 def translate(device: str):
@@ -85,11 +82,7 @@ def put_translate(device: str, value: dict):
         data = _load()
         data.setdefault(device, {})["translate"] = {"enabled": bool(v.get("enabled")), "a": a, "b": b, "updated": time.time()}
         path = _path()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
+        write_json(path, data, ensure_ascii=False, indent=2)
 
 
 def forget(device: str) -> None:
@@ -98,10 +91,7 @@ def forget(device: str) -> None:
         data = _load()
         if data.pop(device, None) is not None:
             path = _path()
-            tmp = path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, path)
+            write_json(path, data, ensure_ascii=False, indent=2)
 
 
 def apply_voice(tts, device: str):

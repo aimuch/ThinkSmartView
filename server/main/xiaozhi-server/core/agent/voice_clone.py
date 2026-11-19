@@ -14,6 +14,7 @@ import time
 
 from config.config_loader import get_project_dir
 from core.utils import voice_clone_api as api
+from core.utils.atomic_file import write_json
 
 ENTRY = "CloneTTS"
 PREFIX_VALUE = "clone:"          # 设备页里复刻的声音的值：clone:<voice_id>
@@ -38,11 +39,7 @@ def load() -> list:
 
 def _save(voices: list):
     path = _path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(voices, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, path)
+    write_json(path, voices, ensure_ascii=False, indent=1)
 
 
 def find(voice_id: str):
