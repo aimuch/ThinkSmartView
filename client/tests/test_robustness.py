@@ -119,3 +119,13 @@ def test_health_loop_reports_and_keeps_api_health(monkeypatch):
         asyncio.run(c._health_loop())
     assert sent and sent[0][0] == '/kiosk/health' and sent[0][1]['device'] == 'dev1' and 'cpu' in sent[0][1]
     assert 'health' not in c.__dict__ and callable(c.health)
+
+
+def test_wifi_reading(monkeypatch):
+    from thinksmart_client import health
+    import subprocess
+    out = 'Connected to 94:08:53:2a:fc:87 (on wlan0)\n\tSSID: Magic\n\tfreq: 5180\n\tsignal: -52 dBm\n'
+    monkeypatch.setattr(subprocess, 'run', lambda *a, **k: types.SimpleNamespace(stdout=out))
+    assert health.wifi() == {'ssid': 'Magic', 'signal': -52}
+    monkeypatch.setattr(subprocess, 'run', lambda *a, **k: types.SimpleNamespace(stdout='Not connected.\n'))
+    assert health.wifi() is None

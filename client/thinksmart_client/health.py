@@ -7,7 +7,6 @@
 import collections
 import logging
 import time
-from pathlib import Path
 
 from . import bg, perf
 
@@ -33,15 +32,23 @@ def install():
 
 
 def wifi(iface='wlan0'):
-    """{'signal': dBm} from /proc/net/wireless，没有 Wi‑Fi 时 None。"""
+    """{'ssid', 'signal': dBm}（iw dev wlan0 link；这台的内核没有 /proc/net/wireless），没连 Wi‑Fi 时 None。"""
+    import subprocess
     try:
-        for line in Path('/proc/net/wireless').read_text().splitlines()[2:]:
-            name, _, rest = line.partition(':')
-            if name.strip() == iface:
-                return {'signal': round(float(rest.split()[2].rstrip('.')))}
-    except (OSError, ValueError, IndexError):
-        pass
-    return None
+        out = subprocess.run(['iw', 'dev', iface, 'link'], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    info = {}
+    for line in out.splitlines():
+        key, _, value = line.strip().partition(':')
+        if key == 'SSID':
+            info['ssid'] = value.strip()
+        elif key == 'signal':
+            try:
+                info['signal'] = round(float(value.split()[0]))
+            except (ValueError, IndexError):
+                pass
+    return info or None
 
 
 class Health:

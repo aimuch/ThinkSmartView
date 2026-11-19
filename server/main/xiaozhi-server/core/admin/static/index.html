@@ -3230,7 +3230,7 @@ async function renderDeviceHealth(root) {
           <span>CPU</span><span>${pct(x.cpu, 60, 85)}${(x.top || []).length ? " · " + x.top.map((p) => `${esc(p.name)} ${p.cpu}%`).join(" · ") : ""}</span>
           <span>内存</span><span>${pct(x.mem, 80, 92)}</span>
           <span>温度</span><span>${x.temp != null ? `<span class="${x.temp >= 70 ? "dh-bad" : x.temp >= 55 ? "dh-warn" : ""}">${x.temp} ℃</span>` : "—"}</span>
-          <span>网络</span><span>${x.wifi ? `Wi‑Fi ${x.wifi.signal} dBm` : "—"}${x.hub_ms != null ? ` · 到网关 ${x.hub_ms} ms` : ""}</span>
+          <span>网络</span><span>${x.wifi ? `Wi‑Fi${x.wifi.ssid ? "「" + esc(x.wifi.ssid) + "」" : ""} ${x.wifi.signal != null ? x.wifi.signal + " dBm" : ""}` : "—"}${x.hub_ms != null ? ` · 到网关 ${x.hub_ms} ms` : ""}</span>
           <span>状态</span><span>${esc(x.state || "—")}${x.quiet && x.quiet.mute ? " · 静音中" : ""}${x.quiet && x.quiet.dnd ? " · 勿扰" + esc(x.quiet.dnd_text || "") : ""}</span>
           <span>出过错</span><span class="${restarts.length || errs.length ? "dh-warn" : ""}">${restarts.length ? "常驻循环重启：" + restarts.map(([k, n]) => `${esc(k)} ${n} 次`).join("、") : "常驻循环没重启过"}${errs.length ? ` · 最近 ${errs.length} 条警告和错误` : ""}</span>
         </div>` : ""}
