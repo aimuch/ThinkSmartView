@@ -6,6 +6,8 @@
 
 几个「没写成状态机、其实是状态机」的地方（屏幕上是哪一页、一轮对话的那些标志、屏幕亮暗、谁在用喇叭）单独列在 [state-machines.md](state-machines.md)，改那些代码之前先看。
 
+一页纸看各部分怎么连、哪里会断、状态存在哪：[system-map.md](system-map.md)。
+
 ## 1. 总览
 
 ```mermaid
