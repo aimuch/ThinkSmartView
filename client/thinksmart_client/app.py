@@ -4220,7 +4220,7 @@ class Client:
     async def _health_loop(self):
         """每分钟报一次健康状况给网关；网关没回就下一分钟再报。"""
         from . import update, web as page
-        self.health = health.Health()
+        self.health_reporter = health.Health()   # 不能叫 self.health：那是 /api/health 用的方法
         hub_ms = None
         while True:
             await asyncio.sleep(HEALTH_EVERY)
@@ -4228,7 +4228,7 @@ class Client:
                 system = (update.read().get('system') or {}).get('current')
             except Exception:  # noqa: BLE001
                 system = None
-            report = await asyncio.get_running_loop().run_in_executor(None, lambda: self.health.report(
+            report = await asyncio.get_running_loop().run_in_executor(None, lambda: self.health_reporter.report(
                 device=self.cfg['device_id'], version=__version__, system=system, state=self.state, hub_ms=hub_ms,
                 view=page.PAGE_STATE[-1] if page.PAGE_STATE else None, quiet=self.quiet_view()))
             t0 = time.monotonic()

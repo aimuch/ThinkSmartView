@@ -93,3 +93,29 @@ async def test_a_sleep_timer_ignores_a_jump_of_the_system_clock(monkeypatch):
     monkeypatch.setattr(media.time, 'time', lambda: real() + 5 * 3600)
     assert 1790 < m._left() <= 1800
     assert abs(m.view()['playing']['ends'] - (real() + 5 * 3600 + 1800)) < 5   # the page's countdown follows the new clock
+
+
+def test_health_loop_reports_and_keeps_api_health(monkeypatch):
+    """健康上报（设计画布第 83 块）：报到网关；而且不能把 Client.health（/api/health 用的）盖掉——
+    0.1.709 第一次发布时就是这样，升级自检不过、两台都退回了 0.1.708。"""
+    from thinksmart_client import quiet
+    c = app.Client.__new__(app.Client)
+    c.cfg = {'device_id': 'dev1'}
+    c.state, c.quiet = 'idle', quiet.normalize(None)
+    sent = []
+
+    async def hub_http(path, body=None):
+        sent.append((path, body))
+        return {'ok': True}
+    c._hub_http = hub_http
+    ticks = {'n': 0}
+
+    async def fake_sleep(_s):
+        ticks['n'] += 1
+        if ticks['n'] > 1:
+            raise asyncio.CancelledError
+    monkeypatch.setattr(app.asyncio, 'sleep', fake_sleep)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(c._health_loop())
+    assert sent and sent[0][0] == '/kiosk/health' and sent[0][1]['device'] == 'dev1' and 'cpu' in sent[0][1]
+    assert 'health' not in c.__dict__ and callable(c.health)
