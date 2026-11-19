@@ -15,8 +15,13 @@ set_key() {
         v=$(printf '%s' "$2" | sed 's/[&|\\]/\\&/g')
         sed -i "s|^$1=.*|$1=$v|" "$CONF"
     else
+        # a last line without its newline would get the new key glued to it ("GPU=xROTATION=90")
+        [ -s "$CONF" ] && [ -n "$(tail -c 1 "$CONF")" ] && echo >> "$CONF"
         echo "$1=$2" >> "$CONF"
     fi
+    # on disk now: the kiosk restarts right after, and a power cut in the next half minute would
+    # otherwise bring the old rotation / URL back (the device has no battery)
+    sync
 }
 
 case "${1:-status}" in
