@@ -1126,3 +1126,7 @@ body.follow-window.dash-on .link { display: none; }   /* 仪表盘顶栏挤：�
 @keyframes wk-flash { 0%, 40% { box-shadow: inset 0 0 0 3px var(--accent); } 100% { box-shadow: inset 0 0 0 3px transparent; } }
 #cloneChips .clone-new.ai-ring { border-style: solid; }
 .sb-wx:empty { display: none; }   /* 天气没取到：不画一个空胶囊 */
+
+/* 看不见、熄屏、30 秒没事干：形象和光球的动画停在当前姿势（screen.js 的 body.calm，设计画布第 80 块）。
+   :is() 里的 #calm-x 只为把优先级抬过睡眠时段那几条带 !important 的 animation（页面上没有这个 id） */
+body.calm :is(.app *, .dash *, #calm-x) { animation-play-state: paused !important; }

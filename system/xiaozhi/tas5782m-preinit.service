@@ -1,0 +1,18 @@
+[Unit]
+Description=TAS5782M chip warm-up (one-shot, opens the speaker PCM once at login)
+After=wireplumber.service pipewire-pulse.service pipewire.service
+Requires=wireplumber.service pipewire.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+# Wait a moment for WirePlumber to finish connecting to PipeWire
+ExecStartPre=/bin/sleep 3
+# Opening the PCM is what makes the TAS5782M amplifier initialise its DSP; with node.pause-on-idle=false
+# PipeWire keeps it running afterwards. The image's original unit played ALSA's channel-test sample
+# (/usr/share/sounds/alsa/Front_Left.wav, a voice saying "Front Left") at every boot; 0.3 s of silence
+# opens the PCM just the same.
+ExecStart=/bin/sh -c 'head -c 57600 /dev/zero | pacat --playback --format=s16le --rate=48000 --channels=2'
+
+[Install]
+WantedBy=default.target
