@@ -20,6 +20,17 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
+
+# 定时停用单调时钟判断：设备没有电池时钟，开机后约一分钟系统时间会跳到现在（往前跳几个小时），按墙上时间
+# 「半小时后停」会一下子到点。页面要的 ends（墙上时间）每次给出去时从单调时钟换算
+def _mono(ends):
+    """墙上时间的 ends -> 单调时钟的到点时刻（None 不变）。"""
+    return None if not ends else time.monotonic() + (ends - time.time())
+
+
+def _wall(mono):
+    return None if mono is None else time.time() + (mono - time.monotonic())
+
 RATE = 48000
 CHUNK = 0.1          # seconds per push
 FADE = 60.0
@@ -236,6 +247,7 @@ class Player:
         self.task = None
         self.proc = None
         self.now = None     # {'kind': 'radio'|'sound'|'music'|…, 'id', 'name', 'ends'}；音乐另有 artist、cover、next…
+        self._ends = None   # 定时停的到点时刻（单调时钟），见 _set_ends
         self.queue = None   # 音乐的播放顺序（Queue）
         self.stream_url = None      # 歌 id → 网关中转地址（app 设）
         self.music_info = {'ready': False, 'tags': {}}   # 网关有没有接音乐库、标了哪些（app 定时问）
@@ -252,7 +264,19 @@ class Player:
         self._video_result = None
         self._reported = 0.0
 
+    def _set_ends(self, mono):
+        """定时停的到点时刻（单调时钟），None 不定时；self.now['ends'] 是给页面看的墙上时间。"""
+        self._ends = mono
+        if self.now is not None:
+            self.now['ends'] = _wall(mono)
+
+    def _left(self):
+        """离定时停还有几秒（没定时 None）。"""
+        return None if getattr(self, '_ends', None) is None else self._ends - time.monotonic()
+
     def view(self):
+        if self.now is not None and getattr(self, '_ends', None) is not None:
+            self.now['ends'] = _wall(self._ends)   # 系统时间跳过以后，页面上的倒计时也对
         return {'playing': self.now, 'stations': [{'id': k, 'name': v[0]} for k, v in STATIONS.items()],
                 'sounds': [{'id': k, 'name': v} for k, v in SOUNDS.items()], 'music': self.music_info,
                 'modes': [{'id': k, 'name': v} for k, v in MODES.items()]}
@@ -271,7 +295,7 @@ class Player:
     def _music_now(self, paused=False):
         q = self.queue
         t, nxt = q.current, q.upcoming()
-        ends = self.now.get('ends') if self.now and self.now.get('kind') == 'music' else None
+        ends = _wall(getattr(self, '_ends', None)) if self.now and self.now.get('kind') == 'music' else None
         self.now = {'kind': 'music', 'id': t['id'], 'name': t.get('title') or '', 'artist': t.get('artist') or '',
                     'album': t.get('album') or '', 'cover': t.get('cover') or '', 'duration': int(t.get('duration') or 0),
                     'list': getattr(self, '_list_name', ''), 'index': q.pos + 1, 'count': len(q.order), 'mode': q.mode,
@@ -290,7 +314,8 @@ class Player:
         q = Queue(tracks, start, mode or 'loop')
         await self.stop(quiet=True)
         self.queue, self._list_name, self.section = q, name, section
-        self.now = {'kind': 'music', 'ends': time.time() + float(minutes) * 60 if minutes else None}
+        self.now = {'kind': 'music', 'ends': None}
+        self._set_ends(time.monotonic() + float(minutes) * 60 if minutes else None)
         self._start_track(float(at or 0))
         return self.now
 
@@ -351,9 +376,9 @@ class Player:
     async def music_resume(self):
         if not self.music_playing() or not self.now.get('paused'):
             return self.now
-        ends = self.now.get('ends')
-        if ends and ends <= time.time():
-            self.now['ends'] = None          # 定时已经过了：接着放就不再定时
+        left = self._left()
+        if left is not None and left <= 0:
+            self._set_ends(None)             # 定时已经过了：接着放就不再定时
         self._start_track(self._offset)
         return self.now
 
@@ -367,7 +392,7 @@ class Player:
         """定时停：minutes 分钟后（0 / None 取消定时）。"""
         if not self.music_playing():
             raise ValueError('现在没在放歌')
-        self.now['ends'] = time.time() + float(minutes) * 60 if minutes else None
+        self._set_ends(time.monotonic() + float(minutes) * 60 if minutes else None)
         self.on_change(self.view())
         return self.now
 
@@ -415,9 +440,8 @@ class Player:
                     continue
                 got += usable
                 x = np.frombuffer(data[:usable], dtype='<f4').reshape(-1, 2).copy()
-                ends = self.now.get('ends') if self.now else None
-                if ends:
-                    left = ends - time.time()
+                left = self._left() if self.now else None
+                if left is not None:
                     if left <= 0:
                         cut = True
                         break
@@ -467,8 +491,8 @@ class Player:
         self.on_change(self.view())
         try:
             while True:
-                ends = self.now.get('ends') if self.now else None
-                if ends and time.time() >= ends:
+                left = self._left() if self.now else None
+                if left is not None and left <= 0:
                     self.report()
                     return 'cut'
                 try:
@@ -525,6 +549,7 @@ class Player:
         self.queue, self._video = None, None
         if self.now:
             self.now = None
+            self._ends = None
             if not quiet:
                 self.on_change(self.view())
 
@@ -542,6 +567,7 @@ class Player:
             raise ValueError(f"没有这个电台，能放的有：{'、'.join(v[0] for v in STATIONS.values())}")
         await self.stop(quiet=True)
         self.now = {'kind': 'radio', 'id': key, 'name': STATIONS[key][0], 'ends': None}
+        self._ends = None
         self.task = asyncio.create_task(self._radio(key))
         self.on_change(self.view())
         return self.now
@@ -553,6 +579,7 @@ class Player:
         await self.stop(quiet=True)
         ends = time.time() + minutes * 60 if minutes > 0 else None
         self.now = {'kind': 'sound', 'id': key, 'name': SOUNDS[key], 'ends': ends}
+        self._set_ends(_mono(ends))
         self.task = asyncio.create_task(self._sound(key, ends))
         self.on_change(self.view())
         return self.now
@@ -565,6 +592,7 @@ class Player:
         await self.stop(quiet=True)
         span = max(1.0, ends - time.time())
         self.now = {'kind': 'gentle', 'id': 'birds', 'name': '鸟叫（温柔叫醒）', 'ends': ends}
+        self._set_ends(_mono(ends))
         self.task = asyncio.create_task(self._sound('birds', ends, fade_in=span, peak=0.7, fade_out=2.0))
         self.on_change(self.view())
         return self.now
@@ -576,6 +604,7 @@ class Player:
             return None
         await self.stop(quiet=True)
         self.now = {'kind': 'focus', 'id': '+'.join(keys), 'name': name or ' + '.join(SOUNDS[k] for k in keys), 'ends': ends}
+        self._set_ends(_mono(ends))
         self.task = asyncio.create_task(self._sound('+'.join(keys), ends, fade_out=min(FADE, 20.0)))
         self.on_change(self.view())
         return self.now
@@ -610,6 +639,7 @@ class Player:
         if self.now and self.now.get('id') == key:
             self.on_error(f'{STATIONS[key][0]}连不上了，稍后再试')
             self.now = None
+            self._ends = None
             self.on_change(self.view())
 
     async def _sound(self, key, ends, fade_in=2.0, peak=1.0, fade_out=FADE):
@@ -618,11 +648,12 @@ class Player:
         n = int(RATE * CHUNK)
         gen.t = 0.0
         next_at = time.monotonic()
+        until = _mono(ends)   # 从这里起按单调时钟数：系统时间中途跳一下不影响
         while True:
-            now = time.time()
-            if ends and now >= ends:
+            left = None if until is None else until - time.monotonic()
+            if left is not None and left <= 0:
                 break
-            gain = min(1.0, (ends - now) / fade_out) if ends else 1.0
+            gain = min(1.0, left / fade_out) if left is not None else 1.0
             ramp = min(1.0, gen.t / fade_in)
             gain = min(gain, ramp if fade_in <= 2 else ramp * ramp) * peak   # long fade-ins: slow first
             mono = gen.next(n) * max(0.0, gain)
@@ -630,4 +661,5 @@ class Player:
             next_at += CHUNK
             await asyncio.sleep(max(0.0, next_at - time.monotonic()))
         self.now = None
+        self._ends = None
         self.on_change(self.view())

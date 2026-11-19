@@ -238,7 +238,7 @@ class Intercom:
         return {'state': self.state, 'caller': c and c['caller'], 'started': c and c.get('started'),
                 'muted': self.muted, 'camera_off': self.camera_off, 'auto_answer': self.settings['auto_answer'],
                 'auto_in': c and self.state == 'ringing' and self.settings['auto_answer']
-                and max(0, round(c['rang'] + AUTO_ANSWER_AFTER - time.time())),
+                and max(0, round(c['rang_m'] + AUTO_ANSWER_AFTER - time.monotonic())),
                 'ended': self.ended_text, 'history': self.history[:HISTORY]}
 
     def _changed(self):
@@ -296,7 +296,7 @@ class Intercom:
                 await self._post('busy', call_id)
                 return
             self.call = {'id': call_id, 'caller': str(e.get('caller') or '家人')[:20], 'offer': e.get('sdp') or '',
-                         'rang': time.time(), 'started': None}
+                         'rang': time.time(), 'rang_m': time.monotonic(), 'started': None}
             self.muted = self.camera_off = False
             self.ended_text = ''
             log.info('intercom: %s is calling', self.call['caller'])
@@ -308,7 +308,7 @@ class Intercom:
     async def _ringing(self, call_id):
         while self.state == 'ringing' and self.call and self.call['id'] == call_id:
             self.ring_sound()
-            if self.settings['auto_answer'] and time.time() - self.call['rang'] >= AUTO_ANSWER_AFTER:
+            if self.settings['auto_answer'] and time.monotonic() - self.call['rang_m'] >= AUTO_ANSWER_AFTER:
                 await self.accept()
                 return
             self._changed()                         # 自动接通的倒数
@@ -339,6 +339,7 @@ class Intercom:
                 return
             if pc.connectionState == 'connected' and self.state == 'connecting':
                 call['started'] = time.time()
+                call['started_m'] = time.monotonic()
                 log.info('intercom: talking with %s', call['caller'])
                 self._set('talking')
             elif pc.connectionState in ('failed', 'closed') and self.state in ('connecting', 'talking'):
@@ -385,7 +386,7 @@ class Intercom:
         self.remote_view.clear()
         self.self_view.clear()
         if call:
-            seconds = round(time.time() - call['started']) if call.get('started') else 0
+            seconds = round(time.monotonic() - call['started_m']) if call.get('started_m') else 0
             missed = not call.get('started') and reason in ('missed', 'declined')
             self.history.insert(0, {'t': round(call['rang']), 'caller': call['caller'], 'seconds': seconds, 'missed': missed})
             self.history = self.history[:HISTORY]

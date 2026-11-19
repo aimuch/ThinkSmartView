@@ -15,6 +15,8 @@ from pathlib import Path
 
 import aiohttp
 
+from .fileio import write_atomic
+
 log = logging.getLogger(__name__)
 
 KEYS = ('source', 'albums', 'style', 'interval', 'order', 'night')
@@ -73,10 +75,7 @@ class HubAlbum:
             pass
 
     def _save(self):
-        self.dir.mkdir(parents=True, exist_ok=True)
-        tmp = self.dir / 'list.json.tmp'
-        tmp.write_text(json.dumps({'photos': self.photos, 'albums': self.albums, 'total': self.total}, ensure_ascii=False), encoding='utf-8')
-        tmp.replace(self.dir / 'list.json')
+        write_atomic(self.dir / 'list.json', json.dumps({'photos': self.photos, 'albums': self.albums, 'total': self.total}, ensure_ascii=False))
 
     def cached(self):
         """缓存好了的照片（文件在的）。"""

@@ -30,6 +30,7 @@ import time
 import numpy as np
 
 from . import opus
+from .fileio import write_atomic  # noqa: F401  (others call alarms.write_atomic)
 from .audio import OUT_RATE
 
 log = logging.getLogger(__name__)
@@ -59,25 +60,6 @@ def clock_synced():
     if TIMESYNC.parent.exists():
         return TIMESYNC.exists()
     return True   # no timesyncd (a desktop under test, another time daemon): trust the clock
-
-
-def write_atomic(path, data):
-    """Replace path with data so that a power cut leaves either the old file or the new one."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + '.tmp')
-    with open(tmp, 'wb') as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
-    try:
-        fd = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(fd)   # the rename itself
-        finally:
-            os.close(fd)
-    except OSError:
-        pass
 
 
 # ---- repeat rules and time points ----

@@ -4,10 +4,11 @@ The file holds only what belongs to this device or its user (ids, settings chang
 by voice), never copies of the defaults, so a client update can change a default."""
 import json
 import logging
-import os
 import pathlib
 import time
 import uuid
+
+from .fileio import write_atomic
 
 log = logging.getLogger(__name__)
 
@@ -131,13 +132,9 @@ def save(**values):
 
 
 def save_all(data):
-    PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = PATH.with_suffix('.tmp')
-    with open(tmp, 'w', encoding='utf-8') as f:
-        f.write(json.dumps(data, ensure_ascii=False, indent=2))
-        f.flush()
-        os.fsync(f.fileno())   # on disk before the rename: a power cut never leaves an empty config.json
-    tmp.replace(PATH)
+    # on disk before the rename, and the rename itself too: a power cut right after changing a setting
+    # leaves the old config.json or the new one, never an empty one or the change lost
+    write_atomic(PATH, json.dumps(data, ensure_ascii=False, indent=2))
 
 
 def unset(*keys):

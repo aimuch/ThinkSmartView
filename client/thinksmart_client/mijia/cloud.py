@@ -128,13 +128,14 @@ class QRLogin:
             if r.status != 200:
                 raise MiCloudError('http', f'小米账号服务返回 HTTP {r.status}', r.status)
         ticket = parse_ticket(body)
-        ticket['deadline'] = time.time() + ticket['timeout']
+        ticket['deadline'] = time.time() + ticket['timeout']          # 给页面显示倒计时
+        ticket['until'] = time.monotonic() + ticket['timeout']        # 判断过期：开机后系统时间会跳一下
         return ticket
 
     async def wait(self, ticket: dict) -> dict:
         scanned = None
         while scanned is None:
-            if time.time() >= ticket['deadline']:
+            if time.monotonic() >= ticket.get('until', time.monotonic() + ticket['deadline'] - time.time()):
                 raise MiCloudError('bad', '二维码已过期，请刷新')
             try:
                 async with self.http.get(ticket['lp'], timeout=aiohttp.ClientTimeout(total=15)) as r:

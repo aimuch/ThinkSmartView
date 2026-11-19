@@ -11,6 +11,8 @@ import re
 import time
 from pathlib import Path
 
+from .fileio import write_atomic
+
 NOTES = Path.home() / '.local' / 'share' / 'thinksmart-client' / 'notes.json'
 MAX_SCENES = 20
 MAX_NOTES = 30
@@ -52,10 +54,7 @@ def load_notes():
 
 
 def save_notes(notes):
-    NOTES.parent.mkdir(parents=True, exist_ok=True)
-    tmp = NOTES.with_suffix('.tmp')
-    tmp.write_text(json.dumps(notes[-MAX_NOTES:], ensure_ascii=False))
-    tmp.replace(NOTES)
+    write_atomic(NOTES, json.dumps(notes[-MAX_NOTES:], ensure_ascii=False))   # 留完言就断电也不丢
 
 
 def new_note(notes, to, text, sender=''):

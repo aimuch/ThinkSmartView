@@ -2074,11 +2074,12 @@ class Client:
         if data and data.get('ok'):
             today = {k: data.get(k) for k in ('lunar', 'weather', 'weather_error')}
             old = (self.today or {}).get('weather')
-            if not today['weather'] and old and time.time() - old.get('_at', 0) < 12 * 3600:
+            # _at 用单调时钟：开机后系统时间会跳一下，按墙上时间算「几分钟前」会错，甚至把上一次的当成过期
+            if not today['weather'] and old and old.get('_at') is not None and time.monotonic() - old['_at'] < 12 * 3600:
                 # 网关这次没取到（天气服务偶尔超时）：接着显示上一次的，标上是几分钟前的，不让首页、待机页的天气消失
-                today['weather'] = dict(old, stale_min=int((time.time() - old['_at']) // 60))
-            elif today['weather']:
-                today['weather'] = dict(today['weather'], _at=time.time() - 60 * (today['weather'].get('stale_min') or 0))
+                today['weather'] = dict(old, stale_min=int((time.monotonic() - old['_at']) // 60))
+            elif isinstance(today['weather'], dict):
+                today['weather'] = dict(today['weather'], _at=time.monotonic() - 60 * (today['weather'].get('stale_min') or 0))
             self.today = today
             self.events.publish('today', self.today)
             if self.airplay:
@@ -2328,24 +2329,24 @@ class Client:
         self.screen.release()   # a hold left by a previous run must not keep the screen on
         self.slides.clear_all()
         self._apply_sleep()
-        bg.spawn(self._sender())
-        bg.spawn(self._ticker())
-        bg.spawn(self._model_poller())
-        bg.spawn(self._report_poller())
-        bg.spawn(self._alarm_loop())
-        bg.spawn(self._broadcast_loop())
-        bg.spawn(self._today_loop())
-        bg.spawn(self._kids_loop())
-        bg.spawn(self._cook_loop())
-        bg.spawn(self._lists_loop())
-        bg.spawn(self._alert_loop())
-        bg.spawn(self._integrations_loop())
-        bg.spawn(self._album_loop())
-        bg.spawn(self._dark_loop())
-        bg.spawn(self._offline_clips_loop())
+        bg.forever(self._sender)
+        bg.forever(self._ticker)
+        bg.forever(self._model_poller)
+        bg.forever(self._report_poller)
+        bg.forever(self._alarm_loop)
+        bg.forever(self._broadcast_loop)
+        bg.forever(self._today_loop)
+        bg.forever(self._kids_loop)
+        bg.forever(self._cook_loop)
+        bg.forever(self._lists_loop)
+        bg.forever(self._alert_loop)
+        bg.forever(self._integrations_loop)
+        bg.forever(self._album_loop)
+        bg.forever(self._dark_loop)
+        bg.forever(self._offline_clips_loop)
         await self.bt.start()
         self.hub_node.start()
-        bg.spawn(self._bluetooth_loop())
+        bg.forever(self._bluetooth_loop)
         if self.airplay.enabled and self.airplay.installed:
             self.airplay.start()
         self.intercom.start()
@@ -2383,7 +2384,7 @@ class Client:
             # "小麦小麦，今天..." is often said in one go
             self.backlog = []
             audio = self.kws.recent()
-            self.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.voice_wake(hit, audio)))
+            self.loop.call_soon_threadsafe(lambda: bg.spawn(self.voice_wake(hit, audio), name='wake'))
         elif backlog is not None and not self.uploading:
             backlog.append(block)
             del backlog[:-200]   # 4 s, what the send queue takes at once
@@ -2561,7 +2562,7 @@ class Client:
         said meanwhile is kept (backlog) and sent on, and a false wake ends quietly instead of
         with the hub answering the TV or a "didn't catch that"."""
         # 认人打招呼（设计画布第 57 块）：唤醒词那几秒的声音同时送网关认人，和复核一起进行
-        greet = asyncio.create_task(self._ask_greeting(audio)) if self.ring is None and not self.in_turn() else None
+        greet = bg.spawn(self._ask_greeting(audio), name='greet') if self.ring is None and not self.in_turn() else None
         if not self.verifier:
             await self.wake('voice', greet=greet)
         elif self.in_turn():
@@ -3266,17 +3267,23 @@ class Client:
 
     def _apply_sleep(self):
         was = getattr(self, 'sleeping', False)
-        self.sleeping = sleep.active(self.sleep)
+        saved = getattr(self, 'cfg', {}).get('sleep_saved_volume')
+        synced = alarms.clock_synced()
+        if synced:
+            self.sleeping = sleep.active(self.sleep)
+        else:
+            # 没有电池时钟：断电重启后约一分钟系统时间还是断电那会儿的。这时不按钟点判断，接着断电前的样子
+            # （记着睡前音量 = 那时在睡眠时段），也不动音量；对上时间后 _report_poller 再按钟点来
+            self.sleeping = bool(self.sleep.get('enabled')) and saved is not None
         if not self.sleeping:
             self.bright_in_sleep = False
         self.screen.sleep_level = self.sleep.get('brightness', sleep.BRIGHTNESS)
         self.screen.dim(self.sleeping and not self.bright_in_sleep)
         self.screen._write(activity=False)   # the sleep brightness may have changed while dimmed
-        saved = getattr(self, 'cfg', {}).get('sleep_saved_volume')
         # 进出睡眠时段时；客户端在时段里重启（还没记音量）或跨过结束时间重启（记的音量还没还）时也要补上
-        if self.sleeping != was or (self.sleeping and saved is None) or (not self.sleeping and saved is not None):
+        if synced and (self.sleeping != was or (self.sleeping and saved is None) or (not self.sleeping and saved is not None)):
             try:
-                asyncio.get_running_loop().create_task(self._sleep_volume(self.sleeping))
+                bg.spawn(self._sleep_volume(self.sleeping), name='sleep-volume')
             except RuntimeError:
                 pass   # no loop yet (start() applies it again)
 
@@ -3290,13 +3297,19 @@ class Client:
                     if now is not None:
                         self.cfg['sleep_saved_volume'] = now
                         config.save(sleep_saved_volume=now)
-                await self.set_volume(self.sleep.get('volume', sleep.VOLUME), source='sleep')
-                log.info('sleep hours: volume %s (was %s)', self.sleep.get('volume'), self.cfg.get('sleep_saved_volume'))
+                quiet = self.sleep.get('volume', sleep.VOLUME)
+                await self.set_volume(quiet, source='sleep')
+                log.info('sleep hours: volume %s (was %s)', quiet, self.cfg.get('sleep_saved_volume'))
+                back = self.cfg.get('sleep_saved_volume')
+                # 悄悄调了音量，用户会以为设置丢了（2026-11-19：断电后开机正好过了 22:00）：说一声
+                self.events.publish('toast', {'kind': 'info', 'text': f"睡眠时段：音量调到 {quiet}" + (
+                    f"，{self.sleep.get('end', '07:00')} 回到 {back}" if back is not None and back != quiet else '')})
             elif saved is not None:
                 await self.set_volume(saved, source='sleep')
                 self.cfg.pop('sleep_saved_volume', None)
                 config.unset('sleep_saved_volume')
                 log.info('sleep hours over: volume back to %s', saved)
+                self.events.publish('toast', {'kind': 'info', 'text': f'睡眠时段结束：音量回到 {saved}'})
         except Exception as e:  # noqa: BLE001
             log.warning('sleep volume: %s', e)
 
@@ -3366,7 +3379,7 @@ class Client:
         if self._slides_timer:
             self._slides_timer.cancel()
         self._slides_timer = asyncio.get_running_loop().call_later(
-            show.minutes * 60, lambda: asyncio.create_task(self.close_photos(show.id)))
+            show.minutes * 60, lambda: bg.spawn(self.close_photos(show.id), name='photos-close'))
         self.screen.photos(True)
         self.events.publish('slides', show.view())
 
@@ -3426,7 +3439,7 @@ class Client:
 
     async def _report_poller(self):
         while True:
-            if sleep.active(self.sleep) != self.sleeping:
+            if alarms.clock_synced() and sleep.active(self.sleep) != self.sleeping:
                 self._apply_sleep()
                 log.info('sleep hours %s', 'begin' if self.sleeping else 'end')
                 self.set_state(self.state)
