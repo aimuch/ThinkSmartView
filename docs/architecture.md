@@ -4,6 +4,8 @@
 
 下面的图用 Mermaid 写，GitHub 上直接显示成图。
 
+几个「没写成状态机、其实是状态机」的地方（屏幕上是哪一页、一轮对话的那些标志、屏幕亮暗、谁在用喇叭）单独列在 [state-machines.md](state-machines.md)，改那些代码之前先看。
+
 ## 1. 总览
 
 ```mermaid
