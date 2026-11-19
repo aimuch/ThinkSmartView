@@ -53,7 +53,7 @@ import aiohttp
 import numpy as np
 
 from . import bg
-from . import airplay, alarms, appproxy, intercom, broadcast, bt, camera, hub_node, config, cook, perf, daily, focus, gentle, hub_album, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import airplay, alarms, appproxy, quiet, health, kiosk_shot, intercom, broadcast, bt, camera, hub_node, config, cook, perf, daily, focus, gentle, hub_album, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -98,6 +98,7 @@ QUESTION_TAIL = 15       # a reply asks back when a question mark is among its l
 TRAILING = set(' \t\n）)」』"”’\'～~…—*')
 FOLLOW_UPS = ('question', 'always', 'never')
 FOLLOW_SECONDS = (5, 10, 20)
+HEALTH_EVERY = 60        # seconds between health reports to the hub (设计画布第 83 块)
 REPORT_POLL = 10         # seconds between asking the hub for pending reports (local HTTP)
 HISTORY_LIMIT = 50       # messages per model shown from the hub's saved conversations
 MODEL_POLL = 30          # seconds between asking the hub for its models (changes made in its admin page)
@@ -418,6 +419,9 @@ class Client:
             on_active=self._call_active, ring=self._call_ring,
             saved=lambda history: config.save(intercom_history=history))
         self.intercom.history = intercom.load_history(cfg.get('intercom_history'))
+        self.intercom.dnd = self.dnd_active             # 勿扰时家人打来也不自动接通（设计画布第 81 块）
+        self.quiet = quiet.normalize(cfg.get('quiet'))   # 静音和勿扰（quiet.py）
+        self._dnd_was = quiet.dnd_active(self.quiet)
         self.mijia = MijiaService(self.events.publish)
         self.rotation = rotation.Rotation(cfg.get('rotation_auto'), self.events.publish, config.save)
         self.cards = []               # content cards shown in the conversations (self.screen.show_card)
@@ -927,7 +931,8 @@ class Client:
         out = []
         for t in self.cfg.get('tasks') or []:
             days = 'daily' if t['days'] == 'once' else t['days']
-            for _hhmm, key, at in broadcast.due({'enabled': True, 'times': [t['time']], 'days': days}, now, self.broadcast_fired):
+            one = {'items': [{'id': 'task', 'time': t['time'], 'days': days, 'on': True}]}
+            for _item, key, at in broadcast.due(one, now, self.broadcast_fired):
                 out.append((t, f"{key} {t['id']}", at))
         return [(t, k, at) for t, k, at in out if k not in self.broadcast_fired]
 
@@ -993,11 +998,13 @@ class Client:
         log.warning('alert: %s', text)
         self.alert = {'text': text, 'time': time.time(), 'urgent': urgent}
         self.events.publish('alerts', self.alerts_view())
-        self.screen.poke()
+        dnd = self.dnd_active()
+        if not dnd:
+            self.screen.poke()
         self.notes, _ = daily.new_note(self.notes, '家里人', f'⚠ {text}', '小麦')
         daily.save_notes(self.notes)
         self.events.publish('notes', self.notes_view())
-        if self.ring is None:
+        if self.ring is None and not dnd:   # 勿扰：只记在首页和留言里
             self.play('report')
             await self._say_local(f'注意，{text}。' * (2 if urgent else 1))
 
@@ -2142,28 +2149,26 @@ class Client:
     # ---- home address and weather broadcasts (broadcast.py) ----
 
     def broadcast_view(self):
-        return {**self.broadcast, 'home': self.home, 'text': broadcast.describe(self.broadcast),
-                'max_times': broadcast.MAX_TIMES, 'step': broadcast.STEP_MINUTES,
-                'about': {t: broadcast.about(t) for t in self.broadcast['times']}}
+        items = self.broadcast['items']
+        return {'items': [{**it, 'about': broadcast.about(it['time']), 'text': broadcast.item_text(it)} for it in items],
+                'home': self.home, 'text': broadcast.describe(self.broadcast), 'max': broadcast.MAX_ITEMS,
+                'step': broadcast.STEP_MINUTES, 'what': broadcast.WHAT, 'new': broadcast.NEW_ITEM}
 
     def publish_broadcast(self):
         self.events.publish('broadcast', self.broadcast_view())
 
-    async def set_broadcast(self, **changes):
-        """Change the broadcast setting (page or voice); shift={'time', 'minutes'} moves one time.
-        ValueError for anything invalid."""
-        move = changes.pop('shift', None)
+    async def set_broadcast(self, **op):
+        """定时播报（设计画布第 82 块）：{'add': 条}、{'update': id, 改的字段…}、{'delete': id}、{'all': 开关}、
+        {'shift': {'id', 'minutes'}}（时间提前、推后）。ValueError for anything invalid."""
+        move = op.pop('shift', None)
         if move:
-            old = broadcast._time(move.get('time'))
-            if old not in self.broadcast['times']:
-                raise ValueError(f'没有 {old} 这个播报时间')
-            new = broadcast.shift(old, int(move.get('minutes') or 0))
-            if new in self.broadcast['times']:
-                raise ValueError(f'已经有 {new} 了')
-            changes.update(remove_time=old, add_time=new)
-        self.broadcast = broadcast.normalize(self.broadcast, changes)
+            it = broadcast.find(self.broadcast, move.get('id') or move.get('time'))
+            if not it:
+                raise ValueError('没有这条播报')
+            op = {'update': it['id'], 'time': broadcast.shift(it['time'], int(move.get('minutes') or 0))}
+        self.broadcast = broadcast.apply(self.broadcast, op)
         config.save(broadcast=self.broadcast)
-        log.info('weather broadcast: %s', broadcast.describe(self.broadcast))
+        log.info('timed broadcasts: %s', broadcast.describe(self.broadcast))
         self.publish_broadcast()
         return self.broadcast_view()
 
@@ -2255,17 +2260,30 @@ class Client:
             return False
 
     def _busy_for_broadcast(self):
+        # 勿扰时也算忙：播报等勿扰结束（最多等 WAIT_MAX，过了算错过）
         return (self.state != 'idle' or self.uploading or self.ring is not None or self.preview is not None
-                or self.wake_rec is not None)
+                or self.wake_rec is not None or self.dnd_active())
 
-    def _reminders_today(self, now):
+    def _reminders_today(self, now, day=None):
+        """那一天（day，默认今天、从现在起）的闹钟和提醒，几条字。"""
+        day = day or now.date()
         out = []
         for v in (self.alarms.view(i) for i in self.alarms.active()):
             if v['kind'] == 'timer' or not v['at']:
                 continue
             at = datetime.datetime.fromtimestamp(v['at'])
-            if at.date() == now.date() and at >= now:
+            if at.date() == day and at >= now:
                 out.append(f"{at:%H:%M} {v['label'] or v['type']}")
+        return out
+
+    def _list_lines(self, limit=8):
+        """待办和清单里还没做的，一个清单一句：「购物清单：酱油、牛奶」。"""
+        lists = (self.lists or {}).get('lists') or {}
+        out = []
+        for name, items in lists.items():
+            left = [x['text'] for x in items if not x.get('done')][:limit]
+            if left:
+                out.append(f"{name}：{'、'.join(left)}")
         return out
 
     async def _broadcast_loop(self):
@@ -2290,31 +2308,38 @@ class Client:
                     self.broadcast_fired.add(key)
                     await self._run_task(task)
                     break
-                for hhmm, key, at in broadcast.due(self.broadcast, now, self.broadcast_fired):
+                for item, key, at in broadcast.due(self.broadcast, now, self.broadcast_fired):
                     if self._busy_for_broadcast():
                         if (now - at).total_seconds() >= broadcast.WAIT_MAX - 10:   # the last tick of the wait
                             self.broadcast_fired.add(key)
-                            self._note_missed_broadcast(hhmm, at)
+                            self._note_missed_broadcast(item, at)
                         break
                     self.broadcast_fired.add(key)
-                    await self.play_broadcast(hhmm)
+                    await self.play_broadcast(item)
                     break
             except Exception:
                 log.exception('weather broadcast')
 
-    def _note_missed_broadcast(self, hhmm, at):
-        log.info('weather broadcast %s skipped: busy for %d minutes', hhmm, broadcast.WAIT_MAX // 60)
-        self.alarms.missed.append({'kind': 'broadcast', 'label': '天气', 'at': at.timestamp(),
-                                   'why': 'busy', 'noted': time.time()})
+    def _note_missed_broadcast(self, item, at):
+        why = 'dnd' if self.dnd_active() else 'busy'
+        log.info('broadcast %s skipped: %s for %d minutes', item['time'], why, broadcast.WAIT_MAX // 60)
+        self.alarms.missed.append({'kind': 'broadcast', 'label': broadcast.label(item['time']), 'at': at.timestamp(),
+                                   'why': why, 'noted': time.time()})
         self.alarms.save()
         self.publish_alarms()
 
-    async def play_broadcast(self, hhmm=None):
-        """Ask the model to read the weather now (at a broadcast time, or 'test' from the page)."""
-        hhmm = hhmm or datetime.datetime.now().strftime('%H:%M')
-        text = broadcast.request_text(hhmm, self.broadcast, self.home and self.home['name'],
-                                      self._reminders_today(datetime.datetime.now()))
-        log.info('weather broadcast %s', hhmm)
+    async def play_broadcast(self, item=None):
+        """请模型现在播一次（到点了，或者页面上「试试」）。item：那一条（或它的 id）；没有就按第一条、再没有就只播天气。"""
+        if not isinstance(item, dict):
+            item = broadcast.find(self.broadcast, item) if item else None
+        now = datetime.datetime.now()
+        hhmm = item['time'] if item else now.strftime('%H:%M')
+        item = item or (self.broadcast['items'][0] if self.broadcast['items'] else {**broadcast.NEW_ITEM, 'what': ['weather']})
+        day = now.date() + datetime.timedelta(days=1) if broadcast.about(hhmm) == 'tomorrow' else now.date()
+        text = broadcast.request_text(item, self.home and self.home['name'],
+                                      self._reminders_today(now, day) if 'reminders' in item['what'] else None,
+                                      self._list_lines() if 'lists' in item['what'] else None, hhmm=hhmm)
+        log.info('broadcast %s: %s', hhmm, broadcast.item_text(item))
         self.screen.poke()
         self.play('report')
         await self.say(text)
@@ -2344,6 +2369,7 @@ class Client:
         bg.forever(self._album_loop)
         bg.forever(self._dark_loop)
         bg.forever(self._offline_clips_loop)
+        bg.forever(self._health_loop)
         await self.bt.start()
         self.hub_node.start()
         bg.forever(self._bluetooth_loop)
@@ -2422,7 +2448,7 @@ class Client:
     def status(self):
         return {'state': self.state, 'connected': self.hub.connected, 'uploading': self.uploading,
                 'recognising': self.recognising or self.awaiting_text,
-                'mic': self.keys.mic_on, 'sleep': {**self.sleep, 'active': self.sleeping},
+                'mic': self.keys.mic_on, 'sleep': {**self.sleep, 'active': self.sleeping}, 'quiet': quiet.view(getattr(self, 'quiet', quiet.DEFAULT)),
                 'brightness': self.brightness(), 'screen_off': self.screen_off, 'proximity': proximity_status(),
                 'reports': self.reports, 'volume': self.volume}
 
@@ -2518,6 +2544,51 @@ class Client:
         sound = self.sounds.get(name)
         if sound is not None:
             self.audio.player.push(sound)
+
+    # ---- 静音和勿扰（quiet.py，设计画布第 81 块） ----
+
+    def dnd_active(self):
+        return quiet.dnd_active(getattr(self, 'quiet', quiet.DEFAULT))
+
+    def _silenced(self):
+        """喇叭这会儿该不该没声（混音那一处统一把关，audio.Audio.muted）。"""
+        q = getattr(self, 'quiet', quiet.DEFAULT)
+        ring = self.ring
+        alarm = bool(ring) and any(i.get('kind') != 'reminder' for i in ring['items'])
+        call = getattr(self, 'intercom', None)
+        talking = bool(call) and call.state == 'talking'
+        if talking:
+            return False                       # 自己接起来的对讲：照常说话
+        if q['mute']:
+            return not (alarm and q['alarms'])
+        if self.dnd_active():
+            if ring:
+                return not (alarm and q['alarms'])   # 只是提醒：不响
+            return bool(call) and call.state == 'ringing'
+        return False
+
+    def quiet_view(self):
+        return quiet.view(self.quiet)
+
+    async def set_quiet(self, by_voice=False, **changes):
+        """页面或语音改静音、勿扰；锁住的静音用语音取消时报 ValueError。"""
+        self.quiet = quiet.apply(self.quiet, changes, morning=(self.sleep.get('end') if self.sleep.get('enabled') else None) or quiet.MORNING,
+                                 by_voice=by_voice)
+        config.save(quiet=self.quiet)
+        self._dnd_was = quiet.dnd_active(self.quiet)
+        self.audio.muted = self._silenced()
+        log.info('quiet: %s', quiet.describe(self.quiet))
+        view = self.quiet_view()
+        self.events.publish('quiet', view)
+        return view
+
+    def _check_dnd_end(self):
+        """勿扰到点自己结束：告诉页面。"""
+        on = self.dnd_active()
+        if on != getattr(self, '_dnd_was', False):
+            self._dnd_was = on
+            log.info('do not disturb %s', 'on' if on else 'over')
+            self.events.publish('quiet', self.quiet_view())
 
     # ---- actions (from the wake word and the page) ----
 
@@ -3403,10 +3474,12 @@ class Client:
         try:
             # version: 网关后台按这个心跳显示设备 待机/对话中/离线 和客户端版本
             data = await self._hub_http('/kiosk/reports', {'device': self.cfg['device_id'], 'version': __version__,
-                                                           'quiet': self.sleeping, 'play': play})
+                                                           'quiet': self.sleeping or self.dnd_active(), 'play': play})
         except Exception:
             return None
         self.hub_seen = time.monotonic()
+        if data.get('screenshot'):   # 网关后台点了「截一张」（设计画布第 83 块）
+            bg.spawn(self._send_screenshot(), name='screenshot')
         if data.get('admin'):
             self.hub_admin = str(data['admin'])   # 设置页「本机 IP」那里写网关后台的地址（网关不在设备上）
         count = int(data.get('count') or 0)
@@ -3419,6 +3492,8 @@ class Client:
         return data
 
     def _on_new_report(self):
+        if self.dnd_active():
+            return   # 勿扰：首页的「有一条待汇报」等着，点了再念
         if self.sleeping:
             # just light the screen with the notice; it blanks again after the user's screen-off
             self.screen.poke()
@@ -3439,6 +3514,7 @@ class Client:
 
     async def _report_poller(self):
         while True:
+            self._check_dnd_end()
             if alarms.clock_synced() and sleep.active(self.sleep) != self.sleeping:
                 self._apply_sleep()
                 log.info('sleep hours %s', 'begin' if self.sleeping else 'end')
@@ -3634,6 +3710,7 @@ class Client:
             await asyncio.sleep(0.1)
             target = self.background_target()
             self.audio.background.target = target
+            self.audio.muted = self._silenced()
             if self.airplay:
                 self.audio.airplay.target = target
             if self.ring and self.ring is not paused_for:
@@ -4137,6 +4214,49 @@ class Client:
         return True
 
     # ---- models (the hub's local-only /kiosk/llm endpoints) ----
+
+    # ---- 设备健康上报、后台截图（health.py、kiosk_shot.py，设计画布第 83 块） ----
+
+    async def _health_loop(self):
+        """每分钟报一次健康状况给网关；网关没回就下一分钟再报。"""
+        from . import update, web as page
+        self.health = health.Health()
+        hub_ms = None
+        while True:
+            await asyncio.sleep(HEALTH_EVERY)
+            try:
+                system = (update.read().get('system') or {}).get('current')
+            except Exception:  # noqa: BLE001
+                system = None
+            report = await asyncio.get_running_loop().run_in_executor(None, lambda: self.health.report(
+                device=self.cfg['device_id'], version=__version__, system=system, state=self.state, hub_ms=hub_ms,
+                view=page.PAGE_STATE[-1] if page.PAGE_STATE else None, quiet=self.quiet_view()))
+            t0 = time.monotonic()
+            try:
+                await self._hub_http('/kiosk/health', report)
+                hub_ms = round((time.monotonic() - t0) * 1000)
+            except Exception as e:  # noqa: BLE001
+                hub_ms = None
+                log.info('health report: the hub did not take it (%s)', type(e).__name__)
+
+    async def _send_screenshot(self):
+        """屏幕浏览器把现在的页面画成图，传给网关（只留最新一张）。"""
+        try:
+            png = await kiosk_shot.take()
+        except kiosk_shot.ShotError as e:
+            log.warning('screenshot: %s', e)
+            png, why = None, str(e)
+        url = f"{self.cfg['hub_http']}/kiosk/screenshot?" + urllib.parse.urlencode({'device': self.cfg['device_id']})
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as s:
+                if png:
+                    async with s.post(url, data=png, headers={'Content-Type': 'image/png'}) as r:
+                        log.info('screenshot sent (%d KB, hub %s)', len(png) // 1024, r.status)
+                else:
+                    async with s.post(url, json={'error': why}) as r:
+                        pass
+        except Exception as e:  # noqa: BLE001
+            log.warning('screenshot: could not send it (%s)', type(e).__name__)
 
     async def _hub_http(self, path, body=None):
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:

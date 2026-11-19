@@ -37,6 +37,40 @@ function bootDone() {
 }
 window.bootDone = bootDone;
 
+/* ---- 静音和勿扰（设计画布第 81 块；客户端 quiet.py） ---- */
+function renderQuiet() {
+  const q = (ui.status && ui.status.quiet) || ui.quiet;
+  if (!q) return;
+  ui.quiet = q;
+  $('mutePill').hidden = !q.mute;
+  $('mutePillText').textContent = q.lock ? '静音中（锁住）' : '静音中';
+  $('dndPill').hidden = !q.dnd;
+  $('dndPillText').textContent = '勿扰' + (q.dnd_text || '');
+  $('muteSwitch').setAttribute('aria-checked', String(q.mute));
+  $('muteLock').hidden = !q.mute;
+  $('muteLock').querySelector('button').classList.toggle('on', !!q.lock);
+  $('dndNow').textContent = q.dnd ? q.dnd_text : '没开';
+  $('quietAlarms').setAttribute('aria-checked', String(q.alarms));
+  const end = ui.status && ui.status.sleep && ui.status.sleep.enabled && ui.status.sleep.end;
+  $('dndMorning').textContent = `到明早 ${end || '07:00'}`;
+  document.querySelectorAll('#dndChips button').forEach(b => b.classList.toggle('on', b.dataset.dnd === 'off' ? !q.dnd
+    : q.dnd && (b.dataset.dnd === 'forever' ? q.dnd_until === -1 : false)));
+}
+async function sendQuiet(changes) {
+  if (DEMO) { ui.quiet = Object.assign({}, ui.quiet || {}, changes); return renderQuiet(); }
+  const r = await postJson('/api/quiet', changes);
+  if (r && r.ok) { ui.quiet = r.quiet; if (ui.status) ui.status.quiet = r.quiet; renderQuiet(); }   // 没成 postJson 已经提示了
+}
+$('muteSwitch').addEventListener('click', () => sendQuiet({ mute: !(ui.quiet && ui.quiet.mute) }));
+$('muteLock').addEventListener('click', () => sendQuiet({ lock: !(ui.quiet && ui.quiet.lock) }));
+$('quietAlarms').addEventListener('click', () => sendQuiet({ alarms: !(ui.quiet && ui.quiet.alarms !== false) }));
+$('dndChips').addEventListener('click', e => {
+  const b = e.target.closest('[data-dnd]');
+  if (b) sendQuiet({ dnd: /^\d+$/.test(b.dataset.dnd) ? Number(b.dataset.dnd) : b.dataset.dnd });
+});
+$('mutePill').addEventListener('click', () => sendQuiet({ mute: false }));   // 屏幕上点：锁住的也能取消
+$('dndPill').addEventListener('click', () => sendQuiet({ dnd: 'off' }));
+
 /* ---- clock ---- */
 // 每秒走一次，但字一分钟才变：只在变了的时候写，别让 168px 的渐变大字每秒重排重画（设备上很贵）
 function setText(id, text) { const el = $(id); if (el && el.textContent !== text) el.textContent = text; }
@@ -208,6 +242,7 @@ const shownState = () => (ui.ptt ? 'listening' : ui.status.state);
 function renderStatus() {
   const { state, connected } = ui.status;
   const shown = shownState();
+  renderQuiet();
   document.body.dataset.state = shown;
   // 睡眠时段里没在对话：形象去睡觉（设计画布第 29 块）
   document.body.classList.toggle('sleeping', !!(ui.status.sleep && ui.status.sleep.active) && shown === 'idle');
@@ -1553,28 +1588,43 @@ $('btnPhoto').addEventListener('click', async () => {
 });
 
 /* ---- weather broadcasts and the home address (broadcast.py, 设计画布第 6 块) ---- */
-const bc = { holding: false, busy: false, found: null, armed: null };
+const bc = { holding: false, busy: false, found: null, armed: null, open: null, sayOpen: null };
 function holdMeter(btn, v) {
   btn.querySelectorAll('.ww-meter i').forEach((b, i) => {
     const shape = [.45, .75, 1, .6, .9, .5, .3][i];
     b.style.transform = `scaleY(${Math.max(.15, Math.min(1, v * shape * (0.8 + Math.random() * 0.4)))})`;
   });
 }
+const BC_DAYS = { daily: '每天', workdays: '工作日', weekend: '周末' };
+const WEEK_CN = '一二三四五六日';
+function bcDaysText(d) { return BC_DAYS[d] || ('每周' + d.map(x => WEEK_CN[x - 1]).join('、')); }
 function renderBroadcast() {
   const b = ui.broadcast;
-  if (!b) return;
-  $('bcCard').classList.toggle('off', !b.enabled);
-  $('bcSwitch').setAttribute('aria-checked', String(!!b.enabled));
-  $('bcCount').textContent = b.enabled ? (b.times.length ? `${{ daily: '每天', workdays: '工作日', weekend: '周末' }[b.days]} ${b.times.length} 次` : '还没有时间') : '';
-  $('bcTimes').innerHTML = b.times.map(t => {
-    const armed = bc.armed === t;
-    return `<div class="al"><div class="al-text"><b>${t}</b><span>${b.about[t] === 'tomorrow' ? '明天的天气' : '今天的天气'}</span></div>` +
-      `<div class="bc-step"><button data-t="${t}" data-m="-${b.step}" aria-label="提前">−</button><button data-t="${t}" data-m="${b.step}" aria-label="推后">+</button></div>` +
-      `<button class="al-del${armed ? ' armed' : ''}" data-del="${t}">${armed ? '确认删除' : '删除'}</button></div>`;
-  }).join('');
-  $('bcAdd').hidden = b.times.length >= b.max_times;
-  for (const el of $('bcDays').children) el.classList.toggle('on', el.dataset.d === b.days);
-  for (const el of $('bcExtras').querySelectorAll('[data-x]')) el.classList.toggle('on', !!b[el.dataset.x]);
+  if (!b || !b.items) return;
+  const on = b.items.filter(x => x.on).length;
+  $('bcCount').textContent = b.items.length ? `${on} / ${b.items.length} 条开着` : '';
+  $('bcAdd').hidden = b.items.length >= b.max;
+  if (bc.open && !b.items.some(x => x.id === bc.open)) bc.open = null;
+  $('bcItems').innerHTML = (b.items.length ? b.items.map(it => {
+    const what = it.what.map(w => w === 'say' ? `「${esc(it.say)}」` : esc(b.what[w])).join('、');
+    const row = `<div class="bc-row${it.on ? '' : ' off'}${bc.open === it.id ? ' open' : ''}"><button class="bc-main" data-open="${it.id}">` +
+      `<b>${it.time}</b><span>${esc(bcDaysText(it.days))} · ${it.about === 'tomorrow' ? '讲明天' : '讲今天'}</span><small>${what}</small></button>` +
+      `<button class="switch" role="switch" data-on="${it.id}" aria-checked="${it.on}" aria-label="${it.time} 的播报"><i></i></button></div>`;
+    if (bc.open !== it.id) return row;
+    const custom = Array.isArray(it.days);
+    const armed = bc.armed === it.id;
+    return row + `<div class="bc-edit">` +
+      `<div class="bc-time"><button data-shift="-${b.step}" aria-label="提前">−</button><b>${it.time}</b><button data-shift="${b.step}" aria-label="推后">+</button></div>` +
+      `<div class="minutes bc-chips">${Object.entries(BC_DAYS).map(([k, n]) => `<button data-days="${k}" class="${it.days === k ? 'on' : ''}">${n}</button>`).join('')}</div>` +
+      `<div class="minutes bc-week">${[1, 2, 3, 4, 5, 6, 7].map(d => `<button data-wd="${d}" class="${custom ? (it.days.includes(d) ? 'on' : '') : ''}">${WEEK_CN[d - 1]}</button>`).join('')}</div>` +
+      `<div class="minutes bc-what">${Object.entries(b.what).map(([k, n]) => `<button data-what="${k}" class="${it.what.includes(k) ? 'on' : ''}">${n}</button>`).join('')}</div>` +
+      (it.what.includes('say') || bc.sayOpen === it.id ? `<input class="bc-say" id="bcSay" maxlength="80" placeholder="念什么，比如：周末要带孩子去上课外班" value="${esc(it.say || '')}">` : '') +
+      `<div class="bc-acts"><button class="upd-btn" data-test="${it.id}">▶ 现在播一次</button><button class="al-del${armed ? ' armed' : ''}" data-del="${it.id}">${armed ? '确认删除' : '删除'}</button></div></div>`;
+  }).join('') : '<p class="opt-note">还没有定时播报：点「＋ 加一条」，或者说「每天早上七点半播报天气」。</p>');
+  renderHome();
+}
+function renderHome() {
+  const b = ui.broadcast;
   const f = bc.found;
   $('bcHome').classList.toggle('warn', !!(f && f.error));
   $('bcConfirm').hidden = !(f && f.place);
@@ -1585,8 +1635,8 @@ function renderBroadcast() {
     $('bcHomeSub').textContent = coords(f.place);
   } else {
     $('bcHomeLabel').textContent = '住宅地址（音箱所在地）';
-    $('bcHomeName').textContent = b.home ? b.home.name : '还没设';
-    $('bcHomeSub').textContent = f && f.error ? '⚠ ' + f.error : b.home ? coords(b.home) : '没设时按网关后台「查天气」里的设备所在地';
+    $('bcHomeName').textContent = b && b.home ? b.home.name : '还没设';
+    $('bcHomeSub').textContent = f && f.error ? '⚠ ' + f.error : b && b.home ? coords(b.home) : '没设时按网关后台「查天气」里的设备所在地';
   }
   $('bcHold').disabled = bc.busy;
   $('bcHold').classList.toggle('on', bc.holding);
@@ -1599,36 +1649,59 @@ function coords(p) {
 async function setBroadcast(body) {
   if (DEMO !== null) return;
   const r = await postJson('/api/broadcast', body);
-  if (r.ok) { ui.broadcast = r.broadcast; renderBroadcast(); } else if (r.error) toast(r.error, 'error');
+  if (r.ok && r.broadcast) { ui.broadcast = r.broadcast; renderBroadcast(); }
+  return r;
 }
-$('bcSwitch').addEventListener('click', () => setBroadcast({ enabled: !(ui.broadcast && ui.broadcast.enabled) }));
-$('bcDays').addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) setBroadcast({ days: b.dataset.d }); });
-$('bcExtras').addEventListener('click', e => {
-  const b = e.target.closest('[data-x]');
-  if (b) setBroadcast({ [b.dataset.x]: !ui.broadcast[b.dataset.x] });
+$('bcAdd').addEventListener('click', async () => {
+  // 默认一小时后的整点（最后一条再往后一小时），天气 + 闹钟和提醒
+  const items = ui.broadcast.items, last = items.length ? items[items.length - 1].time : '06:30';
+  const [h, m] = last.split(':').map(Number);
+  const r = await setBroadcast({ add: { ...ui.broadcast.new, time: pad((h + 1) % 24) + ':' + pad(m) } });
+  if (r && r.ok) { const added = r.broadcast.items.find(x => !items.some(y => y.id === x.id)); bc.open = added && added.id; renderBroadcast(); }
 });
-$('bcAdd').addEventListener('click', () => {
-  // the next free time an hour after the last one (07:30 first)
-  const times = ui.broadcast.times;
-  let t = times.length ? times[times.length - 1] : '06:30';
-  for (let i = 0; i < 24 && (i === 0 || times.includes(t)); i++) {
-    const [h, m] = t.split(':').map(Number);
-    t = pad((h + 1) % 24) + ':' + pad(m);
+$('bcItems').addEventListener('click', e => {
+  const t = e.target, b = ui.broadcast, it = bc.open && b.items.find(x => x.id === bc.open);
+  const sw = t.closest('[data-on]');
+  if (sw) { const x = b.items.find(y => y.id === sw.dataset.on); return setBroadcast({ update: x.id, on: !x.on }); }
+  const op = t.closest('[data-open]');
+  if (op) { bc.open = bc.open === op.dataset.open ? null : op.dataset.open; bc.armed = null; return renderBroadcast(); }
+  if (!it) return;
+  const sh = t.closest('[data-shift]');
+  if (sh) return setBroadcast({ shift: { id: it.id, minutes: Number(sh.dataset.shift) } });
+  const dy = t.closest('[data-days]');
+  if (dy) return setBroadcast({ update: it.id, days: dy.dataset.days });
+  const wd = t.closest('[data-wd]');
+  if (wd) {
+    const d = Number(wd.dataset.wd), cur = Array.isArray(it.days) ? it.days : [];
+    const next = cur.includes(d) ? cur.filter(x => x !== d) : [...cur, d];
+    return next.length ? setBroadcast({ update: it.id, days: next }) : toast('至少选一天', 'error');
   }
-  setBroadcast({ add_time: t });
-});
-$('bcTimes').addEventListener('click', e => {
-  const step = e.target.closest('[data-m]');
-  if (step) return setBroadcast({ shift: { time: step.dataset.t, minutes: Number(step.dataset.m) } });
-  const del = e.target.closest('[data-del]');
+  const wh = t.closest('[data-what]');
+  if (wh) {
+    const k = wh.dataset.what, next = it.what.includes(k) ? it.what.filter(x => x !== k) : [...it.what, k];
+    if (k === 'say' && !it.what.includes('say') && !it.say) { bc.sayOpen = it.id; renderBroadcast(); const s = $('bcSay'); if (s) s.focus(); return; }
+    return next.length ? setBroadcast({ update: it.id, what: next }) : toast('至少要播一样', 'error');
+  }
+  const ts = t.closest('[data-test]');
+  if (ts) { setBroadcast({ test: ts.dataset.test }); return toast('马上播一次'); }
+  const del = t.closest('[data-del]');
   if (!del) return;
-  if (bc.armed !== del.dataset.del) {
-    bc.armed = del.dataset.del; renderBroadcast();
-    setTimeout(() => { if (bc.armed === del.dataset.del) { bc.armed = null; renderBroadcast(); } }, 3000);
+  if (bc.armed !== it.id) {
+    bc.armed = it.id; renderBroadcast();
+    setTimeout(() => { if (bc.armed === it.id) { bc.armed = null; renderBroadcast(); } }, 3000);
     return;
   }
-  bc.armed = null;
-  setBroadcast({ remove_time: del.dataset.del });
+  bc.armed = null; bc.open = null;
+  setBroadcast({ delete: it.id });
+});
+$('bcItems').addEventListener('change', e => {
+  if (e.target.id !== 'bcSay' || !bc.open) return;
+  const it = ui.broadcast.items.find(x => x.id === bc.open), say = e.target.value.trim();
+  if (!it) return;
+  bc.sayOpen = null;
+  const what = say ? [...new Set([...it.what, 'say'])] : it.what.filter(x => x !== 'say');
+  if (!what.length) return toast('至少要播一样', 'error');
+  setBroadcast({ update: it.id, say, what });
 });
 async function homeHoldStart(e) {
   e.preventDefault();
@@ -1662,11 +1735,6 @@ $('bcUse').addEventListener('click', async () => {
   const r = await postJson('/api/home', { place: f.place });
   if (r.ok) { bc.found = null; ui.broadcast = r.broadcast; renderBroadcast(); toast(`住宅地址改成了${f.place.name}`); }
   else toast(r.error || '没改成', 'error');
-});
-$('bcTest').addEventListener('click', () => {
-  if (DEMO !== null) return;
-  postJson('/api/broadcast', { test: true });
-  toast('马上播一次');
 });
 
 /* ---- countdowns, alarms and reminders (alarms.py: the client keeps and rings them) ---- */
@@ -2750,6 +2818,7 @@ $('perfClose').addEventListener('click', () => openPerf(false));
 
 /* ---- events from the client ---- */
 const handlers = {
+  quiet(q) { ui.quiet = q; if (ui.status) ui.status.quiet = q; renderQuiet(); },
   snapshot(s) {
     if (ui.build && s.build && s.build !== ui.build) return location.reload();   // client restarted (deployed)
     if (!ui.build && !DEMO) setTimeout(() => {   // 第一份状态画完后，把屏幕上实际显示的记到设备日志（排查屏幕不动用）

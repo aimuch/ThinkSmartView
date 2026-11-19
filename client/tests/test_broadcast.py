@@ -29,52 +29,61 @@ D = datetime.datetime
 HOME = {'name': '上海市青浦区', 'latitude': 31.15, 'longitude': 121.12}
 
 
-def test_normalize_and_shift():
-    s = bc.normalize(None)
-    assert s == {'enabled': False, 'times': ['07:30'], 'days': 'daily', 'reminders': True, 'news': False}
-    s = bc.normalize(s, {'enabled': True, 'add_time': '21:00'})
-    s = bc.normalize(s, {'add_time': '6:45'})
-    assert s['times'] == ['06:45', '07:30', '21:00'] and s['enabled']
-    assert bc.normalize(s, {'remove_time': '07:30'})['times'] == ['06:45', '21:00']
-    s = bc.normalize(s, {'add_time': '12：00'})   # a full-width colon
-    with pytest.raises(ValueError, match='最多'):
-        bc.normalize(s, {'add_time': '22:00'})
-    with pytest.raises(ValueError, match='没有'):
-        bc.normalize(s, {'remove_time': '08:00'})
-    with pytest.raises(ValueError, match='HH:MM'):
-        bc.normalize(s, {'add_time': '25:00'})
-    with pytest.raises(ValueError, match='哪几天'):
-        bc.normalize(s, {'days': 'monday'})
-    assert bc.shift('23:50', 15) == '00:05' and bc.shift('00:10', -15) == '23:55'
-    assert bc.about('07:30') == 'today' and bc.about('13:59') == 'today' and bc.about('21:00') == 'tomorrow'
+def test_normalize_migrates_and_validates():
+    old = {'enabled': True, 'times': ['21:00', '07:30'], 'days': 'workdays', 'reminders': True, 'news': False}
+    s = bc.normalize(old)                                               # 以前的天气播报：变成一样的两条
+    assert [(i['time'], i['days'], i['on'], i['what']) for i in s['items']] == [
+        ('07:30', 'workdays', True, ['weather', 'reminders']), ('21:00', 'workdays', True, ['weather', 'reminders'])]
+    assert bc.normalize(None) == {'items': []} and bc.normalize({'items': [{'time': '25:00'}]}) == {'items': []}
+    s = bc.apply(s, {'add': {'time': '17:30', 'days': [5], 'what': ['say'], 'say': '周末要带孩子去上课外班'}})
+    fri = next(i for i in s['items'] if i['time'] == '17:30')
+    assert fri['days'] == [5] and bc.item_text(fri) == '17:30 每周五：「周末要带孩子去上课外班」'
+    assert bc.normalize({'items': [{'time': '08:00', 'days': [1, 2, 3, 4, 5]}]})['items'][0]['days'] == 'workdays'
+    for bad in ({'add': {'time': '9'}}, {'add': {'what': []}}, {'add': {'what': ['say']}}, {'update': 'nope'}, {'delete': 'nope'}):
+        with pytest.raises(ValueError):
+            bc.apply(s, bad)
+    s = bc.apply(s, {'update': fri['id'], 'on': False, 'time': '18:00'})
+    assert bc.find(s, '18:00')['on'] is False and bc.find(s, fri['id'])['time'] == '18:00'
+    s = bc.apply(s, {'all': False})
+    assert bc.describe(s) == '定时播报都关着'
+    s = bc.apply(s, {'delete': fri['id']})
+    assert len(s['items']) == 2 and bc.shift('23:45', 30) == '00:15'
+    for i in range(6):
+        s = bc.apply(s, {'add': {'time': f'1{i}:00'}})
+    with pytest.raises(ValueError):
+        bc.apply(s, {'add': {'time': '23:00'}})                         # 最多 8 条
 
 
 def test_due_days_window_and_fired():
-    s = bc.normalize(None, {'enabled': True, 'times': ['07:30', '21:00'], 'days': 'workdays'})
+    s = bc.normalize({'items': [{'id': 'a', 'time': '07:30', 'days': 'workdays'}, {'id': 'b', 'time': '21:00', 'days': [7]}]})
     monday = D(2026, 11, 9, 7, 30, 4)
-    assert [t for t, _, _ in bc.due(s, monday, set())] == ['07:30']
-    assert bc.due(s, monday, {'2026-11-09 07:30'}) == []
+    assert [i['id'] for i, _, _ in bc.due(s, monday, set())] == ['a']
+    assert bc.due(s, monday, {'2026-11-09 07:30 a'}) == []
     assert bc.due(s, D(2026, 11, 9, 7, 29, 59), set()) == []
     assert bc.due(s, D(2026, 11, 9, 8, 0, 0), set()) == []          # 30 min later: given up
     assert bc.due(s, D(2026, 11, 8, 7, 31), set()) == []            # Sunday
-    assert [t for t, _, _ in bc.due({**s, 'days': 'weekend'}, D(2026, 11, 8, 21, 5), set())] == ['21:00']
-    assert bc.due({**s, 'enabled': False}, monday, set()) == []
+    assert [i['id'] for i, _, _ in bc.due(s, D(2026, 11, 8, 21, 5), set())] == ['b']   # 只在周日
+    assert bc.due(bc.apply(s, {'all': False}), monday, set()) == []
 
 
 def test_request_text_and_tag():
-    s = bc.normalize(None, {'enabled': True, 'reminders': True, 'news': True})
-    morning = bc.request_text('07:30', s, '上海市青浦区', ['08:30 给宝宝带水杯'])
+    s = bc.normalize({'items': [{'time': '07:30', 'what': ['weather', 'reminders', 'news']}]})
+    it = s['items'][0]
+    morning = bc.request_text(it, '上海市青浦区', ['08:30 给宝宝带水杯'])
     assert morning.startswith('【早安播报 07:30】早上好，先调用查天气工具查最新的天气')
     assert '08:30 给宝宝带水杯' in morning and '新闻' in morning
-    assert '今天没有闹钟和提醒' in bc.request_text('07:30', s, None, [])
-    noon = bc.request_text('12:30', s, '青浦区', ['13:00 开会'])
-    assert noon.startswith('【天气播报 12:30】') and '开会' not in noon and '新闻' not in noon
-    evening = bc.request_text('21:00', s, '青浦区')
-    assert evening.startswith('【天气播报 21:00】') and '明天的天气' in evening
-    assert bc.tag_of(morning) == '早安播报 07:30' and bc.tag_of(evening) == '天气播报 21:00'
+    assert '今天没有闹钟和提醒' in bc.request_text(it, None, [])
+    evening = bc.request_text({**it, 'what': ['weather', 'reminders', 'lists'], 'time': '21:00'}, '青浦区',
+                              ['07:00 起床'], ['购物清单：酱油、牛奶'])
+    assert evening.startswith('【晚间播报 21:00】晚上好，') and '明天的天气' in evening
+    assert '明天的闹钟和提醒：07:00 起床' in evening and '购物清单：酱油、牛奶' in evening
+    say = bc.request_text({**it, 'what': ['say'], 'say': '周末要上课', 'time': '15:00'}, None)
+    assert say.startswith('【定时播报 15:00】') and '「周末要上课」' in say and '天气' not in say
+    assert bc.tag_of(morning) == '早安播报 07:30' and bc.tag_of(evening) == '晚间播报 21:00'
     assert bc.tag_of(morning[1:]) == '早安播报 07:30'   # as the hub echoes it back
     assert bc.tag_of('【重要】明天开会') is None and bc.tag_of('明天下雨吗') is None
-    assert '工作日' in bc.describe({**s, 'days': 'workdays'}) and bc.describe(bc.normalize(None)) == '天气播报关着'
+    assert '工作日' in bc.describe(bc.apply(s, {'update': it['id'], 'days': 'workdays'}))
+    assert bc.describe({'items': []}) == '还没有定时播报'
 
 
 def make_client(tmp_path, monkeypatch):
@@ -126,14 +135,15 @@ def test_settings_change_and_persist(tmp_path, monkeypatch):
     c = make_client(tmp_path, monkeypatch)
 
     async def run():
-        view = await c.set_broadcast(enabled=True, add_time='21:00', news=True)
-        assert view['times'] == ['07:30', '21:00'] and view['about'] == {'07:30': 'today', '21:00': 'tomorrow'}
-        view = await c.set_broadcast(shift={'time': '07:30', 'minutes': -15})
-        assert view['times'] == ['07:15', '21:00']
-        with pytest.raises(ValueError, match='已经有'):
-            await c.set_broadcast(shift={'time': '07:15', 'minutes': 13 * 60 + 45})
+        view = await c.set_broadcast(add={'time': '21:00', 'what': ['weather', 'news']})
+        assert [(i['time'], i['about']) for i in view['items']] == [('21:00', 'tomorrow')]
+        it = view['items'][0]
+        view = await c.set_broadcast(shift={'id': it['id'], 'minutes': -15})
+        assert view['items'][0]['time'] == '20:45'
+        with pytest.raises(ValueError, match='没有'):
+            await c.set_broadcast(shift={'id': 'nope', 'minutes': 15})
         saved = json.loads(config.PATH.read_text())['broadcast']
-        assert saved['times'] == ['07:15', '21:00'] and saved['news'] and saved['enabled']
+        assert saved['items'][0]['time'] == '20:45' and saved['items'][0]['what'] == ['weather', 'news']
     asyncio.run(run())
 
 
@@ -162,7 +172,7 @@ def test_home_address_by_voice_recording(tmp_path, monkeypatch):
 def test_loop_plays_when_idle_and_waits_when_busy(tmp_path, monkeypatch):
     c = make_client(tmp_path, monkeypatch)
     c.home = HOME
-    c.broadcast = bc.normalize(None, {'enabled': True, 'times': ['07:30']})
+    c.broadcast = bc.normalize({'items': [{'id': 'm', 'time': '07:30', 'what': ['weather']}]})
     now = {'t': D(2026, 11, 9, 7, 30, 3)}
 
     class Clock(datetime.datetime):
@@ -210,10 +220,16 @@ def call(c, name, **args):
 def test_voice_tools(tmp_path, monkeypatch):
     c = make_client(tmp_path, monkeypatch)
     names = [t['name'] for t in asyncio.run(mcp.handle({'id': 1, 'method': 'tools/list'}))['result']['tools']]
-    assert {'self.weather_broadcast.update', 'self.location.set_home'} <= set(names) and len(names) == len(set(names))
-    r = call(c, 'self.weather_broadcast.update', enabled=True, add_time='21:00', days='workdays')
-    assert r['success'] and '工作日' in r['text'] and '21:00' in r['text']
-    r = call(c, 'self.weather_broadcast.update', remove_time='09:00')
+    assert {'self.broadcast.update', 'self.location.set_home', 'self.quiet.set'} <= set(names) and len(names) == len(set(names))
+    r = call(c, 'self.broadcast.update', action='add', time='21:00', days='workdays', what=['weather', 'lists'])
+    assert r['success'] and '21:00 工作日：天气、待办和清单' in r['text']
+    r = call(c, 'self.broadcast.update', action='add', time='17:30', weekdays=[5], say_text='周末上课')
+    assert r['success'] and '17:30 每周五：「周末上课」' in r['text']
+    r = call(c, 'self.broadcast.update', action='change', time='21:00', new_time='21:30')
+    assert r['success'] and '21:30' in r['text'] and '21:00' not in r['text']
+    r = call(c, 'self.broadcast.update', action='off', time='21:30')
+    assert '（关着）' in r['text']
+    r = call(c, 'self.broadcast.update', action='remove', time='09:00')
     assert not r['success'] and '没有' in r['reason']
     assert call(c, 'self.location.set_home')['home'] is None
     r = call(c, 'self.location.set_home', place='杭州西湖区')

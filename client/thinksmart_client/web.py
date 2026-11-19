@@ -38,10 +38,14 @@ async def fresh_pages(request, handler):
 
 
 
+PAGE_STATE = []   # 屏幕上最近几次是哪一页（page_state_routes 记，健康上报也带上）
+
+
 def page_state_routes(app):
     """屏幕上现在是哪一页（web/v2/screen.js 变了就报）：设备日志记一行「page view: …」，GET 能查现在和最近
     20 次，排查「屏幕上是什么」不用拍照、也不用连页面。"""
-    recent = []
+    recent = PAGE_STATE
+    recent.clear()
 
     async def page_state_set(request):
         try:
@@ -131,6 +135,16 @@ def make_app(client: Client):
         except ValueError as e:
             return web.json_response({'ok': False, 'error': str(e)}, status=400)
         return web.json_response({'ok': True, 'screen_off': value})
+
+    async def quiet_set(request):
+        """静音和勿扰（设计画布第 81 块）：{mute, lock, alarms, dnd: 分钟 | 'morning' | 'forever' | 'off'}。"""
+        body = await request.json()
+        keys = ('mute', 'lock', 'alarms', 'dnd')
+        try:
+            view = await client.set_quiet(**{k: body[k] for k in keys if isinstance(body, dict) and k in body})
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)}, status=400)
+        return web.json_response({'ok': True, 'quiet': view})
 
     async def work_settings(request):
         body = await request.json()
@@ -478,6 +492,7 @@ def make_app(client: Client):
     app.router.add_get('/api/screen-light', screen_light)
     app.router.add_post('/api/hub-node', hub_node_switch)
     app.router.add_post('/api/work', work_settings)
+    app.router.add_post('/api/quiet', quiet_set)
     app.router.add_post('/api/integrations/repo', repo_command)
     app.router.add_post('/api/home-tabs', home_tabs)
     app.router.add_post('/api/volume', volume)
@@ -515,11 +530,11 @@ def make_app(client: Client):
     async def broadcast_set(request):
         body = await request.json()
         if body.get('test'):
-            bg.spawn(client.play_broadcast())
+            bg.spawn(client.play_broadcast(body['test'] if isinstance(body['test'], str) else None))
             return web.json_response({'ok': True})
 
         async def change():
-            keys = ('enabled', 'days', 'reminders', 'news', 'add_time', 'remove_time', 'shift')
+            keys = ('add', 'update', 'delete', 'all', 'shift', 'time', 'days', 'on', 'what', 'say')
             return {'broadcast': await client.set_broadcast(**{k: body[k] for k in keys if k in body})}
         return await wake_call(change)
 

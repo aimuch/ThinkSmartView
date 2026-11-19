@@ -220,6 +220,7 @@ class Background:
 
 class Audio:
     def __init__(self, on_block):
+        self.muted = False   # 静音和勿扰（设计画布第 81 块）：app 每 0.1 秒按 _silenced() 设
         self.on_block = on_block          # called on the worker thread: on_block(block, wake_block), 20 ms
         self.player = Player()
         self.background = Background()
@@ -265,6 +266,8 @@ class Audio:
             bg = channel.pull(frames)
             if bg is not None:
                 out = np.clip(out + bg, -1.0, 1.0)
+        if self.muted:
+            out = np.zeros_like(out)   # 静音、勿扰（app._silenced）：照样把各路取走，只是不出声
         outdata[:] = out
         self.aec.feed_far(outdata)
 

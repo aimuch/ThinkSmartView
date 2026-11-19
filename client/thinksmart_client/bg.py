@@ -10,6 +10,7 @@ import logging
 
 log = logging.getLogger(__name__)
 _live = set()
+restarts = {}   # 常驻循环出错重启的次数（forever），设备健康上报里带上（设计画布第 83 块）
 RESTART_AFTER = (1, 5, 30, 60)   # seconds before restarting a loop after its 1st, 2nd, 3rd... error in a row
 CALM = 600                       # a loop that ran this long since its last error starts counting again
 
@@ -43,6 +44,7 @@ def forever(make, name=None):
                 raise
             except Exception:  # noqa: BLE001  anything: the loop's feature must not stop for good
                 errors = 1 if loop.time() - started > CALM else errors + 1
+                restarts[name] = restarts.get(name, 0) + 1
                 pause = RESTART_AFTER[min(errors, len(RESTART_AFTER)) - 1]
                 log.exception('%s failed (%d in a row): starting it again in %d s', name, errors, pause)
                 await asyncio.sleep(pause)

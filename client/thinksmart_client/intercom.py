@@ -204,6 +204,7 @@ class Intercom:
         self.save = saved or (lambda history: None)
         self.state = 'idle'                       # idle / ringing / connecting / talking / ended
         self.call = None                          # {'id', 'caller', 'offer', 'rang', 'started'}
+        self.dnd = None                           # app 给：勿扰时不自动接通（设计画布第 81 块）
         self.history = []
         self.pc = None
         self.tracks = []
@@ -308,7 +309,7 @@ class Intercom:
     async def _ringing(self, call_id):
         while self.state == 'ringing' and self.call and self.call['id'] == call_id:
             self.ring_sound()
-            if self.settings['auto_answer'] and time.monotonic() - self.call['rang_m'] >= AUTO_ANSWER_AFTER:
+            if self.settings['auto_answer'] and not (self.dnd and self.dnd()) and time.monotonic() - self.call['rang_m'] >= AUTO_ANSWER_AFTER:
                 await self.accept()
                 return
             self._changed()                         # 自动接通的倒数

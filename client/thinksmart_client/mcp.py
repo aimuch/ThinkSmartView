@@ -14,7 +14,7 @@ import logging
 import re
 import time
 
-from . import study
+from . import quiet, study
 from .mijia import tools as home_tools
 
 log = logging.getLogger(__name__)
@@ -176,21 +176,46 @@ CARD_TOOLS = [
                         'required': ['title', 'markdown']},
     },
 ]
+QUIET_TOOLS = [   # 静音和勿扰（quiet.py，设计画布第 81 块）
+    {
+        'name': 'self.quiet.set',
+        'description': '静音和勿扰。静音：现在就不出声，回答只在屏幕上显示文字；勿扰：一段时间里不主动打扰'
+                       '（播报推后、提醒和告警只记在首页、对讲只亮屏），用户叫它照常回答。闹钟默认照响。'
+                       '「静音」mute=true；「取消静音」mute=false；「勿扰一小时」dnd=60；「勿扰到明天早上」dnd="morning"；'
+                       '「一直勿扰」dnd="forever"；「关掉勿扰」dnd="off"；「勿扰的时候闹钟也别响」alarms=false。'
+                       '只查看现在的状态就什么都不传。返回 success=false 时把 reason 告诉用户（比如静音锁住了要在屏幕上点）。'
+                       '这不是调音量：调音量用 self.audio_speaker.set_volume。',
+        'inputSchema': {'type': 'object',
+                        'properties': {'mute': {'type': 'boolean'},
+                                       'dnd': {'description': '分钟数（1-1440），或 "morning"、"forever"、"off"',
+                                               'anyOf': [{'type': 'integer', 'minimum': 1, 'maximum': 1440},
+                                                         {'type': 'string', 'enum': ['morning', 'forever', 'off']}]},
+                                       'alarms': {'type': 'boolean', 'description': '静音、勿扰时闹钟照不照响'}}},
+    },
+]
+
 BROADCAST_TOOLS = [
     {
-        'name': 'self.weather_broadcast.update',
-        'description': '查看或修改天气定时播报（到点设备自己念住宅地址的天气）。'
-                       '「每天早上七点半播报天气」enabled=true, add_time="07:30"；「晚上九点也播一下」add_time="21:00"；'
-                       '「不要九点那次了」remove_time="21:00"；「工作日才播」days="workdays"；「关掉天气播报」enabled=false；'
-                       '「早上顺便说一下新闻」news=true；「顺便说今天的提醒」reminders=true。只查看就什么参数都不传。'
-                       '14 点以后的播报讲明天的天气。改完用一句话复述 text。',
+        'name': 'self.broadcast.update',
+        'description': '定时播报（到点设备自己播，可以有好几条，早上、晚上、任何时间都行）。每条有时间、哪几天、播什么：'
+                       'weather 天气、reminders 闹钟和提醒、lists 待办和清单、news 新闻三条、say 一句自己写的话（放在 say_text）。'
+                       '下午两点以后的播报讲明天。'
+                       '「每天晚上九点播报明天的天气和待办」action="add", time="21:00", days="daily", what=["weather","lists"]；'
+                       '「工作日早上七点半播天气和提醒」action="add", time="07:30", days="workdays", what=["weather","reminders"]；'
+                       '「周五下午五点半提醒我周末要带孩子上课」action="add", time="17:30", weekdays=[5], what=["say"], say_text="周末要带孩子去上课外班"；'
+                       '「把九点那个播报关了」action="off", time="21:00"；「打开」action="on"；「删掉早上那个」action="remove", time="07:30"；'
+                       '「改到八点」action="change", time 原来的, new_time="08:00"；「播报都关了」action="all_off"。'
+                       '只查看就 action="list"。改完用一句话复述 text。',
         'inputSchema': {'type': 'object',
-                        'properties': {'enabled': {'type': 'boolean'},
-                                       'add_time': {'type': 'string', 'description': '加一个播报时间，24 小时制 HH:MM'},
-                                       'remove_time': {'type': 'string', 'description': '删掉一个播报时间 HH:MM'},
+                        'properties': {'action': {'type': 'string', 'enum': ['list', 'add', 'change', 'on', 'off', 'remove', 'all_on', 'all_off']},
+                                       'time': {'type': 'string', 'description': '24 小时制 HH:MM：新的那条的时间，或者要改的那条现在的时间'},
+                                       'new_time': {'type': 'string', 'description': 'change 时的新时间 HH:MM'},
                                        'days': {'type': 'string', 'enum': ['daily', 'workdays', 'weekend']},
-                                       'reminders': {'type': 'boolean', 'description': '中午前的播报顺便说今天的闹钟和提醒'},
-                                       'news': {'type': 'boolean', 'description': '中午前的播报顺便说三条新闻'}}},
+                                       'weekdays': {'type': 'array', 'items': {'type': 'integer', 'minimum': 1, 'maximum': 7},
+                                                    'description': '只在星期几（1 是周一，7 是周日）；和 days 二选一'},
+                                       'what': {'type': 'array', 'items': {'type': 'string', 'enum': ['weather', 'reminders', 'lists', 'news', 'say']}},
+                                       'say_text': {'type': 'string', 'description': 'what 里有 say 时念的那句话'}},
+                        'required': ['action']},
     },
     {
         'name': 'self.location.set_home',
@@ -412,7 +437,7 @@ PROACTIVE_TOOLS = [
                         'required': ['enabled']},
     },
 ]
-TOOLS += WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + LISTEN_TOOLS + PAGE_TOOLS + ALBUM_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
+TOOLS += QUIET_TOOLS + WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + LISTEN_TOOLS + PAGE_TOOLS + ALBUM_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -566,6 +591,43 @@ async def set_volume(volume):
     await _wpctl('set-volume', '@DEFAULT_AUDIO_SINK@', f'{max(0, min(100, int(volume))) / 100:.2f}')
 
 
+async def _broadcast_tool(client, args):
+    """self.broadcast.update（设计画布第 82 块）。"""
+    from . import broadcast
+    action = args.get('action') or 'list'
+    fields = {}
+    if args.get('weekdays'):
+        fields['days'] = args['weekdays']
+    elif args.get('days'):
+        fields['days'] = args['days']
+    if args.get('what'):
+        fields['what'] = args['what']
+    if args.get('say_text'):
+        fields['say'] = args['say_text']
+        fields.setdefault('what', ['say'])
+    try:
+        if action == 'add':
+            await client.set_broadcast(add={**fields, 'time': args.get('time') or '07:30', 'on': True})
+        elif action in ('change', 'on', 'off', 'remove'):
+            it = broadcast.find(client.broadcast, args.get('time'))
+            if not it:
+                raise ValueError(f"没有 {args.get('time') or '这个时间'} 的播报")
+            if action == 'remove':
+                await client.set_broadcast(delete=it['id'])
+            else:
+                if action != 'change':
+                    fields['on'] = action == 'on'
+                if args.get('new_time'):
+                    fields['time'] = args['new_time']
+                await client.set_broadcast(update=it['id'], **fields)
+        elif action in ('all_on', 'all_off'):
+            await client.set_broadcast(all=action == 'all_on')
+    except ValueError as e:
+        return {'success': False, 'reason': str(e), 'text': broadcast.describe(client.broadcast)}
+    view = client.broadcast_view()
+    return {'success': True, 'text': view['text'], 'home': view['home'] and view['home']['name']}
+
+
 def _dumps(value):
     return json.dumps(value, ensure_ascii=False)
 
@@ -643,14 +705,15 @@ async def handle(payload, client=None):
                 text = json.dumps({'volume': client.alarm_volume})
             elif name == 'self.wake_word.update' and client:
                 text = _dumps(await _wake_word(client, args.get('action'), str(args.get('word') or '').strip()))
-            elif name == 'self.weather_broadcast.update' and client:
-                keys = ('enabled', 'add_time', 'remove_time', 'days', 'reminders', 'news')
+            elif name == 'self.quiet.set' and client:
+                changes = {k: args[k] for k in ('mute', 'dnd', 'alarms') if args.get(k) is not None}
                 try:
-                    view = await client.set_broadcast(**{k: args[k] for k in keys if args.get(k) is not None})
-                    text = _dumps({'success': True, 'text': view['text'],
-                                   'home': view['home'] and view['home']['name']})
+                    await client.set_quiet(by_voice=True, **changes)
+                    text = _dumps({'success': True, 'text': quiet.describe(client.quiet)})
                 except ValueError as e:
-                    text = _dumps({'success': False, 'reason': str(e), 'text': client.broadcast_view()['text']})
+                    text = _dumps({'success': False, 'reason': str(e)})
+            elif name == 'self.broadcast.update' and client:
+                text = _dumps(await _broadcast_tool(client, args))
             elif name == 'self.location.set_home' and client:
                 text = _dumps(await _set_home(client, str(args.get('place') or '').strip()))
             elif name in ('self.scene.save', 'self.scene.run', 'self.message.leave', 'self.list.update', 'self.media.play') and client:

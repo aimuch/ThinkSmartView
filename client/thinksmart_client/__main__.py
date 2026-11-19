@@ -22,4 +22,6 @@ async def main():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(levelname)s %(name)s: %(message)s')
+    from . import health
+    health.install()   # 最近的警告和错误一起报给网关（设计画布第 83 块）
     asyncio.run(main())

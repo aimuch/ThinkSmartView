@@ -254,13 +254,14 @@ roomWidth();
 
 /* ---- 日程：月历、接下来（闹钟、提醒、天气播报、定时任务、作息排成一条时间线）、快捷倒计时、清单、留言 ---- */
 const sameDay = (a, b) => a.toDateString() === b.toDateString();
-const onDay = (days, d) => days === 'workdays' ? d.getDay() >= 1 && d.getDay() <= 5 : days === 'weekend' ? (d.getDay() === 0 || d.getDay() === 6) : true;
+const onDay = (days, d) => Array.isArray(days) ? days.includes(d.getDay() || 7) : days === 'workdays' ? d.getDay() >= 1 && d.getDay() <= 5 : days === 'weekend' ? (d.getDay() === 0 || d.getDay() === 6) : true;
+const bcLabel = hm => { const h = Number(String(hm).slice(0, 2)); return h < 12 ? '早安播报' : h >= 17 ? '晚间播报' : '定时播报'; };
 function agenda() {
   // {at: Date, title, sub, kind}：真的闹钟提醒，加上今天和明天按点会发生的事
   const out = [], now = new Date();
   for (const v of (ui.alarms && ui.alarms.items) || []) {
     if (v.kind === 'timer') continue;
-    out.push({ at: new Date(v.at * 1000), title: v.label || (v.kind === 'alarm' ? '闹钟' : v.kind === 'broadcast' ? '天气播报' : '提醒'),
+    out.push({ at: new Date(v.at * 1000), title: v.label || (v.kind === 'alarm' ? '闹钟' : v.kind === 'broadcast' ? '定时播报' : '提醒'),
       sub: v.repeat || '', kind: { alarm: '闹钟', reminder: '提醒', broadcast: '播报' }[v.kind] || '提醒' });
   }
   const at = (d, hm) => { const [h, m] = String(hm).split(':').map(Number); const x = new Date(d); x.setHours(h, m || 0, 0, 0); return x; };
@@ -268,7 +269,8 @@ function agenda() {
     const d = new Date(now); d.setDate(d.getDate() + i);
     const add = (hm, title, sub, kind) => { const t = at(d, hm); if (t > now) out.push({ at: t, title, sub, kind }); };
     const b = ui.broadcast;
-    if (b && b.enabled && onDay(b.days, d) && !out.some(x => x.kind === '播报' && sameDay(x.at, d))) for (const t of b.times || []) add(t, '天气播报', DAYS_TEXT[b.days] || '', '播报');
+    // 定时播报（设计画布第 82 块）：每条自己的时间、哪几天、播什么
+    for (const it of (b && b.items) || []) if (it.on && onDay(it.days, d)) add(it.time, bcLabel(it.time), it.text.replace(/^\S+\s/, ''), '播报');
     for (const t of (ui.tasks && ui.tasks.tasks) || []) if (onDay(t.days, d)) add(t.time, t.prompt, DAYS_TEXT[t.days] || '', '定时任务');
     const sl = ui.status && ui.status.sleep;
     if (sl && sl.enabled) add(sl.start, '睡眠时段开始', `到 ${sl.end}`, '作息');

@@ -57,6 +57,15 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
                transition: transform .12s; }
 .report-pill:active { transform: scale(.95); }
 .has-reports .report-pill { display: flex; }
+/* 静音、勿扰（设计画布第 81 块） */
+.quiet-pill { display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 16px 0 12px; border-radius: 999px; font: inherit; font-size: 17px;
+              font-weight: 600; border: 0; color: #ffe1e8; background: #ff6b8133; box-shadow: inset 0 0 0 1.5px #ff8fa3aa; transition: transform .12s; }
+.quiet-pill.dnd { color: #e9e3ff; background: #8f7bff33; box-shadow: inset 0 0 0 1.5px #b9a8ffaa; }
+.quiet-pill[hidden] { display: none; }
+.quiet-pill:active { transform: scale(.95); }
+body[data-theme="dawn"] .quiet-pill, body[data-theme="lavender"] .quiet-pill { color: #8a1f36; }
+body[data-theme="dawn"] .quiet-pill.dnd, body[data-theme="lavender"] .quiet-pill.dnd { color: #3d2a8f; }
+.q-chips { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 .fresh .clock { display: none; }
 .timer-chip { display: none; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px; font-size: 18px;
               font-weight: 600; font-variant-numeric: tabular-nums; color: #ffe2b0; background: #ffb54718; border: 1px solid #ffb54744; }
@@ -649,6 +658,24 @@ body[data-theme="dawn"] .svc-warn, body[data-theme="candy"] .svc-warn, body[data
 
 /* weather broadcast (设计画布第 6 块) */
 .bc-card.off .bc-on { display: none; }
+/* 定时播报（设计画布第 82 块） */
+.bc-items { display: flex; flex-direction: column; gap: 10px; }
+.bc-row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
+.bc-row.open { border-color: var(--accent2); }
+.bc-row.off .bc-main { opacity: .5; }
+.bc-main { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 16px; align-items: baseline; text-align: left;
+           background: none; border: 0; color: var(--ink); font: inherit; padding: 0; }
+.bc-main b { grid-row: span 2; font-size: 34px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.bc-main span { font-size: 17px; color: var(--ink2); }
+.bc-main small { font-size: 15px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bc-edit { display: flex; flex-direction: column; gap: 12px; padding: 4px 6px 10px; }
+.bc-time { display: flex; align-items: center; gap: 16px; }
+.bc-time b { font-size: 40px; font-weight: 500; font-variant-numeric: tabular-nums; min-width: 120px; text-align: center; }
+.bc-time button { width: 64px; height: 56px; border-radius: 16px; font-size: 28px; color: var(--ink2); background: var(--card); border: 1px solid var(--line); }
+.bc-week { grid-template-columns: repeat(7, 1fr); }
+.bc-what { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.bc-say { height: 56px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 18px; padding: 0 16px; }
+.bc-acts { display: flex; gap: 12px; justify-content: space-between; }
 .bc-on { display: flex; flex-direction: column; gap: 16px; }
 .bc-chips { grid-template-columns: repeat(3, 1fr); }
 .bc-chips button.lock { color: var(--ink); background: #ffffff1f; border-color: transparent; opacity: 1; }
