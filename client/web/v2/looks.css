@@ -87,6 +87,7 @@ body.home-tight #tryLabel, body.home-tight #chips { display: none; }
   border-radius: 24px; background: #f5a52424; border: 1.5px solid #f5a52488; color: #ffd38a; font: inherit; font-size: 20px; text-align: left; }
 .net-banner[hidden] { display: none; }
 body.net-off .welcome { top: 92px; justify-content: flex-start; padding-top: 12px; }   /* 提示条在上面：首页内容整体放到它下面 */
+body.net-off .welcome::before { flex-grow: 0; }
 .net-banner b { font-size: 22px; } .net-banner small { font-size: 17px; opacity: .85; }
 .net-banner i { font-style: normal; margin-left: auto; height: 56px; padding: 0 24px; border-radius: 18px; background: #f5a524; color: #1d1300;
   font-weight: 700; display: grid; place-items: center; }

@@ -210,12 +210,19 @@ function renderQuick() {
   fitHome();
 }
 // 首页放不下时先收起「试试这样问我」，别让时钟和常用设备被挤出屏幕
+// 首页被工作台、仪表盘别的页签挡着时（display: none）量出来是 0，不能当成「放得下」：等它露出来再量
 function fitHome() {
   const w = $('welcome');
+  if (!w.clientHeight) return;
   document.body.classList.remove('home-tight');
   if (w.scrollHeight > w.clientHeight + 2) document.body.classList.add('home-tight');
 }
 window.addEventListener('resize', fitHome);
+if (window.ResizeObserver) {   // 露出来（0 → 有高度）、里面的块变高变矮时都重新量
+  const ro = new ResizeObserver(() => fitHome());
+  ro.observe($('welcome'));
+  [...$('welcome').children].forEach(el => ro.observe(el));
+}
 window.fitHome = fitHome;   // work.js 的工作台摘要、蓝牙灯也会把首页撑高
 function quickHome(on) {   // 首页显示着才查常用设备的状态（30 秒一次）；待机页、熄屏时不查
   if (DEMO || quickHome.on === on) return;
