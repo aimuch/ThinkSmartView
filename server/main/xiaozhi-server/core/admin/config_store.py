@@ -83,6 +83,8 @@ def save_custom(data: CommentedMap, path: Path = None) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             _yaml().dump(data, f)
+            f.flush()
+            os.fsync(f.fileno())   # 落盘后再替换：机器断电时不会留下空的配置
         os.chmod(tmp, 0o600)
         os.replace(tmp, path)
     except BaseException:

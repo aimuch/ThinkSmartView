@@ -19,6 +19,7 @@ import json
 import os
 import re
 import secrets
+import threading
 import time
 import wave
 from concurrent.futures import ThreadPoolExecutor
@@ -121,6 +122,8 @@ class AdminHandler:
         self._voice_samples = {}  # 音色 -> mp3 字节（试听缓存）
         self._today_cache = None  # 设备首页的天气（/kiosk/today）：地点 -> (时间, 数据)；存在 data/.today-weather.json，
         # 网关重启（部署）以后第一次碰上天气服务超时，也还有上一次的天气给设备
+        self._today_lock = threading.Lock()   # 首页天气存盘：按先后写，旧的不盖新的
+        self._today_seq = self._today_written = 0
         self._detail_cache = {}   # 设备天气详情页（/kiosk/weather）：只在内存里
         self.logger = logger
         self.grokbot = GrokBotAdmin(grokbot_credentials, logger=logger.bind(tag=TAG))
@@ -1839,7 +1842,9 @@ class AdminHandler:
         try:
             out["weather"] = open_meteo.brief(*await open_meteo.fetch(home, None if home else name))
             cache[key] = (time.time(), out["weather"])
-            await self._blocking(self._save_today_weather)
+            # 拷一份再交给线程写：线程遍历缓存时，事件循环里别的设备的请求还会往里加（「遍历时字典变了」）
+            self._today_seq += 1
+            await self._blocking(self._save_today_weather, self._today_seq, {k: list(v) for k, v in cache.items()})
         except open_meteo.WeatherError as e:
             out["weather_error"] = str(e)
             # 天气服务都连不上：照旧给上一次查到的（12 小时内），标上是几分钟前的（设计画布第 56 块）
@@ -1856,11 +1861,21 @@ class AdminHandler:
                 self._today_cache = {}
         return self._today_cache
 
-    def _save_today_weather(self):
+    def _save_today_weather(self, seq: int = None, snapshot: dict = None):
         path = self.data_dir / ".today-weather.json"
+        if snapshot is None:        # 在事件循环里直接调（测试）：现拷一份
+            self._today_seq += 1
+            seq, snapshot = self._today_seq, {k: list(v) for k, v in (self._today_cache or {}).items()}
+        with self._today_lock:
+            if seq < self._today_written:
+                return              # 更新的一份已经写了：旧的不再盖上去
+            self._today_written = seq
+            self._write_today_weather(path, snapshot)
+
+    def _write_today_weather(self, path, snapshot: dict):
         try:
             # 两台设备同时取首页天气时会同时存：临时文件名每次不同（以前固定的 .tmp 会撞）
-            write_json(path, {k: list(v) for k, v in self._today_cache.items()}, ensure_ascii=False)
+            write_json(path, snapshot, ensure_ascii=False)
         except OSError as e:
             self.logger.bind(tag=TAG).warning(f"首页天气存不下来：{e}")
 

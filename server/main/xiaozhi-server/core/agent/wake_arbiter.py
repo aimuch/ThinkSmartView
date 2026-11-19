@@ -7,6 +7,7 @@
 import asyncio
 import json
 import os
+import threading
 import time
 from collections import deque
 
@@ -36,13 +37,17 @@ def load() -> dict:
     return d
 
 
+_lock = threading.Lock()   # 后台的保存在线程池里跑：读改写要串行，不然同时改开关和窗口时一个会丢
+
+
 def save(enabled=None, window=None) -> dict:
-    d = load()
-    if isinstance(enabled, bool):
-        d["enabled"] = enabled
-    if window in WINDOWS:
-        d["window"] = window
-    write_json(_path(), d)
+    with _lock:
+        d = load()
+        if isinstance(enabled, bool):
+            d["enabled"] = enabled
+        if window in WINDOWS:
+            d["window"] = window
+        write_json(_path(), d)
     return d
 
 

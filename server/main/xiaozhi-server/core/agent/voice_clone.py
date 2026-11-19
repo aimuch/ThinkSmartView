@@ -121,6 +121,9 @@ async def create(merged: dict, name: str, audio: bytes, filename: str = "", sour
              "created": int(time.time()), "source": source, "seconds": seconds and round(seconds)}
     with _lock:
         voices = load()
+        # 上面的检查在锁外（中间要等百炼好几秒）：同时提交的两个请求可能都过了，这里再看一次
+        if len(voices) >= MAX_VOICES or any(v["name"] == name for v in voices):
+            raise ValueError(f"已经有叫「{name}」的声音了，或者已经满 {MAX_VOICES} 个")
         voices.append(entry)
         _save(voices)
     return view(entry)
