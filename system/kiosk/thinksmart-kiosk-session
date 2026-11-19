@@ -26,4 +26,6 @@ path=/usr/local/bin/thinksmart-kiosk-app
 watch=true
 EOF
 
-exec weston --config="$CFG"
+# --debug: lets weston-screenshooter capture the screen (the gateway admin's「截一张」, 设计画布第 83 块);
+# only programs in this session can use it
+exec weston --debug --config="$CFG"

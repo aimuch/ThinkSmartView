@@ -345,6 +345,68 @@ def reachable(url):
         return False
 
 
+# ---- 后台看屏幕（设计画布第 83 块）：小麦客户端经本机的 UNIX socket 要一张截图 ----
+# 网页进程的 get_snapshot 要 pycairo（镜像里没有），所以用 Weston 自己的 weston-screenshooter（会话里 weston 带
+# --debug 才给截）。截出来是屏幕原本的竖着的方向，按 ROTATION 转回人看到的样子。
+SHOT_DIR = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+SHOT_SOCK = os.path.join(SHOT_DIR, 'thinksmart-kiosk.sock')
+SHOT_PNG = os.path.join(SHOT_DIR, 'thinksmart-shot.png')
+
+
+def take_screenshot(rotation):
+    """截一张、转正，存到 SHOT_PNG；返回 (ok, 说明)。"""
+    import glob
+    import tempfile
+    gi.require_version('GdkPixbuf', '2.0')
+    from gi.repository import GdkPixbuf
+    with tempfile.TemporaryDirectory(dir=SHOT_DIR) as tmp:
+        try:
+            r = subprocess.run(['weston-screenshooter'], cwd=tmp, capture_output=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return False, f'weston-screenshooter: {e}'
+        shots = glob.glob(os.path.join(tmp, '*.png'))
+        if r.returncode or not shots:
+            return False, (r.stderr.decode('utf-8', 'replace').strip() or 'no image')[-200:]
+        pix = GdkPixbuf.Pixbuf.new_from_file(shots[0])
+        turn = {'90': GdkPixbuf.PixbufRotation.CLOCKWISE, '180': GdkPixbuf.PixbufRotation.UPSIDEDOWN,
+                '270': GdkPixbuf.PixbufRotation.COUNTERCLOCKWISE}.get(str(rotation))
+        if turn is not None:
+            pix = pix.rotate_simple(turn)
+        pix.savev(SHOT_PNG + '.tmp', 'png', [], [])
+        os.replace(SHOT_PNG + '.tmp', SHOT_PNG)
+        return True, f'{pix.get_width()}x{pix.get_height()}'
+
+
+def serve_screenshots(rotation):
+    try:
+        os.unlink(SHOT_SOCK)
+    except FileNotFoundError:
+        pass
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    srv.bind(SHOT_SOCK)
+    os.chmod(SHOT_SOCK, 0o600)
+    srv.listen(2)
+
+    def loop():
+        while True:
+            conn, _ = srv.accept()
+            with conn:
+                try:
+                    conn.settimeout(20)
+                    if not conn.recv(64).startswith(b'snapshot'):
+                        conn.sendall(b'{"ok": false, "error": "unknown request"}\n')
+                        continue
+                    ok, note = take_screenshot(rotation)
+                    reply = {'ok': True, 'path': SHOT_PNG, 'size': note} if ok else {'ok': False, 'error': note}
+                    conn.sendall((json.dumps(reply) + '\n').encode())
+                except Exception as e:  # noqa: BLE001  one bad request must not end the server
+                    try:
+                        conn.sendall((json.dumps({'ok': False, 'error': type(e).__name__}) + '\n').encode())
+                    except OSError:
+                        pass
+    threading.Thread(target=loop, name='screenshots', daemon=True).start()
+
+
 def main():
     conf = read_conf()
     url = conf.get('URL', '')
@@ -530,6 +592,10 @@ def main():
     window.connect('destroy', Gtk.main_quit)
     window.fullscreen()
     window.show_all()
+    try:
+        serve_screenshots(conf.get('ROTATION', 'normal'))
+    except OSError as e:
+        print(f'screenshots: {e}', file=sys.stderr)
     reload()
     Gtk.main()
 
