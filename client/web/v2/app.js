@@ -43,9 +43,14 @@ function renderQuiet() {
   if (!q) return;
   ui.quiet = q;
   $('mutePill').hidden = !q.mute;
-  $('mutePillText').textContent = q.lock ? '静音中（锁住）' : '静音中';
+  $('mutePillText').textContent = q.lock ? '静音 🔒' : '静音';
   $('dndPill').hidden = !q.dnd;
-  $('dndPillText').textContent = '勿扰' + (q.dnd_text || '');
+  document.body.classList.toggle('quiet-on', !!(q.mute || q.dnd));
+  // 顶栏放不下长字：「勿扰到 07:00」「勿扰」（一直）
+  const until = q.dnd && q.dnd_until > 0 ? new Date(q.dnd_until * 1000) : null;
+  $('dndPillText').textContent = until ? `${pad(until.getHours())}:${pad(until.getMinutes())}` : '勿扰';
+  $('mutePill').title = q.lock ? '静音中（锁住了），点一下取消' : '静音中，点一下取消';
+  $('dndPill').title = `勿扰${q.dnd_text || ''}，点一下关掉`;
   $('muteSwitch').setAttribute('aria-checked', String(q.mute));
   $('muteLock').hidden = !q.mute;
   $('muteLock').querySelector('button').classList.toggle('on', !!q.lock);

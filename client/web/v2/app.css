@@ -58,7 +58,7 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 .report-pill:active { transform: scale(.95); }
 .has-reports .report-pill { display: flex; }
 /* 静音、勿扰（设计画布第 81 块） */
-.quiet-pill { display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 16px 0 12px; border-radius: 999px; font: inherit; font-size: 17px;
+.quiet-pill { display: flex; flex: none; white-space: nowrap; align-items: center; gap: 6px; height: 48px; padding: 0 14px 0 11px; border-radius: 999px; font: inherit; font-size: 16px;
               font-weight: 600; border: 0; color: #ffe1e8; background: #ff6b8133; box-shadow: inset 0 0 0 1.5px #ff8fa3aa; transition: transform .12s; }
 .quiet-pill.dnd { color: #e9e3ff; background: #8f7bff33; box-shadow: inset 0 0 0 1.5px #b9a8ffaa; }
 .quiet-pill[hidden] { display: none; }
@@ -66,6 +66,14 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 body[data-theme="dawn"] .quiet-pill, body[data-theme="lavender"] .quiet-pill { color: #8a1f36; }
 body[data-theme="dawn"] .quiet-pill.dnd, body[data-theme="lavender"] .quiet-pill.dnd { color: #3d2a8f; }
 .q-chips { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+#muteLock { grid-template-columns: minmax(0, max-content); }
+/* 顶栏挤：静音只留图标；勿扰横屏带到几点、竖屏也只留图标（标题里有全文）。点一下照样取消 */
+.quiet-pill.mute { width: 48px; padding: 0; justify-content: center; } .quiet-pill.mute span:last-child { display: none; }
+#dashTabs button, header .right > * { white-space: nowrap; }
+@media (orientation: portrait) {
+  .quiet-pill.dnd { width: 48px; padding: 0; justify-content: center; } .quiet-pill.dnd span:last-child { display: none; }
+}
+body.quiet-on .top .link { display: none; }   /* 顶栏放不下：开着静音、勿扰时让出「待机」那个小标签 */
 .fresh .clock { display: none; }
 .timer-chip { display: none; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px; font-size: 18px;
               font-weight: 600; font-variant-numeric: tabular-nums; color: #ffe2b0; background: #ffb54718; border: 1px solid #ffb54744; }
