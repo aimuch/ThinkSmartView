@@ -21,3 +21,18 @@ def test_reports_and_screenshots(tmp_path, monkeypatch):
     assert dh.view()["a:b"]["screenshot_at"] and dh.shot_path("a:b").endswith("a_b.png")
     dh.shot_failed("c", "没有屏幕程序")
     assert dh.view()["c"]["screenshot_error"]["text"] == "没有屏幕程序"
+
+
+def test_trouble_note(tmp_path, monkeypatch):
+    """侧栏心跳的黄点：常驻循环重启过、或者一小时内有错误才算；警告不算，很久以前的错误不算。"""
+    import time
+    monkeypatch.setattr(dh, "_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(dh, "_reports", None)
+    now = time.time()
+    dh.put("ok", {"restarts": {}, "errors": [{"t": now - 60, "level": "warning", "msg": "no lists"},
+                                              {"t": now - 7200, "level": "error", "msg": "old"}]})
+    assert dh.trouble("ok") == ""
+    dh.put("bad", {"restarts": {"_today_loop": 2}, "errors": [{"t": now - 60, "level": "error", "msg": "page error: TypeError"}]})
+    note = dh.trouble("bad")
+    assert "_today_loop 2 次" in note and "1 条错误" in note and "TypeError" in note
+    assert dh.trouble("nobody") == ""

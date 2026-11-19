@@ -3857,6 +3857,7 @@ class AdminHandler:
         seen = presence.snapshot(self._connected_ids())
         for d in seen:
             d["name"] = names.get(d["device_id"], "")
+            d["trouble"] = device_health.trouble(d["device_id"])   # 侧栏心跳的黄点（设计画布第 83 块）
         return self._json({"ok": True, "devices": devices, "now": int(time.time()),
                            "seen": seen,
                            "emotions": [{"emotion": name, "emoji": emoji, "label": catalog.EMOTION_LABELS.get(name, name)}

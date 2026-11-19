@@ -590,6 +590,10 @@
   .hb[data-st="off"] { --hb: var(--err); background: var(--err-soft); border-color: color-mix(in srgb, var(--err) 35%, transparent); }
   .hb[data-st="expired"] { --hb: var(--warn); background: var(--warn-soft); }
   .hb[data-st="none"] .hb-txt b { color: var(--text); }
+  /* 设备最近出过错（设计画布第 83 块）：信号图标旁边一个黄点，点心跳去「设备」页看 */
+  .hb { position: relative; } .hb.trouble { cursor: pointer; }
+  .hb.trouble::after { content: ""; position: absolute; left: 22px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--warn);
+                       box-shadow: 0 0 0 2px var(--side-bg, #0b1024); }
   .dot.idle { background: #f5a524; box-shadow: 0 0 0 3px rgba(245, 165, 36, .18); }
   .side-foot .acct { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px; border-radius: 9px; border: 0; cursor: pointer;
           background: var(--side-hover); color: inherit; text-align: left; text-decoration: none !important; }
@@ -1596,6 +1600,7 @@ function hbTick() {
   else sub.textContent = hb.okAt ? `上次 ${hm(hb.okAt / 1000, true)}` : "";
 }
 setInterval(hbTick, 1000);
+document.addEventListener("click", (e) => { const h = e.target.closest("#hb.trouble"); if (h) location.hash = "#devices"; });
 function hbBeat() {
   const el = $("hb"); el.classList.remove("beat"); void el.getBoundingClientRect(); el.classList.add("beat");
 }
@@ -1626,7 +1631,10 @@ function setOnline(dev, reason = OFFLINE) {
   $("online-text").textContent = !dev ? reason : talking ? `${talking} 台在对话${idle ? ` · ${idle} 台待机` : ""}`
     : idle ? `${idle} 台在线` : "没有设备在线";
   $("online-short").textContent = !dev ? (reason === OFFLINE ? "已断开" : "需登录") : talking + idle ? `${talking + idle} 台` : "无设备";  // 窄屏用
-  $("hb").title = !dev ? reason : seen.length ? seen.map((d) => `${hbName(d)}：${{ talking: "对话中", idle: "待机", offline: "离线" }[d.state]}${d.version ? " · " + d.version : ""}`).join("\n")
+  const trouble = dev ? seen.filter((d) => d.state !== "offline" && d.trouble) : [];
+  $("hb").classList.toggle("trouble", trouble.length > 0);
+  $("hb").title = !dev ? reason : seen.length ? seen.map((d) => `${hbName(d)}：${{ talking: "对话中", idle: "待机", offline: "离线" }[d.state]}${d.version ? " · " + d.version : ""}${d.trouble ? "\n  ⚠ " + d.trouble : ""}`).join("\n")
+      + (trouble.length ? "\n点一下去「设备」页看" : "")
     : "设备只在对话时连着网关；待机时每 10 秒有一次心跳（客户端 0.1.625 起）。1 分钟没有心跳算离线";
   hbTick();
 }

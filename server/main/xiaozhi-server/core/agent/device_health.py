@@ -99,3 +99,23 @@ def view() -> dict:
         item["pending"] = device in pending and time.time() - pending[device] < PENDING_SECONDS
         out[device] = item
     return out
+
+
+TROUBLE_SECONDS = 3600          # 一小时内出过错才算（侧栏心跳的黄点，设计画布第 83 块）
+
+
+def trouble(device: str, now=None) -> str:
+    """这台设备最近出过错：一句话（常驻循环重启、一小时内的错误）；没事是空字符串。"""
+    now = now or time.time()
+    with _lock:
+        r = dict(_load().get(device) or {})
+    if not r or now - r.get("at", 0) > 3 * 3600:
+        return ""                # 很久没报了：在不在线由心跳管
+    parts = []
+    restarts = {k: n for k, n in (r.get("restarts") or {}).items() if n}
+    if restarts:
+        parts.append("常驻循环重启 " + "、".join(f"{k} {n} 次" for k, n in restarts.items()))
+    errs = [e for e in r.get("errors") or [] if e.get("level") in ("error", "critical") and now - (e.get("t") or 0) < TROUBLE_SECONDS]
+    if errs:
+        parts.append(f"一小时内 {len(errs)} 条错误：{errs[-1].get('msg', '')[:60]}")
+    return "；".join(parts)
