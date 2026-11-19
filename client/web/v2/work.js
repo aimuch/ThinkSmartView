@@ -228,20 +228,38 @@ function screenUrl() {
   if (ig.tab === 'hub' && W().hub === 'web' && A().smart_hub) return u.hub || '';
   return '';
 }
+// 机柜、智能中枢的网页框不删，只藏起来：以前切到别的页、关掉工作台就把它删了，回来要重建、整页重新加载
+// （经设备代理 → 网关 → 登录 rack-screen，好几秒黑框）。藏起来超过 SCREEN_KEEP 才放掉，免得它在后台一直轮询
+const SCREEN_KEEP = 10 * 60 * 1000;
+const frames = {};   // 网址 -> { el, ready, hiddenAt }
 function renderScreen() {
   const box = $('wkScreen'), url = screenUrl();
   box.hidden = !url;
-  let f = box.querySelector('iframe');
-  if (f && f.dataset.src !== url) { f.src = 'about:blank'; f.remove(); f = null; }
-  if (!url || f) return;
-  $('wkScreenMsg').textContent = '正在打开…';
-  const n = document.createElement('iframe');
-  n.title = ig.tab === 'hub' ? '智能中枢' : '机柜';
-  n.dataset.src = url;
-  n.addEventListener('load', () => { $('wkScreenMsg').textContent = ''; });
-  n.src = url;
-  box.appendChild(n);
+  for (const [u, f] of Object.entries(frames)) {
+    const on = u === url;
+    f.el.hidden = !on;
+    f.hiddenAt = on ? 0 : (f.hiddenAt || Date.now());
+  }
+  if (!url) return;
+  if (!frames[url]) {
+    const n = document.createElement('iframe');
+    n.title = ig.tab === 'hub' ? '智能中枢' : '机柜';
+    const f = frames[url] = { el: n, ready: false, hiddenAt: 0 };
+    n.addEventListener('load', () => {
+      f.ready = true;
+      n.classList.add('ready');   // 画好了再露出来：之前是「正在打开…」，不是一块黑
+      if (!n.hidden) $('wkScreenMsg').textContent = '';
+    });
+    n.src = url;
+    box.appendChild(n);
+  }
+  $('wkScreenMsg').textContent = frames[url].ready ? '' : '正在打开…';
 }
+setInterval(() => {
+  for (const [u, f] of Object.entries(frames)) {
+    if (f.hiddenAt && Date.now() - f.hiddenAt > SCREEN_KEEP) { f.el.src = 'about:blank'; f.el.remove(); delete frames[u]; }
+  }
+}, 60000);
 function renderWork() {
   if (!ig.open || ig.dragging) return;
   if (!ig.data) { set('wkDesk', note('正在连小麦网关…')); return; }
