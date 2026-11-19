@@ -9,6 +9,7 @@
 - 名字像密钥的字段只写不读，提交空值表示不修改。
 """
 
+import copy
 import json
 import os
 import re
@@ -93,10 +94,31 @@ def save_custom(data: CommentedMap, path: Path = None) -> None:
         raise
 
 
+_merged_cache = {}   # (两个文件的路径) -> ((两个文件的 mtime_ns、大小), 合并好的配置)
+_merged_lock = threading.Lock()
+
+
+def _stamp(path: str):
+    try:
+        st = os.stat(path)
+        return st.st_mtime_ns, st.st_size
+    except OSError:
+        return None
+
+
 def load_merged(default_path: Path = None, custom_path: Path = None) -> dict:
-    default = read_config(str(default_path or default_config_path())) or {}
-    custom = read_config(str(custom_path or custom_config_path())) or {}
-    return merge_configs(default, custom)
+    """config.yaml 加 data/.config.yaml 合并后的配置。两个文件没变就用上一次解析好的（每次解析两个 YAML 要 7 毫秒左右，
+    设备每 10 秒查待汇报、机柜和智能中枢网页的每个请求都要读它，而且常在事件循环里直接调）；给出去的是拷贝，改了不影响缓存。"""
+    paths = (str(default_path or default_config_path()), str(custom_path or custom_config_path()))
+    stamp = tuple(_stamp(x) for x in paths)
+    with _merged_lock:
+        hit = _merged_cache.get(paths)
+        if hit and hit[0] == stamp:
+            return copy.deepcopy(hit[1])
+    merged = merge_configs(read_config(paths[0]) or {}, read_config(paths[1]) or {})
+    with _merged_lock:
+        _merged_cache[paths] = (stamp, merged)
+    return copy.deepcopy(merged)
 
 
 def is_placeholder(value) -> bool:
