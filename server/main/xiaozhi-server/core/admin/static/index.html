@@ -457,6 +457,17 @@
     .gr-def { grid-template-columns: 1fr; }
     .gr-row { grid-template-columns: 36px minmax(0, 1fr); } .gr-row .gr-call, .gr-row .gr-lines, .gr-row .sv-acts { grid-column: 2; justify-content: flex-start; }
   }
+  /* 设备健康和屏幕（设计画布第 83 块） */
+  .dh-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 16px; margin-top: 16px; }
+  .dh-card { display: flex; flex-direction: column; gap: 12px; }
+  .dh-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } .dh-top > b { font-size: 16px; }
+  .dh-shot { position: relative; border-radius: 10px; overflow: hidden; background: var(--panel2, #0d1430); border: 1px solid var(--line, #2a3150);
+             aspect-ratio: 16 / 10; display: grid; place-items: center; color: var(--muted, #8e98c0); font-size: 13px; }
+  .dh-shot.tall { aspect-ratio: 10 / 16; max-height: 420px; justify-self: center; }
+  .dh-shot img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .dh-kv { display: grid; grid-template-columns: 96px 1fr; gap: 4px 12px; font-size: 13px; } .dh-kv > span:nth-child(odd) { color: var(--muted, #8e98c0); }
+  .dh-warn { color: #e0a33a; } .dh-bad { color: #e5566d; }
+  .dh-errs { font-size: 12px; max-height: 180px; overflow: auto; } .dh-errs div { display: grid; grid-template-columns: 70px 120px 1fr; gap: 8px; padding: 3px 0; border-top: 1px solid var(--line, #2a3150); }
   .wa-card { margin-bottom: 16px; } .wa-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; } .wa-head > b { font-size: 15px; }
   .wa-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; } .wa-row.off { opacity: .5; }
   .wa-hist { display: grid; grid-template-columns: 60px 1fr; gap: 4px 12px; margin-top: 10px; } .wa-win { color: var(--ok); font-weight: 600; }
@@ -3186,6 +3197,62 @@ async function renderDeviceSettings(root) {
     <p class="muted small">蓝字是这台单独设的，灰字是跟着全局。改完设备下一次对话就用上（设备每次叫醒都会重连）。全局的在「大模型」「语音合成」「意图识别」页。</p>`;
   root.querySelectorAll("[data-dev]").forEach((tr) => (tr.onclick = () => openDeviceDrawer(tr.dataset.dev, root)));
   renderWakeArbiter(root).then(() => renderGreetings(root));
+  renderDeviceHealth(root);
+}
+
+// 设备健康上报、后台看屏幕（设计画布第 83 块，core/agent/device_health.py）：每台设备一张卡片，放在设备表下面
+async function renderDeviceHealth(root) {
+  let d;
+  try { d = await api("device-health"); } catch (e) { return; }
+  const box = document.createElement("div");
+  box.className = "dh-grid";
+  const table = root.querySelector(".dv-table") ? root.querySelector(".dv-table").closest(".card") : null;
+  if (table) table.after(box); else root.append(box);
+  const t = (s) => s ? new Date(s * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : "—";
+  const dur = (s) => { if (s == null) return "—"; const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h >= 24 ? `${Math.floor(h / 24)} 天 ${h % 24} 小时` : h ? `${h} 小时 ${m} 分` : `${m} 分钟`; };
+  const pct = (v, warn, bad) => v == null ? "—" : `<span class="${v >= bad ? "dh-bad" : v >= warn ? "dh-warn" : ""}">${v}%</span>`;
+  const draw = () => {
+    box.innerHTML = d.devices.length ? d.devices.map((x) => {
+      const old = x.at && Date.now() / 1000 - x.at > 180;
+      const restarts = Object.entries(x.restarts || {}).filter(([, n]) => n);
+      const errs = (x.errors || []).slice().reverse();
+      const view = x.view && x.view.view;
+      const shot = x.screenshot_at ? `<img alt="屏幕截图" src="/admin/api/device-health/screenshot/${encodeURIComponent(x.device_id)}?t=${x.screenshot_at}">`
+        : x.pending ? "正在等设备截图（最多 10 秒）…" : "还没有截图：点右上角「截一张」";
+      return `<div class="card panel dh-card" data-dh="${esc(x.device_id)}">
+        <div class="dh-top"><b>${esc(x.name || x.device_id)}</b>
+          <span class="muted small">${x.version ? "客户端 " + esc(x.version) : ""}${x.system ? " · 系统层 " + esc(x.system) : ""}${x.at ? " · " + (old ? `<span class="dh-warn">上次报 ${t(x.at)}</span>` : `${t(x.at)} 报的`) : " · 还没报过（客户端 0.1.709 起）"}</span>
+          <button class="btn sm" data-shot="${esc(x.device_id)}" style="margin-left:auto" ${x.pending ? "disabled" : ""}>${x.pending ? "正在截…" : "📷 截一张"}</button></div>
+        <div class="dh-shot">${shot}</div>
+        <div class="muted small">${x.screenshot_at ? `截于 ${t(x.screenshot_at)}` : ""}${view ? ` · 屏幕上是 ${esc(view)}` : ""}${x.screenshot_error ? ` · <span class="dh-bad">没截成：${esc(x.screenshot_error.text)}</span>` : ""}</div>
+        ${x.at ? `<div class="dh-kv">
+          <span>开机</span><span>${dur(x.uptime)} · 客户端 ${dur(x.client_uptime)}</span>
+          <span>CPU</span><span>${pct(x.cpu, 60, 85)}${(x.top || []).length ? " · " + x.top.map((p) => `${esc(p.name)} ${p.cpu}%`).join(" · ") : ""}</span>
+          <span>内存</span><span>${pct(x.mem, 80, 92)}</span>
+          <span>温度</span><span>${x.temp != null ? `<span class="${x.temp >= 70 ? "dh-bad" : x.temp >= 55 ? "dh-warn" : ""}">${x.temp} ℃</span>` : "—"}</span>
+          <span>网络</span><span>${x.wifi ? `Wi‑Fi ${x.wifi.signal} dBm` : "—"}${x.hub_ms != null ? ` · 到网关 ${x.hub_ms} ms` : ""}</span>
+          <span>状态</span><span>${esc(x.state || "—")}${x.quiet && x.quiet.mute ? " · 静音中" : ""}${x.quiet && x.quiet.dnd ? " · 勿扰" + esc(x.quiet.dnd_text || "") : ""}</span>
+          <span>出过错</span><span class="${restarts.length || errs.length ? "dh-warn" : ""}">${restarts.length ? "常驻循环重启：" + restarts.map(([k, n]) => `${esc(k)} ${n} 次`).join("、") : "常驻循环没重启过"}${errs.length ? ` · 最近 ${errs.length} 条警告和错误` : ""}</span>
+        </div>` : ""}
+        ${errs.length ? `<details><summary class="small">最近的警告和错误</summary><div class="dh-errs">${errs.map((e) =>
+          `<div><span class="muted">${t(e.t)}</span><span class="${e.level === "error" ? "dh-bad" : "dh-warn"}">${esc(e.name)}</span><span>${esc(e.msg)}</span></div>`).join("")}</div></details>` : ""}
+      </div>`;
+    }).join("") : '<div class="card panel muted">设备升级到客户端 0.1.709 以后，每分钟会把健康状况报到这里。</div>';
+    box.querySelectorAll("[data-shot]").forEach((b) => (b.onclick = () => shoot(b.dataset.shot)));
+    box.querySelectorAll(".dh-shot img").forEach((img) => (img.onload = () => img.closest(".dh-shot").classList.toggle("tall", img.naturalHeight > img.naturalWidth)));
+  };
+  const shoot = async (device) => {
+    const before = (d.devices.find((x) => x.device_id === device) || {}).screenshot_at;
+    try { await api("device-health/screenshot", { device }); } catch (e) { return toast(e.message, true); }
+    for (let i = 0; i < 20; i++) {
+      try { d = await api("device-health"); } catch (e) { break; }
+      draw();
+      const x = d.devices.find((y) => y.device_id === device) || {};
+      if (x.screenshot_at !== before || (x.screenshot_error && !x.pending)) break;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  };
+  draw();
 }
 
 // 就近唤醒（设计画布第 55 块，core/agent/wake_arbiter.py）：卡片放在设备列表上面

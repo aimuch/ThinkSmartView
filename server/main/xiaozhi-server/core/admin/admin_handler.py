@@ -33,7 +33,7 @@ from core.admin import auth, brand, catalog, config_store, connections, pages, p
 from core.admin.grokbot import GrokBotAdmin
 from core.admin.status import _claude_version, collect_status
 from core import billing
-from core.agent import album, chat_history, family, health, llm_router, media, photo_ask, reports
+from core.agent import album, chat_history, device_health, family, health, llm_router, media, photo_ask, reports
 from core.utils import local_voiceprint  # noqa: F401  导入时会初始化日志（asyncio.run），不能放到请求里再导入
 from core.agent.agent_session import ErrorKind
 from core.agent.grokbot_client import GrokBotError
@@ -147,6 +147,12 @@ class AdminHandler:
                 web.post("/admin/api/update/check", self.handle_update_check),
                 web.post("/admin/api/update/start", self.handle_update_start),
                 web.get("/admin/api/devices", self.handle_devices),
+                # 设备健康上报、后台看屏幕（设计画布第 83 块，core/agent/device_health.py）
+                web.get("/admin/api/device-health", self.handle_device_health),
+                web.post("/admin/api/device-health/screenshot", self.handle_device_screenshot_request),
+                web.get("/admin/api/device-health/screenshot/{device}", self.handle_device_screenshot),
+                web.post("/kiosk/health", self.handle_kiosk_health),
+                web.post("/kiosk/screenshot", self.handle_kiosk_screenshot),
                 web.get("/admin/api/memory", self.handle_memory),
                 web.get("/admin/api/billing", self.handle_billing),
                 web.post("/admin/api/asr/provider", self.handle_asr_provider_save),
@@ -1390,7 +1396,68 @@ class AdminHandler:
         from core.utils.util import get_local_ip
         port = int((self.config.get("server") or {}).get("http_port", 8003))
         return self._json({"ok": True, "count": reports.count(device), "playing": playing,
-                           "admin": f"http://{get_local_ip()}:{port}/admin"})
+                           "admin": f"http://{get_local_ip()}:{port}/admin",
+                           "screenshot": device_health.take_pending(device)})   # 后台点了「截一张」（设计画布第 83 块）
+
+    # ---------- 设备健康上报、后台看屏幕（设计画布第 83 块） ----------
+
+    async def handle_kiosk_health(self, request: web.Request):
+        """设备每分钟报一份健康状况（客户端 health.py）：只留每台最新的一份。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        if (request.content_length or 0) > device_health.MAX_REPORT:
+            return self._error("太大了", 413)
+        body = await self._read_json(request)
+        device = str(body.get("device") or "")
+        if not device:
+            return self._error("缺少 device", 400)
+        await self._blocking(device_health.put, device, body)
+        return self._json({"ok": True})
+
+    async def handle_kiosk_screenshot(self, request: web.Request):
+        """?device=…：body 是 PNG（截好了），或 JSON {"error"}（没截成）。只留最新一张。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        device = request.query.get("device") or ""
+        if not device:
+            return self._error("缺少 device", 400)
+        if request.content_type == "application/json":
+            body = await self._read_json(request)
+            device_health.shot_failed(device, body.get("error") or "没截成")
+            return self._json({"ok": True})
+        data, size = bytearray(), 0
+        async for chunk in request.content.iter_chunked(256 * 1024):
+            size += len(chunk)
+            if size > device_health.MAX_SHOT:
+                return self._error("截图太大", 413)
+            data += chunk
+        if not bytes(data[:8]) == b"\x89PNG\r\n\x1a\n":
+            return self._error("不是 PNG", 400)
+        await self._blocking(device_health.save_screenshot, device, bytes(data))
+        return self._json({"ok": True})
+
+    async def handle_device_health(self, request: web.Request):
+        """后台「设备」页：每台设备最新的健康报告、截图时间、是不是在等截图。"""
+        self._require_login(request)
+        names = await self._blocking(self._device_names)
+        items = await self._blocking(device_health.view)
+        return self._json({"ok": True, "devices": [{"device_id": d, "name": names.get(d, ""), **v} for d, v in sorted(items.items())]})
+
+    async def handle_device_screenshot_request(self, request: web.Request):
+        self._require_login(request)
+        body = await self._read_json(request)
+        device = str(body.get("device") or "")
+        if not device:
+            return self._error("缺少 device", 400)
+        device_health.request_screenshot(device)
+        return self._json({"ok": True})
+
+    async def handle_device_screenshot(self, request: web.Request):
+        self._require_login(request)
+        path = device_health.shot_path(request.match_info["device"])
+        if not os.path.exists(path):
+            raise web.HTTPNotFound()
+        return web.FileResponse(path, headers={**SECURITY_HEADERS, "Cache-Control": "no-store"})
 
     async def handle_kiosk_asr(self, request: web.Request):
         """只识别、不对话：body 是 10 秒以内的 16kHz 单声道 16 位 PCM，返回 {"text", "ms"}。
