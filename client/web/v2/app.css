@@ -670,6 +670,10 @@ body[data-theme="dawn"] .svc-warn, body[data-theme="candy"] .svc-warn, body[data
 .bc-items { display: flex; flex-direction: column; gap: 10px; }
 .bc-row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
 .bc-row.open { border-color: var(--accent2); }
+.bc-row { touch-action: pan-y; transition: transform .2s ease; }
+.bc-row.swiped { transform: translateX(-8px); }
+.bc-swdel { flex: none; height: 52px; padding: 0 22px; border-radius: 14px; border: 0; font: inherit; font-size: 18px; font-weight: 600;
+            color: #fff; background: #e5566d; }
 .bc-row.off .bc-main { opacity: .5; }
 .bc-main { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 16px; align-items: baseline; text-align: left;
            background: none; border: 0; color: var(--ink); font: inherit; padding: 0; }

@@ -1593,7 +1593,7 @@ $('btnPhoto').addEventListener('click', async () => {
 });
 
 /* ---- weather broadcasts and the home address (broadcast.py, 设计画布第 6 块) ---- */
-const bc = { holding: false, busy: false, found: null, armed: null, open: null, sayOpen: null };
+const bc = { holding: false, busy: false, found: null, armed: null, open: null, sayOpen: null, swiped: null };
 function holdMeter(btn, v) {
   btn.querySelectorAll('.ww-meter i').forEach((b, i) => {
     const shape = [.45, .75, 1, .6, .9, .5, .3][i];
@@ -1612,9 +1612,10 @@ function renderBroadcast() {
   if (bc.open && !b.items.some(x => x.id === bc.open)) bc.open = null;
   $('bcItems').innerHTML = (b.items.length ? b.items.map(it => {
     const what = it.what.map(w => w === 'say' ? `「${esc(it.say)}」` : esc(b.what[w])).join('、');
-    const row = `<div class="bc-row${it.on ? '' : ' off'}${bc.open === it.id ? ' open' : ''}"><button class="bc-main" data-open="${it.id}">` +
+    const row = `<div class="bc-row${it.on ? '' : ' off'}${bc.open === it.id ? ' open' : ''}${bc.swiped === it.id ? ' swiped' : ''}" data-row="${it.id}"><button class="bc-main" data-open="${it.id}">` +
       `<b>${it.time}</b><span>${esc(bcDaysText(it.days))} · ${it.about === 'tomorrow' ? '讲明天' : '讲今天'}</span><small>${what}</small></button>` +
-      `<button class="switch" role="switch" data-on="${it.id}" aria-checked="${it.on}" aria-label="${it.time} 的播报"><i></i></button></div>`;
+      (bc.swiped === it.id ? `<button class="bc-swdel" data-swdel="${it.id}">删除</button>`
+        : `<button class="switch" role="switch" data-on="${it.id}" aria-checked="${it.on}" aria-label="${it.time} 的播报"><i></i></button>`) + `</div>`;
     if (bc.open !== it.id) return row;
     const custom = Array.isArray(it.days);
     const armed = bc.armed === it.id;
@@ -1664,6 +1665,27 @@ $('bcAdd').addEventListener('click', async () => {
   const r = await setBroadcast({ add: { ...ui.broadcast.new, time: pad((h + 1) % 24) + ':' + pad(m) } });
   if (r && r.ok) { const added = r.broadcast.items.find(x => !items.some(y => y.id === x.id)); bc.open = added && added.id; renderBroadcast(); }
 });
+// 左滑一条：右边露出「删除」，点它就删（设计画布第 82 块）；再点别处或右滑收回去
+const swipe = { x: 0, y: 0, id: null, moved: false };
+$('bcItems').addEventListener('pointerdown', e => {
+  const r = e.target.closest('[data-row]');
+  Object.assign(swipe, { x: e.clientX, y: e.clientY, id: r && r.dataset.row, moved: false });
+});
+$('bcItems').addEventListener('pointerup', e => {
+  if (!swipe.id) return;
+  const dx = e.clientX - swipe.x, dy = Math.abs(e.clientY - swipe.y);
+  if (Math.abs(dx) > 50 && dy < 40) {
+    swipe.moved = true;   // 是滑，不是点：接下来的 click 不算
+    bc.swiped = dx < 0 ? swipe.id : null;
+    renderBroadcast();
+  }
+});
+$('bcItems').addEventListener('click', e => {
+  if (swipe.moved) { swipe.moved = false; e.stopPropagation(); return; }
+  const sd = e.target.closest('[data-swdel]');
+  if (sd) { e.stopPropagation(); bc.swiped = null; if (bc.open === sd.dataset.swdel) bc.open = null; return setBroadcast({ delete: sd.dataset.swdel }); }
+  if (bc.swiped) { e.stopPropagation(); bc.swiped = null; renderBroadcast(); }
+}, true);
 $('bcItems').addEventListener('click', e => {
   const t = e.target, b = ui.broadcast, it = bc.open && b.items.find(x => x.id === bc.open);
   const sw = t.closest('[data-on]');

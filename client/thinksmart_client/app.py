@@ -324,6 +324,8 @@ class Client:
         self.sleeping = False
         try:
             self.broadcast = broadcast.normalize(cfg.get('broadcast'))
+            if isinstance(cfg.get('broadcast'), dict) and 'items' not in cfg['broadcast']:
+                config.save(broadcast=self.broadcast)   # 以前的天气播报：换成新格式存下，每条的 id 才不会每次启动都变
         except ValueError:
             log.warning('invalid broadcast setting %r, using the default', cfg.get('broadcast'))
             self.broadcast = broadcast.normalize(None)
