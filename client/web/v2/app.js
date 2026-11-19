@@ -25,6 +25,18 @@ const SUGGEST = [
   ['把音量调小一点', '#9b7bff2b', '#c8b4ff', '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 12h4"/>'],
 ];
 
+/* ---- 开页面：第一份状态画好再露出来（index.html 开头的 booting） ---- */
+function bootDone() {
+  if (!document.body.classList.contains('booting')) return;
+  if (window.dashRender) window.dashRender();   // 仪表盘布局要等 dash.js 下一秒才排：现在就排好
+  setTimeout(() => {   // 不用 requestAnimationFrame：页面藏着、熄屏时它不跑
+    document.body.classList.add('boot-reveal');
+    document.body.classList.remove('booting');
+    setTimeout(() => document.body.classList.remove('boot-reveal'), 400);
+  }, 30);
+}
+window.bootDone = bootDone;
+
 /* ---- clock ---- */
 // 每秒走一次，但字一分钟才变：只在变了的时候写，别让 168px 的渐变大字每秒重排重画（设备上很贵）
 function setText(id, text) { const el = $(id); if (el && el.textContent !== text) el.textContent = text; }
@@ -1309,6 +1321,7 @@ function renderLooks() {
   const l = ui.looks;
   if (!l) return;
   document.body.dataset.theme = l.theme_now;
+  try { localStorage.setItem('bootTheme', l.theme_now); } catch (e) { /* 下次开机先用默认主题铺背景 */ }
   const photo = l.avatar.startsWith('photo:') && l.photos.find(p => p.id === l.avatar);
   const recent = (l.pack && l.pack.recent) || [];
   const pk = l.avatar.startsWith('pack:') && recent.find(p => p.id === l.avatar);   // 形象库（设计画布第 41 块）
@@ -2779,6 +2792,7 @@ const handlers = {
     ui.photo = s.photo || null; renderPhoto();
     renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth(); renderWake(); renderBroadcast();
     updateFinished((s.update || {}).job);
+    bootDone();
   },
   power(p) {
     $('powerOff').classList.toggle('on', p.state === 'off');

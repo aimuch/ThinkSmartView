@@ -17,7 +17,15 @@
 <link rel="stylesheet" href="/static/v2/app.css">
 <link rel="stylesheet" href="/static/v2/looks.css">
 </head>
-<body data-state="idle" class="fresh">
+<body data-state="idle" class="fresh booting">
+<script>
+// 第一份状态到之前（开机、转屏幕方向、客户端重启后页面重新打开），HTML 里的默认样子（光球、经典布局、夜间主题）
+// 不给看：先按上次记下的主题只铺背景，状态到了（app.js 的 snapshot）再显示；最多等 6 秒
+(() => {
+  try { const t = localStorage.getItem('bootTheme'); if (t) document.body.dataset.theme = t; } catch (e) { /* 没有就用默认 */ }
+  setTimeout(() => { if (window.bootDone) window.bootDone(); else document.body.classList.remove('booting'); }, 6000);
+})();
+</script>
 <div class="app">
   <header class="top">
     <div class="brand">

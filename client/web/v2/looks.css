@@ -527,6 +527,7 @@ body.dash-on:not([data-dash="chat"]) .dash { display: grid; grid-template-rows: 
   background: var(--accent); }   /* 星夜的青色渐变上白字只有 2.2:1；纯主题色 ≥ 3:1 */
 body[data-theme="lavender"]:not(.sleeping) .dc-ic { background: linear-gradient(135deg, #8f7ff7, var(--accent-text)); }
 .dm { font-size: 15px; color: var(--ink3); line-height: 1.45; }
+.dw-top .dm, .dw-row { word-break: keep-all; }   /* 日期、「上海市青浦区 · 晴间少云」只在空格、点处换行 */
 .d-ok { color: var(--dok, #3ecf74) !important; }
 .d-warn { color: var(--warn-text, var(--warn)) !important; }
 .dw-top { display: flex; align-items: flex-start; gap: 10px; }
@@ -653,6 +654,8 @@ img.dm-cover { object-fit: cover; background: var(--card2); } .dm-cover.mu-nocv 
 }
 .d-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; }
 .d-nums b { font-size: 26px; color: var(--ink); font-variant-numeric: tabular-nums; } .d-nums small { font-size: 15px; color: var(--ink3); }
+/* 窄格子里「5/5 在线」「288 失败」别从词中间断开：只在空格处换行，单位小一号 */
+.d-nums b { word-break: keep-all; line-height: 1.15; } .d-nums b i { font-style: normal; font-size: .62em; font-weight: 500; }
 .d-empty { text-align: left; font-size: 16px; color: var(--accent-text, var(--accent)); padding: 12px 0; }
 .dh-name { font-size: 24px; }
 .d-room { height: 52px; border-radius: 16px; font-size: 19px; color: var(--ink2); text-align: left; padding: 0 18px; }

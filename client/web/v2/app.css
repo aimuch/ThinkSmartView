@@ -9,6 +9,9 @@ body[data-state="speaking"]   { --c1: #a6c8ff; --c2: #5872ff; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; }
+/* 第一份状态到之前只铺背景（index.html 的 booting）；到了淡入 */
+body.booting > * { opacity: 0 !important; }
+body.boot-reveal > * { transition: opacity .3s ease; }
 body { background: radial-gradient(760px 560px at 20% 46%, var(--glow1, #18245a) 0%, transparent 70%),
        radial-gradient(820px 520px at 100% 108%, var(--glow2, #0c3350) 0%, transparent 62%),
        radial-gradient(600px 380px at 78% -10%, var(--glow3, #1c1546) 0%, transparent 70%),

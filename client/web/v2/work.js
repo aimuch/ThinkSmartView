@@ -610,7 +610,7 @@ window.igApi = {
     const cells = hasWork() ? workCells() : [];
     if (!cells.length) return head('▭', '工作台') + '<button class="d-empty" data-work="1">在小麦网关后台的插件里接入机柜、仓库同步或 DeskHub，这里就有内容</button>';
     const r = ig.data.rack_status, prob = r && !r.error && r.problems.length ? `<div class="dm d-bad">● ${esc(r.problems[0])}</div>` : '';
-    return head('▭', '工作台', '›') + `<button class="d-nums d-work" data-work="1">${cells.map(c => `<div><b class="${c.bad ? 'd-bad' : ''}">${esc(c.b)}</b><small>${esc(c.s.split(' · ')[0])}</small></div>`).join('')}</button>` + prob;
+    return head('▭', '工作台', '›') + `<button class="d-nums d-work" data-work="1">${cells.map(c => `<div><b class="${c.bad ? 'd-bad' : ''}">${esc(c.b).replace(/([\u4e00-\u9fff]+)/g, '<i>$1</i>')}</b><small>${esc(c.s.split(' · ')[0])}</small></div>`).join('')}</button>` + prob;
   },
   lightsCard(head) {
     const ls = lights();
