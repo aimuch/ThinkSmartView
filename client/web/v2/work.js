@@ -42,7 +42,7 @@ async function refresh() {
 // 设置里没藏起来的，按设置里的顺序
 const WK = [['desk', '智能桌面', 'desk', 'wkDesk', 'desk_hub'], ['hub', '智能中枢', 'hub', 'wkHub', 'smart_hub'],
             ['rack', '机柜', 'rack', 'wkRack', 'rack_status'], ['repo', '仓库同步', 'repo', 'wkRepo', 'repo_status']];
-const W = () => ui.work || { order: WK.map(w => w[0]), hidden: [], first: '', rack: 'screen', hub: 'tiles', split: {}, idle_close: true, urls: {} };
+const W = () => ui.work || { order: WK.map(w => w[0]), hidden: [], first: '', rack: 'screen', hub: 'tiles', split: {}, idle_close: true, keep: 10, urls: {} };
 const wkOrdered = () => W().order.map(k => WK.find(w => w[0] === k)).filter(Boolean);
 const wkTabs = () => {
   const on = wkOrdered().filter(w => A()[w[4]]), shown = on.filter(w => !W().hidden.includes(w[0]));
@@ -229,9 +229,12 @@ function screenUrl() {
   return '';
 }
 // 机柜、智能中枢的网页框不删，只藏起来：以前切到别的页、关掉工作台就把它删了，回来要重建、整页重新加载
-// （经设备代理 → 网关 → 登录 rack-screen，好几秒黑框）。藏起来超过 SCREEN_KEEP 才放掉，免得它在后台一直轮询
-const SCREEN_KEEP = 10 * 60 * 1000;
+// （经设备代理 → 网关 → 登录 rack-screen，好几秒黑框）。藏多久在工作台设置里选（设计画布第 79 块，work.keep 分钟：
+// 0 不保留，-1 一直保留），过了才放掉，免得它在后台一直轮询
+const KEEP = [[0, '不保留'], [5, '5 分钟'], [10, '10 分钟'], [30, '30 分钟'], [-1, '一直保留']];
+const keepMs = () => { const k = W().keep; return k === -1 ? Infinity : (typeof k === 'number' ? k : 10) * 60000; };
 const frames = {};   // 网址 -> { el, ready, hiddenAt }
+function dropFrame(u) { const f = frames[u]; f.el.src = 'about:blank'; f.el.remove(); delete frames[u]; }
 function renderScreen() {
   const box = $('wkScreen'), url = screenUrl();
   box.hidden = !url;
@@ -239,6 +242,7 @@ function renderScreen() {
     const on = u === url;
     f.el.hidden = !on;
     f.hiddenAt = on ? 0 : (f.hiddenAt || Date.now());
+    if (!on && keepMs() === 0) dropFrame(u);   // 不保留：切走就放掉
   }
   if (!url) return;
   if (!frames[url]) {
@@ -257,7 +261,7 @@ function renderScreen() {
 }
 setInterval(() => {
   for (const [u, f] of Object.entries(frames)) {
-    if (f.hiddenAt && Date.now() - f.hiddenAt > SCREEN_KEEP) { f.el.src = 'about:blank'; f.el.remove(); delete frames[u]; }
+    if (f.hiddenAt && Date.now() - f.hiddenAt > keepMs()) dropFrame(u);
   }
 }, 60000);
 function renderWork() {
@@ -563,6 +567,10 @@ function renderCfg() {
     `<div class="wc-sub">打开工作台先看</div><div class="wc-chips">${chip('first', '', '上次看的')}${avail.map(([k, n]) => chip('first', k, n)).join('')}</div>` +
     (A().rack_status ? `<div class="wc-sub">机柜那页放</div><div class="wc-chips">${chip('rack', 'screen', '机柜屏的画面')}${chip('rack', 'list', '简要列表')}</div>` : '') +
     (A().smart_hub ? `<div class="wc-sub">智能中枢那页放</div><div class="wc-chips">${chip('hub', 'tiles', '设备块')}${chip('hub', 'web', '它自己的网页')}</div>` : '') +
+    // 有网页要保留时才有这一行（机柜放机柜屏的画面、或智能中枢放它自己的网页）
+    ((A().rack_status && w.rack === 'screen') || (A().smart_hub && w.hub === 'web')
+      ? `<div class="wc-sub">切走后保留网页</div><div class="wc-chips">${KEEP.map(([m, t]) => `<button data-keep="${m}" class="${(w.keep ?? 10) === m ? 'on' : ''}">${t}</button>`).join('')}</div>` +
+        '<p class="wc-note">保留着，回来不用重新加载；保留越久，它在后台刷新数据越久。</p>' : '') +
     `<div class="wc-row"><b>左右栏宽度</b><button class="wc-btn" data-wreset="1"${Object.keys(w.split || {}).length ? '' : ' disabled'}>恢复默认</button></div>` +
     `<div class="wc-row"><div><b>没人碰 3 分钟回首页</b><small>关掉就一直开着（叫它时也不收起）</small></div><button class="switch sm" role="switch" data-idle="1" aria-checked="${w.idle_close}"><i></i></button></div>`);
 }
@@ -587,6 +595,8 @@ $('wkCfg').addEventListener('click', e => {
   }
   const c = t.closest('[data-wset]');
   if (c) return sendWork({ [c.dataset.wset]: c.dataset.v });
+  const kp = t.closest('[data-keep]');
+  if (kp) return sendWork({ keep: Number(kp.dataset.keep) });
   if (t.closest('[data-wreset]')) return sendWork({ split: null });
   if (t.closest('[data-idle]')) return sendWork({ idle_close: !w.idle_close });
 });

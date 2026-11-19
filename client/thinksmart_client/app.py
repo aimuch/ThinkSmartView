@@ -2455,9 +2455,9 @@ class Client:
         return {**self.cfg['work'], 'urls': {a: appproxy.url(a) for a in appproxy.APPS}}
 
     async def set_work(self, changes):
-        """工作台右上角的设置（设计画布第 75 块）：order、hidden、first、rack、hub、split（合并）、idle_close。"""
+        """工作台右上角的设置（设计画布第 75、79 块）：order、hidden、first、rack、hub、split（合并）、idle_close、keep。"""
         cur = dict(self.cfg['work'])
-        for k in ('order', 'hidden', 'first', 'rack', 'hub', 'idle_close'):
+        for k in ('order', 'hidden', 'first', 'rack', 'hub', 'idle_close', 'keep'):
             if k in changes:
                 cur[k] = changes[k]
         if isinstance(changes.get('split'), dict):

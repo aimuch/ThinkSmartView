@@ -1,2 +1,2 @@
 """ThinkSmart View voice client for xiaozhi-hub-server."""
-__version__ = '0.1.705'
+__version__ = '0.1.706'

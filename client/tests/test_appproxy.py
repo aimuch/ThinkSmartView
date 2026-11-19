@@ -27,11 +27,13 @@ def test_work_setting():
     """工作台的设置（设计画布第 75 块）：四页都在 order 里；以前存的「先看」带过来；栏宽限在 30%–70%。"""
     w = appproxy.normalize_work(None, 'rack')
     assert w == {'order': ['desk', 'hub', 'rack', 'repo'], 'hidden': [], 'first': 'rack', 'rack': 'screen', 'hub': 'tiles',
-                 'split': {}, 'idle_close': True}
+                 'split': {}, 'idle_close': True, 'keep': 10}
     w = appproxy.normalize_work({'order': ['repo', 'x', 'repo', 'desk'], 'hidden': ['hub', 'y'], 'first': 'nope', 'rack': 'list',
                                  'hub': 'web', 'split': {'desk': 0.9, 'repo': 0.2, 'z': 0.5}, 'idle_close': False})
     assert w == {'order': ['repo', 'desk', 'hub', 'rack'], 'hidden': ['hub'], 'first': '', 'rack': 'list', 'hub': 'web',
-                 'split': {'desk': 0.7, 'repo': 0.3}, 'idle_close': False}
+                 'split': {'desk': 0.7, 'repo': 0.3}, 'idle_close': False, 'keep': 10}
+    # 切走后保留网页几分钟（设计画布第 79 块）：只认那几档，写错的回到默认 10
+    assert [appproxy.normalize_work({'keep': k})['keep'] for k in (0, 5, 30, -1, 7, '10', True, None)] == [0, 5, 30, -1, 10, 10, 10, 10]
     assert appproxy.url('rack') == 'http://127.0.0.1:8091/kiosk' and appproxy.url('hub').endswith(':8092/#/')
 
 
