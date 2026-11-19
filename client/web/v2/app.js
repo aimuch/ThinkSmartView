@@ -26,17 +26,19 @@ const SUGGEST = [
 ];
 
 /* ---- clock ---- */
+// 每秒走一次，但字一分钟才变：只在变了的时候写，别让 168px 的渐变大字每秒重排重画（设备上很贵）
+function setText(id, text) { const el = $(id); if (el && el.textContent !== text) el.textContent = text; }
 function tick() {
   const now = new Date();
   const hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
-  $('time').textContent = hm;
-  $('bigTime').textContent = hm;
+  setText('time', hm);
+  setText('bigTime', hm);
   const lunar = ui.today && ui.today.lunar;
-  $('bigDate').textContent = `${now.getMonth() + 1}月${now.getDate()}日  星期${WEEK[now.getDay()]}` +
-    (lunar && lunar.text ? `  ·  农历${lunar.text}${lunar.term ? ' ' + lunar.term : ''}${lunar.festival ? ' ' + lunar.festival : ''}` : '');
+  setText('bigDate', `${now.getMonth() + 1}月${now.getDate()}日  星期${WEEK[now.getDay()]}` +
+    (lunar && lunar.text ? `  ·  农历${lunar.text}${lunar.term ? ' ' + lunar.term : ''}${lunar.festival ? ' ' + lunar.festival : ''}` : ''));
   const h = now.getHours();
-  $('greet').textContent = h < 5 ? '夜深了' : h < 9 ? '早上好' : h < 12 ? '上午好' : h < 14 ? '中午好' : h < 18 ? '下午好' : h < 23 ? '晚上好' : '夜深了';
-  $('ringTime').textContent = hm;
+  setText('greet', h < 5 ? '夜深了' : h < 9 ? '早上好' : h < 12 ? '上午好' : h < 14 ? '中午好' : h < 18 ? '下午好' : h < 23 ? '晚上好' : '夜深了');
+  setText('ringTime', hm);
   tickAlarms();
 }
 

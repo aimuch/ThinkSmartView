@@ -418,7 +418,8 @@ setInterval(() => {
   watchTalk();
   if (!on()) { if (document.body.classList.contains('dash-on')) apply(); return; }
   const now = new Date(), tm = $('dTime');
-  if (tm) tm.textContent = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  const hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  if (tm && tm.textContent !== hm) tm.textContent = hm;
   if (++n % 2 === 0) render(false);
   if (n % 30 === 0) loadCost();
 }, 1000);

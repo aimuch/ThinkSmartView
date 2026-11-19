@@ -37,6 +37,31 @@ async def fresh_pages(request, handler):
     return await handler(request)
 
 
+
+def page_state_routes(app):
+    """屏幕上现在是哪一页（web/v2/screen.js 变了就报）：设备日志记一行「page view: …」，GET 能查现在和最近
+    20 次，排查「屏幕上是什么」不用拍照、也不用连页面。"""
+    recent = []
+
+    async def page_state_set(request):
+        try:
+            body = json.loads((await request.text())[:500])
+            view = str(body.get('view', ''))[:80]
+        except (ValueError, AttributeError):
+            return web.Response(status=400)
+        if view:
+            recent.append({'view': view, 'at': round(time.time(), 1)})
+            del recent[:-20]
+            log.info('page view: %s', view)
+        return web.Response(status=204)
+
+    async def page_state(request):
+        last = recent[-1] if recent else {}
+        return web.json_response({'view': last.get('view'), 'since': last.get('at'), 'recent': recent[::-1]})
+
+    app.router.add_post('/api/page-state', page_state_set)
+    app.router.add_get('/api/page-state', page_state)
+
 def make_app(client: Client):
     app = web.Application(middlewares=[fresh_pages])
 
@@ -441,6 +466,8 @@ def make_app(client: Client):
         return web.Response(status=204)
     page_log.times = []
     app.router.add_post('/api/page-log', page_log)
+
+    page_state_routes(app)
     app.router.add_post('/api/photos', photos_show)
     app.router.add_post('/api/photos/close', photos_close)
     app.router.add_get('/api/photos', photos_get)
