@@ -24,7 +24,9 @@ function apply() {
   if (dash && !D.tab) D.tab = (ui.looks.dash_default in { home: 1, smart: 1, plan: 1, chat: 1 }) ? ui.looks.dash_default : 'home';
   document.body.classList.toggle('dash-on', dash);
   const shown = D.talk ? 'chat' : (D.tab || 'home');
-  document.body.dataset.dash = dash ? shown : '';
+  const want = dash ? shown : '';
+  // 值没变也重设，body 上挂着的样式就全部重算、整屏重画（每 2 秒一次，这台机器上是 CPU 画的）：变了才写
+  if (document.body.dataset.dash !== want) document.body.dataset.dash = want;
   document.querySelectorAll('#dashTabs [data-dt]').forEach(b => b.classList.toggle('on', b.dataset.dt === shown));
   document.querySelectorAll('.dash-pane').forEach(p => p.classList.toggle('on', p.dataset.dp === shown));
   if (window.miApi) window.miApi.visible(dash && shown === 'smart' && !document.hidden);
@@ -327,8 +329,9 @@ function plan() {
 const ASK = ['明天下雨吗？', '放雨声半小时', '我有哪些闹钟', '讲个冷笑话'];
 function ask() {
   const st = ui.status && ui.status.state;
-  $('dAskSub').textContent = st === 'listening' ? '在听…' : st === 'thinking' ? '在想…' : st === 'speaking' ? '在说…'
+  const sub = st === 'listening' ? '在听…' : st === 'thinking' ? '在想…' : st === 'speaking' ? '在说…'
     : `我在呢，叫「${(ui.wake && ui.wake.primary) || '小麦小麦'}」或者点话筒`;
+  if ($('dAskSub').textContent !== sub) $('dAskSub').textContent = sub;
   set('dAskChips', ASK.map(q => `<button data-ask="${esc(q)}">${esc(q)}</button>`).join(''));
 }
 
