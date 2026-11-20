@@ -297,6 +297,23 @@ class Updater:
                    f"--unit=xiaozhi-hub-update-{int(time.time())}", *cmd]
         return cmd
 
+    def restart_detached(self) -> bool:
+        """重启网关（恢复备份以后，设计画布第 87 块）：和更新一样放到服务外面跑 autostart.sh restart，
+        网关自己被重启也不会把它带走。手动启动的（没开开机自启）重启不了，返回 False。"""
+        script = self.root / "scripts" / "autostart.sh"
+        if not script.exists():
+            return False
+        cmd = ["bash", str(script), "restart"]
+        if sys.platform.startswith("linux") and os.environ.get("INVOCATION_ID") and shutil.which("systemd-run"):
+            cmd = ["systemd-run", "--user", "--scope", "--quiet", "--collect",
+                   f"--unit=xiaozhi-hub-restart-{int(time.time())}", *cmd]
+        try:
+            subprocess.Popen(cmd, cwd=str(self.root), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+        except OSError:
+            return False
+        return True
+
     def _write_state(self, state: dict) -> None:
         tmp = self.state_file.with_suffix(".part")
         tmp.write_text(json.dumps(state), encoding="utf-8")

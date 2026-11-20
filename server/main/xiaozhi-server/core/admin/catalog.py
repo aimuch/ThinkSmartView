@@ -355,6 +355,12 @@ PLUGIN_SETTINGS.update({
             {"key": "base_url", "label": "地址", "type": "text", "default": "http://homeassistant.local:8123",
              "hint": "比如 http://10.10.10.x:8123（网关要能访问到）"},
             {"key": "api_key", "label": "长期访问令牌", "type": "secret", "required": True},
+            # 门口来人（设计画布第 86 块）
+            {"key": "door_triggers", "label": "门口来人：什么时候弹（选填）", "type": "text",
+             "hint": "门铃、人体、门磁的实体，逗号分开，比如 event.doorbell, binary_sensor.front_door_motion；点「测试」会列出能用的"},
+            {"key": "door_camera", "label": "门口摄像头（选填）", "type": "text", "hint": "比如 camera.front_door；不填就只弹一行字"},
+            {"key": "door_night", "label": "睡觉时也弹", "type": "select", "default": "off",
+             "options": [["off", "不弹"], ["on", "弹（不出声、不调亮）"]]},
         ],
     },
     "smart_hub": {

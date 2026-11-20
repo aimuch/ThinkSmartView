@@ -467,6 +467,14 @@
   .dh-shot img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .dh-kv { display: grid; grid-template-columns: 96px 1fr; gap: 4px 12px; font-size: 13px; } .dh-kv > span:nth-child(odd) { color: var(--muted, #8e98c0); }
   .dh-warn { color: #e0a33a; } .dh-bad { color: #e5566d; }
+  /* 备份（设计画布第 87 块） */
+  .bk-rows { display: flex; flex-direction: column; gap: 10px; }
+  .bk-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } .bk-row[hidden], p[data-for][hidden] { display: none; }
+  .bk-row .k { color: var(--muted); font-size: 13px; }
+  .bk-table td { vertical-align: middle; } .bk-acts { white-space: nowrap; text-align: right; } .bk-acts .btn + .btn { margin-left: 6px; }
+  .bk-inc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 16px; font-size: 13px; }
+  .bk-inc span::before { content: "✓ "; color: var(--ok); }
+  @media (max-width: 720px) { .bk-inc { grid-template-columns: 1fr 1fr; } }
   .dh-errs { font-size: 12px; max-height: 180px; overflow: auto; } .dh-errs div { display: grid; grid-template-columns: 70px 120px 1fr; gap: 8px; padding: 3px 0; border-top: 1px solid var(--line, #2a3150); }
   .wa-card { margin-bottom: 16px; } .wa-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; } .wa-head > b { font-size: 15px; }
   .wa-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; } .wa-row.off { opacity: .5; }
@@ -1163,6 +1171,7 @@
       <button data-page="services"><span class="ico">☁</span>外部服务</button>
       <button data-page="media"><span class="ico">▶</span>媒体</button>
       <button data-page="update"><span class="ico">⟳</span>更新网关</button>
+      <button data-page="backup"><span class="ico">⇩</span>备份</button>
     </nav>
     <div class="side-foot"><div class="sf-box">
       <div class="side-status hb" id="hb" data-st="none"><svg class="hb-ico" viewBox="0 0 24 24" aria-hidden="true"><g class="hb-live"><circle class="hb-dot" cx="12" cy="12" r="2"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.3 5.3a9.5 9.5 0 0 0 0 13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4"/></g><g class="hb-alert"><circle cx="12" cy="12" r="2"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.3 5.3a9.5 9.5 0 0 0 0 13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4M3.5 3.5l17 17"/></g></svg>
@@ -1266,7 +1275,7 @@ function applyBrand(b) {
 }
 const PAGE_TITLES = { status: "状态", how: "工作原理", llm: "大模型", calls: "称呼", grokbot: "Grok Bot", agents: "智能体", devices: "设备", memory: "记忆", cost: "费用",
   asr: "语音识别", tts: "语音合成", intent: "意图识别", update: "更新网关", kids: "孩子和学习", album: "家庭相册",
-  commands: "口令", services: "外部服务", media: "媒体" };
+  commands: "口令", services: "外部服务", media: "媒体", backup: "备份" };
 
 let authMode = "login";
 async function route() {
@@ -1403,7 +1412,7 @@ function renderPasswordDrawer(body) {
 
 $("logout").onclick = async () => { if (!confirmLeave()) return; page.dirty = null; await api("logout", {}); await route(); };
 
-const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, devices: renderDeviceSettings, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, commands: renderCommands, services: renderServices, kids: renderKids, album: renderAlbum, media: renderMedia, music: renderMedia, update: renderUpdate };
+const PAGES = { status: renderStatus, how: renderHow, llm: renderLLM, calls: renderCallNames, grokbot: renderGrokBot, agents: renderAgents, devices: renderDeviceSettings, memory: renderMemory, cost: renderCost, asr: renderASR, tts: renderTTS, intent: renderIntent, commands: renderCommands, services: renderServices, kids: renderKids, album: renderAlbum, media: renderMedia, music: renderMedia, update: renderUpdate, backup: renderBackup };
 const page = { name: "", dirty: null, timer: null };
 function currentPage() { const p = location.hash.slice(1).split("/")[0]; return PAGES[p] ? p : "status"; }
 function confirmLeave() { return !(page.dirty && page.dirty()) || confirm("当前页面有修改还没保存，确定离开吗？"); }
@@ -3136,6 +3145,8 @@ async function openPluginSettings(id, label, onSaved) {
   const box = $("drawer-body");
   const input = (f) => f.type === "secret"
     ? `<input class="in mono" data-k="${esc(f.key)}" type="password" autocomplete="off" placeholder="${f.set ? `已配置 ${esc(f.hint_set)}，留空表示不改` : "未配置，粘贴后保存"}">`
+    : f.type === "select"
+    ? `<select class="in" data-k="${esc(f.key)}">${(f.options || []).map(([v, label]) => `<option value="${esc(v)}" ${String(f.value || f.default || "") === String(v) ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>`
     : `<input class="in ${f.type === "number" ? "" : "mono"}" data-k="${esc(f.key)}" ${f.type === "number" ? `type="number" min="${f.min ?? ""}" max="${f.max ?? ""}"` : ""}
         value="${esc(f.value ?? "")}" placeholder="${f.default !== undefined ? "留空用默认：" + esc(f.default) : ""}">`;
   box.innerHTML = `
@@ -4777,7 +4788,7 @@ async function renderUpdate(root) {
   renderLastUpdate(d.update);
   if (d.unsupported) return;
   const check = () => busy($("up-check"), async () => {
-    $("up-box").innerHTML = '<div class="panel muted">正在和 GitHub 比较…（网络不好时最多等 30 秒）</div>';
+    $("up-box").innerHTML = '<div class="panel muted">正在和更新来源比较…（网络不好时最多等 30 秒）</div>';
     try { drawCheck(root, (await api("update/check", {})).check); }
     catch (e) { $("up-box").innerHTML = `<div class="panel"><div class="banner err" style="margin:0">${esc(e.message)}</div></div>`; }
   });
@@ -4785,6 +4796,112 @@ async function renderUpdate(root) {
   // 打开这一页时，十分钟内没检查过就自动查一次（只查不更新）
   if (d.check && Date.now() / 1000 - d.check.checked_at < 600) drawCheck(root, d.check);
   else check();
+}
+
+// ---------- 备份（设计画布第 87 块） ----------
+
+const fmtSize = (n) => (n >= 1073741824 ? (n / 1073741824).toFixed(1) + " GB" : n >= 1048576 ? (n / 1048576).toFixed(1) + " MB"
+  : Math.max(1, Math.round((n || 0) / 1024)) + " KB");
+const bkWhen = (t) => { if (!t) return ""; const d = new Date(t * 1000); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+async function renderBackup(root) {
+  const d = await api("backup");
+  const s = d.settings;
+  const form = { keep: s.keep, target: s.target };
+  const last = d.last;
+  const lastLine = !last ? "还没备份过" : last.ok
+    ? `上次 ${bkWhen(last.at)} · ${last.reason === "恢复" ? "恢复了一次" : "成功"}${last.size ? " · " + fmtSize(last.size) : ""}${last.where ? " · 放在" + esc(last.where) : ""}`
+    : `上次 ${bkWhen(last.at)} · <span style="color:var(--err)">没成功：${esc(last.error || "")}</span>`;
+  const failed = (d.history || []).filter((e) => !e.ok && e.name && !d.backups.some((b) => b.name === e.name));
+  const keepSeg = [3, 7, 14, 30].map((n) => `<button data-keep="${n}" class="${s.keep === n ? "on" : ""}">${n} 份</button>`).join("");
+  root.innerHTML = `
+    <div class="page-head"><div><h1>备份</h1><p class="sub">网关的设置和记录：各家的 Key、聊天记忆、家人声音、设备设置、孩子的进度、相册。每天自己备份一份，也可以现在下载；恢复前会先备份一份现在的。</p></div>
+      <div style="display:flex;gap:8px;flex:none"><a class="btn" href="/admin/api/backup/download">下载一份</a><button class="btn primary" id="bk-run">现在备份</button></div></div>
+    <div class="card panel">
+      <div class="st-h" style="margin-bottom:12px"><label class="switch" style="margin:0"><input type="checkbox" id="bk-on" ${s.enabled ? "checked" : ""}><b>定期备份</b></label>
+        <span class="muted small">${lastLine}</span></div>
+      <div class="bk-rows">
+        <div class="bk-row"><span class="k">每天</span><input class="in mono" id="bk-time" value="${esc(s.time)}" style="width:90px">
+          <span class="k">留最近</span><div class="seg" id="bk-keep" style="margin:0">${keepSeg}</div></div>
+        <div class="bk-row"><span class="k">放在</span><div class="seg" id="bk-target" style="margin:0">
+          <button data-t="local" class="${s.target === "local" ? "on" : ""}">网关本机</button><button data-t="webdav" class="${s.target === "webdav" ? "on" : ""}">NAS（WebDAV）</button></div></div>
+        <div class="bk-row" data-for="local"><span class="k">文件夹</span><input class="in mono" id="bk-dir" value="${esc(s.local_dir)}" style="flex:1;min-width:220px"></div>
+        <div class="bk-row" data-for="webdav"><input class="in mono" id="bk-url" placeholder="http://NAS的地址:5005/backup/xiaozhi" value="${esc(s.webdav_url)}" style="flex:2;min-width:240px">
+          <input class="in" id="bk-user" placeholder="用户名" value="${esc(s.webdav_user)}" style="flex:1;min-width:110px" autocomplete="off">
+          <input class="in" id="bk-pw" type="password" placeholder="${s.webdav_password_set ? "已保存，留空不改" : "密码"}" style="flex:1;min-width:110px" autocomplete="new-password"></div>
+      </div>
+      <p class="muted small" data-for="webdav" style="margin:10px 0 0">飞牛、群晖、威联通都能开 WebDAV（共享文件夹 › WebDAV）。传不上去时先放在网关本机，状态页「要处理」里会说。</p>
+      <p class="muted small" data-for="local" style="margin:10px 0 0">放在网关本机：网关的盘坏了会一起没，只适合临时用；能放 NAS 就放 NAS。</p>
+      <p class="muted small" style="margin:6px 0 0">备份里有各家的 Key 和后台密码的哈希：放在只有自己能看的文件夹。</p>
+      <div class="actions"><span class="result" id="bk-result"></span><button class="btn" id="bk-test">测试</button><button class="btn primary" id="bk-save">保存设置</button></div>
+    </div>
+    <div class="card panel">
+      <div class="st-h" style="margin-bottom:8px"><b>已有的备份</b><span class="muted small">${s.target === "webdav" ? "NAS 和网关本机上的都列出来" : "在 " + esc(s.local_dir)}</span></div>
+      ${d.list_error ? `<div class="banner warn" style="margin:0 0 10px">${esc(d.list_error)}</div>` : ""}
+      ${d.backups.length || failed.length ? `<table class="u-table bk-table"><tr><th>时间</th><th class="n">大小</th><th>在哪</th><th></th></tr>
+        ${d.backups.map((b) => `<tr><td>${bkWhen(b.at)}</td><td class="n">${fmtSize(b.size)}</td><td><span class="muted small">${b.where === "webdav" ? "NAS" : "网关本机"} · </span><code class="small">${esc(b.name)}</code></td>
+          <td class="bk-acts"><a class="btn sm" href="/admin/api/backup/download?name=${encodeURIComponent(b.name)}">下载</a><button class="btn sm" data-restore="${esc(b.name)}" data-at="${b.at}">恢复</button></td></tr>`).join("")}
+        ${failed.slice(0, 3).map((e) => `<tr><td>${bkWhen(e.at)}</td><td class="n">—</td><td><span class="pill err">失败</span> <span class="muted small">${esc(e.error || "")}</span></td><td></td></tr>`).join("")}
+      </table>` : '<p class="muted small" style="margin:0">还没有备份。点右上角「现在备份」做第一份。</p>'}
+      <div class="bk-row" style="margin-top:12px"><label class="btn sm" style="cursor:pointer" id="bk-file-btn">从文件恢复…<input type="file" id="bk-file" accept=".gz,.tgz,application/gzip" hidden></label>
+        <span class="muted small">选一个 .tar.gz（别的网关备份的也行）</span></div>
+    </div>
+    <div class="card panel">
+      <div class="st-h" style="margin-bottom:8px"><b>备份里有什么</b><span class="muted small">现在 ${d.included.files} 个文件，${fmtSize(d.included.size)}（压缩前）</span></div>
+      <div class="bk-inc"><span>设置和各家的 Key</span><span>聊天记录和记忆</span><span>家人声音</span><span>设备各自的设置、清单</span>
+        <span>孩子和学习、媒体分区</span><span>家庭相册</span><span>费用记录</span><span>口令、称呼、智能体</span></div>
+      <p class="muted small" style="margin:10px 0 0">不备份：模型（能重新下载）、设备截图、临时文件、改配置前自动留的 .bak。</p>
+    </div>`;
+  const show = () => root.querySelectorAll("[data-for]").forEach((el) => (el.hidden = el.dataset.for !== form.target));
+  show();
+  const values = () => ({ enabled: $("bk-on").checked, time: $("bk-time").value.trim(), keep: form.keep, target: form.target,
+    local_dir: $("bk-dir").value.trim(), webdav_url: $("bk-url").value.trim(), webdav_user: $("bk-user").value.trim(), webdav_password: $("bk-pw").value });
+  const dirty = snapshot(values);
+  page.dirty = dirty;
+  const result = (html) => ($("bk-result").innerHTML = html);
+  $("bk-keep").onclick = (e) => { const b = e.target.closest("[data-keep]"); if (!b) return; form.keep = +b.dataset.keep;
+    $("bk-keep").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); };
+  $("bk-target").onclick = (e) => { const b = e.target.closest("[data-t]"); if (!b) return; form.target = b.dataset.t;
+    $("bk-target").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); show(); };
+  $("bk-test").onclick = (e) => busy(e.target, async () => {
+    result('<span class="muted">正在试…</span>');
+    try { result(`<span style="color:var(--ok)">✓ ${esc((await api("backup/test", values())).message)}</span>`); }
+    catch (err) { result(`<span style="color:var(--err)">${esc(err.message)}</span>`); }
+  });
+  $("bk-save").onclick = (e) => busy(e.target, async () => {
+    try { await api("backup/settings", values()); page.dirty = null; toast("已保存"); openPage("backup", true); }
+    catch (err) { result(`<span style="color:var(--err)">${esc(err.message)}</span>`); }
+  });
+  $("bk-run").onclick = (e) => busy(e.target, async () => {
+    if (dirty()) { toast("先保存上面的设置", true); return; }
+    try { const r = await api("backup/run", {}); toast(`备份好了：${fmtSize(r.entry.size)}，放在${r.entry.where}`); }
+    catch (err) { toast(err.message, true); }
+    page.dirty = null;
+    openPage("backup", true);
+  });
+  const restore = async (btn, what, send) => {
+    if (!confirm(`恢复到${what}？\n\n现在的设置、聊天记录、家人声音等会换成那时候的。换之前先自动备份一份现在的（在列表里能找回来）。\n网关会重启，1～2 分钟，设备会断开一下再连上。`)) return;
+    await busy(btn, async () => {
+      try {
+        const r = await send();
+        toast(`恢复好了（${r.files} 个文件），网关正在重启…`, false, 20000);
+        page.dirty = null;
+        setTimeout(() => location.reload(), 15000);
+      } catch (err) { toast(err.message, true); }
+    });
+  };
+  root.querySelectorAll("[data-restore]").forEach((b) => (b.onclick = () =>
+    restore(b, ` ${bkWhen(+b.dataset.at)} 的备份`, () => api("backup/restore?name=" + encodeURIComponent(b.dataset.restore), {}))));
+  $("bk-file").onchange = (e) => {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    restore($("bk-file-btn"), `文件「${f.name}」里的备份`, async () => {
+      const res = await fetch("/admin/api/backup/restore", { method: "POST", headers: { "Content-Type": "application/gzip" }, body: f });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.error || "请求失败：" + res.status);
+      return data;
+    });
+  };
 }
 
 function renderLastUpdate(u) {
@@ -4925,6 +5042,7 @@ const NAV_ICONS = {
   media: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
   album: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
   kids: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.6-3.6 3.3-5.5 7-5.5s6.4 1.9 7 5.5"/><path d="M9.5 7.5c1-1.6 4-1.6 5 0"/>',
+  backup: '<path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z"/><path d="M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
 };
 document.querySelectorAll("#nav button[data-page] .ico").forEach((el) => {
   const d = NAV_ICONS[el.parentElement.dataset.page];

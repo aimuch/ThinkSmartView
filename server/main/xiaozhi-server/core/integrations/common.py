@@ -15,7 +15,9 @@ DEFAULTS = {
     "repo_status": {"url": "http://127.0.0.1:8765", "password": ""},
     "desk_hub": {"token": ""},
     # Home Assistant（设计画布第 84 块）：和上游 hass_* 插件同一份 plugins.home_assistant
-    "home_assistant": {"base_url": "http://homeassistant.local:8123", "api_key": ""},
+    "home_assistant": {"base_url": "http://homeassistant.local:8123", "api_key": "",
+                       # 门口来人（设计画布第 86 块，core/integrations/doorbell.py）
+                       "door_triggers": "", "door_camera": "", "door_night": "off"},
 }
 PLUGINS = tuple(DEFAULTS)
 LABELS = {"smart_hub": "智能中枢", "rack_status": "机柜", "repo_status": "仓库同步", "desk_hub": "DeskHub", "home_assistant": "Home Assistant"}

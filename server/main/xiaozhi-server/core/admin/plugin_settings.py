@@ -115,6 +115,11 @@ def _values(settings_id: str, payload: dict, merged: dict) -> dict:
             if ("min" in f and number < f["min"]) or ("max" in f and number > f["max"]):
                 raise ValueError(f"{label} 要在 {f.get('min')} 到 {f.get('max')} 之间")
             values[key] = number
+        elif f["type"] == "select":
+            allowed = [str(o[0]) for o in f.get("options", [])]
+            if text and text not in allowed:
+                raise ValueError(f"{label} 只能选：" + "、".join(str(o[1]) for o in f.get("options", [])))
+            values[key] = text
         else:
             if "\n" in text:
                 raise ValueError(f"{label} 不能换行")
@@ -190,7 +195,8 @@ async def _test_integration(name: str, values: dict) -> dict:
     try:
         if name == "home_assistant":
             v = await hass.overview(s, fresh=True)
-            return {"message": f"连上了：{v['count']} 个设备（{len(v['areas'])} 个区域）、{len(v['scenes'])} 个场景"}
+            text = f"连上了：{v['count']} 个设备（{len(v['areas'])} 个区域）、{len(v['scenes'])} 个场景"
+            return {"message": text + await _test_door(s)}
         if name == "smart_hub":
             devs = await smarthub.devices(s, fresh=True)
             lights = sum(d["kind"] == "light" and not d["group"] for d in devs)
@@ -213,6 +219,31 @@ async def _test_integration(name: str, values: dict) -> dict:
         return {"message": "口令已保存。还没有 Mac 连上来：在 DeskHub App（0.4.5 起）的 设置 › 控制终端 里添加一个，填网关地址和这串口令"}
     except common.IntegrationError as e:
         raise ValueError(str(e))
+
+
+async def _test_door(s: dict) -> str:
+    """Home Assistant 的「测试」顺便看门口来人（设计画布第 86 块）：填的实体在不在，没填就列出能用的；
+    填了就往设备上推一次（不出声）。"""
+    from core.integrations import doorbell
+
+    d = doorbell.door_settings({"plugins": {"home_assistant": s}})
+    c = await doorbell.candidates(d)
+    if not d["triggers"]:
+        if not c["triggers"] and not c["cameras"]:
+            return ""
+        return ("。门口来人能用的：" + "、".join(c["triggers"][:6]) if c["triggers"] else "。") + \
+               ("；摄像头：" + "、".join(c["cameras"][:4]) if c["cameras"] else "")
+    missing = [t for t in d["triggers"] if t not in c["all"]]
+    if missing:
+        raise ValueError("Home Assistant 里没有：" + "、".join(missing))
+    if d["camera"] and d["camera"] not in c["all"]:
+        raise ValueError(f"Home Assistant 里没有摄像头 {d['camera']}")
+    watch = doorbell.WATCH
+    if not watch:
+        return "。门口来人填好了"
+    ev = watch.fire("test", "测试", "测试：门口来人", test=True)
+    return f"。门口来人：推了一次测试到 {ev['devices']} 台设备上（不出声）" if ev["devices"] else \
+        "。门口来人填好了，但现在没有设备在等（客户端 0.1.719 起才有）"
 
 
 async def _test_newsnow(values: dict) -> dict:

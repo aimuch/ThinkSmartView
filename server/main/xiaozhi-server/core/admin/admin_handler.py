@@ -19,6 +19,8 @@ import json
 import os
 import re
 import secrets
+import shutil
+import tempfile
 import threading
 import time
 import wave
@@ -29,7 +31,7 @@ from aiohttp import web
 
 from config.config_loader import get_project_dir
 from config.logger import setup_logging
-from core.admin import auth, brand, catalog, config_store, connections, pages, pipeline, plugin_settings, presence, updater
+from core.admin import auth, backup, brand, catalog, config_store, connections, pages, pipeline, plugin_settings, presence, updater
 from core.admin.grokbot import GrokBotAdmin
 from core.admin.status import _claude_version, collect_status
 from core import billing
@@ -118,6 +120,13 @@ class AdminHandler:
         if self.sessions.restore(self.sessions_handover):
             logger.bind(tag=TAG).info("更新网关后沿用了更新前的后台登录")
         self.updater = gateway_updater or updater.Updater()
+        # 网关备份（设计画布第 87 块）：每天的那次在 register_admin_routes 里排上
+        # 门口来人（设计画布第 86 块）：Home Assistant 的门铃、人体、门磁 → 设备弹出门口的画面
+        from core.integrations import doorbell
+        self.door = doorbell.DoorWatch(self._merged)
+        doorbell.WATCH = self.door
+        self.backups = backup.Backups(data_dir, version=self._backup_version,
+                                      restart=lambda: getattr(self.updater, "restart_detached", lambda: False)())
         self._emotion_runs = {}  # session_id -> {"task", "index", "total", "emotion"}
         self._voice_samples = {}  # 音色 -> mp3 字节（试听缓存）
         self._today_cache = None  # 设备首页的天气（/kiosk/today）：地点 -> (时间, 数据)；存在 data/.today-weather.json，
@@ -146,6 +155,12 @@ class AdminHandler:
                 web.get("/admin/api/update", self.handle_update),
                 web.post("/admin/api/update/check", self.handle_update_check),
                 web.post("/admin/api/update/start", self.handle_update_start),
+                web.get("/admin/api/backup", self.handle_backup),
+                web.post("/admin/api/backup/settings", self.handle_backup_settings),
+                web.post("/admin/api/backup/test", self.handle_backup_test),
+                web.post("/admin/api/backup/run", self.handle_backup_run),
+                web.get("/admin/api/backup/download", self.handle_backup_download),
+                web.post("/admin/api/backup/restore", self.handle_backup_restore),
                 web.get("/admin/api/devices", self.handle_devices),
                 # 设备健康上报、后台看屏幕（设计画布第 83 块，core/agent/device_health.py）
                 web.get("/admin/api/device-health", self.handle_device_health),
@@ -226,6 +241,9 @@ class AdminHandler:
                 web.post("/kiosk/smarthub", self.handle_kiosk_smarthub),
                 web.get("/kiosk/hass", self.handle_kiosk_hass),             # 家居里的 Home Assistant（设计画布第 84 块）
                 web.post("/kiosk/hass/control", self.handle_kiosk_hass_control),
+                web.get("/kiosk/door/wait", self.handle_kiosk_door_wait),     # 门口来人（设计画布第 86 块）
+                web.get("/kiosk/door", self.handle_kiosk_door),
+                web.get("/kiosk/hass/camera", self.handle_kiosk_hass_camera),
                 web.post("/kiosk/deskhub", self.handle_kiosk_deskhub),
                 web.post("/kiosk/repo", self.handle_kiosk_repo),
                 web.post("/kiosk/plugin", self.handle_kiosk_plugin),
@@ -780,6 +798,10 @@ class AdminHandler:
         except Exception:  # noqa: BLE001
             pass
         try:
+            out.extend(self.backups.attention(now))
+        except Exception:  # noqa: BLE001
+            pass
+        try:
             for p in pages.home_plugins(merged):
                 if p["enabled"] and p["needs_config"]:
                     out.append({"level": "warn", "text": f"{p['label']}开着但还没填", "sub": "外部服务 › 家里的系统",
@@ -787,6 +809,106 @@ class AdminHandler:
         except Exception:  # noqa: BLE001
             pass
         return out
+
+    # ---------- 备份（core/admin/backup.py，设计画布第 87 块） ----------
+
+    def _backup_version(self) -> str:
+        head = getattr(self.updater, "_head", None)
+        try:
+            return (head() or "")[:12] if head else ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    async def handle_backup(self, request: web.Request):
+        self._require_login(request)
+        return self._json({"ok": True, **await self.backups.view()})
+
+    async def handle_backup_settings(self, request: web.Request):
+        self._require_login(request)
+        body = await self._read_json(request)
+        try:
+            return self._json({"ok": True, "settings": await self._blocking(self.backups.save_settings, body)})
+        except backup.BackupError as e:
+            return self._error(str(e), 400)
+
+    async def handle_backup_test(self, request: web.Request):
+        """拿表单上的（还没保存的）试一下：密码留空用存着的。"""
+        self._require_login(request)
+        body = await self._read_json(request)
+        saved = await self._blocking(self.backups.settings)
+        s = {**saved, **{k: body[k] for k in ("target", "local_dir", "webdav_url", "webdav_user") if k in body}}
+        if str(body.get("webdav_password") or ""):
+            s["webdav_password"] = str(body["webdav_password"])
+        try:
+            return self._json({"ok": True, "message": await self.backups.target(s).test()})
+        except backup.BackupError as e:
+            return self._error(str(e), 400)
+
+    async def handle_backup_run(self, request: web.Request):
+        self._require_login(request)
+        entry = await self.backups.run("手动")
+        if not entry.get("ok"):
+            return self._json({"ok": False, "error": entry.get("error") or "备份没成功", "entry": entry}, 400)
+        return self._json({"ok": True, "entry": entry})
+
+    async def handle_backup_download(self, request: web.Request):
+        """?name=：下载已有的一份；不带 name：现在打一份直接下载（不放到定期备份的地方）。"""
+        self._require_login(request)
+        name = str(request.query.get("name") or "")
+        tmp_dir = Path(tempfile.mkdtemp(prefix="hub-backup-dl-", dir=str(self.data_dir.parent)))
+        try:
+            if name:
+                if not backup.NAME_RE.fullmatch(name):
+                    return self._error("没有这份备份", 404)
+                path = tmp_dir / name
+                await self.backups.fetch(name, path)
+            else:
+                name = backup._now_name()
+                path = tmp_dir / name
+                await self._blocking(backup.build, self.data_dir, path, await self._blocking(self._backup_version))
+            resp = web.StreamResponse(headers={**SECURITY_HEADERS, "Content-Type": "application/gzip",
+                                               "Content-Disposition": f'attachment; filename="{name}"',
+                                               "Content-Length": str(path.stat().st_size), "Cache-Control": "no-store"})
+            await resp.prepare(request)
+            with open(path, "rb") as f:
+                while True:
+                    chunk = await self._blocking(f.read, 1024 * 1024)
+                    if not chunk:
+                        break
+                    await resp.write(chunk)
+            await resp.write_eof()
+            return resp
+        except backup.BackupError as e:
+            return self._error(str(e), 404)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    async def handle_backup_restore(self, request: web.Request):
+        """?name=<已有的一份>，或者请求体就是 .tar.gz（「从文件恢复」）。恢复好了网关自己重启。"""
+        self._require_login(request)
+        name = str(request.query.get("name") or "")
+        tmp_dir = Path(tempfile.mkdtemp(prefix="hub-restore-", dir=str(self.data_dir.parent)))
+        try:
+            path = tmp_dir / "restore.tar.gz"
+            if name:
+                await self.backups.fetch(name, path)
+            else:
+                size = 0
+                with open(path, "wb") as f:
+                    async for chunk in request.content.iter_chunked(1024 * 1024):
+                        size += len(chunk)
+                        if size > backup.MAX_RESTORE:
+                            raise backup.BackupError("文件太大了（超过 8 GB）")
+                        await self._blocking(f.write, chunk)
+                if not size:
+                    raise backup.BackupError("文件是空的")
+            r = await self.backups.restore(path)
+            health.event("update", "从备份恢复，网关重启")
+            return self._json({"ok": True, **r})
+        except backup.BackupError as e:
+            return self._error(str(e), 400)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     # ---------- 更新网关 ----------
 
@@ -2110,6 +2232,47 @@ class AdminHandler:
         if not (common.ready(merged, "home_assistant") and common.enabled_for(merged, device, "home_assistant")):
             return None
         return common.settings(merged, "home_assistant")
+
+    def start_door_watch(self):
+        """register_admin_routes 在服务起来时排上：一直连着 Home Assistant 听门铃。"""
+        return self.door.run()
+
+    async def handle_kiosk_door_wait(self, request: web.Request):
+        """?device=：长轮询，最多 25 秒；有门口来人就马上回 {"events": [...]}。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        device = str(request.query.get("device") or "")
+        if not device:
+            return self._error("哪台设备？", 400)
+        return self._json({"ok": True, "events": await self.door.wait(device)})
+
+    async def handle_kiosk_door(self, request: web.Request):
+        """?device=：「看看门口」之前问一下有没有门口摄像头、能不能用。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.integrations import doorbell
+
+        s = await self._hass_settings(request.query.get("device") or "")
+        if s is None:
+            return self._json({"ok": True, "available": False})
+        d = doorbell.door_settings({"plugins": {"home_assistant": s}})
+        return self._json({"ok": True, "available": True, "camera": bool(d["camera"]), "triggers": len(d["triggers"]),
+                           "night": d["night"], "watching": self.door.state})
+
+    async def handle_kiosk_hass_camera(self, request: web.Request):
+        """?device=：门口摄像头的一张快照（JPEG），设备每秒来拿一次。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.integrations import common
+
+        s = await self._hass_settings(request.query.get("device") or "")
+        if s is None:
+            return self._error("这台没开 Home Assistant", 404)
+        try:
+            body = await self.door.snapshot({"plugins": {"home_assistant": s}})
+        except common.IntegrationError as e:
+            return self._error(str(e), 502)
+        return web.Response(body=body, content_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
     async def handle_kiosk_hass(self, request: web.Request):
         """?device=…&fresh=1：家居里 Home Assistant 那一页要的（区域、每块、场景）；没接入 available=false。"""
