@@ -5,75 +5,7 @@
 (() => {
 
 /* ---------------- 家居 ---------------- */
-const mi = { view: null, open: false, detail: null, region: 'cn', qrShown: null, room: '全屋', scrollTab: true, src: null };
-// 家居页的两页（设计画布第 45 块）：接入了智能中枢才有「米家 | 智能中枢」切换，记住上次看的那一页（只在这台设备上）
-const SRC_KEY = 'home.src';
-const savedSrc = () => { try { return localStorage.getItem(SRC_KEY); } catch (e) { return null; } };
-function setSrc(src) {
-  mi.src = src;
-  try { localStorage.setItem(SRC_KEY, src); } catch (e) { /* 存不了就只记这一次 */ }
-  renderHome();
-  if (window.dashRender) window.dashRender();
-}
-// 家居的分页（设计画布第 62 块）：米家、智能中枢、机柜；后两个放它们自己的网页（设备本机的小代理 appproxy.py）。
-// 设置里选显示哪些、先看哪个；网关没给这台设备打开对应插件的不显示
-const tabsCfg = () => ui.home_tabs || { show: ['mi', 'hub'], first: '', work: '', urls: {} };
-function availableSrcs() {
-  const ok = { mi: true, hub: !!(window.hubAvailable && window.hubAvailable()) };   // 机柜挪到了工作台（设计画布第 71 块）
-  const list = tabsCfg().show.filter(t => ok[t]);
-  return list.length ? list : ['mi'];
-}
-// 'mi' 或 'hub'：没选过时按设置里的「先看」，再按上次看的；米家没登录时先看别的
-function currentSrc() {
-  const list = availableSrcs();
-  if (!list.includes(mi.src)) {
-    const first = tabsCfg().first, saved = savedSrc(), loggedIn = !!(mi.view && mi.view.account && mi.view.state !== 'expired');
-    mi.src = list.includes(first) ? first : list.includes(saved) ? saved : (loggedIn || list.length < 2 ? list[0] : list.find(t => t !== 'mi'));
-  }
-  return mi.src;
-}
-// 智能中枢、机柜自己的网页：只在看那一页时加载，切走或关掉「家居」就卸掉（两个网页都不小）
-let appOn = null;
-function renderApp(app, reload) {
-  const box = $('hApp');
-  box.hidden = !app;
-  if (app === appOn && !reload) return;
-  box.querySelectorAll('iframe').forEach(f => { f.src = 'about:blank'; f.remove(); });
-  appOn = app;
-  $('hAppMsg').textContent = '';
-  if (!app) return;
-  const url = (tabsCfg().urls || {})[app];
-  if (DEMO || !url) { $('hAppMsg').textContent = DEMO ? '演示模式里不加载它的网页' : '客户端还没准备好，稍后再试'; return; }
-  $('hAppMsg').textContent = '正在打开…';
-  const f = document.createElement('iframe');
-  f.title = app === 'hub' ? '智能中枢' : '机柜';
-  f.addEventListener('load', () => { if (appOn === app) $('hAppMsg').textContent = ''; });
-  f.src = url;
-  box.appendChild(f);
-}
-function renderHt() {
-  const c = tabsCfg();
-  $('htShow').querySelectorAll('[data-t]').forEach(b => b.classList.toggle('on', c.show.includes(b.dataset.t)));
-  $('htFirst').querySelectorAll('[data-t]').forEach(b => {
-    b.classList.toggle('on', b.dataset.t === c.first);
-    b.hidden = !!b.dataset.t && !c.show.includes(b.dataset.t);
-  });
-}
-async function sendHt(change) {
-  if (DEMO) { ui.home_tabs = Object.assign({}, tabsCfg(), change); renderHt(); renderHome(); return; }
-  const r = await postJson('/api/home-tabs', change);
-  if (r && r.ok) handlers.home_tabs(r.home_tabs);
-}
-handlers.home_tabs = v => { ui.home_tabs = v; if (!availableSrcs().includes(mi.src)) mi.src = null; renderHt(); renderHome(); };
-$('htShow').addEventListener('click', e => {
-  const b = e.target.closest('[data-t]');
-  if (!b) return;
-  const show = tabsCfg().show.includes(b.dataset.t) ? tabsCfg().show.filter(t => t !== b.dataset.t) : [...tabsCfg().show, b.dataset.t];
-  if (!show.length) return toast('至少留一个', 'info');
-  sendHt({ show });
-});
-$('htFirst').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (b) sendHt({ first: b.dataset.t }); });
-
+const mi = { view: null, open: false, detail: null, region: 'cn', qrShown: null, room: '全屋', scrollTab: true };
 async function miFetch(path, body) {
   try {
     const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -86,10 +18,6 @@ async function miFetch(path, body) {
 }
 
 function openHome(on) {
-  if (on && !mi.open) {   // 设置里选了「先看」哪一页：每次打开都从它开始
-    const first = tabsCfg().first;
-    if (first && availableSrcs().includes(first)) mi.src = first;
-  }
   mi.open = on;
   $('home').classList.toggle('on', on);
   if (!on) closeDetail();
@@ -137,39 +65,33 @@ function renderHome() {
   if (!v) return;
   renderMiSettings();
   const loggedIn = !!v.account && v.state !== 'expired';
-  // 智能中枢（work.js，设计画布第 38 块）和米家分两页（第 45 块）：没选过时米家没登录就先看智能中枢
-  const src = currentSrc(), list = availableSrcs();
-  const onHub = src !== 'mi';          // 智能中枢、机柜：放它们自己的网页，米家那些都藏起来
-  if (window.hubRender) window.hubRender(false);   // 设备自己画的智能中枢那几块换成了它自己的网页
-  $('hSrc').hidden = list.length < 2;
-  $('hSrc').querySelectorAll('[data-src]').forEach(b => { b.hidden = !list.includes(b.dataset.src); b.classList.toggle('on', b.dataset.src === src); });
-  $('home').classList.toggle('on-app', onHub);
-  renderApp(onHub && mi.open ? src : null);
-  const showLogin = !loggedIn && !onHub;
+  // 家居只放米家（设计画布第 75 块）：智能中枢在工作台里
+  if (window.hubRender) window.hubRender(false);
+  const showLogin = !loggedIn;
   // only one of the two takes the sheet's height: both flex:1, the QR pane overflowed its half and
   // the empty rooms box above it in the stack swallowed taps on 获取二维码
   $('hLogin').style.display = showLogin ? '' : 'none';
-  $('hRooms').style.display = loggedIn && !onHub ? '' : 'none';
-  $('hRefresh').style.display = (loggedIn && !onHub) || onHub ? '' : 'none';
-  $('hSub').textContent = onHub ? (src === 'hub' ? '智能中枢 · 和电脑上的网页一样' : '机柜 · 和机柜屏上的一样') : loggedIn ? `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
+  $('hRooms').style.display = loggedIn ? '' : 'none';
+  $('hRefresh').style.display = loggedIn ? '' : 'none';
+  $('hSub').textContent = loggedIn ? `米家 · ${v.account.user}` + (v.updated_at ? ` · ${new Date(v.updated_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '')
     : '用米家 App 扫码登录后显示家里的设备';
   // the home: its name with ▾, the others in a menu
   const homes = loggedIn ? v.homes : [];
   const current = homes.find(h => h.id === v.home_id) || homes[0];
-  $('hHomeName').textContent = !onHub && current ? current.name : '家居';
+  $('hHomeName').textContent = current ? current.name : '家居';
   $('hHomePick').classList.toggle('many', homes.length > 1);
   $('hHomeMenu').innerHTML = homes.map(h =>
     `<button data-id="${esc(h.id)}" class="${current && h.id === current.id ? 'on' : ''}">${esc(h.name)}${h.shared ? '<small>共享</small>' : ''}</button>`).join('');
   // message line
   const msg = v.state === 'expired' ? '米家登录已过期，请重新扫码' : v.state === 'loading' ? '正在读取米家设备…'
     : v.state === 'error' ? v.error : loggedIn && !v.rooms.length ? '这个家里还没有能显示的设备' : '';
-  $('hMsg').textContent = onHub ? '' : msg;
+  $('hMsg').textContent = msg;
   $('hMsg').classList.toggle('bad', v.state === 'error' || v.state === 'expired');
   if (showLogin) renderLogin(v);
   // rooms as tabs: 全屋 and each room; the summary chips and tiles follow the tab
   const rooms = loggedIn ? v.rooms : [];
   if (mi.room !== ALL && !rooms.some(r => r.name === mi.room)) mi.room = ALL;
-  $('hTabs').style.display = $('hChips').style.display = loggedIn && rooms.length && !onHub ? '' : 'none';
+  $('hTabs').style.display = $('hChips').style.display = loggedIn && rooms.length ? '' : 'none';
   $('hTabs').innerHTML = [ALL, ...rooms.map(r => r.name)].map(n =>
     `<button data-room="${esc(n)}" class="${n === mi.room ? 'on' : ''}">${esc(n)}</button>`).join('');
   const shown = mi.room === ALL ? rooms : rooms.filter(r => r.name === mi.room);
@@ -366,11 +288,7 @@ function fmt(key, v) {
 
 $('btnHome').addEventListener('click', () => openHome(true));
 $('hClose').addEventListener('click', () => openHome(false));
-$('hSrc').addEventListener('click', e => { const b = e.target.closest('[data-src]'); if (b && b.dataset.src !== mi.src) setSrc(b.dataset.src); });
-$('hRefresh').addEventListener('click', () => {
-  if (appOn) return renderApp(appOn, true);     // 智能中枢、机柜：重新载入它的网页（回到默认页）
-  miFetch('/api/mijia/refresh'); toast('正在刷新');
-});
+$('hRefresh').addEventListener('click', () => { miFetch('/api/mijia/refresh'); toast('正在刷新'); });
 $('hQrBtn').addEventListener('click', () => miFetch('/api/mijia/login/start', { region: mi.region }));
 $('hRegions').addEventListener('click', e => {
   const b = e.target.closest('button');
@@ -595,8 +513,7 @@ handlers.rotation = r => { rot = r; renderRotation(); };
 window.miApi = {
   view: () => mi.view, findCard, control, openDetail, openHome, icon, isOn, longPress, askConfirm,
   isOpen: () => mi.open, rerender: () => renderHome(),
-  showLogin: () => setSrc('mi'),
-  src: currentSrc, setSrc,
+  showLogin: () => renderHome(),
   visible: on => { if (!DEMO) miFetch('/api/mijia/visible', { visible: on || mi.open, home: !!quickHome.on }); },
 };
 })();

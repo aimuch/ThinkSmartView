@@ -18,11 +18,6 @@ def free_port():
         return s.getsockname()[1]
 
 
-def test_tabs_setting():
-    assert appproxy.normalize_tabs(None) == {'show': ['mi'], 'first': ''}
-    assert appproxy.normalize_tabs({'show': ['rack', 'hub', 'mi', 'x'], 'first': 'hub'}) == {'show': ['mi'], 'first': ''}
-
-
 def test_work_setting():
     """工作台的设置（设计画布第 75 块）：四页都在 order 里；以前存的「先看」带过来；栏宽限在 30%–70%。"""
     w = appproxy.normalize_work(None, 'rack')

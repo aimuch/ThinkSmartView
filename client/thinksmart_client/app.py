@@ -341,7 +341,7 @@ class Client:
                 cfg[key] = config.DEFAULTS[key]
         cfg['home_blocks'] = looks.normalize_blocks(cfg.get('home_blocks'))
         cfg['work'] = appproxy.normalize_work(cfg.get('work'), (cfg.get('home_tabs') or {}).get('work', ''))   # 工作台（第 75 块）
-        cfg['home_tabs'] = appproxy.normalize_tabs(cfg.get('home_tabs'))   # 家居的分页（设计画布第 62 块）
+        cfg.pop('home_tabs', None)   # 家居的分页没了（只放米家，设计画布第 75 块）；以前存的「工作台先看」上面已经迁走   # 家居的分页（设计画布第 62 块）
         cfg['dash_cards'] = looks.normalize_blocks(cfg.get('dash_cards'), looks.DASH_CARDS)
         try:
             cfg['dash_default'] = looks.normalize_dash_tab(cfg.get('dash_default'))
@@ -2476,9 +2476,6 @@ class Client:
 
     # ---- 家居的分页：米家、智能中枢、机柜（设计画布第 62 块） ----
 
-    def home_tabs_view(self):
-        return {**self.cfg['home_tabs'], 'urls': {a: appproxy.url(a) for a in appproxy.APPS}}
-
     def work_view(self):
         return {**self.cfg['work'], 'urls': {a: appproxy.url(a) for a in appproxy.APPS}}
 
@@ -2507,21 +2504,6 @@ class Client:
             self.events.publish('integrations', self.integrations)
         return r
 
-    async def set_home_tabs(self, show=None, first=None):
-        """Settings page: which tabs 家居 shows and which one it opens on ('' = the one looked at last)."""
-        cur = dict(self.cfg['home_tabs'])
-        if show is not None:
-            if not isinstance(show, list) or not show:
-                raise ValueError('至少留一个')
-            cur['show'] = show
-        if first is not None:
-            cur['first'] = first
-        self.cfg['home_tabs'] = appproxy.normalize_tabs(cur)
-        config.save(home_tabs=self.cfg['home_tabs'])
-        view = self.home_tabs_view()
-        self.events.publish('home_tabs', view)
-        return view
-
     def snapshot(self):
         return {'status': self.status(), 'models': self.models, 'alarms': self.alarm_view(), 'bluetooth': self.bt.view(),
                 'hub_node': self.hub_node.view(), 'work': self.work_view(),
@@ -2532,7 +2514,7 @@ class Client:
                 'gentle': self.gentle.view(time.time()), 'focus': self.focus.view(), 'study': self.study_view(),
                 'airplay': self.airplay and self.airplay.view(),
                 'intercom': self.intercom and self.intercom.view(),
-                'listen': self.listen_view(), 'home_tabs': self.home_tabs_view(),
+                'listen': self.listen_view(), 
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
                 'integrations': self.integrations,

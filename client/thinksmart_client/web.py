@@ -165,14 +165,6 @@ def make_app(client: Client):
         fresh = isinstance(lux, (int, float)) and isinstance(at, (int, float)) and time.time() - at < 40
         return web.json_response({'ok': True, 'lux': lux if fresh else None})
 
-    async def home_tabs(request):
-        body = await request.json()
-        try:
-            value = await client.set_home_tabs(body.get('show'), body.get('first'))
-        except ValueError as e:
-            return web.json_response({'ok': False, 'error': str(e)}, status=400)
-        return web.json_response({'ok': True, 'home_tabs': value})
-
     async def volume(request):
         body = await request.json()
         try:
@@ -494,7 +486,6 @@ def make_app(client: Client):
     app.router.add_post('/api/work', work_settings)
     app.router.add_post('/api/quiet', quiet_set)
     app.router.add_post('/api/integrations/repo', repo_command)
-    app.router.add_post('/api/home-tabs', home_tabs)
     app.router.add_post('/api/volume', volume)
     app.router.add_post('/api/alarm-volume', alarm_volume)
     app.router.add_post('/api/alarm-tone', alarm_tone)

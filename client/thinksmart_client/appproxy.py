@@ -19,23 +19,12 @@ HOP = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 
        'upgrade', 'host', 'content-length'}
 
 
-TABS = ('mi',)                   # 家居 的分页：只剩米家；机柜（第 71 块）、智能中枢（第 75 块）挪到了工作台
 WORK_TABS = ('desk', 'hub', 'rack', 'repo')   # 工作台的分页：智能桌面、智能中枢、机柜、仓库同步
 SPLIT_MIN, SPLIT_MAX = 0.3, 0.7  # 工作台两栏的左栏占多少（拖中间的竖条）
 
 
 def url(app):
     return f'http://127.0.0.1:{APPS[app]}{HOME[app]}'
-
-
-def normalize_tabs(value):
-    """{'show': 显示哪些分页（按 TABS 的顺序）, 'first': 打开「家居」先看哪个（'' = 上次看的）,
-    'work': 打开工作台先看哪页（WORK_TABS 之一，'' = 上次看的）}。"""
-    value = value if isinstance(value, dict) else {}
-    show = value.get('show')
-    show = [t for t in TABS if t in show] if isinstance(show, list) else list(TABS)
-    first = value.get('first') if value.get('first') in TABS else ''
-    return {'show': show or ['mi'], 'first': first if first in (show or ['mi']) else ''}
 
 
 KEEP_CHOICES = (0, 5, 10, 30, -1)   # 切走后保留机柜页、智能中枢网页几分钟（设计画布第 79 块）：0 不保留，-1 一直保留

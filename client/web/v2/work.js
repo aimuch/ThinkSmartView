@@ -223,7 +223,7 @@ function renderTabs() {
 // 机柜那页放 rack-screen 的画面（设置里选了、网关说能放：填了登录密码、登得上）；智能中枢那页可以放它自己的网页
 function screenUrl() {
   if (!ig.open || !ig.data || DEMO) return '';
-  const u = W().urls || (ui.home_tabs || {}).urls || {};
+  const u = W().urls || {};
   if (ig.tab === 'rack' && W().rack === 'screen' && A().rack_status && (ig.data.rack_status || {}).screen) return u.rack || '';
   if (ig.tab === 'hub' && W().hub === 'web' && A().smart_hub) return u.hub || '';
   return '';
