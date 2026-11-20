@@ -427,6 +427,22 @@ def test_status_not_interrupted_when_update_ends_while_checking(repos, monkeypat
     assert st["state"] == "failed" and st["error"] == "安装步骤失败，已退回原来的版本"
 
 
+def test_status_reports_the_commit_the_update_ended_on(repos):
+    """「更新成功：A → B」的 B 是那次更新完时的版本，不是现在的 HEAD（之后用部署脚本又更新过，设计画布第 85 块 ⑩）。"""
+    _, install, _ = repos
+    u = make_updater(install)
+    u.state_dir.mkdir(parents=True)
+    head = git(install, "rev-parse", "HEAD")
+    first = git(install, "rev-list", "--max-parents=0", "HEAD").split()[0]
+    u._write_state({"started": time.time(), "from": first, "pid": 999999})
+    u.exit_file.write_text(f"0 {first}\n")
+    st = u.status()
+    assert st["state"] == "done" and st["to"]["commit"] == first and not st["changed"]
+    u.exit_file.write_text("0\n")                     # 老的退出文件只有退出码：退回用现在的 HEAD
+    st = u.status()
+    assert st["state"] == "done" and st["to"]["commit"] == head
+
+
 # ---------- 登录交接 ----------
 
 def test_session_handover(tmp_path):

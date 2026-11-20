@@ -2457,8 +2457,8 @@ class AdminHandler:
         return {"ok": True, **(await self._blocking(services.view, merged)),
                 "home": {"plugins": pages.home_plugins(merged), "devices": self._device_plugins(merged),
                          "intent": pages.describe_intent(merged)["mode"]},
-                "ai": {"llm": llm_router.model_label(sel.get("LLM") or ""), "asr": sel.get("ASR") or "",
-                       "tts": sel.get("TTS") or ""}}
+                "ai": {"llm": llm_router.model_label(sel.get("LLM") or ""), "asr": pages.asr_display(merged) if sel.get("ASR") else "",
+                       "tts": pages.tts_display(merged) if sel.get("TTS") else ""}}
 
     async def handle_services(self, request: web.Request):
         self._require_login(request)

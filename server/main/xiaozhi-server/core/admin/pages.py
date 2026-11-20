@@ -666,6 +666,25 @@ def asr_choice(merged: dict) -> str:
     return "other"
 
 
+ASR_CHOICE_LABEL = {"local": "X-ASR 中英混合", "doubao": "豆包流式语音识别"}
+
+
+def asr_display(merged: dict) -> str:
+    """后台卡片上的名字（「X-ASR 中英混合」），不是配置里的条目名（SherpaXASR）；手动配的才显示条目名。"""
+    choice = asr_choice(merged)
+    if choice in ASR_CHOICE_LABEL:
+        return ASR_CHOICE_LABEL[choice]
+    provider = catalog.ASR_PROVIDER_BY_ID.get(choice)
+    return provider["label"] if provider else _selected(merged, "ASR")
+
+
+def tts_display(merged: dict) -> str:
+    """TTS 引擎在后台的名字（EdgeTTS、千问 TTS、局域网合成服务）；不认识的显示条目名。"""
+    name = _selected(merged, "TTS")
+    engine = next((e for e in catalog.TTS_ENGINES if e["entry"] == name), None)
+    return engine["label"] if engine else name
+
+
 def describe_asr(merged: dict) -> dict:
     name = _selected(merged, "ASR")
     entry = _entry(merged, "ASR", name)
@@ -675,6 +694,7 @@ def describe_asr(merged: dict) -> dict:
     local = _entry(merged, "ASR", catalog.LOCAL_ASR_ENTRY)
     return {
         "selected": name,
+        "selected_label": asr_display(merged),
         "label": asr_label(entry),
         "info": info,
         "model": asr_model_check(entry),

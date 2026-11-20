@@ -1265,7 +1265,8 @@ function applyBrand(b) {
   $("favicon").href = "/admin/favicon?v=" + encodeURIComponent(brandInfo.icon.kind + (brandInfo.icon.value || "").length + brandInfo.icon.value.slice(-12));
 }
 const PAGE_TITLES = { status: "状态", how: "工作原理", llm: "大模型", calls: "称呼", grokbot: "Grok Bot", agents: "智能体", devices: "设备", memory: "记忆", cost: "费用",
-  asr: "语音识别", tts: "语音合成", intent: "意图识别", update: "更新网关" };
+  asr: "语音识别", tts: "语音合成", intent: "意图识别", update: "更新网关", kids: "孩子和学习", album: "家庭相册",
+  commands: "口令", services: "外部服务", media: "媒体" };
 
 let authMode = "login";
 async function route() {
@@ -2414,7 +2415,7 @@ async function renderASR(root) {
   if (downloading) page.timer = setInterval(() => { if (!(page.dirty && page.dirty())) openPage("asr", true); }, 2500);
   root.innerHTML = `
     <div class="page-head"><div><h1>语音识别</h1><p class="sub">把设备说的话转成文字。一次只用一种：本地模型在这台电脑上识别、不联网；云端服务要开通、按用量付费。</p></div>
-      <span class="pill ok">当前：${esc(d.selected)}</span></div>
+      <span class="pill ok">当前：${esc(d.selected_label || d.selected)}</span></div>
     ${d.choice === "other" ? `<div class="banner warn">当前使用的 ${esc(d.selected)} 不在后台管理范围内（可能是手动改了配置文件）。在下面选择一种并使用即可切换。</div>` : ""}
     ${d.running && d.running !== d.selected ? `<div class="banner warn">配置里选的是 ${esc(d.selected)}，但服务仍在使用 ${esc(d.running)}，重启服务后生效。</div>` : ""}
     <div data-tab="engine"><h3 class="asr-group" style="margin-top:0">本地模型</h3>
@@ -3182,6 +3183,8 @@ async function openPluginSettings(id, label, onSaved) {
 
 // ---------- [xiaozhi-hub] 设备（设计画布第 19 块）：每台设备分别配置默认模型、音色、人设、插件 ----------
 
+// 设备上报的对话状态（客户端 ui.status.state）
+const HEALTH_STATE = { idle: "待机", connecting: "连接中", listening: "在听", thinking: "在想", speaking: "在说" };
 const DV_STATE = { talking: '<span class="spill">对话中</span>', idle: '<span class="spill idle">待机</span>', offline: '<span class="spill off">离线</span>' };
 let dvData = null;
 async function renderDeviceSettings(root) {
@@ -3239,8 +3242,8 @@ async function renderDeviceHealth(root) {
           <span>内存</span><span>${pct(x.mem, 80, 92)}</span>
           <span>温度</span><span>${x.temp != null ? `<span class="${x.temp >= 70 ? "dh-bad" : x.temp >= 55 ? "dh-warn" : ""}">${x.temp} ℃</span>` : "—"}</span>
           <span>网络</span><span>${x.wifi ? `Wi‑Fi${x.wifi.ssid ? "「" + esc(x.wifi.ssid) + "」" : ""} ${x.wifi.signal != null ? x.wifi.signal + " dBm" : ""}` : "—"}${x.hub_ms != null ? ` · 到网关 ${x.hub_ms} ms` : ""}</span>
-          <span>状态</span><span>${esc(x.state || "—")}${x.quiet && x.quiet.mute ? " · 静音中" : ""}${x.quiet && x.quiet.dnd ? " · 勿扰" + esc(x.quiet.dnd_text || "") : ""}</span>
-          <span>出过错</span><span class="${restarts.length || errs.length ? "dh-warn" : ""}">${restarts.length ? "常驻循环重启：" + restarts.map(([k, n]) => `${esc(k)} ${n} 次`).join("、") : "常驻循环没重启过"}${errs.length ? ` · 最近 ${errs.length} 条警告和错误` : ""}</span>
+          <span>状态</span><span>${esc(HEALTH_STATE[x.state] || x.state || "—")}${x.quiet && x.quiet.mute ? " · 静音中" : ""}${x.quiet && x.quiet.dnd ? " · 勿扰" + esc(x.quiet.dnd_text || "") : ""}</span>
+          <span>出过错</span><span>${restarts.length ? '<span class="dh-warn">常驻循环重启：' + restarts.map(([k, n]) => `${esc(k)} ${n} 次`).join("、") + "</span>" : "常驻循环没重启过"}${errs.length ? ` · <span class="dh-warn">最近 ${errs.length} 条警告和错误</span>` : ""}</span>
         </div>` : ""}
         ${errs.length ? `<details><summary class="small">最近的警告和错误</summary><div class="dh-errs">${errs.map((e) =>
           `<div><span class="muted">${t(e.t)}</span><span class="${e.level === "error" ? "dh-bad" : "dh-warn"}">${esc(e.name)}</span><span>${esc(e.msg)}</span></div>`).join("")}</div></details>` : ""}
@@ -4760,7 +4763,7 @@ async function renderUpdate(root) {
   if (d.update.state === "running") return renderUpdating(root, d.update);
   const src = d.source || {};
   root.innerHTML = `
-    <div class="page-head"><div><h1>更新网关</h1><p class="sub">和 GitHub 上的版本比较，有新版本时由你决定什么时候更新，不会自动更新。</p></div>
+    <div class="page-head"><div><h1>更新网关</h1><p class="sub">和下面的「更新来源」比较，有新版本时由你决定什么时候更新，不会自动更新。</p></div>
       ${d.unsupported ? "" : '<button class="btn" id="up-check">检查更新</button>'}</div>
     ${d.unsupported ? `<div class="banner warn">${esc(d.unsupported)}</div>` : ""}
     <div class="card panel"><div class="kv two">

@@ -245,10 +245,19 @@ class Updater:
         return True
 
     def _exit_code(self):
+        """更新脚本的退出码（退出文件第一项）。"""
         try:
-            return int(self.exit_file.read_text().strip())
-        except (OSError, ValueError):
+            return int(self.exit_file.read_text().split()[0])
+        except (OSError, ValueError, IndexError):
             return None
+
+    def _exit_commit(self) -> str:
+        """更新结束时 HEAD 是哪个提交（退出文件第二项）。老的退出文件只有退出码，返回空。"""
+        try:
+            parts = self.exit_file.read_text().split()
+        except OSError:
+            return ""
+        return parts[1] if len(parts) > 1 else ""
 
     def running(self) -> bool:
         state = self._state()
@@ -279,7 +288,7 @@ class Updater:
         return self.status()
 
     def _command(self) -> list:
-        script = 'bash "$1"; code=$?; echo "$code" >"$2.part" && mv "$2.part" "$2"'
+        script = 'bash "$1"; code=$?; echo "$code $(git rev-parse HEAD 2>/dev/null)" >"$2.part" && mv "$2.part" "$2"'
         cmd = ["bash", "-c", script, "hub-update", str(self.root / "scripts" / "update.sh"), str(self.exit_file)]
         if sys.platform.startswith("linux") and os.environ.get("INVOCATION_ID") and shutil.which("systemd-run"):
             # 网关是 systemd 服务：重启时会结束服务 cgroup 里的所有进程，更新进程要放到服务外面
@@ -318,9 +327,10 @@ class Updater:
             lines = []
         steps = [line[4:].strip() for line in lines if line.startswith("==> ")]
         errors = [line.lstrip("✗ ").strip() for line in lines if line.lstrip().startswith("✗")]
-        head = self._head()
+        # 更新到了哪个提交：记在退出文件里；老的退出文件没记，只好用现在的 HEAD（之后用部署脚本又更新过就不准了）
+        head = self._exit_commit() or self._head()
         result = {"state": status, "started": int(state.get("started", 0)), "step": steps[-1] if steps else "",
-                  "from": self._commit(state["from"]) if state.get("from") else {}, "to": self._commit("HEAD"),
+                  "from": self._commit(state["from"]) if state.get("from") else {}, "to": self._commit(head) if head else {},
                   "changed": bool(head) and head != state.get("from"), "log": lines[-80:]}
         if code is not None:
             try:
