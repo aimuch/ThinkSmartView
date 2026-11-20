@@ -41,8 +41,8 @@ function weather() {
   const w = ui.today && ui.today.weather, now = new Date(), lunar = ui.today && ui.today.lunar;
   const t = w && w.today || {};
   return `<div class="dw-top"><div><div class="dw-time" id="dTime">${pad(now.getHours())}:${pad(now.getMinutes())}</div>` +
-    `<div class="dm">${now.getMonth() + 1}月${now.getDate()}日 周${WD[now.getDay()]}${lunar && lunar.text ? ' · ' + esc(lunar.text) : ''}</div></div>` +
-    (w ? `<div class="dw-now"><span class="dw-ic">${esc(w.icon || '')}</span><b>${n0(w.temp)}°</b><span class="dm">${esc(w.place || '')} · ${esc(w.text || '')}</span></div>` : '') + '</div>' +
+    `<div class="dm dw-two"><span>${now.getMonth() + 1}月${now.getDate()}日 周${WD[now.getDay()]}</span>${lunar && lunar.text ? `<span>${esc(lunar.text)}</span>` : ''}</div></div>` +
+    (w ? `<div class="dw-now"><span class="dw-ic">${esc(w.icon || '')}</span><b>${n0(w.temp)}°</b><span class="dm dw-two"><span>${esc(w.place || '')}</span><span>${esc(w.text || '')}</span></span></div>` : '') + '</div>' +
     (w ? `<div class="dm dw-row"><span>${n0(t.min)}° / ${n0(t.max)}°</span>${t.rain !== null && t.rain !== undefined ? `<span>降水 ${n0(t.rain)}%</span>` : ''}${w.air ? `<span class="${airClass(w.air)}">空气${esc(w.air)}</span>` : ''}${w.stale_min ? `<span class="dw-stale">${staleText(w.stale_min)}</span>` : ''}</div>`
       : `<div class="dm">${esc((ui.today && ui.today.weather_error) || '天气还没取到')}</div>`);
 }
@@ -323,6 +323,7 @@ const ASK = ['明天下雨吗？', '放雨声半小时', '我有哪些闹钟', '
 function ask() {
   const st = ui.status && ui.status.state;
   const sub = st === 'listening' ? '在听…' : st === 'thinking' ? '在想…' : st === 'speaking' ? '在说…'
+    : ui.status && ui.status.mic === false ? '麦克风已关，拨开机身侧面的开关就能说话'
     : `我在呢，叫「${(ui.wake && ui.wake.primary) || '小麦小麦'}」或者点话筒`;
   if ($('dAskSub').textContent !== sub) $('dAskSub').textContent = sub;
   set('dAskChips', ASK.map(q => `<button data-ask="${esc(q)}">${esc(q)}</button>`).join(''));

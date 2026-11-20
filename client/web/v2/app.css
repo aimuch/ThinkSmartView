@@ -862,6 +862,7 @@ body.screen-dark * { animation-play-state: paused !important; }
 .h-read b { margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .h-read small { font-size: 14px; font-weight: 400; color: var(--ink3); margin-left: 2px; }
 .h-tile.k-psu.on > b { margin-top: 4px; }
+.h-tile.hub > b { margin-top: 6px; }   /* 智能中枢：名字紧跟图标，少一行说明的卡片不再低一截（第 85 块 ⑤） */
 .h-keys { display: flex; flex-wrap: wrap; gap: 8px; }
 .h-keys button { padding: 8px 14px; border-radius: 999px; background: var(--card2); color: var(--ink); font-size: 15px; border: 1px solid var(--line); }
 .h-keys button:active { transform: scale(.94); background: var(--accent); }

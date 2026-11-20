@@ -93,7 +93,7 @@ body.net-off .welcome::before { flex-grow: 0; }
   font-weight: 700; display: grid; place-items: center; }
 
 /* ---- the home page's weather block and the appearance card ---- */
-.home-weather { display: flex; align-items: center; gap: 18px; margin-top: 22px; padding: 14px 22px; max-width: 560px; border-radius: 22px;
+.home-weather { display: flex; align-items: center; gap: 18px; margin-top: 22px; padding: 14px 22px; max-width: 640px; border-radius: 22px;
   background: var(--card); border: 1px solid var(--line); }
 .home-weather[hidden] { display: none; }
 .home-weather .hw-icon { font-size: 46px; line-height: 1; }
@@ -527,7 +527,10 @@ body.dash-on:not([data-dash="chat"]) .dash { display: grid; grid-template-rows: 
   background: var(--accent); }   /* 星夜的青色渐变上白字只有 2.2:1；纯主题色 ≥ 3:1 */
 body[data-theme="lavender"]:not(.sleeping) .dc-ic { background: linear-gradient(135deg, #8f7ff7, var(--accent-text)); }
 .dm { font-size: 15px; color: var(--ink3); line-height: 1.45; }
-.dw-top .dm, .dw-row { word-break: keep-all; }   /* 日期、「上海市青浦区 · 晴间少云」只在空格、点处换行 */
+.dw-top .dm, .dw-row { word-break: keep-all; }
+/* 日期和农历、地点和天气：两段放得下在一行，放不下各占一行，不在行尾留「·」（设计画布第 85 块 ③） */
+.dw-two { display: flex; flex-wrap: wrap; column-gap: 8px; }
+.dw-now .dw-two { justify-content: flex-end; }   /* 日期、「上海市青浦区 · 晴间少云」只在空格、点处换行 */
 .d-ok { color: var(--dok, #3ecf74) !important; }
 .d-warn { color: var(--warn-text, var(--warn)) !important; }
 .dw-top { display: flex; align-items: flex-start; gap: 10px; }
@@ -1124,3 +1127,7 @@ body.calm :is(.app *, .dash *, #calm-x) { animation-play-state: paused !importan
 .h-tile.ro .h-power { display: none; }
 @media (orientation: portrait) { .h-src { margin: 0 8px; } .h-src button { padding: 0 14px; font-size: 17px; } }
 .d-ha { align-self: stretch; height: 46px; margin: 0 0 12px; border-radius: 14px; font: inherit; font-size: 16px; font-weight: 600; color: var(--ink); background: var(--card2); border: 1px solid var(--line); }
+
+/* 设计画布第 85 块：麦克风拨关时两个话筒按钮变灰（⑥ 外观设置两组之间补间距） */
+body.mic-off .mic, body.mic-off .da-mic { opacity: .4; filter: grayscale(.6); }
+#looksDashBox:not([hidden]) { display: flex; flex-direction: column; gap: 16px; }

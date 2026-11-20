@@ -30,6 +30,21 @@ def test_scripts_parse_together(tmp_path):
     assert r.returncode == 0, r.stderr
 
 
+def test_every_colour_variable_used_has_a_default():
+    """深色主题没有 --track 时，关着的开关只剩一个白点（设计画布第 85 块 ①）：var(--x) 不带默认值的，
+    tokens.css 的 :root 里都要有。"""
+    root = (V2 / 'tokens.css').read_text()
+    defined = set(re.findall(r'(--[\w-]+)\s*:', root))
+    for css in ('app.css', 'looks.css'):
+        text = re.sub(r'/\*.*?\*/', '', (V2 / css).read_text(), flags=re.S)
+        defined |= set(re.findall(r'(--[\w-]+)\s*:', text.split('body[data-theme')[0]))
+    for css in sorted(V2.glob('*.css')):
+        text = re.sub(r'/\*.*?\*/', '', css.read_text(), flags=re.S)
+        for name in ('--track', '--card', '--card2', '--line', '--ink', '--ink2', '--ink3', '--accent'):
+            if re.search(r'var\(' + name + r'\)', text):
+                assert name in defined, f'{css.name} 用了 var({name})，tokens.css 里没有默认值'
+
+
 def test_stylesheets_have_balanced_braces():
     """少一个 } 后面的规则就全进了上一个 @media（0.1.715：删旧样式时把 `@media (orientation: portrait) { … }`
     删掉了一半，后面的样式在横屏全都不生效）。"""

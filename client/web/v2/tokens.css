@@ -5,6 +5,7 @@
   --bg0: #050813; --bg1: #0b1128;                       /* 底色、卡片底 */
   --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #939ec7;     /* 文字：主、次、弱（弱字在卡片上也要 ≥ 4.5:1） */
   --line: #ffffff17; --card: #ffffff0b; --card2: #ffffff14;
+  --track: #ffffff24;                                   /* 关着的开关、进度条的底（浅色主题在 looks.css 换） */
   --accent: #6c8cff; --accent2: #5ee0ff;                /* 品牌蓝、青 */
   --accent-strong: #4a66e8;                             /* 主题色底上放白色小字时用（≥ 4.5:1） */
   /* AI 渐变（设计画布第 45 块）：和模型、智能体有关的按钮和标签。--ai 描边和亮的装饰，--ai-fill 上面放白字（≥ 4.5:1），
