@@ -6,6 +6,12 @@
 
 /* ---------------- 家居 ---------------- */
 const mi = { view: null, open: false, detail: null, region: 'cn', qrShown: null, room: '全屋', scrollTab: true };
+// 家居里的 Home Assistant（设计画布第 84 块）：放在前面，renderHome 启动时就会用到
+const ha = { src: (() => { try { return localStorage.getItem('home.src') === 'ha' ? 'ha' : 'mi'; } catch (e) { return 'mi'; } })(),
+             view: null, room: '全部', timer: null, detail: null, busy: {} };
+const HA_ALL = '全部';
+const HA_ICON = { light: 'light', switch: 'plug', fan: 'fan', climate: 'climate', cover: 'cover', sensor: 'sensor', binary: 'sensor', lock: 'lock' };
+const haOn = () => !!(window.haAvailable && window.haAvailable());
 async function miFetch(path, body) {
   try {
     const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -17,11 +23,13 @@ async function miFetch(path, body) {
   }
 }
 
-function openHome(on) {
+function openHome(on, src) {
+  if (on && (src === 'ha' || src === 'mi')) setHaSrc(src);
   mi.open = on;
   $('home').classList.toggle('on', on);
   if (!on) closeDetail();
   if (window.hubOpen) window.hubOpen(on);   // 智能中枢的蓝牙灯（work.js）
+  haPoll();
   if (!DEMO) {
     miFetch('/api/mijia/visible', { visible: on });
     if (on && mi.view && mi.view.account && mi.view.state !== 'loading') miFetch('/api/mijia/refresh');
@@ -61,6 +69,13 @@ function drawQr(canvas, text) {
 }
 
 function renderHome() {
+  // 米家 | Home Assistant（设计画布第 84 块）：网关接了 HA、这台开着才有切换
+  const haOk = haOn();
+  $('hSrc').hidden = !haOk;
+  if (!haOk && ha.src === 'ha') ha.src = 'mi';
+  $('hSrc').querySelectorAll('[data-src]').forEach(b => b.classList.toggle('on', b.dataset.src === ha.src));
+  $('hHa').hidden = ha.src !== 'ha';
+  if (ha.src === 'ha') return renderHa();
   const v = mi.view;
   if (!v) return;
   renderMiSettings();
@@ -288,7 +303,11 @@ function fmt(key, v) {
 
 $('btnHome').addEventListener('click', () => openHome(true));
 $('hClose').addEventListener('click', () => openHome(false));
-$('hRefresh').addEventListener('click', () => { miFetch('/api/mijia/refresh'); toast('正在刷新'); });
+$('hRefresh').addEventListener('click', () => {
+  if (ha.src === 'ha') { loadHa(true); return toast('正在刷新'); }
+  miFetch('/api/mijia/refresh'); toast('正在刷新');
+});
+$('hSrc').addEventListener('click', e => { const b = e.target.closest('[data-src]'); if (b && b.dataset.src !== ha.src) { setHaSrc(b.dataset.src); renderHome(); haPoll(); } });
 $('hQrBtn').addEventListener('click', () => miFetch('/api/mijia/login/start', { region: mi.region }));
 $('hRegions').addEventListener('click', e => {
   const b = e.target.closest('button');
@@ -509,9 +528,114 @@ longPress($('hRooms'), '.h-tile', t => { const c = findCard(t.dataset.id); if (c
 setInterval(() => quickHome(!document.hidden && !mi.open && !(typeof sb !== 'undefined' && sb.shown)
   && document.body.dataset.state !== 'sleep' && ((mi.view && mi.view.favorites) || []).length > 0), 5000);
 handlers.rotation = r => { rot = r; renderRotation(); };
+/* ---------------- Home Assistant（设计画布第 84 块；网关 core/integrations/hass.py） ---------------- */
+function setHaSrc(src) { ha.src = src; try { localStorage.setItem('home.src', src); } catch (e) { /* 只记这一次 */ } }
+async function loadHa(fresh) {
+  if (DEMO) return;
+  try {
+    ha.view = await (await fetch('/api/hass' + (fresh ? '?fresh=1' : ''), { cache: 'no-store' })).json();
+  } catch (e) { ha.view = { ok: false, error: '客户端没有响应' }; }
+  if (ha.src === 'ha' && mi.open) renderHa();
+  if (ha.detail) renderHaDetail();
+}
+function haPoll() {   // 看着这一页才问（5 秒一次），关了「家居」、切回米家就停
+  const want = mi.open && ha.src === 'ha' && haOn();
+  if (want && !ha.timer) { loadHa(); ha.timer = setInterval(() => loadHa(), 5000); }
+  if (!want && ha.timer) { clearInterval(ha.timer); ha.timer = null; }
+}
+const haCards = () => ((ha.view && ha.view.areas) || []).flatMap(a => a.cards);
+const haCard = id => haCards().find(c => c.id === id);
+function haTile(c) {
+  const canPower = c.online && !c.readonly && (c.controls.power || c.controls.open);
+  const power = canPower ? `<button class="h-power${c.on ? ' on' : ''}" data-hapower="${esc(c.id)}" aria-label="开关">${c.kind === 'cover'
+    ? '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg>'
+    : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v8M6.3 7.3a8 8 0 1 0 11.4 0"/></svg>'}</button>` : '';
+  return `<div class="h-tile${c.on && c.kind !== 'binary' ? ' on' : ''}${c.online ? '' : ' offline'}${canPower ? '' : ' ro'}${ha.busy[c.id] ? ' busy' : ''}" data-ha="${esc(c.id)}">
+    <div class="h-ic k-${esc(HA_ICON[c.kind] || 'appliance')}">${icon(HA_ICON[c.kind] || 'appliance')}</div>${power}
+    <b>${esc(c.name)}</b><span>${esc(c.summary)}</span></div>`;
+}
+function renderHa() {
+  const v = ha.view;
+  ['hLogin', 'hRooms', 'hTabs', 'hChips', 'hMsg'].forEach(id => { $(id).style.display = 'none'; });
+  $('hRefresh').style.display = '';
+  $('hHomeName').textContent = '家';
+  $('hHomePick').classList.remove('many');
+  if (!v) { $('hSub').textContent = 'Home Assistant · 正在读取…'; $('haMsg').textContent = ''; return; }
+  const err = v.ok === false ? v.error : v.error;
+  $('hSub').textContent = 'Home Assistant' + (v.areas ? ` · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })} 更新` : '');
+  $('haMsg').textContent = !v.available && v.ok !== false ? '网关没给这台设备接 Home Assistant' : err ? `连不上 Home Assistant：${err}` : !haCards().length ? 'Home Assistant 里没有能显示的设备' : '';
+  $('haMsg').classList.toggle('bad', !!err);
+  const areas = v.areas || [];
+  if (ha.room !== HA_ALL && !areas.some(a => a.name === ha.room)) ha.room = HA_ALL;
+  $('haTabs').innerHTML = areas.length > 1 ? [HA_ALL, ...areas.map(a => a.name)].map(n => `<button data-haroom="${esc(n)}" class="${n === ha.room ? 'on' : ''}">${esc(n)}</button>`).join('') : '';
+  $('haScenes').innerHTML = (v.scenes || []).map(x => `<button data-hascene="${esc(x.id)}" class="${ha.busy[x.id] ? 'busy' : ''}">▶ ${esc(x.name)}</button>`).join('');
+  const shown = ha.room === HA_ALL ? areas : areas.filter(a => a.name === ha.room);
+  $('haRooms').innerHTML = shown.map(a => `<div class="h-room">${ha.room === HA_ALL ? `<h3>${esc(a.name)}</h3>` : ''}<div class="h-tiles">${a.cards.map(haTile).join('')}</div></div>`).join('');
+}
+async function haDo(id, op, value) {
+  if (ha.busy[id]) return;
+  ha.busy[id] = true; renderHa();
+  let r;
+  try {
+    r = await (await fetch('/api/hass/control', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                  body: JSON.stringify({ entity: id, op, value }) })).json();
+  } catch (e) { r = { ok: false, error: '客户端没有响应' }; }
+  delete ha.busy[id];
+  if (r && r.ok && r.card && r.card.area) {
+    for (const a of (ha.view && ha.view.areas) || []) a.cards = a.cards.map(c => c.id === r.card.id ? r.card : c);
+  } else if (r && r.ok) toast(r.card && r.card.summary === '已启动' ? '场景已启动' : '好了');
+  else toast((r && r.error) || '没做成', 'error');
+  renderHa();
+  if (ha.detail) renderHaDetail();
+}
+function renderHaDetail() {
+  const c = haCard(ha.detail);
+  if (!c) return closeHaDetail();
+  $('hadName').textContent = c.name;
+  $('hadSum').textContent = `${c.area} · ${c.summary}`;
+  const k = c.controls || {}, rows = [];
+  const chips = (label, items) => rows.push(`<div class="bright-head"><b class="sub">${label}</b></div><div class="h-keys big">${items.join('')}</div>`);
+  const b = (op, v, text, on) => `<button data-haop="${op}" data-hav="${esc(String(v))}" class="${on ? 'on' : ''}">${text}</button>`;
+  if (c.readonly || c.kind === 'sensor' || c.kind === 'binary') rows.push(`<p class="opt-note">${c.readonly ? '只能看：门锁不在这里开关。' : '这是读数，不能控制。'}</p>`);
+  if (k.power && c.online) chips('开关', [b('on', '', '开', c.on), b('off', '', '关', c.on === false)]);
+  if (k.brightness) chips('亮度', [25, 50, 75, 100].map(n => b('brightness', n, n + '%', c.brightness === n)));
+  if (k.cct) chips('色温', [['暖', 2700], ['中', 4000], ['冷', 6000]].filter(([, kv]) => kv >= k.cct.min - 200 && kv <= k.cct.max + 200).map(([t, kv]) => b('cct', kv, t)));
+  if (k.percentage) chips('风速', [25, 50, 75, 100].map(n => b('percentage', n, n + '%')));
+  if (k.target) {
+    const t = c.target != null ? c.target : 26, st = k.target.step || 1;
+    chips('温度', [b('target', t - st, '−'), `<button disabled>${t}℃</button>`, b('target', t + st, '+')]);
+    if ((k.modes || []).length) chips('模式', k.modes.map(m => b('mode', m, { off: '关', heat: '制热', cool: '制冷', auto: '自动', heat_cool: '自动', dry: '除湿', fan_only: '送风' }[m] || m, c.mode === m)));
+  }
+  if (k.open) {
+    chips('窗帘', [b('open', '', '开'), b('stop', '', '停'), b('close', '', '关')]);
+    if (k.position) chips('开到', [0, 25, 50, 75, 100].map(n => b('position', n, n + '%', c.position === n)));
+  }
+  $('hadControls').innerHTML = rows.join('');
+}
+function openHaDetail(id) { ha.detail = id; $('haDetail').classList.add('on'); renderHaDetail(); }
+function closeHaDetail() { ha.detail = null; $('haDetail').classList.remove('on'); }
+$('hadClose').addEventListener('click', closeHaDetail);
+$('haDetail').addEventListener('click', e => {
+  if (e.target === $('haDetail')) return closeHaDetail();
+  const x = e.target.closest('[data-haop]');
+  if (!x || !ha.detail) return;
+  const v = x.dataset.hav, op = x.dataset.haop;
+  haDo(ha.detail, op, v === '' ? null : /^-?[\d.]+$/.test(v) ? Number(v) : v);
+});
+$('hHa').addEventListener('click', e => {
+  const room = e.target.closest('[data-haroom]');
+  if (room) { ha.room = room.dataset.haroom; return renderHa(); }
+  const sc = e.target.closest('[data-hascene]');
+  if (sc) { haDo(sc.dataset.hascene, 'scene'); return; }
+  const pw = e.target.closest('[data-hapower]');
+  if (pw) { const c = haCard(pw.dataset.hapower); return haDo(c.id, c.kind === 'cover' ? (c.on ? 'close' : 'open') : 'toggle'); }
+  const t = e.target.closest('[data-ha]');
+  if (t) openHaDetail(t.dataset.ha);
+});
+
 // 仪表盘（dash.js）用的家居接口：设备数据、开关、详情、家居页、长按
 window.miApi = {
-  view: () => mi.view, findCard, control, openDetail, openHome, icon, isOn, longPress, askConfirm,
+  view: () => mi.view, findCard, control, openDetail, openHome, icon, isOn, longPress, askConfirm, haOn,
   isOpen: () => mi.open, rerender: () => renderHome(),
   showLogin: () => renderHome(),
   visible: on => { if (!DEMO) miFetch('/api/mijia/visible', { visible: on || mi.open, home: !!quickHome.on }); },

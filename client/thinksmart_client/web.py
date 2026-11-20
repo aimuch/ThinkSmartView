@@ -299,6 +299,21 @@ def make_app(client: Client):
             return web.json_response({'ok': False, 'error': '参数不对'}, status=400)
         return await _hub_call(client.set_plugin, name, on)
 
+    async def hass_get(request):
+        """家居里的 Home Assistant（设计画布第 84 块）：网关读好的区域和每块；?fresh=1 不用网关的 3 秒缓存。"""
+        try:
+            return web.json_response(await client.hass_view(request.query.get('fresh') == '1'))
+        except Exception as e:  # noqa: BLE001
+            return web.json_response({'ok': False, 'error': f'连不上小麦网关：{type(e).__name__}'})
+
+    async def hass_control(request):
+        body = await request.json()
+        try:
+            r = await client.hass_control(str(body.get('entity') or ''), str(body.get('op') or ''), body.get('value'))
+        except Exception as e:  # noqa: BLE001
+            r = {'ok': False, 'error': f'连不上小麦网关：{type(e).__name__}'}
+        return web.json_response(r)
+
     async def smarthub_act(request):
         body = await request.json()
         return await _hub_call(client.smarthub_act, str(body.get('id') or ''), str(body.get('action') or ''), body.get('value'))
@@ -509,6 +524,8 @@ def make_app(client: Client):
     app.router.add_get('/api/integrations', integrations_get)
     app.router.add_post('/api/integrations/visible', integrations_visible)
     app.router.add_post('/api/integrations/smarthub', smarthub_act)
+    app.router.add_get('/api/hass', hass_get)
+    app.router.add_post('/api/hass/control', hass_control)
     app.router.add_post('/api/integrations/plugin', integrations_plugin)
     app.router.add_post('/api/integrations/desk', desk_command)
     app.router.add_post('/api/rotation', rotation_set)

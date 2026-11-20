@@ -204,7 +204,8 @@ function smart() {
   const all = v.rooms.flatMap(r => r.cards), home = (v.homes || []).find(h => h.id === v.home_id);
   const rooms = ['全屋', ...v.rooms.map(r => r.name)];
   if (!rooms.includes(D.room)) D.room = '全屋';
-  set('dHomeRooms', `<b class="dh-name">${esc(home ? home.name : '我的家')}</b><span class="dm d-ok">● ${all.filter(c => c.online).length} / ${all.length} 在线</span>` +
+  const haBtn = window.miApi && window.miApi.haOn && window.miApi.haOn() ? '<button class="d-ha" data-openha="1">Home Assistant ›</button>' : '';   // 设计画布第 84 块
+  set('dHomeRooms', haBtn + `<b class="dh-name">${esc(home ? home.name : '我的家')}</b><span class="dm d-ok">● ${all.filter(c => c.online).length} / ${all.length} 在线</span>` +
     `<div class="ds-roomlist">${rooms.map(r => `<button class="d-room${r === D.room ? ' on' : ''}" data-room="${esc(r)}">${esc(r)}` +
       `<small>${r === '全屋' ? all.length : v.rooms.find(x => x.name === r).cards.length}</small></button>`).join('')}</div>`);
   const sc = (ui.scenes && ui.scenes.scenes) || [];
@@ -396,6 +397,7 @@ $('dash').addEventListener('click', e => {
   if (t.closest('[data-phone]')) return $('listsPhone').click();
   const rm = t.closest('[data-room]');
   if (rm) { D.room = rm.dataset.room; return render(true); }
+  if (t.closest('[data-openha]') && window.miApi) return window.miApi.openHome(true, 'ha');
   const op = t.closest('[data-open]');
   if (op && window.miApi) return window.miApi.openHome(true);
   const q = t.closest('[data-ask]');

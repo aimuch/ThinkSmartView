@@ -731,6 +731,8 @@
       <p id="hSub">米家设备</p>
       <div class="h-home-menu" id="hHomeMenu"></div>
     </div>
+    <!-- 米家 | Home Assistant（设计画布第 84 块）：网关接了 Home Assistant、这台开着才有 -->
+    <div class="h-src" id="hSrc" role="tablist" hidden><button data-src="mi" role="tab">米家</button><button data-src="ha" role="tab">Home Assistant</button></div>
     <div class="w-btns">
       <button class="close" id="hRefresh" aria-label="刷新">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
@@ -757,8 +759,22 @@
   </section>
   <div class="h-msg" id="hMsg"></div>
   <div class="h-rooms" id="hRooms"></div>
+  <div class="h-ha" id="hHa" hidden>
+    <div class="h-tabs" id="haTabs"></div>
+    <div class="ha-scenes" id="haScenes"></div>
+    <div class="h-msg" id="haMsg"></div>
+    <div class="h-rooms" id="haRooms"></div>
+  </div>
   </div>
   <!-- 智能中枢、机柜自己的网页（设备本机的小代理 appproxy.py → 网关带令牌转过去；设计画布第 62 块） -->
+</div>
+<!-- Home Assistant 的一个设备点开（设计画布第 84 块）：亮度、色温、空调温度和模式、窗帘 -->
+<div class="h-detail" id="haDetail">
+  <div class="h-detail-card">
+    <div class="h-detail-head"><div><b id="hadName"></b><span id="hadSum"></span></div>
+      <button class="close" id="hadClose" aria-label="关闭"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="h-controls" id="hadControls"></div>
+  </div>
 </div>
 <!-- 智能中枢的灯和电源（work.js，设计画布第 38 块） -->
 <div class="h-detail" id="lDetail">

@@ -1067,6 +1067,15 @@ class Client:
             self.events.publish('integrations', self.integrations)
         return r
 
+    # ---- 家居里的 Home Assistant（设计画布第 84 块；网关 core/integrations/hass.py） ----
+
+    async def hass_view(self, fresh=False):
+        q = urllib.parse.urlencode({'device': self.cfg['device_id'], **({'fresh': '1'} if fresh else {})})
+        return await self._hub_http('/kiosk/hass?' + q)
+
+    async def hass_control(self, entity, op, value=None):
+        return await self._hub_http('/kiosk/hass/control', {'device': self.cfg['device_id'], 'entity': entity, 'op': op, 'value': value})
+
     async def set_plugin(self, name, on):
         """设备设置里「接入的服务」的开关（设计画布第 40 块）：改网关上这台设备的插件，只改这台；改完重新拉一次。"""
         r = await self._hub_http('/kiosk/plugin', {'device': self.cfg['device_id'], 'name': name, 'on': bool(on)})

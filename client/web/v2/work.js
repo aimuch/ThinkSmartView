@@ -419,6 +419,7 @@ function hubHtml() {
 }
 // home.js 的 renderHome 调：返回这台设备有没有接入智能中枢；shown：家居页现在在「智能中枢」那一页（设计画布第 45 块）
 window.hubAvailable = () => !!A().smart_hub;
+window.haAvailable = () => !!A().home_assistant;   // 家居里的 Home Assistant（设计画布第 84 块）
 window.rackAvailable = () => !!A().rack_status;   // 家居的「机柜」分页（home.js，设计画布第 62 块）
 window.hubRender = shown => {
   const box = $('hHub');
@@ -721,6 +722,7 @@ function renderAll() {
   renderWork();
   renderLight(false);
   renderSvc();
+  if (window.miApi && window.miApi.isOpen()) window.miApi.rerender();   // 家居顶上的「米家 | Home Assistant」跟着接入变
   if (window.miApi && window.miApi.isOpen()) window.miApi.rerender();   // 仪表盘每 2 秒自己重画，不用通知
 }
 const baseSnapshot = handlers.snapshot;

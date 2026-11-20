@@ -1114,3 +1114,17 @@ body.follow-window.dash-on .link { display: none; }   /* 仪表盘顶栏挤：�
 /* 看不见、熄屏、30 秒没事干：形象和光球的动画停在当前姿势（screen.js 的 body.calm，设计画布第 80 块）。
    :is() 里的 #calm-x 只为把优先级抬过睡眠时段那几条带 !important 的 animation（页面上没有这个 id） */
 body.calm :is(.app *, .dash *, #calm-x) { animation-play-state: paused !important; }
+
+/* 家居：米家 | Home Assistant（设计画布第 84 块） */
+.h-src { display: inline-flex; flex: none; gap: 4px; padding: 5px; margin: 0 16px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+.h-src[hidden] { display: none; }
+.h-src button { height: 52px; padding: 0 22px; border-radius: 999px; font: inherit; font-size: 19px; font-weight: 600; color: var(--ink2); background: none; border: 0; white-space: nowrap; }
+.h-src button.on { background: var(--card2); color: var(--ink); box-shadow: 0 2px 10px #0003; }
+.h-ha[hidden] { display: none; }
+.ha-scenes { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 20px 6px; }
+.ha-scenes:empty { display: none; }
+.ha-scenes button { height: 48px; padding: 0 18px; border-radius: 999px; font: inherit; font-size: 17px; color: var(--ink); background: var(--card); border: 1px solid var(--line); }
+.ha-scenes button.busy { opacity: .5; }
+.h-tile.ro .h-power { display: none; }
+@media (orientation: portrait) { .h-src { margin: 0 8px; } .h-src button { padding: 0 14px; font-size: 17px; } }
+.d-ha { align-self: stretch; height: 46px; margin: 0 0 12px; border-radius: 14px; font: inherit; font-size: 16px; font-weight: 600; color: var(--ink); background: var(--card2); border: 1px solid var(--line); }
