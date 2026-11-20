@@ -22,11 +22,11 @@ def test_work_setting():
     """工作台的设置（设计画布第 75 块）：四页都在 order 里；以前存的「先看」带过来；栏宽限在 30%–70%。"""
     w = appproxy.normalize_work(None, 'rack')
     assert w == {'order': ['desk', 'hub', 'rack', 'repo'], 'hidden': [], 'first': 'rack', 'rack': 'screen', 'hub': 'tiles',
-                 'split': {}, 'idle_min': 3, 'idle_close': True, 'keep': 10}
+                 'split': {}, 'idle_min': 3, 'idle_close': True, 'keep': 10, 'usage': 'show'}
     w = appproxy.normalize_work({'order': ['repo', 'x', 'repo', 'desk'], 'hidden': ['hub', 'y'], 'first': 'nope', 'rack': 'list',
                                  'hub': 'web', 'split': {'desk': 0.9, 'repo': 0.2, 'z': 0.5}, 'idle_close': False})
     assert w == {'order': ['repo', 'desk', 'hub', 'rack'], 'hidden': ['hub'], 'first': '', 'rack': 'list', 'hub': 'web',
-                 'split': {'desk': 0.7, 'repo': 0.3}, 'idle_min': 0, 'idle_close': False, 'keep': 10}
+                 'split': {'desk': 0.7, 'repo': 0.3}, 'idle_min': 0, 'idle_close': False, 'keep': 10, 'usage': 'show'}
     # 切走后保留网页几分钟（设计画布第 79 块）：只认那几档，写错的回到默认 10
     assert [appproxy.normalize_work({'keep': k})['keep'] for k in (0, 5, 30, -1, 7, '10', True, None)] == [0, 5, 30, -1, 10, 10, 10, 10]
     # 没人碰几分钟回首页（设计画布第 89 块）：几档；0 不回首页；没存过的看老的 idle_close
@@ -35,6 +35,8 @@ def test_work_setting():
     assert appproxy.normalize_work({'idle_close': False})['idle_min'] == 0
     assert appproxy.normalize_work({'idle_close': False, 'idle_min': 10}) == {**appproxy.normalize_work({'idle_min': 10})}
     assert not appproxy.normalize_work({'idle_min': 0})['idle_close'] and appproxy.normalize_work({'idle_min': 30})['idle_close']
+    # 智能桌面的 AI 用量显示不显示（设计画布第 91 块）：只认 hide，别的都算显示
+    assert [appproxy.normalize_work({'usage': u})['usage'] for u in ('hide', 'show', 'x', None, False)] == ['hide', 'show', 'show', 'show', 'show']
     assert appproxy.url('rack') == 'http://127.0.0.1:8091/kiosk' and appproxy.url('hub').endswith(':8092/#/')
 
 
@@ -110,4 +112,5 @@ def test_set_work_idle_minutes(monkeypatch):
     assert run({'idle_close': True})['idle_min'] == 3               # 老页面的开关
     assert run({'idle_close': False})['idle_min'] == 0
     assert run({'idle_min': 99})['idle_min'] == 0                  # 不认的：照之前的（不回首页）
+    assert run({'usage': 'hide'})['usage'] == 'hide' and saved[-1]['work']['usage'] == 'hide'
     assert published[-1][0] == 'work'

@@ -995,7 +995,7 @@ p.wc-note { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink3); }
 .dk-src small { margin-top: auto; font-size: 13px; color: var(--ink3); }
 .dk-src.on { border-color: var(--ok); background: #43d39e1f; } .dk-src.on .dk-si { background: var(--ok); color: #04301f; } .dk-src.on small { color: var(--ok); }
 .dk-src.busy { animation: wkpulse 1s ease-in-out infinite; }
-.dk-rings { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.dk-rings { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-top: 16px; }   /* 和「AI 用量」那行标题留开（设计画布第 91 块） */
 .dk-ring { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 14px; }
 .dk-ring > small { font-size: 12px; color: var(--ink3); }
 .dk-ring-c { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--accent2) var(--v), var(--card2) 0); }

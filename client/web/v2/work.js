@@ -42,7 +42,7 @@ async function refresh() {
 // 设置里没藏起来的，按设置里的顺序
 const WK = [['desk', '智能桌面', 'desk', 'wkDesk', 'desk_hub'], ['hub', '智能中枢', 'hub', 'wkHub', 'smart_hub'],
             ['rack', '机柜', 'rack', 'wkRack', 'rack_status'], ['repo', '仓库同步', 'repo', 'wkRepo', 'repo_status']];
-const W = () => ui.work || { order: WK.map(w => w[0]), hidden: [], first: '', rack: 'screen', hub: 'tiles', split: {}, idle_min: 3, idle_close: true, keep: 10, urls: {} };
+const W = () => ui.work || { order: WK.map(w => w[0]), hidden: [], first: '', rack: 'screen', hub: 'tiles', split: {}, idle_min: 3, idle_close: true, keep: 10, usage: 'show', urls: {} };
 const wkOrdered = () => W().order.map(k => WK.find(w => w[0] === k)).filter(Boolean);
 const wkTabs = () => {
   const on = wkOrdered().filter(w => A()[w[4]]), shown = on.filter(w => !W().hidden.includes(w[0]));
@@ -105,11 +105,11 @@ function deskHtml() {
   left.push(srcs.length ? `<div class="dk-srcs">${srcs.map(s => `<button class="dk-src${s.id === d.current ? ' on' : ''}${ig.busy[s.id] ? ' busy' : ''}" data-src="${esc(s.id)}">` +
       `<span class="dk-si">${srcSvg(srcKind(s))}</span><b>${esc(s.name)}</b><small>${s.id === d.current ? '现在' : esc(s.port || '')}</small></button>`).join('')}</div>`
     : note('Mac 上还没有试切过的输入源：在 DeskHub 的菜单里先试切一次。'));
-  const u = d.usage;
+  const u = W().usage === 'hide' ? null : d.usage;   // 设置里选了不显示（设计画布第 91 块）
   if (u) left.push(`<div class="dk-ai wk-card"><div class="wk-row"><b><span class="ai-ink">AI 用量</span>${u.provider ? ' · ' + esc([u.provider, u.plan].filter(Boolean).join(' ')) : ''}</b><small>Magpie 读的</small></div>` +
       `<div class="dk-rings">${(u.windows || []).slice(0, 2).map((w, i) => ringHtml(w.left, w.name, w.reset_s ? resetIn(w.reset_s) + '重置' : '', i)).join('')}` +
       `<div class="dk-stats"><div><b>${u.calls}</b><small>今天的请求</small></div><div><b>${tokens(u.tokens)}</b><small>今天的 token</small></div></div></div></div>`);
-  else if (d.usage_off) left.push(note('Mac 上读不到 Magpie 的用量（Magpie 没开？）'));
+  else if (d.usage_off && W().usage !== 'hide') left.push(note('Mac 上读不到 Magpie 的用量（Magpie 没开？）'));
   let right;
   if (d.todos_off) right = note(d.todos_off === 'access' ? 'DeskHub 没有读提醒事项的权限：在 Mac 的 系统设置 › 隐私与安全性 › 提醒事项 里打开。' : 'DeskHub 里关掉了提醒事项。');
   else {
@@ -351,7 +351,7 @@ function workCells() {
   const r = ig.data && ig.data.rack_status;
   if (a.rack_status && r && !r.error) cells.push({ b: `${r.up}/${r.total} 在线`, s: r.problems.length ? `机柜 · ${r.problems[0]}` : '机柜 · 没有告警', bad: r.up < r.total || r.problems.length });
   const d = ig.data && ig.data.desk_hub;
-  if (a.desk_hub && d && d.usage && d.usage.windows.length) {
+  if (a.desk_hub && d && d.usage && d.usage.windows.length && W().usage !== 'hide') {
     const w = d.usage.windows[0];
     cells.push({ b: `剩 ${w.left}%`, s: `AI 用量 · ${w.name}`, bad: w.left <= 25 });
   } else if (a.desk_hub && d && d.seen) {
@@ -574,7 +574,7 @@ function showCfg(on) {
   if (on) renderCfg();
 }
 function renderCfg() {
-  const w = W(), avail = wkOrdered().filter(x => A()[x[4]]);
+  const w = { usage: 'show', ...W() }, avail = wkOrdered().filter(x => A()[x[4]]);
   const chip = (key, val, text) => `<button data-wset="${key}" data-v="${val}" class="${w[key] === val ? 'on' : ''}">${text}</button>`;
   const rows = avail.map(([k, name, ic], i) => `<div class="wc-row"><span class="wc-ic">${svg(ic, 20)}</span><b>${name}</b>` +
     `<button class="wc-mv" data-move="${k}" data-d="-1"${i === 0 ? ' disabled' : ''} aria-label="往前">↑</button>` +
@@ -585,6 +585,8 @@ function renderCfg() {
     `<div class="wc-sub">打开工作台先看</div><div class="wc-chips">${chip('first', '', '上次看的')}${avail.map(([k, n]) => chip('first', k, n)).join('')}</div>` +
     (A().rack_status ? `<div class="wc-sub">机柜那页放</div><div class="wc-chips">${chip('rack', 'screen', '机柜屏的画面')}${chip('rack', 'list', '简要列表')}</div>` : '') +
     (A().smart_hub ? `<div class="wc-sub">智能中枢那页放</div><div class="wc-chips">${chip('hub', 'tiles', '设备块')}${chip('hub', 'web', '它自己的网页')}</div>` : '') +
+    (A().desk_hub ? `<div class="wc-sub">智能桌面的 AI 用量</div><div class="wc-chips">${chip('usage', 'show', '显示')}${chip('usage', 'hide', '不显示')}</div>` +
+      '<p class="wc-note">不显示时，智能桌面那页不放这一块，首页「工作台」卡片里也不放「剩多少」，换成电脑上今天的待办。</p>' : '') +
     // 有网页要保留时才有这一行（机柜放机柜屏的画面、或智能中枢放它自己的网页）
     ((A().rack_status && w.rack === 'screen') || (A().smart_hub && w.hub === 'web')
       ? `<div class="wc-sub">切走后保留网页</div><div class="wc-chips">${KEEP.map(([m, t]) => `<button data-keep="${m}" class="${(w.keep ?? 10) === m ? 'on' : ''}">${t}</button>`).join('')}</div>` +

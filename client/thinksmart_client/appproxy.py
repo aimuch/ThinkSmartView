@@ -35,7 +35,8 @@ def normalize_work(value, legacy_first=''):
     """工作台的设置（设计画布第 75 块）：{'order': 四页的顺序, 'hidden': 不显示的页, 'first': 先看哪页（'' = 上次看的）,
     'rack': 机柜页放 'screen'（机柜屏的画面）或 'list', 'hub': 智能中枢页放 'tiles' 或 'web'（它自己的网页）,
     'split': {'desk', 'repo'} 左栏占多少, 'idle_min': 没人碰几分钟回首页（IDLE_CHOICES，0 不回；老的 idle_close
-    true/false 读成 3/0）, 'idle_close': idle_min 不是 0（页面和老代码用）, 'keep': 切走后网页保留几分钟（KEEP_CHOICES）}。legacy_first：以前存在 home_tabs 里的「先看」。"""
+    true/false 读成 3/0）, 'idle_close': idle_min 不是 0（页面和老代码用）, 'keep': 切走后网页保留几分钟（KEEP_CHOICES）,
+    'usage': 智能桌面的 AI 用量 'show' / 'hide'（设计画布第 91 块）}。legacy_first：以前存在 home_tabs 里的「先看」。"""
     v = value if isinstance(value, dict) else {}
     order = [x for x in v.get('order') or [] if x in WORK_TABS]
     order = list(dict.fromkeys(order)) + [x for x in WORK_TABS if x not in order]
@@ -53,7 +54,8 @@ def normalize_work(value, legacy_first=''):
             'rack': v.get('rack') if v.get('rack') in ('screen', 'list') else 'screen',
             'hub': v.get('hub') if v.get('hub') in ('tiles', 'web') else 'tiles',
             'split': split, 'idle_min': idle, 'idle_close': idle != 0,
-            'keep': v.get('keep') if v.get('keep') in KEEP_CHOICES and not isinstance(v.get('keep'), bool) else 10}
+            'keep': v.get('keep') if v.get('keep') in KEEP_CHOICES and not isinstance(v.get('keep'), bool) else 10,
+            'usage': 'hide' if v.get('usage') == 'hide' else 'show'}
 
 
 class AppProxy:
