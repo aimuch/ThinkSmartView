@@ -1131,3 +1131,33 @@ body.calm :is(.app *, .dash *, #calm-x) { animation-play-state: paused !importan
 /* 设计画布第 85 块：麦克风拨关时两个话筒按钮变灰（⑥ 外观设置两组之间补间距） */
 body.mic-off .mic, body.mic-off .da-mic { opacity: .4; filter: grayscale(.6); }
 #looksDashBox:not([hidden]) { display: flex; flex-direction: column; gap: 16px; }
+
+/* 门口来人（设计画布第 86 块）：盖在所有页面上面（待机页、视频也盖），画面每秒换一张快照 */
+.door-view { position: fixed; inset: 0; z-index: 75; display: flex; flex-direction: column; gap: 14px; padding: 22px 26px 18px;
+  background: radial-gradient(90% 60% at 30% 0%, #1a2560 0%, #050813 65%); color: #fff; }   /* 不用淡入：熄屏时 body.screen-dark 把所有动画停住，淡入会停在透明 */
+.door-view[hidden], .door-view [hidden] { display: none !important; }
+.dv-head { display: flex; align-items: center; gap: 14px; }
+.dv-bell { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; font-size: 26px; flex: none;
+  background: linear-gradient(135deg, #ffe2a8, var(--warn)); }
+.door-view.asked .dv-bell { background: linear-gradient(135deg, var(--accent2), var(--accent)); }
+.dv-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dv-title b { font-size: 28px; } .dv-title small { font-size: 17px; color: #b6c0e2; }
+.dv-left { margin-left: auto; font-size: 16px; color: #939ec7; white-space: nowrap; }
+.dv-cam { flex: 1; min-height: 0; position: relative; border-radius: 22px; overflow: hidden; background: linear-gradient(180deg, #2a3142, #151a26);
+  display: grid; place-items: center; }
+.dv-cam img { width: 100%; height: 100%; object-fit: contain; }
+.dv-live { position: absolute; left: 14px; top: 14px; font-size: 14px; padding: 4px 10px; border-radius: 9px; background: #000a; }
+.dv-live i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); margin-right: 6px; vertical-align: 1px; }
+.dv-none { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 20px; text-align: center; font-size: 34px; font-weight: 700; color: #dfe5ff; }
+.dv-btns { display: flex; gap: 14px; }
+.dv-btns button { flex: 1; height: 68px; border-radius: 20px; font-size: 21px; color: #fff; background: #ffffff17; border: 1px solid #ffffff1c; }
+.dv-btns button.pri { background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #081024; font-weight: 700; border: 0; }
+.dv-btns button:active { transform: scale(.97); }
+.dv-hint { margin: 0; text-align: center; font-size: 14px; color: #7883ab; }
+@media (orientation: portrait) {
+  .door-view { padding: 28px 24px 26px; gap: 16px; }
+  .dv-btns { flex-direction: column-reverse; }
+  .dv-btns button { flex: none; }
+}
+
+body:has(.door-view:not([hidden])) .toast { z-index: 80; }   /* 门口画面上点「再看一分钟」出错时也看得见 */

@@ -864,6 +864,25 @@ def make_app(client: Client):
             return {'standby': await client.set_standby(**{k: body[k] for k in keys if k in body})}
         return await wake_call(change)
 
+    async def door_post(request):
+        """{"action": "close" | "more" | "show"}：门口来人的按钮（设计画布第 86 块）。"""
+        body = await request.json()
+        try:
+            door = await client.door_action(str(body.get('action') or ''))
+        except ValueError as e:
+            return web.json_response({'ok': False, 'error': str(e)}, status=400)
+        return web.json_response({'ok': True, 'door': door})
+
+    async def door_camera(_request):
+        """门口摄像头的一张快照：页面每秒换一次（弹着的时候才拉）。"""
+        if not (client.door and client.door.view()):
+            return web.Response(status=404)
+        try:
+            body = await client.door.camera()
+        except Exception as e:
+            return web.json_response({'ok': False, 'error': str(e)}, status=502)
+        return web.Response(body=body, content_type='image/jpeg', headers={'Cache-Control': 'no-store'})
+
     async def album_start(_request):
         return await wake_call(client.album_start)
 
@@ -987,6 +1006,8 @@ def make_app(client: Client):
     app.router.add_get('/api/call/info', call_info)
     app.router.add_get('/api/call/video/{which}', call_video)
     app.router.add_post('/api/airplay', airplay_post)
+    app.router.add_post('/api/door', door_post)
+    app.router.add_get('/api/door/camera', door_camera)
     app.router.add_post('/api/study', study_set)
     app.router.add_get('/api/weather', weather_get)
     app.router.add_post('/api/weather/cities', weather_cities)

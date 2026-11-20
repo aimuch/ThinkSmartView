@@ -966,6 +966,15 @@
     <button class="end" data-ca2="hangup" aria-label="挂断"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
 </div>
+<!-- 门口来人（wf.js，设计画布第 86 块）：Home Assistant 的门铃、人体、门磁触发，或者说「看看门口」 -->
+<div class="door-view" id="doorView" hidden>
+  <div class="dv-head"><span class="dv-bell" aria-hidden="true">🔔</span><div class="dv-title"><b id="doorTitle">门口有人</b><small id="doorSub"></small></div>
+    <span class="dv-left" id="doorLeft"></span></div>
+  <div class="dv-cam" id="doorCam"><img id="doorImg" alt="门口的画面"><span class="dv-live" id="doorLive"><i></i>门口摄像头 · 实时</span>
+    <p class="dv-none" id="doorNone"></p></div>
+  <div class="dv-btns"><button id="doorClose">收起</button><button class="pri" id="doorMore">再看一分钟</button></div>
+  <p class="dv-hint">也可以说「小麦小麦，看看门口」随时打开</p>
+</div>
 <!-- 学习陪伴提醒了一句（wf.js，设计画布第 48 块） -->
 <div class="study-bubble" id="studyBubble" hidden><span class="sb-ic">🧍</span><div><b id="studyBubbleText"></b><small id="studyBubbleSub"></small></div></div>
 <div class="gentle-bar" id="gentleBar" hidden>

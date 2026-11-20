@@ -53,7 +53,7 @@ import aiohttp
 import numpy as np
 
 from . import bg
-from . import airplay, alarms, appproxy, quiet, health, kiosk_shot, intercom, broadcast, bt, camera, hub_node, config, cook, perf, daily, focus, gentle, hub_album, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
+from . import airplay, alarms, appproxy, door, quiet, health, kiosk_shot, intercom, broadcast, bt, camera, hub_node, config, cook, perf, daily, focus, gentle, hub_album, kids, looks, study, usb, mcp, media, offline, photos, rotation, sleep, update, wake_verify, wake_words
 from . import __version__
 from .mijia import MijiaService
 from .audio import OUT_RATE, Audio, load_wav
@@ -244,6 +244,7 @@ class Client:
     study_task = None
     airplay = None                            # AirPlay (airplay.py)
     intercom = None                           # 视频对讲 (intercom.py)
+    door = None                               # 门口来人 (door.py)
     notes = []                                # 留言 (daily.py)
     lists = None                              # 清单 (the hub keeps them: /kiosk/lists)
     alert = None                              # the red banner of a Mijia sensor alert
@@ -422,6 +423,8 @@ class Client:
             saved=lambda history: config.save(intercom_history=history))
         self.intercom.history = intercom.load_history(cfg.get('intercom_history'))
         self.intercom.dnd = self.dnd_active             # 勿扰时家人打来也不自动接通（设计画布第 81 块）
+        # 门口来人（设计画布第 86 块）：网关听 Home Assistant 的门铃、人体、门磁，触发了弹门口的画面
+        self.door = door.Door(cfg['hub_http'], cfg['device_id'], self.events.publish, on_event=self.door_event)
         self.quiet = quiet.normalize(cfg.get('quiet'))   # 静音和勿扰（quiet.py）
         self._dnd_was = quiet.dnd_active(self.quiet)
         self.mijia = MijiaService(self.events.publish)
@@ -2387,6 +2390,7 @@ class Client:
         if self.airplay.enabled and self.airplay.installed:
             self.airplay.start()
         self.intercom.start()
+        self.door.start()
         await self.appproxy.start()
         await self.mijia.start()
         self.rotation.start()
@@ -2523,6 +2527,7 @@ class Client:
                 'gentle': self.gentle.view(time.time()), 'focus': self.focus.view(), 'study': self.study_view(),
                 'airplay': self.airplay and self.airplay.view(),
                 'intercom': self.intercom and self.intercom.view(),
+                'door': (self.door and self.door.view()) or {'open': False},
                 'listen': self.listen_view(), 
                 'scenes': self.scenes_view(), 'notes': self.notes_view(), 'lists': self.lists,
                 'tasks': self.tasks_view(), 'alerts': self.alerts_view(), 'translate': self.translate_view(),
@@ -3731,6 +3736,49 @@ class Client:
                 self.audio.player.push(alarms.reminder_chime())
             except Exception:
                 log.exception('call ring')
+
+    # ---- 门口来人（door.py，设计画布第 86 块） ----
+
+    async def door_event(self, e):
+        """网关送来一条：睡眠时段、勿扰时只在后台开了「睡觉时也弹」才弹；弹了就亮屏，平常「叮咚」一声。
+        静音、正在对话或对讲、同一个触发又来、后台点的测试：不出声。"""
+        night = bool(self.sleeping) or self.dnd_active()
+        if night and not e.get('night') and not e.get('test'):
+            log.info('door: %s (%s), sleeping or DND: not shown', e.get('why'), e.get('name'))
+            return
+        fresh = self.door.show(e)
+        log.info('door: %s (%s)%s', e.get('why'), e.get('name'), '' if fresh else ' again')
+        self.screen.poke()
+        busy = self.in_turn() or bool(self.intercom and self.intercom.active) or bool(self.ring)
+        if fresh and not (night or busy or e.get('test') or self._silenced()):
+            try:
+                self.audio.player.push(alarms.doorbell_chime())
+            except Exception:
+                log.exception('door chime')
+
+    async def door_action(self, action):
+        """页面上的按钮：close 收起、more 再看一分钟、show 打开（「看看门口」，没人按门铃也能看）。"""
+        if action == 'close':
+            self.door.close()
+        elif action == 'more':
+            self.door.more()
+        elif action == 'show':
+            await self.door_show()
+        else:
+            raise ValueError('不认识的操作')
+        return self.door.view() or {'open': False}
+
+    async def door_show(self):
+        try:
+            info = await self.door.info()
+        except Exception as e:
+            raise ValueError('连不上小麦网关，看不了门口') from e
+        if not info.get('available'):
+            raise ValueError('这台还没接 Home Assistant：在网关后台「外部服务 › 家里的系统」里填好，再选门口摄像头')
+        if not info.get('camera'):
+            raise ValueError('网关后台还没选门口摄像头（外部服务 › 家里的系统 › Home Assistant › 设置）')
+        self.door.show({'id': f'ask-{int(time.time())}', 'why': '门口', 'name': '你要看的', 'camera': True}, asked=True)
+        self.screen.poke()
 
     async def call_action(self, action, value=None):
         ic = self.intercom

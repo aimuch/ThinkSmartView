@@ -487,6 +487,61 @@ window.loadCallInfo = loadCallInfo;
 loadCallInfo();
 
 
+/* ---------------- 门口来人（设计画布第 86 块） ---------------- */
+// 弹着、有摄像头时：上一张画好了 1 秒再拉下一张（不叠请求）；拉不到就说一句、3 秒后再试
+const door = { cur: null, img: 0, tick: null, retry: null };
+function doorNext(delay) {
+  clearTimeout(door.retry);
+  door.retry = setTimeout(() => {
+    if (!door.cur || !door.cur.camera || document.hidden) return;
+    $('doorImg').src = '/api/door/camera?t=' + Date.now();
+  }, delay);
+}
+$('doorImg').addEventListener('load', () => { $('doorNone').hidden = true; $('doorLive').hidden = false; $('doorImg').hidden = false; doorNext(1000); });
+$('doorImg').addEventListener('error', () => {
+  if (!door.cur) return;
+  $('doorImg').hidden = true; $('doorLive').hidden = true;
+  $('doorNone').hidden = false; $('doorNone').textContent = '门口的画面没取到，正在重试…';
+  doorNext(3000);
+});
+function renderDoor() {
+  const c = door.cur && door.cur.open ? door.cur : null;
+  const was = !$('doorView').hidden;
+  $('doorView').hidden = !c;
+  clearInterval(door.tick); door.tick = null;
+  if (!c) { clearTimeout(door.retry); $('doorImg').removeAttribute('src'); return; }
+  const when = new Date(c.at * 1000);
+  const hm = `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`;
+  $('doorView').classList.toggle('asked', !!c.asked);
+  $('doorTitle').textContent = c.test ? '测试：门口来人' : c.asked ? '门口' : '门口有人';
+  $('doorSub').textContent = c.asked ? '实时画面' : `${c.why}${c.name && c.name !== c.why ? ' · ' + c.name : ''} · ${hm}`;
+  if (!c.camera) {
+    $('doorImg').hidden = true; $('doorLive').hidden = true;
+    $('doorNone').hidden = false; $('doorNone').textContent = c.why || '门口有人';
+  } else if (!was || !$('doorImg').getAttribute('src')) {
+    $('doorNone').hidden = false; $('doorNone').textContent = '正在取门口的画面…';
+    $('doorImg').hidden = true; $('doorLive').hidden = true;
+    doorNext(0);
+  }
+  const left = () => {
+    const s = Math.max(0, Math.round(c.until - Date.now() / 1000));
+    $('doorLeft').textContent = s > 0 ? `${s} 秒后自己收起` : '';
+    if (s <= 0) { door.cur = null; renderDoor(); }
+  };
+  left(); door.tick = setInterval(left, 1000);
+}
+handlers.door = c => { door.cur = c && c.open ? c : null; renderDoor(); };
+async function doorPost(action) {
+  try {
+    const r = await postJson('/api/door', { action });
+    if (r.door) handlers.door(r.door);
+  } catch (e) { /* 收起、再看失败：等下一次推送 */ }
+}
+$('doorClose').addEventListener('click', () => doorPost('close'));
+$('doorMore').addEventListener('click', () => doorPost('more'));
+window.openDoor = () => doorPost('show');
+
+
 /* ---------------- 说完以后怎么听（设计画布第 52 块） ---------------- */
 const LISTEN_OPTS = { question: ['它问我时才接着听', '回答在问你（「要提醒你带伞吗？」）才接着听，默认'],
   always: ['每次都接着听', '可以连着聊；配合「只听刚才说话的人」不怕旁人插话'],

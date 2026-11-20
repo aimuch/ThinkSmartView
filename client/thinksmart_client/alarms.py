@@ -442,6 +442,17 @@ def load_sound(path):
     return np.repeat(x[:, None], 2, axis=1)
 
 
+def doorbell_chime(peak=0.55):
+    """门口来人（设计画布第 86 块）：「叮——咚」两声，像门铃。双声道 float32。"""
+    def bell(f, dur):
+        t, a = _env(int(OUT_RATE * dur), 0.002)
+        return a * (np.sin(2 * np.pi * f * t) + 0.3 * np.sin(2 * np.pi * 2 * f * t) * np.exp(-3 * t)
+                    + 0.12 * np.sin(2 * np.pi * 3 * f * t) * np.exp(-6 * t)) * np.exp(-2.2 * t)
+    x = _place([(0, bell(659.25, 1.4)), (0.62, bell(523.25, 1.9))], 2.6)
+    x = (x * peak / np.max(np.abs(x))).astype(np.float32)
+    return np.repeat(x[:, None], 2, axis=1)
+
+
 def reminder_chime():
     """A reminder's chime: a rolled piano chord (~3 s with its ring), its words start CHIME_SPEECH_AT in."""
     try:

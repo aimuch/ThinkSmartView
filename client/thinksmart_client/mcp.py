@@ -194,6 +194,16 @@ QUIET_TOOLS = [   # 静音和勿扰（quiet.py，设计画布第 81 块）
     },
 ]
 
+DOOR_TOOLS = [   # 门口来人（door.py，设计画布第 86 块）
+    {
+        'name': 'self.door.show',
+        'description': '在屏幕上打开门口摄像头的画面（Home Assistant 里的门口摄像头）。「看看门口」「门口是谁」「门口有人吗」'
+                       '「谁在按门铃」时调用。成功时直接回答「门口的画面在屏幕上」，不要猜门口是谁；返回 success=false 时把 reason 告诉用户。'
+                       '不能开门锁。',
+        'inputSchema': {'type': 'object', 'properties': {}},
+    },
+]
+
 BROADCAST_TOOLS = [
     {
         'name': 'self.broadcast.update',
@@ -437,7 +447,7 @@ PROACTIVE_TOOLS = [
                         'required': ['enabled']},
     },
 ]
-TOOLS += QUIET_TOOLS + WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + LISTEN_TOOLS + PAGE_TOOLS + ALBUM_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
+TOOLS += QUIET_TOOLS + DOOR_TOOLS + WAKE_TOOLS + CARD_TOOLS + BROADCAST_TOOLS + PHOTO_TOOLS + LOOKS_TOOLS + KIDS_TOOLS + COOK_TOOLS + DAILY_TOOLS + FOCUS_TOOLS + STUDY_TOOLS + LISTEN_TOOLS + PAGE_TOOLS + ALBUM_TOOLS + PROACTIVE_TOOLS + home_tools.TOOLS
 
 ALARM_WHEN = ('hours', 'minutes', 'seconds', 'time', 'date', 'days_from_today')
 
@@ -710,6 +720,12 @@ async def handle(payload, client=None):
                 try:
                     await client.set_quiet(by_voice=True, **changes)
                     text = _dumps({'success': True, 'text': quiet.describe(client.quiet)})
+                except ValueError as e:
+                    text = _dumps({'success': False, 'reason': str(e)})
+            elif name == 'self.door.show' and client:
+                try:
+                    await client.door_show()
+                    text = _dumps({'action': 'RESPONSE', 'response': '门口的画面在屏幕上。'})
                 except ValueError as e:
                     text = _dumps({'success': False, 'reason': str(e)})
             elif name == 'self.broadcast.update' and client:
