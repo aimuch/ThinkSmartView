@@ -127,8 +127,9 @@ function deskHtml() {
 }
 
 // 左右两栏，中间的竖条能拖（设计画布第 75 块）：左栏占多少存在这台设备的工作台设置里
+const SPLIT_DEFAULT = { desk: 0.52, repo: 0.58 };
 function split(key, left, right, rightClass = 'wk-card') {
-  const l = (W().split || {})[key] ?? (key === 'repo' ? 0.58 : 0.52);
+  const l = (W().split || {})[key] ?? SPLIT_DEFAULT[key];
   return `<div class="wk-split" data-split="${key}" style="--l:${l}"><div class="wk-col">${left}</div>` +
     `<div class="wk-grip" data-grip="${key}" title="拖动调宽，双击恢复"><i></i></div><div class="wk-col ${rightClass === 'wk-plain' ? '' : rightClass || 'wk-card'}">${right}</div></div>`;
 }
@@ -555,6 +556,18 @@ async function sendWork(changes) {
   const r = await postJson('/api/work', changes);
   if (r && r.ok) handlers.work(r.work); else toast((r && r.error) || '没保存上', 'error');
 }
+// 左右栏宽度（设计画布第 90 块）：有两栏的页（智能桌面、仓库同步，接入了、没藏）一页一行，改过的才有「恢复默认」；竖屏整组不显示
+function splitCfg(w) {
+  const pages = wkOrdered().filter(([k, , , , need]) => k in SPLIT_DEFAULT && A()[need] && !w.hidden.includes(k));
+  if (!pages.length) return '';
+  const pct = v => `左栏 ${Math.round(v * 100)}%`;
+  return '<div class="wc-split"><div class="wc-sub">左右栏宽度</div><p class="wc-note">拖两栏中间的竖条调宽窄，双击竖条也能恢复。</p>' +
+    pages.map(([k, name]) => {
+      const v = (w.split || {})[k];
+      return `<div class="wc-row"><b>${name}</b>` + (v == null ? `<small class="wc-val">默认（${pct(SPLIT_DEFAULT[k])}）</small>`
+        : `<small class="wc-val">${pct(v)}</small><button class="wc-btn" data-wreset="${k}">恢复默认</button>`) + '</div>';
+    }).join('') + '</div>';
+}
 function showCfg(on) {
   $('wkCfg').hidden = !on;
   $('wkCfgBtn').classList.toggle('on', !!on);
@@ -576,7 +589,7 @@ function renderCfg() {
     ((A().rack_status && w.rack === 'screen') || (A().smart_hub && w.hub === 'web')
       ? `<div class="wc-sub">切走后保留网页</div><div class="wc-chips">${KEEP.map(([m, t]) => `<button data-keep="${m}" class="${(w.keep ?? 10) === m ? 'on' : ''}">${t}</button>`).join('')}</div>` +
         '<p class="wc-note">保留着，回来不用重新加载；保留越久，它在后台刷新数据越久。</p>' : '') +
-    `<div class="wc-row"><b>左右栏宽度</b><button class="wc-btn" data-wreset="1"${Object.keys(w.split || {}).length ? '' : ' disabled'}>恢复默认</button></div>` +
+    splitCfg(w) +
     // 没人碰多久回首页（设计画布第 89 块）：几档，0 = 不回首页
     `<div class="wc-sub">没人碰多久回首页</div><div class="wc-chips">${IDLE.map(([m, t]) => `<button data-idle="${m}" class="${idleMin() === m ? 'on' : ''}">${t}</button>`).join('')}</div>` +
     '<p class="wc-note">回首页以后，再按「外观 › 待机页」设的时间进待机页。选「不回首页」：工作台一直开着，也不进待机页，叫它的时候也不收起；熄屏照常。</p>');
@@ -604,7 +617,8 @@ $('wkCfg').addEventListener('click', e => {
   if (c) return sendWork({ [c.dataset.wset]: c.dataset.v });
   const kp = t.closest('[data-keep]');
   if (kp) return sendWork({ keep: Number(kp.dataset.keep) });
-  if (t.closest('[data-wreset]')) return sendWork({ split: null });
+  const rs = t.closest('[data-wreset]');
+  if (rs) return sendWork({ split: { [rs.dataset.wreset]: null } });
   const idle = t.closest('[data-idle]');
   if (idle) return sendWork({ idle_min: Number(idle.dataset.idle) });
 });

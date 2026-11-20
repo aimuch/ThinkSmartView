@@ -952,7 +952,7 @@ body.identify::after { content: ""; position: fixed; inset: 0; z-index: 9999; po
 .wk-cfg[hidden] { display: none; }
 .wc-head { display: flex; align-items: center; justify-content: space-between; } .wc-head b { font-size: 20px; }
 .wc-x { width: 40px; height: 40px; border-radius: 50%; background: var(--card2); color: var(--ink2); }
-.wc-sub { margin-top: 6px; font-size: 14px; color: var(--ink3); }
+.wc-sub { margin-top: 10px; font-size: 16px; font-weight: 600; color: var(--ink2); }   /* 每组的标题（设计画布第 90 块） */
 .wc-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 2px 0; border-top: 1px solid var(--line); }
 .wc-row b { flex: 1; font-size: 17px; font-weight: 600; } .wc-row div { flex: 1; display: flex; flex-direction: column; } .wc-row small { font-size: 13px; color: var(--ink3); }
 .wc-ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--card2); color: var(--ink2); }
@@ -962,7 +962,11 @@ body.identify::after { content: ""; position: fixed; inset: 0; z-index: 9999; po
 .wc-chips button { height: 40px; padding: 0 14px; border-radius: 999px; background: var(--card2); color: var(--ink2); font-size: 15px; border: 1.5px solid transparent; }
 .wc-chips button.on { color: var(--ink); border-color: var(--accent); background: #6c8cff24; }
 .wc-btn { height: 40px; padding: 0 14px; border-radius: 999px; background: var(--card2); color: var(--ink2); font-size: 15px; } .wc-btn:disabled { opacity: .4; }
-.wc-note { margin: 0; font-size: 14px; color: var(--ink3); }
+p.wc-note { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink3); }   /* p：不然被 .sheet p 顶成 18 号 */
+.wc-split { display: flex; flex-direction: column; gap: 8px; }
+.wc-split .wc-row b { font-size: 16px; font-weight: 500; }
+.wc-row small.wc-val { flex: none; font-size: 14px; color: var(--ink3); }
+@media (orientation: portrait) { .wc-split { display: none; } }   /* 竖屏两栏上下排，没有竖条 */
 @media (orientation: portrait) {
   .wk-split { grid-template-columns: minmax(0, 1fr); row-gap: 14px; }
   .wk-grip { display: none; }
