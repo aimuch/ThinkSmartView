@@ -14,9 +14,11 @@ DEFAULTS = {
     "rack_status": {"prometheus": "http://127.0.0.1:9090", "url": "http://127.0.0.1:8088", "token": "", "password": ""},
     "repo_status": {"url": "http://127.0.0.1:8765", "password": ""},
     "desk_hub": {"token": ""},
+    # Home Assistant（设计画布第 84 块）：和上游 hass_* 插件同一份 plugins.home_assistant
+    "home_assistant": {"base_url": "http://homeassistant.local:8123", "api_key": ""},
 }
 PLUGINS = tuple(DEFAULTS)
-LABELS = {"smart_hub": "智能中枢", "rack_status": "机柜", "repo_status": "仓库同步", "desk_hub": "DeskHub"}
+LABELS = {"smart_hub": "智能中枢", "rack_status": "机柜", "repo_status": "仓库同步", "desk_hub": "DeskHub", "home_assistant": "Home Assistant"}
 
 
 class IntegrationError(Exception):
@@ -35,7 +37,7 @@ def settings(config: dict, name: str) -> dict:
     for key, default in DEFAULTS[name].items():
         value = saved.get(key)
         out[key] = default if _blank(value) else str(value).strip()
-    for key in ("url", "prometheus"):
+    for key in ("url", "prometheus", "base_url"):
         if key in out:
             out[key] = out[key].rstrip("/")
     return out
@@ -66,8 +68,8 @@ def plugin_states(config: dict, device: str) -> dict:
     return {n: {"on": n in eff, "global": n in glob, "own": ov.get(n), "ready": ready(config, n)} for n in PLUGINS}
 
 
-async def request(method: str, url: str, *, headers: dict = None, json=None, timeout: float = 8, auth=None):
-    """-> 解析好的 JSON。连不上、超时、非 2xx 都变成 IntegrationError。"""
+async def request(method: str, url: str, *, headers: dict = None, json=None, timeout: float = 8, auth=None, raw: bool = False):
+    """-> 解析好的 JSON（raw：原样的文字）。连不上、超时、非 2xx 都变成 IntegrationError。"""
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout, connect=min(timeout, 4))) as s:
             async with s.request(method, url, headers=headers, json=json, auth=auth) as r:
@@ -75,6 +77,8 @@ async def request(method: str, url: str, *, headers: dict = None, json=None, tim
                     raise IntegrationError("令牌或密码不对（对方回 401）")
                 if r.status == 403:
                     raise IntegrationError("对方拒绝了（403）")
+                if raw and r.status < 400:
+                    return await r.text()
                 try:
                     data = await r.json(content_type=None)
                 except Exception:

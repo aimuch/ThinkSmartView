@@ -279,6 +279,8 @@ PLUGINS = [
      "config": "repo_status", "settings": "repo_status", "home": True},
     {"name": "desk_hub", "label": "智能桌面（DeskHub）", "desc": "切显示器输入源、AI 用量、电脑上的提醒事项；Mac 上的 DeskHub App 连网关",
      "config": "desk_hub", "settings": "desk_hub", "home": True},
+    {"name": "home_assistant", "label": "Home Assistant", "desc": "设备「家居」里多一页 Home Assistant：灯、开关、空调、窗帘、场景能控制，温湿度、门窗能看；语音也能控制。点「设置」填地址和长期访问令牌",
+     "config": "home_assistant", "settings": "home_assistant", "home": True},
 ]
 PLUGIN_NAMES = {p["name"] for p in PLUGINS}
 
@@ -346,6 +348,15 @@ PLUGIN_SETTINGS.update({
 })
 # [xiaozhi-hub] 四个接入的设置（字段和 core/integrations/common.DEFAULTS 一致）
 PLUGIN_SETTINGS.update({
+    "home_assistant": {
+        "note": "长期访问令牌在 Home Assistant 网页左下角你的名字 › 安全 › 长期访问令牌 里创建。网关用它读设备、开关和调节，"
+                "不改 Home Assistant 的设置；和上游的「查智能家居状态」「控制智能家居」插件用同一份。门锁只读，不开锁。",
+        "fields": [
+            {"key": "base_url", "label": "地址", "type": "text", "default": "http://homeassistant.local:8123",
+             "hint": "比如 http://10.10.10.x:8123（网关要能访问到）"},
+            {"key": "api_key", "label": "长期访问令牌", "type": "secret", "required": True},
+        ],
+    },
     "smart_hub": {
         "note": "访问令牌是正在跑的那份智能中枢（btrouter）的 .env 里 BTROUTER_API_TOKEN 这一行，或它配置文件的 api.token；"
                 "和网关在同一台机器上时就是网关那台的 ~/bluetooth-router/.env（不是开发用电脑上的源码仓库）。"

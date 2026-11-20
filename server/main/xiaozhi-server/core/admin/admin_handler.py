@@ -224,6 +224,8 @@ class AdminHandler:
                 web.get("/kiosk/integrations", self.handle_kiosk_integrations),
                 web.get("/kiosk/hubnode", self.handle_kiosk_hubnode),
                 web.post("/kiosk/smarthub", self.handle_kiosk_smarthub),
+                web.get("/kiosk/hass", self.handle_kiosk_hass),             # 家居里的 Home Assistant（设计画布第 84 块）
+                web.post("/kiosk/hass/control", self.handle_kiosk_hass_control),
                 web.post("/kiosk/deskhub", self.handle_kiosk_deskhub),
                 web.post("/kiosk/repo", self.handle_kiosk_repo),
                 web.post("/kiosk/plugin", self.handle_kiosk_plugin),
@@ -2104,6 +2106,46 @@ class AdminHandler:
         except common.IntegrationError as e:
             return self._error(str(e), 502)
         return self._json({"ok": True, "device": dev})
+
+    async def _hass_settings(self, device: str):
+        from core.integrations import common
+
+        merged = await self._blocking(self._merged)
+        if not (common.ready(merged, "home_assistant") and common.enabled_for(merged, device, "home_assistant")):
+            return None
+        return common.settings(merged, "home_assistant")
+
+    async def handle_kiosk_hass(self, request: web.Request):
+        """?device=…&fresh=1：家居里 Home Assistant 那一页要的（区域、每块、场景）；没接入 available=false。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.integrations import common, hass
+
+        s = await self._hass_settings(request.query.get("device") or "")
+        if s is None:
+            return self._json({"ok": True, "available": False})
+        try:
+            view = await hass.overview(s, fresh=request.query.get("fresh") == "1")
+        except common.IntegrationError as e:
+            return self._json({"ok": True, "available": True, "error": f"{e}（{s['base_url']}）"})
+        return self._json({"ok": True, "available": True, **view})
+
+    async def handle_kiosk_hass_control(self, request: web.Request):
+        """{"device", "entity", "op", "value"} -> 改完的那一块。"""
+        if not self._from_this_machine(request):
+            return self._error("仅限本机", 403)
+        from core.integrations import common, hass
+
+        body = await self._read_json(request)
+        s = await self._hass_settings(str(body.get("device") or ""))
+        if s is None:
+            return self._error("Home Assistant 没接入", 400)
+        try:
+            view = await hass.overview(s)
+            card = await hass.act(s, view, str(body.get("entity") or ""), str(body.get("op") or ""), body.get("value"))
+        except common.IntegrationError as e:
+            return self._error(str(e), 502)
+        return self._json({"ok": True, "card": card})
 
     async def handle_kiosk_deskhub(self, request: web.Request):
         """{"device", "op": "switch" | "todo_done", "id"}：经 Mac 上的 DeskHub 执行，等它的结果（最多 12 秒）。"""

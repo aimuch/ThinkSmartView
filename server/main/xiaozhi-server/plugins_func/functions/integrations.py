@@ -1,11 +1,12 @@
 """[xiaozhi-hub] 接入家里别的服务的语音命令（core/integrations，设计画布第 38 块）：
-smart_hub（智能中枢的蓝牙灯）、rack_status（机柜）、repo_status（仓库同步）、desk_hub（Mac 上的 DeskHub）。
+smart_hub（智能中枢的蓝牙灯）、rack_status（机柜）、repo_status（仓库同步）、desk_hub（Mac 上的 DeskHub）、
+home_assistant（Home Assistant，设计画布第 84 块）。
 
 查询类交给大模型组织语言（REQLLM）；控制成功直接念结果（RESPONSE），快一些。
 """
 
 from config.logger import setup_logging
-from core.integrations import common, deskhub, rack, repos, smarthub
+from core.integrations import common, deskhub, hass, rack, repos, smarthub
 from plugins_func.register import Action, ActionResponse, ToolType, register_function
 
 TAG = __name__
@@ -45,6 +46,19 @@ DESK_DESC = _fn(
     {"action": {"type": "string", "enum": ["switch", "inputs", "usage", "todos", "done"],
                 "description": "switch 切显示器输入源；inputs 查有哪些输入源、现在在哪个；usage 查 AI 用量；todos 查电脑上的待办；done 完成一条待办"},
      "name": {"type": "string", "description": "switch 时是输入源名字（如 Windows、HDMI 1、Mac）；done 时是待办的标题"}},
+    ["action"])
+
+
+HASS_DESC = _fn(
+    "home_assistant",
+    "控制和查询 Home Assistant 里的设备：灯、开关插座、风扇、空调、窗帘、场景，以及温湿度、门窗、人体传感器和门锁的状态。"
+    "用户说开关某个房间的灯或电器、空调调温度或模式、窗帘开关、启动场景、问某个房间多少度时使用。"
+    "米家设备用米家的工具，智能中枢的蓝牙灯用 smart_hub；不知道是哪边的先用 status 查。门锁只查不开。",
+    {"action": {"type": "string", "enum": ["status", "on", "off", "toggle", "brightness", "temperature", "mode", "open", "close", "stop", "position", "scene"],
+                "description": "status 查状态；brightness 设灯亮度（value 1-100）；temperature 设空调温度（value ℃）；mode 设空调模式（value: cool/heat/auto/dry/fan_only/off）；"
+                               "open/close/stop 窗帘；position 窗帘开到多少（value 0-100）；scene 启动场景（device 填场景名）"},
+     "device": {"type": "string", "description": "设备名，可以带房间，例如「客厅的灯」「卧室空调」「窗帘」；场景时填场景名；查全部状态时可以不填"},
+     "value": {"description": "亮度、温度、位置的数，或空调模式"}},
     ["action"])
 
 
@@ -132,3 +146,43 @@ async def desk_hub(conn, action: str = "inputs", name: str = ""):
         out = await deskhub.hub.command("todo_done", hit["id"])
         return ActionResponse(Action.RESPONSE, None, out["text"] + "。")
     return ActionResponse(Action.REQLLM, "不支持的操作。", None)
+
+
+@register_function("home_assistant", HASS_DESC, ToolType.SYSTEM_CTL)
+async def home_assistant(conn, action: str = "status", device: str = "", value=None):
+    """[xiaozhi-hub] Home Assistant（设计画布第 84 块，core/integrations/hass.py）。"""
+    bad, s = _not_ready(conn, "home_assistant")
+    if bad:
+        return bad
+    try:
+        view = await hass.overview(s, fresh=action == "status")
+        if action == "scene":
+            want = hass._norm(device)
+            hit = [x for x in view["scenes"] if want and (want in hass._norm(x["name"]) or hass._norm(x["name"]) in want)]
+            if len(hit) != 1:
+                names = "、".join(x["name"] for x in (hit or view["scenes"])[:8]) or "没有场景"
+                return ActionResponse(Action.REQLLM, f"没确定是哪个场景，可选：{names}。请问用户要哪一个。", None)
+            await hass.act(s, view, hit[0]["id"], "scene")
+            return ActionResponse(Action.RESPONSE, None, f"已启动{hit[0]['name']}。")
+        if action == "status":
+            cards = [c for a in view["areas"] for c in a["cards"]]
+            if device:
+                hit, cands = hass.find(view, device)
+                cards = [hit] if hit else [c for c in cards if f"{c['area']}的{c['name']}" in cands] or \
+                    [c for c in cards if hass._norm(device) in hass._norm(c["area"])]
+            return ActionResponse(Action.REQLLM, "Home Assistant 的设备：" + hass.spoken_list(cards), None)
+        hit, cands = hass.find(view, device)
+        if not hit:
+            more = f"可选：{'、'.join(cands)}。" if cands else "没找到这个设备。"
+            return ActionResponse(Action.REQLLM, f"{more}请问用户要哪一个。", None)
+        op = {"temperature": "target"}.get(action, action)
+        if op in ("brightness", "target", "position", "mode") and value is None:
+            return ActionResponse(Action.REQLLM, "要给出数值（亮度、温度或位置）或模式。请问用户。", None)
+        card = await hass.act(s, view, hit["id"], op, value)
+        word = {"on": "已打开", "off": "已关掉", "toggle": "已切换", "open": "已打开", "close": "已关上", "stop": "已停下"}.get(op, "已调好")
+        tail = f"，现在{card['summary']}" if op not in ("on", "off") and card.get("summary") else ""
+        where = f"{hit['area']}的" if hit["area"] != hass.OTHER else ""
+        return ActionResponse(Action.RESPONSE, None, f"{word}{where}{hit['name']}{tail}。")
+    except common.IntegrationError as e:
+        logger.bind(tag=TAG).warning(f"Home Assistant: {e}")
+        return ActionResponse(Action.REQLLM, f"Home Assistant 没做成：{e}。请用一句话如实告诉用户。", None)

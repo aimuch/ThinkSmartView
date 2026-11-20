@@ -191,7 +191,7 @@ async def client(upstream, tmp_path, monkeypatch):
 async def test_smart_hub_rack_repos(client, upstream):
     _, calls = upstream
     d = await (await client.get("/kiosk/integrations?device=study")).json()
-    assert d["available"] == {"smart_hub": True, "rack_status": True, "repo_status": True, "desk_hub": True}
+    assert d["available"] == {"smart_hub": True, "rack_status": True, "repo_status": True, "desk_hub": True, "home_assistant": False}
     names = {x["name"]: x for x in d["smart_hub"]["devices"]}
     assert names["补光灯 Verge"]["summary"] == "60% · 4300K" and names["补光灯 Verge"]["via"] == "office"
     assert names["台灯"]["summary"] == "关" and names["工作台电源"]["summary"] == "12.00 V · 1.20 A · 14.4 W"

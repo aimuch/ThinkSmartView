@@ -184,10 +184,13 @@ async def _test_get_weather(values: dict) -> dict:
 
 async def _test_integration(name: str, values: dict) -> dict:
     """[xiaozhi-hub] 四个接入的测试：真的去读一次。"""
-    from core.integrations import common, deskhub, rack, repos, smarthub
+    from core.integrations import common, deskhub, hass, rack, repos, smarthub
 
     s = common.settings({"plugins": {name: values}}, name)
     try:
+        if name == "home_assistant":
+            v = await hass.overview(s, fresh=True)
+            return {"message": f"连上了：{v['count']} 个设备（{len(v['areas'])} 个区域）、{len(v['scenes'])} 个场景"}
         if name == "smart_hub":
             devs = await smarthub.devices(s, fresh=True)
             lights = sum(d["kind"] == "light" and not d["group"] for d in devs)
@@ -235,7 +238,7 @@ async def _test_chinanews(values: dict) -> dict:
 
 TESTS = {"web_search": _test_web_search, "get_weather": _test_get_weather,
          "get_news_from_newsnow": _test_newsnow, "get_news_from_chinanews": _test_chinanews}
-for _name in ("smart_hub", "rack_status", "repo_status", "desk_hub"):
+for _name in ("smart_hub", "rack_status", "repo_status", "desk_hub", "home_assistant"):
     TESTS[_name] = functools.partial(_test_integration, _name)
 
 

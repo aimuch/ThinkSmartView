@@ -251,7 +251,7 @@ def test_home_systems_live_outside_the_intent_list(cfg_path):
     pages.save_home_plugin("smart_hub", False, merged(cfg_path), cfg_path)
     assert merged(cfg_path)["Intent"]["function_call"]["functions"] == ["play_music", "rack_status"]
     home = {p["name"]: p for p in pages.home_plugins(merged(cfg_path))}
-    assert list(home) == ["smart_hub", "rack_status", "repo_status", "desk_hub"] and home["rack_status"]["enabled"]
+    assert list(home) == ["smart_hub", "rack_status", "repo_status", "desk_hub", "home_assistant"] and home["rack_status"]["enabled"]
     assert home["smart_hub"]["needs_config"] and not home["repo_status"]["needs_config"]       # 令牌是必填的；仓库同步没有必填
     with pytest.raises(ValueError):
         pages.save_home_plugin("get_weather", True, merged(cfg_path), cfg_path)
