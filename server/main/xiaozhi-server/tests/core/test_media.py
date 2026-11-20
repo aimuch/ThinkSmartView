@@ -1,7 +1,7 @@
 """[xiaozhi-hub] 媒体（设计画布第 58、60 块）：Navidrome、Jellyfin 都用本机起的假服务测，不联网。
 
 覆盖：token + salt 认证（密码不存）、找歌（搜不到时模糊比全部歌名）、按标签挑、随便放、本机 music 文件夹、
-后台的保存/测试/浏览/上传、设备的 /kiosk/music/* 中转（带 Range）、外部服务页的状态、常用口令。
+后台的保存/测试/浏览/上传、设备的 /kiosk/media/* 中转（带 Range）、外部服务页的状态、常用口令。
 """
 import hashlib
 import json
@@ -289,24 +289,23 @@ async def test_admin_save_test_browse(client, nas):
 async def test_kiosk_relay_and_find(client, nas):
     configure(nas)
     await client.post("/admin/api/logout", json={})                     # 设备不登录，经隧道来算本机
-    d = await (await client.get("/kiosk/music")).json()
-    assert d["ready"] and d["tags"] == {"kids": 0, "bedtime": 0}
-    f = await (await client.get("/kiosk/music/find?q=两只老虎")).json()
+    assert (await client.get("/kiosk/music")).status == 404             # 旧的别名删了，只留 tag
+    f = await (await client.get("/kiosk/media/find?q=两只老虎")).json()
     assert f["tracks"][0]["id"] == "n.s1"
-    r = await client.get("/kiosk/music/stream/n.s1")
+    r = await client.get("/kiosk/media/stream/n.s1")
     assert r.status == 200 and r.headers["Content-Type"] == "audio/mpeg" and await r.read() == AUDIO
-    r = await client.get("/kiosk/music/stream/n.s1", headers={"Range": "bytes=1000-"})
+    r = await client.get("/kiosk/media/stream/n.s1", headers={"Range": "bytes=1000-"})
     assert r.status == 206 and r.headers["Content-Range"].startswith("bytes 1000-") and await r.read() == AUDIO[1000:]
     stream_call = [c for c in nas.calls if c[0] == "stream"][-1][1]
     assert stream_call["u"] == USER and "p" not in stream_call
-    r = await client.get("/kiosk/music/cover/n.al-1?size=200")
+    r = await client.get("/kiosk/media/cover/n.al-1?size=200")
     assert r.status == 200 and (await r.read()).endswith(b"al-1")
     assert [c for c in nas.calls if c[0] == "getCoverArt"][-1][1]["size"] == "200"
     t = await (await client.get("/kiosk/music/tag/kids")).json()
     assert t["tracks"] == [] and "儿歌" in t["error"]
-    assert (await client.get("/kiosk/music/stream/zz")).status == 404
-    assert (await client.get("/kiosk/music/find?q=x", headers={"X-Forwarded-For": "1.2.3.4"})).status == 403
-    assert (await client.get("/kiosk/music/stream/n.s1", headers={"X-Forwarded-For": "1.2.3.4"})).status == 403
+    assert (await client.get("/kiosk/media/stream/zz")).status == 404
+    assert (await client.get("/kiosk/media/find?q=x", headers={"X-Forwarded-For": "1.2.3.4"})).status == 403
+    assert (await client.get("/kiosk/media/stream/n.s1", headers={"X-Forwarded-For": "1.2.3.4"})).status == 403
 
 
 async def test_upload_mkdir_delete(client, tmp_path):
@@ -317,9 +316,9 @@ async def test_upload_mkdir_delete(client, tmp_path):
     assert (await r.json())["size"] == len(AUDIO) and (tmp_path / "music" / "儿歌" / "两只老虎.mp3").read_bytes() == AUDIO
     assert (await client.post("/admin/api/media/upload?dir=l.&name=x.exe", data=b"1")).status == 400
     assert not list((tmp_path / "music").glob(".*.part"))
-    f = await (await client.get("/kiosk/music/find?q=两只老虎")).json()
+    f = await (await client.get("/kiosk/media/find?q=两只老虎")).json()
     tid = f["tracks"][0]["id"]
-    r = await client.get(f"/kiosk/music/stream/{tid}", headers={"Range": "bytes=10-19"})
+    r = await client.get(f"/kiosk/media/stream/{tid}", headers={"Range": "bytes=10-19"})
     assert r.status == 206 and await r.read() == AUDIO[10:20]
     assert (await client.post("/admin/api/media/local", json={"op": "delete", "id": tid})).status == 200
     assert (await client.post("/admin/api/media/local", json={"op": "delete", "id": folder["id"]})).status == 200

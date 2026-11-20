@@ -116,14 +116,14 @@ def ffmpeg(monkeypatch):
 def test_player_plays_through_and_pauses(ffmpeg):
     bg, views, errors = Background(), [], []
     p = media.Player(bg, on_change=views.append, on_error=errors.append)
-    p.stream_url = lambda sid: f'http://hub/kiosk/music/stream/{sid}'
+    p.stream_url = lambda sid: f'http://hub/kiosk/media/stream/{sid}'
 
     async def run():
         now = await p.play_music(TRACKS[:2], mode='loop', name='儿歌')
         assert now['kind'] == 'music' and now['name'] == '两只老虎' and now['next']['name'] == '小星星'
         assert now['list'] == '儿歌' and now['index'] == 1 and now['count'] == 2 and not now['paused']
         await asyncio.sleep(0.02)
-        assert ffmpeg[-1][ffmpeg[-1].index('-i') + 1] == 'http://hub/kiosk/music/stream/n.s0' and '-vn' in ffmpeg[-1]
+        assert ffmpeg[-1][ffmpeg[-1].index('-i') + 1] == 'http://hub/kiosk/media/stream/n.s0' and '-vn' in ffmpeg[-1]
         for _ in range(400):                       # 放完第一首自己接下一首
             await asyncio.sleep(0.01)
             if p.now['name'] == '小星星':

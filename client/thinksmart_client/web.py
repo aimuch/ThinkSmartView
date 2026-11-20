@@ -954,7 +954,7 @@ def make_app(client: Client):
     app.router.add_post('/api/voices/{act}', voices)
     app.router.add_post('/api/proactive/{kind}', proactive_set)
     async def music_cover(request):
-        """专辑封面：从网关中转（/kiosk/music/cover/<id>），设备上缓存一天。"""
+        """专辑封面：从网关中转（/kiosk/media/cover/<id>），设备上缓存一天。"""
         sid = request.match_info['id']
         if not re.fullmatch(r'[a-z]\.[\w\-=./]{0,400}', sid):
             raise web.HTTPNotFound()

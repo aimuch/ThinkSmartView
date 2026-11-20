@@ -298,12 +298,8 @@ class AdminHandler:
                 web.get("/kiosk/kids", self.handle_kiosk_kids),
                 web.get("/kiosk/kids/learn", self.handle_kiosk_kids_learn),
                 web.post("/kiosk/kids/report", self.handle_kiosk_kids_report),
-                # 58 块的客户端（0.1.685）还在用
-                web.get("/kiosk/music", self.handle_kiosk_music),
-                web.get("/kiosk/music/find", self.handle_kiosk_media_find),
+                # 设备说「放点歌」「放儿歌」「放睡前故事」时还走这条（kids|bedtime|any）
                 web.get("/kiosk/music/tag/{tag}", self.handle_kiosk_music_tag),
-                web.get("/kiosk/music/stream/{id}", self.handle_media_stream),
-                web.get("/kiosk/music/cover/{id}", self.handle_media_cover),
                 web.post("/kiosk/wake/greet", self.handle_kiosk_wake_greet),
                 web.get("/admin/api/greetings", self.handle_greetings),
                 web.post("/admin/api/greetings", self.handle_greetings_save),
@@ -2960,17 +2956,8 @@ class AdminHandler:
             return self._error(str(e) or "记录不对", 400)
         return self._json({"ok": True})
 
-    async def handle_kiosk_music(self, request: web.Request):
-        """58 块的设备（0.1.685）：能不能放、儿歌和睡前故事标了几项。"""
-        if not self._from_this_machine(request):
-            return self._error("仅限本机", 403)
-        d = await self._blocking(media.load)
-        return self._json({"ok": True, "ready": bool(await self._blocking(media.sources, d)),
-                           "tags": {t: len(media.section_of(d, sid)["refs"]) for t, sid in media.OLD_TAGS.items()},
-                           "tag_names": {"kids": "儿歌", "bedtime": "睡前故事"}})
-
     async def handle_kiosk_music_tag(self, request: web.Request):
-        """58 块的设备：/kiosk/music/tag/kids|bedtime|any → {"tracks", "name"}。"""
+        """/kiosk/music/tag/kids|bedtime|any → {"tracks", "name"}：儿歌、睡前故事两个分区，或者随便听。"""
         if not self._from_this_machine(request):
             return self._error("仅限本机", 403)
         try:

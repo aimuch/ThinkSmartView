@@ -2,7 +2,7 @@
 like a phone's music over Bluetooth: lowered while talking, muted while an alarm rings. One at a time.
 
 Music (设计画布第 58 块): songs from the family's own library (Navidrome on the NAS, or the hub's music folder),
-always through the hub's relay /kiosk/music/stream/<id>: the device never holds the library's password.
+always through the hub's relay /kiosk/media/stream/<id>: the device never holds the library's password.
 A Queue keeps the order (列表循环 / 单曲循环 / 随机); pausing remembers where it was and resumes with
 ffmpeg -ss (the hub passes Range on). A timer stops it like the sleep sounds, fading the last seconds.
 
