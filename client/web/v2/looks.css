@@ -831,10 +831,6 @@ body[data-theme="dawn"] .ai-chip, body[data-theme="candy"] .ai-chip, body[data-t
 #callsList .al-text span.calls { display: block; white-space: normal; }
 .upd-btn.ai-fill:disabled { opacity: 1; }   /* 「在用」是状态，不是灰掉的按钮 */
 
-/* ---- 家居页「米家 | 智能中枢」两页（设计画布第 45 块） ---- */
-/* 智能中枢、机柜自己的网页（设计画布第 62 块）：占满分页下面，圆角边框；那两个网页按自己的主题画 */
-@media (orientation: portrait) { #home.on-hub .h-home-pick svg { display: none; }
-#home.on-hub .h-home-pick { pointer-events: none; }
 #dRooms .h-tiles { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 
 /* ---- 温柔叫醒（设计画布第 46 块） ---- */

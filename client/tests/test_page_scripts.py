@@ -28,3 +28,15 @@ def test_scripts_parse_together(tmp_path):
     both.write_text('\n;\n'.join(f.read_text() for f in files))
     r = subprocess.run(['node', '--check', str(both)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_stylesheets_have_balanced_braces():
+    """少一个 } 后面的规则就全进了上一个 @media（0.1.715：删旧样式时把 `@media (orientation: portrait) { … }`
+    删掉了一半，后面的样式在横屏全都不生效）。"""
+    for css in sorted(V2.glob('*.css')):
+        text = re.sub(r'/\*.*?\*/', '', css.read_text(), flags=re.S)
+        depth = 0
+        for n, line in enumerate(text.splitlines(), 1):
+            depth += line.count('{') - line.count('}')
+            assert depth >= 0, f'{css.name}:{n} 多了一个 }}'
+        assert depth == 0, f'{css.name}: 少了 {depth} 个 }}'
