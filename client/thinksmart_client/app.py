@@ -2493,11 +2493,14 @@ class Client:
         return {**self.cfg['work'], 'urls': {a: appproxy.url(a) for a in appproxy.APPS}}
 
     async def set_work(self, changes):
-        """工作台右上角的设置（设计画布第 75、79 块）：order、hidden、first、rack、hub、split（合并）、idle_close、keep。"""
+        """工作台右上角的设置（设计画布第 75、79、89 块）：order、hidden、first、rack、hub、split（合并）、idle_min、keep。
+        老页面发的 idle_close（true/false）当成 3 分钟 / 不回首页。"""
         cur = dict(self.cfg['work'])
-        for k in ('order', 'hidden', 'first', 'rack', 'hub', 'idle_close', 'keep'):
+        for k in ('order', 'hidden', 'first', 'rack', 'hub', 'idle_min', 'keep'):
             if k in changes:
                 cur[k] = changes[k]
+        if 'idle_close' in changes and 'idle_min' not in changes:
+            cur['idle_min'] = 3 if changes['idle_close'] else 0
         if isinstance(changes.get('split'), dict):
             cur['split'] = {**cur.get('split', {}), **changes['split']}
             cur['split'] = {k: v for k, v in cur['split'].items() if v is not None}

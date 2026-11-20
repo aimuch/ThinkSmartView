@@ -22,13 +22,19 @@ def test_work_setting():
     """工作台的设置（设计画布第 75 块）：四页都在 order 里；以前存的「先看」带过来；栏宽限在 30%–70%。"""
     w = appproxy.normalize_work(None, 'rack')
     assert w == {'order': ['desk', 'hub', 'rack', 'repo'], 'hidden': [], 'first': 'rack', 'rack': 'screen', 'hub': 'tiles',
-                 'split': {}, 'idle_close': True, 'keep': 10}
+                 'split': {}, 'idle_min': 3, 'idle_close': True, 'keep': 10}
     w = appproxy.normalize_work({'order': ['repo', 'x', 'repo', 'desk'], 'hidden': ['hub', 'y'], 'first': 'nope', 'rack': 'list',
                                  'hub': 'web', 'split': {'desk': 0.9, 'repo': 0.2, 'z': 0.5}, 'idle_close': False})
     assert w == {'order': ['repo', 'desk', 'hub', 'rack'], 'hidden': ['hub'], 'first': '', 'rack': 'list', 'hub': 'web',
-                 'split': {'desk': 0.7, 'repo': 0.3}, 'idle_close': False, 'keep': 10}
+                 'split': {'desk': 0.7, 'repo': 0.3}, 'idle_min': 0, 'idle_close': False, 'keep': 10}
     # 切走后保留网页几分钟（设计画布第 79 块）：只认那几档，写错的回到默认 10
     assert [appproxy.normalize_work({'keep': k})['keep'] for k in (0, 5, 30, -1, 7, '10', True, None)] == [0, 5, 30, -1, 10, 10, 10, 10]
+    # 没人碰几分钟回首页（设计画布第 89 块）：几档；0 不回首页；没存过的看老的 idle_close
+    assert [appproxy.normalize_work({'idle_min': m})['idle_min'] for m in (1, 3, 5, 10, 30, 0, 7, '5', True, None)] == \
+        [1, 3, 5, 10, 30, 0, 3, 3, 3, 3]
+    assert appproxy.normalize_work({'idle_close': False})['idle_min'] == 0
+    assert appproxy.normalize_work({'idle_close': False, 'idle_min': 10}) == {**appproxy.normalize_work({'idle_min': 10})}
+    assert not appproxy.normalize_work({'idle_min': 0})['idle_close'] and appproxy.normalize_work({'idle_min': 30})['idle_close']
     assert appproxy.url('rack') == 'http://127.0.0.1:8091/kiosk' and appproxy.url('hub').endswith(':8092/#/')
 
 
@@ -85,3 +91,23 @@ async def test_hub_unreachable(monkeypatch):
                 assert r.status == 502 and '网关' in await r.text()
     finally:
         await p.stop()
+
+
+def test_set_work_idle_minutes(monkeypatch):
+    """页面选几分钟回首页；老页面只发 idle_close 时当成 3 分钟 / 不回首页（设计画布第 89 块）。"""
+    import asyncio
+    import types
+    from thinksmart_client import app, config
+
+    saved, published = [], []
+    monkeypatch.setattr(config, 'save', lambda **kw: saved.append(kw))
+    stub = types.SimpleNamespace(cfg={'work': appproxy.normalize_work({'idle_close': False})},
+                                 events=types.SimpleNamespace(publish=lambda k, v: published.append((k, v))))
+    stub.work_view = lambda: stub.cfg['work']
+    run = lambda changes: asyncio.new_event_loop().run_until_complete(app.Client.set_work(stub, changes))
+    assert stub.cfg['work']['idle_min'] == 0                       # 以前关着的：不回首页
+    assert run({'idle_min': 10})['idle_min'] == 10 and saved[-1]['work']['idle_min'] == 10
+    assert run({'idle_close': True})['idle_min'] == 3               # 老页面的开关
+    assert run({'idle_close': False})['idle_min'] == 0
+    assert run({'idle_min': 99})['idle_min'] == 0                  # 不认的：照之前的（不回首页）
+    assert published[-1][0] == 'work'

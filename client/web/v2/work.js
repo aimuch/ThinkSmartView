@@ -42,7 +42,7 @@ async function refresh() {
 // 设置里没藏起来的，按设置里的顺序
 const WK = [['desk', '智能桌面', 'desk', 'wkDesk', 'desk_hub'], ['hub', '智能中枢', 'hub', 'wkHub', 'smart_hub'],
             ['rack', '机柜', 'rack', 'wkRack', 'rack_status'], ['repo', '仓库同步', 'repo', 'wkRepo', 'repo_status']];
-const W = () => ui.work || { order: WK.map(w => w[0]), hidden: [], first: '', rack: 'screen', hub: 'tiles', split: {}, idle_close: true, keep: 10, urls: {} };
+const W = () => ui.work || { order: WK.map(w => w[0]), hidden: [], first: '', rack: 'screen', hub: 'tiles', split: {}, idle_min: 3, idle_close: true, keep: 10, urls: {} };
 const wkOrdered = () => W().order.map(k => WK.find(w => w[0] === k)).filter(Boolean);
 const wkTabs = () => {
   const on = wkOrdered().filter(w => A()[w[4]]), shown = on.filter(w => !W().hidden.includes(w[0]));
@@ -232,6 +232,9 @@ function screenUrl() {
 // 机柜、智能中枢的网页框不删，只藏起来：以前切到别的页、关掉工作台就把它删了，回来要重建、整页重新加载
 // （经设备代理 → 网关 → 登录 rack-screen，好几秒黑框）。藏多久在工作台设置里选（设计画布第 79 块，work.keep 分钟：
 // 0 不保留，-1 一直保留），过了才放掉，免得它在后台一直轮询
+const IDLE = [[1, '1 分钟'], [3, '3 分钟'], [5, '5 分钟'], [10, '10 分钟'], [30, '30 分钟'], [0, '不回首页']];
+// 老的客户端只给 idle_close：开着算 3 分钟
+const idleMin = () => { const w = W(); return typeof w.idle_min === 'number' ? w.idle_min : (w.idle_close === false ? 0 : 3); };
 const KEEP = [[0, '不保留'], [5, '5 分钟'], [10, '10 分钟'], [30, '30 分钟'], [-1, '一直保留']];
 const keepMs = () => { const k = W().keep; return k === -1 ? Infinity : (typeof k === 'number' ? k : 10) * 60000; };
 const frames = {};   // 网址 -> { el, ready, hiddenAt }
@@ -574,7 +577,9 @@ function renderCfg() {
       ? `<div class="wc-sub">切走后保留网页</div><div class="wc-chips">${KEEP.map(([m, t]) => `<button data-keep="${m}" class="${(w.keep ?? 10) === m ? 'on' : ''}">${t}</button>`).join('')}</div>` +
         '<p class="wc-note">保留着，回来不用重新加载；保留越久，它在后台刷新数据越久。</p>' : '') +
     `<div class="wc-row"><b>左右栏宽度</b><button class="wc-btn" data-wreset="1"${Object.keys(w.split || {}).length ? '' : ' disabled'}>恢复默认</button></div>` +
-    `<div class="wc-row"><div><b>没人碰 3 分钟回首页</b><small>关掉就一直开着（叫它时也不收起）</small></div><button class="switch sm" role="switch" data-idle="1" aria-checked="${w.idle_close}"><i></i></button></div>`);
+    // 没人碰多久回首页（设计画布第 89 块）：几档，0 = 不回首页
+    `<div class="wc-sub">没人碰多久回首页</div><div class="wc-chips">${IDLE.map(([m, t]) => `<button data-idle="${m}" class="${idleMin() === m ? 'on' : ''}">${t}</button>`).join('')}</div>` +
+    '<p class="wc-note">回首页以后，再按「外观 › 待机页」设的时间进待机页。选「不回首页」：工作台一直开着，也不进待机页，叫它的时候也不收起；熄屏照常。</p>');
 }
 $('wkCfgBtn').addEventListener('click', () => showCfg($('wkCfg').hidden));
 $('wkCfg').addEventListener('click', e => {
@@ -600,7 +605,8 @@ $('wkCfg').addEventListener('click', e => {
   const kp = t.closest('[data-keep]');
   if (kp) return sendWork({ keep: Number(kp.dataset.keep) });
   if (t.closest('[data-wreset]')) return sendWork({ split: null });
-  if (t.closest('[data-idle]')) return sendWork({ idle_close: !w.idle_close });
+  const idle = t.closest('[data-idle]');
+  if (idle) return sendWork({ idle_min: Number(idle.dataset.idle) });
 });
 handlers.work = v => { ui.work = v; renderWork(); if (!$('wkCfg').hidden) renderCfg(); };
 
@@ -629,9 +635,9 @@ $('wkCols').addEventListener('pointerdown', e => {
 });
 $('wkCols').addEventListener('dblclick', e => { const g = e.target.closest('[data-grip]'); if (g) sendWork({ split: { [g.dataset.grip]: null } }); });
 
-// 没人碰 3 分钟回首页（设置里能关）
+// 没人碰几分钟回首页（设置里选，设计画布第 89 块；0 = 不回首页）
 document.addEventListener('pointerdown', () => { ig.touched = Date.now(); }, true);
-setInterval(() => { if (ig.open && W().idle_close && Date.now() - (ig.touched || 0) > 180000) openWork(false); }, 15000);
+setInterval(() => { const m = idleMin(); if (ig.open && m > 0 && Date.now() - (ig.touched || 0) > m * 60000) openWork(false); }, 5000);
 
 /* ---------------- 仪表盘卡片（dash.js 调） ---------------- */
 window.igApi = {
@@ -737,6 +743,6 @@ handlers.snapshot = s => {
 handlers.integrations = d => { ig.data = d; renderAll(); };
 // 叫醒时工作台和灯的详情也收起（和家居页一样）
 const baseAutoClose = window.miAutoClose;
-window.miAutoClose = () => { if (baseAutoClose) baseAutoClose(); if (ig.open && W().idle_close) openWork(false); closeLight(); };
+window.miAutoClose = () => { if (baseAutoClose) baseAutoClose(); if (ig.open && idleMin() > 0) openWork(false); closeLight(); };
 window.openWork = openWork;
 })();
