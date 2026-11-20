@@ -87,6 +87,44 @@ function srcKind(s) {
   return /mac|book|imac/.test(n) ? 'mac' : /kvm|切换/.test(n) ? 'kvm' : /usb|type-?c|雷电|thunder/.test(n) ? 'usb' : 'pc';
 }
 const srcSvg = (k, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${SRC_ICON[k]}</svg>`;
+// AI 用量（设计画布第 92 块）：DeskHub 0.4.6 起有每个服务（usages），老的只有一个（usage）。
+// 顺序：设置里排过就按排的，没排过剩得最少的在前；设置里关掉的不显示
+const USAGE_LOGO = { claude: 'claude', anthropic: 'claude', codex: 'codex', openai: 'openai', chatgpt: 'openai', gemini: 'gemini', google: 'gemini',
+  deepseek: 'deepseek', kimi: 'kimi', moonshot: 'kimi', qwen: 'qwen', zhipu: 'zhipu', glm: 'zhipu', grok: 'grok', xai: 'xai', mistral: 'mistral',
+  openrouter: 'openrouter', minimax: 'minimax', doubao: 'doubao' };
+const usageIcon = p => USAGE_LOGO[p.id] ? `/static/logos/${USAGE_LOGO[p.id]}-color.svg` : letterLogo(p.name || p.id);
+const usageLow = p => (p.windows && p.windows.length ? Math.min(...p.windows.map(w => w.left)) : 101);
+function usageAll(d) {
+  if (!d) return [];
+  if (d.usages && d.usages.length) return d.usages;
+  const u = d.usage;
+  return u ? [{ id: u.provider || 'ai', name: u.provider ? u.provider[0].toUpperCase() + u.provider.slice(1) : 'AI', plan: u.plan, windows: u.windows || [], error: '' }] : [];
+}
+function usageOrdered(d) {
+  const w = W(), order = w.usage_order || [], all = usageAll(d);
+  const auto = all.slice().sort((a, b) => usageLow(a) - usageLow(b));
+  return order.length ? [...order.map(id => all.find(p => p.id === id)).filter(Boolean), ...auto.filter(p => !order.includes(p.id))] : auto;
+}
+const usageShown = d => usageOrdered(d).filter(p => !(W().usage_hidden || []).includes(p.id));
+function usageRow(p) {
+  const head = `<div class="dk-pv-n"><img src="${usageIcon(p)}" alt=""><div><b>${esc(p.name)}</b><small>${esc(p.plan || '')}</small></div></div>`;
+  if (!p.windows.length) return `<div class="dk-pv">${head}<div class="dk-pv-x">读不到${p.error ? '：' + esc(p.error) : '额度'}</div></div>`;
+  return `<div class="dk-pv">${head}${p.windows.slice(0, 2).map(w => `<div class="dk-win"><div><span>${esc(w.name)}</span><b>${w.left}%</b></div>` +
+    `<i class="${w.left <= 25 ? 'low' : ''}"><em style="transform:scaleX(${Math.max(0, Math.min(100, w.left)) / 100})"></em></i>` +
+    `<small>${w.reset_s ? esc(resetIn(w.reset_s) + '重置') : ''}</small></div>`).join('')}</div>`;
+}
+function usageCard(d, u) {
+  const shown = usageShown(d);
+  if (!shown.length) return '';
+  const stats = `<div class="dk-stats"><div><b>${u.calls}</b><small>今天的请求</small></div><div><b>${tokens(u.tokens)}</b><small>今天的 token</small></div></div>`;
+  if (shown.length === 1 && shown[0].windows.length) {   // 一个：还是两个圆环
+    const p = shown[0];
+    return `<div class="dk-ai wk-card"><div class="wk-row"><b><span class="ai-ink">AI 用量</span> · ${esc([p.name, p.plan].filter(Boolean).join(' '))}</b><small>Magpie 读的</small></div>` +
+      `<div class="dk-rings">${p.windows.slice(0, 2).map((w, i) => ringHtml(w.left, w.name, w.reset_s ? resetIn(w.reset_s) + '重置' : '', i)).join('')}${stats}</div></div>`;
+  }
+  return `<div class="dk-ai wk-card"><div class="wk-row"><b><span class="ai-ink">AI 用量</span></b><small>Magpie 读的 · ${shown.length} 个服务</small></div>` +
+    `<div class="dk-pvs">${shown.map(usageRow).join('')}</div><div class="dk-pv-stats">${stats}</div></div>`;
+}
 function ringHtml(left, name, reset, i) {
   const v = Math.max(0, Math.min(100, left)), low = v <= 25;
   return `<div class="dk-ring"><div class="dk-ring-c${low ? ' low' : i ? ' two' : ''}" style="--v:${v * 3.6}deg"><div><b>${v}%</b><small>剩下</small></div></div><span>${esc(name)}</span>${reset ? `<small>${esc(reset)}</small>` : ''}</div>`;
@@ -106,9 +144,7 @@ function deskHtml() {
       `<span class="dk-si">${srcSvg(srcKind(s))}</span><b>${esc(s.name)}</b><small>${s.id === d.current ? '现在' : esc(s.port || '')}</small></button>`).join('')}</div>`
     : note('Mac 上还没有试切过的输入源：在 DeskHub 的菜单里先试切一次。'));
   const u = W().usage === 'hide' ? null : d.usage;   // 设置里选了不显示（设计画布第 91 块）
-  if (u) left.push(`<div class="dk-ai wk-card"><div class="wk-row"><b><span class="ai-ink">AI 用量</span>${u.provider ? ' · ' + esc([u.provider, u.plan].filter(Boolean).join(' ')) : ''}</b><small>Magpie 读的</small></div>` +
-      `<div class="dk-rings">${(u.windows || []).slice(0, 2).map((w, i) => ringHtml(w.left, w.name, w.reset_s ? resetIn(w.reset_s) + '重置' : '', i)).join('')}` +
-      `<div class="dk-stats"><div><b>${u.calls}</b><small>今天的请求</small></div><div><b>${tokens(u.tokens)}</b><small>今天的 token</small></div></div></div></div>`);
+  if (u) left.push(usageCard(d, u));
   else if (d.usage_off && W().usage !== 'hide') left.push(note('Mac 上读不到 Magpie 的用量（Magpie 没开？）'));
   let right;
   if (d.todos_off) right = note(d.todos_off === 'access' ? 'DeskHub 没有读提醒事项的权限：在 Mac 的 系统设置 › 隐私与安全性 › 提醒事项 里打开。' : 'DeskHub 里关掉了提醒事项。');
@@ -351,9 +387,10 @@ function workCells() {
   const r = ig.data && ig.data.rack_status;
   if (a.rack_status && r && !r.error) cells.push({ b: `${r.up}/${r.total} 在线`, s: r.problems.length ? `机柜 · ${r.problems[0]}` : '机柜 · 没有告警', bad: r.up < r.total || r.problems.length });
   const d = ig.data && ig.data.desk_hub;
-  if (a.desk_hub && d && d.usage && d.usage.windows.length && W().usage !== 'hide') {
-    const w = d.usage.windows[0];
-    cells.push({ b: `剩 ${w.left}%`, s: `AI 用量 · ${w.name}`, bad: w.left <= 25 });
+  const pick = a.desk_hub && d && d.usage && W().usage !== 'hide' ? usageShown(d).filter(p => p.windows.length).sort((x, y) => usageLow(x) - usageLow(y))[0] : null;
+  if (pick) {   // 显示的服务里剩得最少的那个时间段（设计画布第 92 块）
+    const w = pick.windows.reduce((x, y) => (y.left < x.left ? y : x));
+    cells.push({ b: `剩 ${w.left}%`, s: `AI 用量 · ${pick.name} ${w.name}`, bad: w.left <= 25 });
   } else if (a.desk_hub && d && d.seen) {
     const due = (d.todos || []).filter(t => t.kind === 'o' || t.kind === 't').length;
     cells.push({ b: `${due} 条`, s: '电脑待办 · 今天', bad: false });
@@ -568,6 +605,18 @@ function splitCfg(w) {
         : `<small class="wc-val">${pct(v)}</small><button class="wc-btn" data-wreset="${k}">恢复默认</button>`) + '</div>';
     }).join('') + '</div>';
 }
+// 显示哪些服务、顺序（设计画布第 92 块）：有两个以上服务、选了「显示」时才有
+function usageCfg(w) {
+  const d = ig.data && ig.data.desk_hub, list = usageOrdered(d);
+  if (w.usage === 'hide' || list.length < 2) return '';
+  const hidden = w.usage_hidden || [];
+  return '<div class="wc-sub">显示哪些、顺序</div>' + list.map((p, i) => `<div class="wc-row"><img class="wc-logo" src="${usageIcon(p)}" alt=""><b>${esc(p.name)}</b>` +
+    `<button class="wc-mv" data-umove="${esc(p.id)}" data-d="-1"${i === 0 ? ' disabled' : ''} aria-label="往前">↑</button>` +
+    `<button class="wc-mv" data-umove="${esc(p.id)}" data-d="1"${i === list.length - 1 ? ' disabled' : ''} aria-label="往后">↓</button>` +
+    `<button class="switch sm" role="switch" data-ushow="${esc(p.id)}" aria-checked="${!hidden.includes(p.id)}" aria-label="显示${esc(p.name)}"><i></i></button></div>`).join('') +
+    `<p class="wc-note">${(w.usage_order || []).length ? '按你排的顺序。' : '没排过时，剩得最少的在前面；用 ↑ ↓ 排过就按排的来。'}只有 Magpie 报过的服务才列在这里。</p>` +
+    ((w.usage_order || []).length ? '<div class="wc-row"><b>顺序</b><button class="wc-btn" data-uauto="1">恢复自动排序</button></div>' : '');
+}
 function showCfg(on) {
   $('wkCfg').hidden = !on;
   $('wkCfgBtn').classList.toggle('on', !!on);
@@ -586,7 +635,7 @@ function renderCfg() {
     (A().rack_status ? `<div class="wc-sub">机柜那页放</div><div class="wc-chips">${chip('rack', 'screen', '机柜屏的画面')}${chip('rack', 'list', '简要列表')}</div>` : '') +
     (A().smart_hub ? `<div class="wc-sub">智能中枢那页放</div><div class="wc-chips">${chip('hub', 'tiles', '设备块')}${chip('hub', 'web', '它自己的网页')}</div>` : '') +
     (A().desk_hub ? `<div class="wc-sub">智能桌面的 AI 用量</div><div class="wc-chips">${chip('usage', 'show', '显示')}${chip('usage', 'hide', '不显示')}</div>` +
-      '<p class="wc-note">不显示时，智能桌面那页不放这一块，首页「工作台」卡片里也不放「剩多少」，换成电脑上今天的待办。</p>' : '') +
+      '<p class="wc-note">不显示时，智能桌面那页不放这一块，首页「工作台」卡片里也不放「剩多少」，换成电脑上今天的待办。</p>' + usageCfg(w) : '') +
     // 有网页要保留时才有这一行（机柜放机柜屏的画面、或智能中枢放它自己的网页）
     ((A().rack_status && w.rack === 'screen') || (A().smart_hub && w.hub === 'web')
       ? `<div class="wc-sub">切走后保留网页</div><div class="wc-chips">${KEEP.map(([m, t]) => `<button data-keep="${m}" class="${(w.keep ?? 10) === m ? 'on' : ''}">${t}</button>`).join('')}</div>` +
@@ -621,6 +670,19 @@ $('wkCfg').addEventListener('click', e => {
   if (kp) return sendWork({ keep: Number(kp.dataset.keep) });
   const rs = t.closest('[data-wreset]');
   if (rs) return sendWork({ split: { [rs.dataset.wreset]: null } });
+  const um = t.closest('[data-umove]');
+  if (um) {
+    const ids = usageOrdered(ig.data && ig.data.desk_hub).map(p => p.id), i = ids.indexOf(um.dataset.umove), j = i + Number(um.dataset.d);
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    return sendWork({ usage_order: ids });
+  }
+  const us = t.closest('[data-ushow]');
+  if (us) {
+    const id = us.dataset.ushow, hidden = w.usage_hidden || [];
+    return sendWork({ usage_hidden: hidden.includes(id) ? hidden.filter(x => x !== id) : [...hidden, id] });
+  }
+  if (t.closest('[data-uauto]')) return sendWork({ usage_order: [] });
   const idle = t.closest('[data-idle]');
   if (idle) return sendWork({ idle_min: Number(idle.dataset.idle) });
 });

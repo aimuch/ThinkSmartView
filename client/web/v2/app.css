@@ -997,6 +997,25 @@ p.wc-note { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink3); }
 .dk-src.busy { animation: wkpulse 1s ease-in-out infinite; }
 .dk-rings { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-top: 16px; }   /* 和「AI 用量」那行标题留开（设计画布第 91 块） */
 .dk-ring { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 14px; }
+/* AI 用量：两个以上服务时一个服务一行（设计画布第 92 块） */
+.dk-pvs { display: flex; flex-direction: column; margin-top: 14px; }
+.dk-pv { display: grid; grid-template-columns: minmax(110px, .8fr) 1fr 1fr; gap: 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.dk-pv:first-child { border-top: 0; padding-top: 0; }
+.dk-pv-n { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dk-pv-n img { width: 30px; height: 30px; border-radius: 9px; background: #fff; padding: 4px; flex: none; }
+.dk-pv-n b { display: block; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .dk-pv-n small { font-size: 12px; color: var(--ink3); }
+.dk-pv-x { grid-column: 2 / span 2; font-size: 14px; color: var(--warn); }
+.dk-win { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.dk-win > div { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink2); } .dk-win > div b { font-size: 15px; color: var(--ink); }
+.dk-win > i { display: block; height: 8px; border-radius: 4px; background: var(--card2); overflow: hidden; }
+.dk-win > i em { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transform-origin: left; }
+.dk-win > i.low em { background: var(--warn); }
+.dk-win small { font-size: 12px; color: var(--ink3); min-height: 15px; }
+.dk-pv-stats { padding-top: 10px; border-top: 1px solid var(--line); }
+.dk-pv-stats .dk-stats { display: flex; gap: 36px; min-width: 0; }
+.dk-pv-stats .dk-stats div { display: flex; align-items: baseline; gap: 8px; }
+.dk-pv-stats .dk-stats b { font-size: 20px; }
+.wc-logo { width: 26px; height: 26px; border-radius: 8px; background: #fff; padding: 3px; flex: none; }
 .dk-ring > small { font-size: 12px; color: var(--ink3); }
 .dk-ring-c { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--accent2) var(--v), var(--card2) 0); }
 .dk-ring-c.two { background: conic-gradient(var(--accent) var(--v), var(--card2) 0); }

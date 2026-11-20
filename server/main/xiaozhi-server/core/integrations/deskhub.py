@@ -24,7 +24,7 @@ PORTS = {"dp1": "DP 1", "dp2": "DP 2", "hdmi1": "HDMI 1", "hdmi2": "HDMI 2", "us
 
 def _parse(messages) -> dict:
     """触摸屏消息 -> {sources, current, usage, todos, todos_total, todos_off}；不认识的忽略。"""
-    out = {"sources": [], "current": "", "usage": None, "todos": [], "todos_total": 0, "todos_off": None}
+    out = {"sources": [], "current": "", "usage": None, "usage_all": None, "todos": [], "todos_total": 0, "todos_off": None}
     for raw in messages or []:
         try:
             m = json.loads(raw) if isinstance(raw, str) else raw
@@ -42,6 +42,8 @@ def _parse(messages) -> dict:
             out["current"] = str(m.get("id") or "")
         elif op == "usage":
             out["usage"] = m if m.get("ok") else {"ok": False}
+        elif op == "usage_all" and m.get("ok"):    # DeskHub 0.4.6 起：Magpie 里的每个服务（设计画布第 92 块）
+            out["usage_all"] = m
         elif op == "todos_begin":
             out["todos"], out["todos_total"], out["todos_off"] = [], int(m.get("total") or 0), None
         elif op == "todo" and m.get("id"):
@@ -69,16 +71,36 @@ def when_text(t: dict) -> str:
     return f"{t['m']}月{t['d']}日{clock}"
 
 
+def _windows(raw) -> list:
+    windows = []
+    for w in raw or []:
+        if not isinstance(w, dict):
+            continue
+        minutes = int(w.get("m") or 0)
+        name = "5 小时" if minutes == 300 else "每周" if minutes == 10080 else "每天" if minutes == 1440 else \
+            "每月" if minutes == 43200 else (f"{minutes // 60} 小时" if minutes % 60 == 0 else f"{minutes} 分钟")
+        windows.append({"name": name, "left": max(0, min(100, int(w.get("r") or 0))), "reset_s": max(0, int(w.get("s") or 0))})
+    return windows
+
+
+def usages_view(u: dict) -> list:
+    """App 的 usage_all（每个服务）-> [{"id", "name", "plan", "windows", "error"}]；老 App 没发就是空列表。"""
+    if not u or not u.get("ok"):
+        return []
+    out = []
+    for p in (u.get("ps") or [])[:8]:
+        if not isinstance(p, dict) or not str(p.get("id") or ""):
+            continue
+        out.append({"id": str(p["id"])[:16], "name": str(p.get("n") or p["id"])[:32], "plan": str(p.get("plan") or "")[:16],
+                    "windows": _windows(p.get("w"))[:3], "error": str(p.get("x") or "")[:120]})
+    return out
+
+
 def usage_view(u: dict) -> dict:
     """App 的 usage 消息（MagpieUsage.message）-> 屏幕和语音用的。"""
     if not u or not u.get("ok"):
         return None
-    windows = []
-    for w in u.get("w") or []:
-        minutes = int(w.get("m") or 0)
-        name = "5 小时" if minutes == 300 else "每周" if minutes == 10080 else "每天" if minutes == 1440 else \
-            (f"{minutes // 60} 小时" if minutes % 60 == 0 else f"{minutes} 分钟")
-        windows.append({"name": name, "left": int(w.get("r") or 0), "reset_s": int(w.get("s") or 0)})
+    windows = _windows(u.get("w"))
     return {"provider": u.get("p") or "", "plan": u.get("plan") or "", "windows": windows, "calls": u.get("c") or 0,
             "errors": u.get("e") or 0, "tokens": u.get("t") or 0, "last_model": u.get("lm") or ""}
 
@@ -153,6 +175,7 @@ class DeskHub:
             return {"online": False, "seen": None}
         return {"online": self.online(), "seen": s["at"], "name": s["name"], "sources": s["sources"], "current": s["current"],
                 "usage": usage_view(s["usage"]), "usage_off": bool(s["usage"]) and not s["usage"].get("ok"),
+                "usages": usages_view(s.get("usage_all")),
                 "todos": s["todos"][:30], "todos_total": s["todos_total"], "todos_off": s["todos_off"],
                 "allow_todo": s["allow_todo"]}
 
@@ -232,12 +255,17 @@ def spoken(v: dict, what: str) -> str:
         u = v.get("usage")
         if not u:
             return "Mac 上读不到 Magpie 的用量" + stale + "。"
-        parts = [f"{w['name']}额度还剩 {w['left']}%" + (f"，{reset_text(w['reset_s'])}重置" if w["reset_s"] else "") for w in u["windows"]]
-        head = " ".join(x for x in (u["provider"], u["plan"]) if x)
+        def windows_text(ws):
+            return [f"{w['name']}额度还剩 {w['left']}%" + (f"，{reset_text(w['reset_s'])}重置" if w["reset_s"] else "") for w in ws]
         tokens = u["tokens"]
         amount = f"{tokens / 1e6:.1f} 百万" if tokens >= 1e6 else f"{tokens / 1e4:.1f} 万" if tokens >= 1e4 else str(tokens)
-        return (f"{head}：" if head else "") + "；".join(parts or ["没有额度信息"]) + \
-            f"。今天调用 {u['calls']} 次，用了 {amount} token" + stale + "。"
+        tail = f"。今天调用 {u['calls']} 次，用了 {amount} token" + stale + "。"
+        many = [p for p in v.get("usages") or [] if p["windows"]]
+        if len(many) > 1:   # 好几个服务：剩得最少的先说
+            many.sort(key=lambda p: min(w["left"] for w in p["windows"]))
+            return "；".join(f"{p['name']}：" + "，".join(windows_text(p["windows"][:2])) for p in many) + tail
+        head = " ".join(x for x in (u["provider"], u["plan"]) if x)
+        return (f"{head}：" if head else "") + "；".join(windows_text(u["windows"]) or ["没有额度信息"]) + tail
     if what == "todos":
         if v.get("todos_off"):
             return "Mac 上的 DeskHub 没打开提醒事项，或者没有权限。"

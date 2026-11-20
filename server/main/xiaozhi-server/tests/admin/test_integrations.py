@@ -238,6 +238,20 @@ async def test_deskhub_round_trip(client):
     assert v["usage"]["windows"][0] == {"name": "5 小时", "left": 62, "reset_s": 7200}
     assert [t["when"] for t in v["todos"]] == ["11月11日（过期）", "今天 17:00"] and v["todos_total"] == 5
     assert "5 小时额度还剩 62%" in deskhub.spoken(v, "usage") and "交物业费" in deskhub.spoken(v, "todos")
+    assert v["usages"] == []                              # 老 App 没发 usage_all
+    # DeskHub 0.4.6：每个服务（设计画布第 92 块）
+    msgs.insert(6, json.dumps({"op": "usage_all", "ok": True, "c": 128, "e": 0, "t": 1200000, "ps": [
+        {"id": "codex", "n": "Codex", "plan": "plus", "w": [{"m": 300, "r": 100, "s": 60}, {"m": 10080, "r": 49, "s": 9000}]},
+        {"id": "claude", "n": "Claude", "plan": "max", "w": [{"m": 300, "r": 23, "s": 600}, {"m": 43200, "r": 150, "s": -5}]},
+        {"id": "copilot", "n": "Copilot", "plan": "", "w": [], "x": "GitHub refused the sign-in; sign in again"},
+        {"n": "no id"}, "junk"]}))
+    assert (await client.post("/deskhub/push", json={"name": "Mac mini", "messages": msgs}, headers=hdr)).status == 200
+    v = (await (await client.get("/kiosk/integrations?device=study")).json())["desk_hub"]
+    assert [p["id"] for p in v["usages"]] == ["codex", "claude", "copilot"]
+    assert v["usages"][1]["windows"][1] == {"name": "每月", "left": 100, "reset_s": 0}      # 限在范围里
+    assert v["usages"][2]["error"].startswith("GitHub") and v["usage"]["provider"] == "Claude"
+    said = deskhub.spoken(v, "usage")
+    assert said.index("Claude：") < said.index("Codex：") and "Copilot" not in said and "今天调用 128 次" in said
 
     async def mac():
         """Mac 的长轮询拿到指令，照触摸屏的格式回结果。"""
