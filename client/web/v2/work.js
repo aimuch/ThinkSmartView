@@ -16,7 +16,7 @@ const ICON = {
   light: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
   group: '<path d="M12 3l2.2 5.6L20 9l-4.5 3.8L17 19l-5-3.2L7 19l1.5-6.2L4 9l5.8-.4z"/>',
   psu: '<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
-  hub: '<circle cx="12" cy="12" r="2.5"/><path d="M5 5l4.5 4.5M19 5l-4.5 4.5M5 19l4.5-4.5M19 19l-4.5-4.5"/>',
+  hub: '<circle cx="12" cy="13.5" r="3"/><circle cx="12" cy="4.5" r="2"/><circle cx="4.3" cy="18" r="2"/><circle cx="19.7" cy="18" r="2"/><path d="M12 10.5v-4M9.4 15l-3.3 1.9M14.6 15l3.3 1.9"/>',   // 中枢连三台（设计画布第 88 块）：以前的四条斜线像个「×」
   ir: '<rect x="7" y="2" width="10" height="20" rx="3"/><path d="M10 7h4M12 11v.01M10 15h.01M14 15h.01M10 18h.01M14 18h.01"/>',
 };
 const svg = (k, s = 24) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k] || ICON.light}</svg>`;
@@ -60,7 +60,8 @@ function openWork(on, want) {   // 也给「打开页面」用（wf.js，设计�
   if (on) { ig.tab = pickTab(want, W().first, lastTab()); ig.touched = Date.now(); renderWork(); refresh(); }
   else { renderScreen(); showCfg(false); }
 }
-const secHead = (k, title, small = '') => `<div class="wk-h"><span class="wk-ic">${svg(k, 22)}</span><b>${title}</b>${small ? `<small>${esc(small)}</small>` : ''}</div>`;
+// 40 的方块里放 26 的图案；智能中枢的四个圆留白多，放 28（设计画布第 88 块）
+const secHead = (k, title, small = '') => `<div class="wk-h"><span class="wk-ic">${svg(k, k === 'hub' ? 28 : 26)}</span><b>${title}</b>${small ? `<small>${esc(small)}</small>` : ''}</div>`;
 const note = text => `<p class="wk-note">${esc(text)}</p>`;
 const NOT_YET = name => `还没接入：在小麦网关后台「外部服务 › 家里的系统」里打开「${name}」并点「设置」。`;
 
@@ -377,7 +378,7 @@ const hubDevices = () => (ig.data && ig.data.smart_hub && ig.data.smart_hub.devi
 const findDev = id => hubDevices().find(x => x.id === id);
 // 智能中枢的设备块（设计画布第 72 块）：按灯、可调电源、红外分组；连不上说网关翻好的中文原因，不显示 MAC 和英文报错
 const POWER_SVG = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3.5v8M7 6.3a7.5 7.5 0 1 0 10 0"/></svg>';
-const NODE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="2.5"/><path d="M5 5l4.5 4.5M19 5l-4.5 4.5M5 19l4.5-4.5M19 19l-4.5-4.5"/></svg>';
+const NODE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="9" r="2"/><path d="M12 11v10M8.5 5.5a5 5 0 0 0 0 7M15.5 5.5a5 5 0 0 1 0 7"/></svg>';   // 经过哪个蓝牙节点：天线（第 88 块）
 const f2 = v => (v === null || v === undefined ? '—' : v.toFixed(2));
 function hubTile(x) {
   const on = x.on === true, off = x.online === false;
