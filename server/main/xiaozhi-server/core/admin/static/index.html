@@ -4794,7 +4794,7 @@ function renderLastUpdate(u) {
   let html = "";
   if (u.state === "done") {
     html = u.changed
-      ? `<div class="banner info">${esc(when)} 更新成功：${esc(u.from.short || "")} → ${esc(u.to.short || "")}。</div>`
+      ? `<div class="banner info">${esc(when)} 更新成功${u.to.short ? `：${esc(u.from.short || "")} → ${esc(u.to.short)}` : u.from.short ? `（从 ${esc(u.from.short)} 更新）` : ""}。</div>`
       : `<div class="banner info">${esc(when)} 检查过，已经是最新版本，没有改动。</div>`;
     if (u.restart_needed) html += '<div class="banner warn">代码已更新，但服务是手动启动的，没有自动重启：请在运行网关的终端按 Ctrl+C 停止，再运行 scripts/start.sh。</div>';
   } else {

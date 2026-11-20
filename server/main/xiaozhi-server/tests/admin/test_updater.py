@@ -441,6 +441,8 @@ def test_status_reports_the_commit_the_update_ended_on(repos):
     u.exit_file.write_text("0\n")                     # 老的退出文件只有退出码：退回用现在的 HEAD
     st = u.status()
     assert st["state"] == "done" and st["to"]["commit"] == head
+    os.utime(u.exit_file, (1, 1))                       # 那次更新比现在的 HEAD 早得多：不知道到了哪个，不乱写
+    assert u.status()["to"] == {}
 
 
 # ---------- 登录交接 ----------

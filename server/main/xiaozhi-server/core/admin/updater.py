@@ -12,6 +12,7 @@ update.sh 会重启网关，不能作为网关的普通子进程跑（重启时�
 """
 
 import json
+from datetime import datetime
 import os
 import re
 import shutil
@@ -328,7 +329,8 @@ class Updater:
         steps = [line[4:].strip() for line in lines if line.startswith("==> ")]
         errors = [line.lstrip("✗ ").strip() for line in lines if line.lstrip().startswith("✗")]
         # 更新到了哪个提交：记在退出文件里；老的退出文件没记，只好用现在的 HEAD（之后用部署脚本又更新过就不准了）
-        head = self._exit_commit() or self._head()
+        recorded = self._exit_commit()
+        head = recorded or self._head()
         result = {"state": status, "started": int(state.get("started", 0)), "step": steps[-1] if steps else "",
                   "from": self._commit(state["from"]) if state.get("from") else {}, "to": self._commit(head) if head else {},
                   "changed": bool(head) and head != state.get("from"), "log": lines[-80:]}
@@ -336,6 +338,13 @@ class Updater:
             try:
                 result["finished"] = int(self.exit_file.stat().st_mtime)
             except OSError:
+                pass
+        if not recorded and result["to"].get("date") and result.get("finished"):
+            # 老的退出文件：现在的 HEAD 比那次更新还晚提交，说明之后又换过版本，不知道那次到了哪个
+            try:
+                if datetime.fromisoformat(result["to"]["date"]).timestamp() > result["finished"] + 60:
+                    result["to"] = {}
+            except ValueError:
                 pass
         if status == "failed":
             result["error"] = errors[-1] if errors else (lines[-1] if lines else "更新失败，没有输出")
